@@ -32,6 +32,8 @@ try {
     ["demo-overview.schema.json", "contracts/demo-overview.schema.json"],
     ["api.ts", "apps/web/src/generated/api.ts"],
     ["demo-overview.schema.json", "apps/web/src/generated/demo-overview.schema.json"],
+    ["model-contracts.schema.json", "contracts/model-contracts.schema.json"],
+    ["model-contracts.schema.json", "apps/web/src/generated/model-contracts.schema.json"],
   ];
   for (const [source, dest] of outputs) {
     const target = path.join(root, dest);

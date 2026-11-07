@@ -1,0 +1,140 @@
+services:
+  langfuse-web:
+    profiles: [observability]
+    image: langfuse/langfuse:4.75.0@sha256:23378ae8cdf1d92b647d68b81c0d0cea3632b43e9fbcbe9b765420af9c9c8662
+    environment: &langfuse-env
+      HOSTNAME: 0.0.0.0
+      DATABASE_URL: postgresql://langfuse:${LF_POSTGRES_PASSWORD:?Run observability init}@langfuse-postgres:5432/langfuse
+      NEXTAUTH_URL: http://127.0.0.1:8104
+      NEXTAUTH_SECRET: ${LF_NEXTAUTH_SECRET:?}
+      SALT: ${LF_SALT:?}
+      ENCRYPTION_KEY: ${LF_ENCRYPTION_KEY:?}
+      TELEMETRY_ENABLED: "false"
+      LANGFUSE_MIGRATION_V4_ALLOW_PREVIEW_OPT_IN: "true"
+      LANGFUSE_MIGRATION_V4_WRITE_MODE: events_only
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: ${LF_CLICKHOUSE_PASSWORD:?}
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      REDIS_HOST: langfuse-redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: ${LF_REDIS_PASSWORD:?}
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${LF_MINIO_USER:?}
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LF_MINIO_PASSWORD:?}
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${LF_MINIO_USER:?}
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LF_MINIO_PASSWORD:?}
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_INIT_ORG_ID: ${LF_ORG_ID:?}
+      LANGFUSE_INIT_ORG_NAME: Compass Local
+      LANGFUSE_INIT_PROJECT_ID: ${LF_PROJECT_ID:?}
+      LANGFUSE_INIT_PROJECT_NAME: compass-local
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${COMPASS_LANGFUSE_PUBLIC_KEY:?}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${COMPASS_LANGFUSE_SECRET_KEY:?}
+      LANGFUSE_INIT_USER_EMAIL: local.admin@compass.invalid
+      LANGFUSE_INIT_USER_NAME: Compass Local
+      LANGFUSE_INIT_USER_PASSWORD: ${LF_ADMIN_PASSWORD:?}
+    ports: ["127.0.0.1:8104:3000"]
+    depends_on: &langfuse-deps
+      langfuse-postgres: { condition: service_healthy }
+      langfuse-clickhouse: { condition: service_healthy }
+      langfuse-redis: { condition: service_healthy }
+      langfuse-minio: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, wget, --no-verbose, --tries=1, --spider, http://127.0.0.1:3000/api/public/health]
+      interval: 5s
+      timeout: 5s
+      start_period: 90s
+      retries: 30
+    logging: &log-policy { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+  langfuse-worker:
+    profiles: [observability]
+    image: langfuse/langfuse-worker:4.75.0@sha256:5fd09700a8af5328f3ef004ca8ce5602f6e799aba13da5054d9b18ba1724533e
+    environment: *langfuse-env
+    depends_on: *langfuse-deps
+    healthcheck:
+      test: [CMD, wget, --no-verbose, --tries=1, --spider, http://127.0.0.1:3030/api/health]
+      interval: 5s
+      timeout: 5s
+      start_period: 90s
+      retries: 30
+    logging: *log-policy
+  langfuse-postgres:
+    profiles: [observability]
+    image: postgres:17.6-alpine@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_DB: langfuse
+      POSTGRES_PASSWORD: ${LF_POSTGRES_PASSWORD:?}
+    volumes: [langfuse-postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD, pg_isready, -U, langfuse, -d, langfuse]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    logging: *log-policy
+  langfuse-clickhouse:
+    profiles: [observability]
+    image: clickhouse/clickhouse-server:26.3.62.3@sha256:de3e47c64078aa196dae2349e048fc98ba81947f651f5c20e06e46baea8ae40a
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: ${LF_CLICKHOUSE_PASSWORD:?}
+    volumes:
+      - langfuse-clickhouse-data:/var/lib/clickhouse
+      - langfuse-clickhouse-logs:/var/log/clickhouse-server
+    healthcheck:
+      test: [CMD, wget, --no-verbose, --tries=1, --spider, http://127.0.0.1:8123/ping]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    logging: *log-policy
+  langfuse-redis:
+    profiles: [observability]
+    image: redis:7.4.5-alpine@sha256:bb186d083732f669da90be8b0f975a37812b15e913465bb14d845db72a4e3e08
+    environment: { REDISCLI_AUTH: "${LF_REDIS_PASSWORD:?}" }
+    command:
+      [
+        redis-server,
+        --requirepass,
+        "${LF_REDIS_PASSWORD:?}",
+        --appendonly,
+        "yes",
+        --maxmemory-policy,
+        noeviction,
+      ]
+    volumes: [langfuse-redis-data:/data]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    logging: *log-policy
+  langfuse-minio:
+    profiles: [observability]
+    image: cgr.dev/chainguard/minio@sha256:cee9a8e35885e93f14b3cb32960e5017aff74e2adfb52ba87c65003b0163886b
+    entrypoint: sh
+    command: [-c, 'mkdir -p /data/langfuse && minio server --address ":9000" /data']
+    environment:
+      MINIO_ROOT_USER: ${LF_MINIO_USER:?}
+      MINIO_ROOT_PASSWORD: ${LF_MINIO_PASSWORD:?}
+    volumes: [langfuse-minio-data:/data]
+    healthcheck:
+      test: [CMD, mc, ready, local]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+    logging: *log-policy
+volumes:
+  langfuse-postgres-data:
+  langfuse-clickhouse-data:
+  langfuse-clickhouse-logs:
+  langfuse-redis-data:
+  langfuse-minio-data:

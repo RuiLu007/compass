@@ -1,0 +1,34 @@
+{
+  "title": "第 11 课 · LLM Runtime",
+  "subtitle": "统一入口、协议适配与调用生命周期",
+  "brand": "Compass",
+  "label": "精简阅读版 · 设计示意",
+  "source": "../../TECH_DESIGN.v2.md",
+  "guide": "guide.md",
+  "output": "../../TECH_DESIGN.compact.html",
+  "hero": "hero.svg",
+  "topics": ["职责边界", "调用快照", "统一契约"],
+  "metrics": [
+    { "value": "1", "label": "统一执行入口", "detail": "Runtime.invoke" },
+    { "value": "2", "label": "协议适配器", "detail": "生成 / 决策" },
+    { "value": "3", "label": "Agent 持久化表", "detail": "接入 / 变更 / 调用" },
+    { "value": "180s", "label": "单次调用总预算", "detail": "准备与执行共享期限" }
+  ],
+  "code": {
+    "prepared": {
+      "file": "../../TECH_DESIGN.v2.md",
+      "contains": "class PreparedCall:",
+      "language": "python"
+    },
+    "runtime": {
+      "file": "../../TECH_DESIGN.v2.md",
+      "contains": "class Runtime:",
+      "language": "python"
+    },
+    "sdk": {
+      "file": "../../TECH_DESIGN.v2.md",
+      "contains": "model, vendor, _, _ = litellm.get_llm_provider",
+      "language": "python"
+    }
+  }
+}

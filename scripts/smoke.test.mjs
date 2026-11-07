@@ -22,7 +22,7 @@ globalThis.fetch = async (url) => {
   let body = 'Compass';
   let status = path === '/api/web/v1/session' ? 401 : 200;
   if (path.includes('overview')) body = {source:'synthetic-fixture', revenue_minor:4000000, orders:397, days:3};
-  if (url.includes(':8001/')) body = {status:'ok',service:'compass-memory',stage:'scaffold'};
+  if (url.includes(':8103/')) body = {status:'ok',service:'compass-memory',stage:'scaffold'};
   if (path.endsWith('.json')) body = {domains:[]};
   if (${JSON.stringify(fail)} && url.includes(${JSON.stringify(fail)})) status = 503;
   return new Response(typeof body === 'string' ? body : JSON.stringify(body), {status, headers:{'cache-control': path === '/api/web/v1/session' ? 'private, no-store' : 'no-store'}});
@@ -49,10 +49,10 @@ globalThis.fetch = async (url) => {
 }
 
 for (const [app, port] of [
-  ["home", 3001],
-  ["web", 3000],
-  ["agent", 8000],
-  ["memory", 8001],
+  ["home", 8101],
+  ["web", 8100],
+  ["agent", 8102],
+  ["memory", 8103],
   ["worker", null],
 ]) {
   test(`local smoke for ${app} requests only its fixed local endpoints`, (t) => {

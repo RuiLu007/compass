@@ -1,0 +1,203 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  id="compass-layered-overview"
+  viewBox="0 0 1280 1170"
+  role="img"
+  aria-labelledby="layered-title layered-description"
+>
+  <title id="layered-title">Compass 分层架构与应用协同</title>
+  <desc id="layered-description">
+    从展示层，经 Web 与 BFF 到 Agent、Memory 和 Worker，再到独立数据库与模型服务。LLM Runtime 作为
+    Agent 内的整体模块呈现。实线为已接入关系，虚线为规划协同；Memory 与 Worker 当前提供脚手架。
+  </desc>
+  <defs>
+    <marker
+      id="layered-arrow"
+      viewBox="0 0 10 10"
+      refX="9"
+      refY="5"
+      markerWidth="7"
+      markerHeight="7"
+      orient="auto-start-reverse"
+    >
+      <path d="M1 1 9 5 1 9Z" fill="#3b705b" />
+    </marker>
+    <marker
+      id="layered-planned-arrow"
+      viewBox="0 0 10 10"
+      refX="9"
+      refY="5"
+      markerWidth="7"
+      markerHeight="7"
+      orient="auto-start-reverse"
+    >
+      <path d="M1 1 9 5 1 9" fill="none" stroke="#859487" stroke-width="1.5" />
+    </marker>
+    <style>
+      #compass-layered-overview text {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+        fill: #233d31;
+      }
+      #compass-layered-overview .layer {
+        fill: #f5f8f2;
+        stroke: #e1e8dc;
+      }
+      #compass-layered-overview .app {
+        fill: #fff;
+        stroke: #9eb7a0;
+        stroke-width: 1.5;
+      }
+      #compass-layered-overview .planned {
+        fill: #f8faf7;
+        stroke: #9fab9c;
+        stroke-width: 1.5;
+        stroke-dasharray: 6 5;
+      }
+      #compass-layered-overview .module {
+        fill: #edf4e7;
+        stroke: #cadac3;
+      }
+      #compass-layered-overview .title {
+        font-size: 23px;
+        font-weight: 650;
+      }
+      #compass-layered-overview .body {
+        font-size: 18px;
+      }
+      #compass-layered-overview .small {
+        font-size: 16px;
+        fill: #617367;
+      }
+      #compass-layered-overview .layer-title {
+        font-size: 20px;
+        font-weight: 600;
+      }
+      #compass-layered-overview .edge {
+        fill: none;
+        stroke: #3b705b;
+        stroke-width: 2.2;
+        stroke-linejoin: round;
+        marker-end: url(#layered-arrow);
+      }
+      #compass-layered-overview .future-edge {
+        fill: none;
+        stroke: #859487;
+        stroke-width: 1.8;
+        stroke-dasharray: 7 5;
+        stroke-linejoin: round;
+        marker-end: url(#layered-planned-arrow);
+      }
+    </style>
+  </defs>
+  <rect width="1280" height="1170" fill="#fff" />
+  <text x="26" y="39" font-size="27" font-weight="650">从用户界面到模型执行的协作边界</text>
+  <text x="26" y="69" class="small">
+    五个独立应用 · Web UI 与 BFF 同属 apps/web · LLM Runtime 作为单一执行模块
+  </text>
+
+  <rect class="layer" x="152" y="100" width="1080" height="126" rx="12" />
+  <text x="24" y="147" class="layer-title">01 展示层</text>
+  <text x="24" y="176" class="small">用户交互</text>
+  <rect class="app" x="176" y="119" width="290" height="87" rx="9" />
+  <text x="194" y="148" class="title">Home · 官网与课程指南</text>
+  <text x="194" y="179" class="body">apps/home · 独立内容入口</text>
+  <rect class="app" x="506" y="119" width="330" height="87" rx="9" />
+  <text x="524" y="148" class="title">模型管理 / 能力测试</text>
+  <text x="524" y="179" class="body">apps/web · 平台管理员</text>
+  <rect class="app" x="876" y="119" width="330" height="87" rx="9" />
+  <text x="894" y="148" class="title">分析 Chat / 主模型选择</text>
+  <text x="894" y="179" class="body">apps/web · 授权租户用户</text>
+
+  <rect class="layer" x="152" y="278" width="1080" height="160" rx="12" />
+  <text x="24" y="322" class="layer-title">02 接入层</text>
+  <text x="24" y="351" class="small">身份与契约</text>
+  <text x="194" y="333" class="body">官网独立运行</text>
+  <text x="194" y="363" class="small">模型调用由产品 Web 发起</text>
+  <text x="194" y="393" class="small">浏览器不直连模型供应商</text>
+  <rect class="app" x="506" y="291" width="700" height="131" rx="10" />
+  <text x="526" y="319" class="small">apps/web · 产品 Web / BFF</text>
+  <rect class="module" x="528" y="336" width="260" height="67" rx="7" />
+  <text x="546" y="363" class="body">账户 / 租户 / 权限 / 审计</text>
+  <text x="546" y="388" class="small">身份与作用域校验</text>
+  <rect class="module" x="824" y="336" width="360" height="67" rx="7" />
+  <text x="842" y="363" class="body">模型 BFF · HTTP / SSE 契约</text>
+  <text x="842" y="388" class="small">可信上下文 · 响应校验 · 停止传播</text>
+  <path class="edge" d="M670 206V291" />
+  <path class="edge" d="M1040 206V291" />
+  <text x="688" y="256" class="small">管理 / 测试</text>
+  <text x="1058" y="256" class="small">调用 / 流式回复</text>
+  <path class="edge" d="M788 370H824" />
+
+  <rect class="layer" x="152" y="500" width="1080" height="324" rx="12" />
+  <text x="24" y="543" class="layer-title">03 应用层</text>
+  <text x="24" y="572" class="small">业务与执行</text>
+  <rect class="app" x="176" y="516" width="650" height="290" rx="10" />
+  <text x="198" y="542" class="small">apps/agent · 推理与运行相关业务</text>
+  <rect class="module" x="198" y="558" width="606" height="52" rx="7" />
+  <text x="217" y="590" class="body">Agent API · 服务认证 / 请求校验 / HTTP 与 SSE</text>
+  <rect class="module" x="198" y="650" width="280" height="102" rx="8" />
+  <text x="216" y="679" class="title">模型应用服务 · models</text>
+  <text x="216" y="709" class="body">配置 / 凭据 / 调用记录</text>
+  <text x="216" y="735" class="small">准备调用，持久化安全结果</text>
+  <rect x="534" y="650" width="270" height="102" rx="8" fill="#245847" />
+  <text x="554" y="684" style="fill: #fff" class="title">LLM Runtime</text>
+  <text x="554" y="717" style="fill: #e1efda" class="body">统一模型执行入口</text>
+  <text x="554" y="742" style="fill: #c7dcc2" class="small">内部职责见下方详细图</text>
+  <path class="edge" d="M338 610V650" />
+  <path class="edge" d="M478 700H534" />
+  <text x="494" y="686" class="small">执行</text>
+  <text x="218" y="785" class="small">扩展职责：Agent 编排、工具执行与分析状态</text>
+
+  <rect class="planned" x="848" y="516" width="170" height="290" rx="10" />
+  <text x="866" y="547" class="small">apps/memory</text>
+  <text x="866" y="581" class="title">Memory</text>
+  <text x="866" y="621" class="body">文件 / 知识 / 记忆</text>
+  <text x="866" y="652" class="body">管理与检索 API</text>
+  <text x="866" y="723" class="small">当前：健康检查</text>
+  <text x="866" y="751" class="small">业务能力规划中</text>
+  <rect class="planned" x="1040" y="516" width="170" height="290" rx="10" />
+  <text x="1058" y="547" class="small">apps/worker</text>
+  <text x="1058" y="581" class="title">Worker</text>
+  <text x="1058" y="621" class="body">定时 / 离线任务</text>
+  <text x="1058" y="652" class="body">异步执行与恢复</text>
+  <text x="1058" y="723" class="small">当前：进程生命周期</text>
+  <text x="1058" y="751" class="small">任务消费规划中</text>
+  <path class="edge" d="M980 403V463H500V558" />
+  <text x="670" y="451" class="small">HTTP · 服务令牌与可信上下文</text>
+  <path class="future-edge" d="M826 585H848" />
+  <path class="future-edge" d="M1040 675H1018" />
+  <path class="future-edge" d="M1040 564H1030V489H780V558" />
+  <text x="851" y="483" class="small">所属应用 API（规划）</text>
+
+  <rect class="layer" x="152" y="922" width="1080" height="135" rx="12" />
+  <text x="24" y="965" class="layer-title">04 资源层</text>
+  <text x="24" y="994" class="small">数据与模型</text>
+  <rect class="app" x="176" y="941" width="240" height="97" rx="9" />
+  <text x="194" y="971" class="title">Web 自有数据库</text>
+  <text x="194" y="1003" class="body">身份 / 租户 / 权限 / 审计</text>
+  <rect class="app" x="438" y="941" width="240" height="97" rx="9" />
+  <text x="456" y="971" class="title">Agent 自有数据库</text>
+  <text x="456" y="1003" class="body">接入配置 / 变更 / 调用</text>
+  <rect class="app" x="700" y="941" width="270" height="97" rx="9" />
+  <text x="718" y="971" class="title">外部模型服务</text>
+  <text x="718" y="1003" class="body">DeepSeek / 阿里云决策模型</text>
+  <rect class="planned" x="992" y="941" width="218" height="97" rx="9" />
+  <text x="1010" y="971" class="title">Memory 自有存储</text>
+  <text x="1010" y="1003" class="body">记忆 / 文件 / 索引（规划）</text>
+  <path class="edge" d="M658 403V447H164V874H296V941" />
+  <path class="edge" d="M198 703H188V854H558V941" />
+  <path class="edge" d="M804 703H816V883H835V941" />
+  <path class="future-edge" d="M933 806V865H1101V941" />
+  <text x="306" y="867" class="small">Web 数据归 Web 管理</text>
+  <text x="568" y="899" class="small">配置与记录</text>
+  <text x="737" y="916" class="small">HTTPS 调用</text>
+
+  <path class="edge" d="M28 1100H77" />
+  <text x="91" y="1106" class="body">已接入关系</text>
+  <path class="future-edge" d="M282 1100H331" />
+  <text x="345" y="1106" class="body">规划中的业务协同</text>
+  <text x="28" y="1142" class="body">
+    应用之间通过契约协作；各应用拥有自身数据，Worker 通过所属应用 API 提交业务状态。
+  </text>
+</svg>

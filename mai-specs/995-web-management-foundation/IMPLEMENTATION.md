@@ -4,6 +4,50 @@
 
 有效契约为 [PRD](spec/PRD.md) 的 21 项 AC、[技术方案](design/TECH_DESIGN.md)及三个附录。按用户连续授权完成实施、代码评审、问题修复与复验；[代码评审](review/code_review.md)无未关闭 P0/P1。PRD/设计中的“未实施”描述保留其设计时点，当前交付状态以本记录为准。
 
+## 2026-11-05 移除切换 App 处理
+
+用户反馈返回页面仍闪烁，明确要求离开再回来与原来一模一样。本次删除 `visibilitychange` 监听、suspended状态、30秒展示deadline、后台/返回复验、浮层遮蔽恢复映射和“重新确认”界面。页面继续维持active，切换App不会刷新、隐藏、禁用、卸载、取消生成或额外检查；临时心跳网络/503/超时也保持已显示界面。定时15秒会话检查静默执行，受保护API仍由服务端逐请求鉴权；确认401/403、身份/权限版本变化、真实会话到期、退出及已有离线/文档离开场景继续清理。PRD和设计已同步，原实现记录作为历史保留。
+
+验证通过：`pnpm lint -F web`、`pnpm typecheck -F web`、`pnpm test -F web`（55项）、`pnpm build -F web`、完整 `pnpm test:e2e -F web`（39项，无跳过或重试）。新增/更新场景监控根节点hidden/inert的每次变化，切换与临时心跳失败均为零隐藏；断言零document导航、无切换触发的session请求、原DOM及草稿附件/权限弹窗保留、后台生成完成后继续聊天上下文，以及后台当前撤权仍清理。12项会话测试覆盖定时器长暂停、请求继续执行和临时失败不打断界面。
+
+定向首轮5项通过、1项后台生成用例在修改 `src/features/models/README.md` 时被开发服务Fast Refresh重新获取RSC并重置，trace记录了热更新与RSC请求；完成文件变更后完整39项均通过。测试继续使用专用数据库与Agent测试宿主/受控上游；结果保存 `work/visibility-recovery/no-visibility-handler-e2e-results.json`。未改DTO、数据库或迁移，未重跑迁移恢复和完整workspace/容器部署。
+
+变更文件Prettier、`git diff --check`及98条文档内部路径检查通过。最终从根入口重启Web；3000端口healthz/readyz/login均200，开发Agent的8000/readyz也正常。独立8013测试Agent已关闭。Web日志 `work/web-no-visibility-restart-20261105.log`。用户刷新一次加载本次客户端代码后，普通切换保持原界面。
+
+## 2026-11-05 后台切换与原地恢复
+
+用户授权按排查方案修复切换 App 后整页刷新的问题，要求保留草稿、聊天和正在生成的内容，补回归并重启 Web。PRD 的身份细则和 AC-995-42、技术与代码设计已同步为当前有效契约。
+
+`DocumentSession` 新增 `suspended`：后台或展示核验期限到期时同步遮蔽根节点和敏感浮层，保留同一个 ProductContent 子树、草稿、附件、聊天、生成输出及请求世代。返回前台先作废旧探测并重新核验当前 sessionId/viewRevision/页面权限，匹配后原地恢复；临时网络/503 保持遮蔽并允许重试。已发出请求与 SSE 在 suspended 中可继续更新页面内存，模型在后台完成时继续维护聊天轮次与下一轮上下文；新请求和下载仍要求 active 与有效期限。确认失权、身份变化、真实会话到期、离线及文档离开仍取消请求、清理并退役。
+
+本次开发自检覆盖：取消旧探测后晚到的成功/拒绝/异常不会影响当前状态；suspended 的响应接收与新操作授权分别校验；清理退休作用域后旧流无法写入；完成于后台的聊天结果不会因 active 检查被丢弃，后台完成不抢焦点；恢复通过前根节点与浮层保持遮蔽。
+
+本次验证结果：
+
+- `pnpm lint -F web`、`pnpm typecheck -F web`、`pnpm test -F web`：通过，10 文件共 55 项单元测试。其中新增 12 项会话生命周期测试覆盖长时间后台、不中断在途流、当前撤权取消流、旧探测乱序、503/网络失败重试、期限到期与真实登录过期。
+- `pnpm test:e2e -F web`：39 项 Chromium 浏览器测试全部通过，无跳过或重试成功项。新增 5 项覆盖草稿/附件与 DOM/window 保留、权限弹窗复验前遮蔽、后台撤权清理、流式生成期间多次切换、后台完成后继续多轮聊天；断言整页 document 请求为 0、调用次数无自动重放、下一轮包含完整聊天上下文。更新心跳超时用例，验证旧成功不能恢复已过期视图，而当前复验可原地恢复。
+- 新场景先定向运行 `--grep 'app switching|timed-out heartbeat'`，6 项通过；随后完整 39 项回归覆盖分析输入、导航/历史、多个视口、离线、退出/身份变化、权限移除、Provider 和各模型能力界面。真实模型链路使用现有 Agent 测试宿主与受控上游 HTTP，不调用真实供应商。
+- `pnpm build -F web`：Next.js Turbopack 生产构建通过。变更文件 Prettier、`git diff --check` 与 98 条受影响文档内部路径检查通过。
+
+浏览器使用专用 `compass_web_test_platform_admin_20261104`，结果保存在忽略 Git 的 `work/visibility-recovery/e2e-results.json`。本次未变更 HTTP DTO、数据库或迁移，未重跑 PG 迁移恢复矩阵及完整 workspace/容器部署。
+
+最终通过根入口 `pnpm dev -F web` 重启本地开发服务；`http://127.0.0.1:3000/healthz`、`/readyz`、`/login` 均返回 200，正式开发 Agent 的 `8000/readyz` 也返回 200。本次测试启动的独立 8013 Agent 服务在验收后关闭。Web 日志位于 `work/web-visibility-restart-20261105.log`；用户手动刷新一次后即可使用新版后台恢复逻辑。
+
+## 2026-11-04 平台管理员完整功能
+
+用户要求平台管理员可以看到整个系统的所有功能。本次同步 FR-995-02/06、AC-995-08 和权限设计：平台管理员无需租户成员关系即可访问全部有效租户与工作区的完整已登记功能和管理操作；普通账号继续按成员资格及个人权限隔离。平台页与个人页恢复最近偏好或首个有效上下文，生成完整业务和治理导航；登录恢复工作区，无有效租户时进入平台租户管理。业务空页保持当前交付范围。
+
+实现集中在 `access`：PG 适配为平台管理员派生 `role=admin`、`memberId=null` 的当前权限，不写入成员记录；普通租户选择器列出全部有效租户，停用租户仍只在平台管理列表中显示。展示版本摘要覆盖平台管理员可访问的全部有效租户；资格撤销后下一请求立即按当前身份处理。自动选择的导航上下文与页面请求 scope 分离，个人/平台页面的心跳仍提交其登记的空 scope。资源归属、归档空间操作、个人资料/会话、最后管理员、并发版本与审计规则继续执行。
+
+本次验证：
+
+- `pnpm lint -F web`、`pnpm typecheck -F web`、`pnpm test -F web`：通过，43 项单元测试。
+- `pnpm test:integration -F web -- tests/integration/foundation.integration.ts tests/integration/models.integration.ts`：真实 PostgreSQL 上 18 项通过，覆盖完整目录、跨租户列表与管理写入/审计、跨租户资源拒绝、停用租户、平台降权、全租户展示版本及模型/Chat 授权与归档限制。
+- `pnpm test:e2e -F web -- --grep platform`：3 项 Chromium 用例通过，覆盖平台页全部一级入口、8 个治理领域、跨租户页面、创建/停用租户，以及真实 BFF/Agent 的 Provider 管理与能力测试。首轮 2 项通过，模型目录因专用 Agent 测试服务未启动而失败；启动现有 `apps/agent/tests/e2e_app.py` 测试入口后复验 3 项全部通过。
+- 变更文件 Prettier、`git diff --check` 与 102 条受影响文档内部路径检查通过。
+
+PostgreSQL 集成复用既有专用测试库，浏览器使用独立 `compass_web_test_platform_admin_20261104`；凭据仅位于忽略 Git 的 `work/`。本次没有数据库迁移、接口 DTO 或构建配置变更，未重跑迁移恢复矩阵、完整 workspace 构建和容器部署。需求、设计和历史评审均保留其阶段记录；本节登记当前权限语义及本次验证结果。
+
 ## 2026-11-02 SPA 体验修复验收
 
 本次按用户反馈修复普通导航闪烁。共享 `(product)` 布局持有应用框架，内部链接、空间切换、GET 筛选/分页和正常保存刷新走 Next App Router；每份页面载荷仍独立复验，旧作用域销毁后取消请求，退役状态拒绝迟到载荷。Tailwind 扫描限定 Web `src/`，修复开发产物触发反复热更新的问题。URL、数据库结构和业务范围保持。

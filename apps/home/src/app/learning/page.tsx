@@ -197,9 +197,9 @@ export default function LearningPage() {
                   按脚手架页完成依赖安装、环境检查、数据库迁移与初始化，再启动系统。
                 </p>
                 <ul className={l.bulletList}>
-                  <li>Home 官网：127.0.0.1:3001。</li>
-                  <li>Web 工作台：127.0.0.1:3000，点击“查看示例数据”。</li>
-                  <li>API 文档：127.0.0.1:8000/docs。</li>
+                  <li>Home 官网：127.0.0.1:8101。</li>
+                  <li>Web 工作台：127.0.0.1:8100，点击“查看示例数据”。</li>
+                  <li>API 文档：127.0.0.1:8102/docs。</li>
                   <li>DBeaver 能连接数据库并查看示例表。</li>
                 </ul>
                 <CopyBlock

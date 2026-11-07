@@ -6,10 +6,11 @@ vi.mock("server-only", () => ({}));
 import { handleWebRequest } from "../../src/server/http/handler";
 import { closeDatabase } from "../../src/server/platform/db";
 import { encodePassword } from "../../src/server/modules/identity/infrastructure/password";
+import { PAGE_CATALOG } from "../../src/lib/page-catalog";
 
 const fid = (n: number) => `99500000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const password = "test-only-995-password";
-const origin = "http://127.0.0.1:3000";
+const origin = "http://127.0.0.1:8100";
 let owner: pg.Client;
 type BrowserSession = { cookie: string; csrf: string; sessionId: string };
 async function request(path: string, method = "GET", body?: unknown, session?: BrowserSession) {
@@ -157,9 +158,9 @@ describe("Web foundation on real PostgreSQL", () => {
       );
     }
   });
-  it("keeps platform privileges separate, filters before counting, and rejects forged fields", async () => {
+  it("allows platform administrators across tenants, filters ordinary members, and rejects forged fields", async () => {
     expect((await request(`tenants/${fid(10)}/members`, "GET", undefined, platform)).status).toBe(
-      404,
+      200,
     );
     expect((await request(`tenants/${fid(11)}/members`, "GET", undefined, admin)).status).toBe(404);
     expect((await request(`tenants/${fid(10)}/members`, "GET", undefined, analyst)).status).toBe(
@@ -179,6 +180,88 @@ describe("Web foundation on real PostgreSQL", () => {
     const raw = await request("me", "GET", undefined, admin);
     expect(await raw.text()).not.toMatch(/password|token_hash|isPlatformAdmin/);
     expect(raw.headers.get("cache-control")).toBe("private, no-store");
+  });
+  it("exposes the complete catalog and all active tenants without creating platform memberships", async () => {
+    const tenants = await request("tenants", "GET", undefined, platform);
+    expect(await tenants.json()).toMatchObject({ total: 2 });
+    for (const path of ["session", `session?tenantId=${fid(10)}&workspaceId=${fid(20)}`]) {
+      const response = await request(path, "GET", undefined, platform);
+      expect(response.status).toBe(200);
+      const view = await response.json();
+      expect(view.navigation.map((p: { id: string }) => p.id).sort()).toEqual(
+        PAGE_CATALOG.map((p) => p.id).sort(),
+      );
+      expect(view.capabilities).toContain("models.invoke");
+      expect(view.tenantCapabilities).toContain("members.write");
+      if (path === "session") expect(view.scope).toEqual({});
+    }
+    expect((await request(`tenants/${fid(11)}/settings`, "GET", undefined, platform)).status).toBe(
+      200,
+    );
+    const settingsPath = `tenants/${fid(10)}/settings`;
+    const settings = await (await request(settingsPath, "GET", undefined, platform)).json();
+    expect(
+      (
+        await request(
+          settingsPath,
+          "PATCH",
+          {
+            timezone: settings.timezone,
+            expectedVersion: settings.version,
+          },
+          platform,
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await owner.query(
+          "SELECT id FROM web.audit_event WHERE actor_user_id=$1 AND tenant_id=$2 AND action='settings.updated'",
+          [fid(1), fid(10)],
+        )
+      ).rowCount,
+    ).toBe(1);
+    expect(
+      (await request(`tenants/${fid(11)}/workspaces/${fid(20)}`, "GET", undefined, platform))
+        .status,
+    ).toBe(404);
+    expect(
+      (await owner.query("SELECT id FROM web.tenant_member WHERE user_id=$1", [fid(1)])).rowCount,
+    ).toBe(0);
+  });
+  it("revalidates platform access after tenant changes, tenant disablement and platform demotion", async () => {
+    const response = await request("session", "GET", undefined, platform);
+    const before = await response.json();
+    await owner.query("UPDATE web.tenant SET authz_version=authz_version+1 WHERE id=$1", [fid(11)]);
+    const after = await (await request("session", "GET", undefined, platform)).json();
+    expect(after.viewRevision).not.toBe(before.viewRevision);
+    await owner.query("UPDATE web.tenant SET status='disabled' WHERE id=$1", [fid(11)]);
+    try {
+      expect(
+        (await request(`session?tenantId=${fid(11)}`, "GET", undefined, platform)).status,
+      ).toBe(404);
+      expect(await (await request("tenants", "GET", undefined, platform)).json()).toMatchObject({
+        total: 1,
+      });
+      expect(
+        await (await request("platform/tenants", "GET", undefined, platform)).json(),
+      ).toMatchObject({ total: 2 });
+    } finally {
+      await owner.query("UPDATE web.tenant SET status='active' WHERE id=$1", [fid(11)]);
+    }
+    await owner.query("UPDATE web.app_user SET is_platform_admin=false WHERE id=$1", [fid(1)]);
+    try {
+      const view = await (await request("session", "GET", undefined, platform)).json();
+      expect(view.viewRevision).not.toBe(after.viewRevision);
+      expect(view.navigation.some((p: { scopeKind: string }) => p.scopeKind !== "self")).toBe(
+        false,
+      );
+      expect((await request(`tenants/${fid(10)}/members`, "GET", undefined, platform)).status).toBe(
+        404,
+      );
+    } finally {
+      await owner.query("UPDATE web.app_user SET is_platform_admin=true WHERE id=$1", [fid(1)]);
+    }
   });
   it("rejects foreign-origin and invalid CSRF writes", async () => {
     const response = await handleWebRequest(

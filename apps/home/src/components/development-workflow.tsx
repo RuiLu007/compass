@@ -105,7 +105,7 @@ export function DevelopmentWorkflow() {
               title="启动 Home 官网"
               code={"pnpm install --frozen-lockfile\npnpm dev -F home"}
             />
-            <p className={s.commandNote}>只需 Node.js 与 pnpm；打开 http://127.0.0.1:3001。</p>
+            <p className={s.commandNote}>只需 Node.js 与 pnpm；打开 http://127.0.0.1:8101。</p>
           </div>
           <div>
             <CopyBlock
@@ -137,7 +137,7 @@ export function DevelopmentWorkflow() {
             />
           </div>
           <p className={s.commandNote}>
-            完整工程还需 uv 与 Docker。home 3001 · Web 3000 · Agent 8000 · Memory 8001 · PostgreSQL
+            完整工程还需 uv 与 Docker。home 8101 · Web 8100 · Agent 8102 · Memory 8103 · PostgreSQL
             55432；Worker 无 HTTP 端口，检查启动日志与退出状态。Memory 业务和 Worker
             任务消费待接入，当前两项均不依赖数据库或 Temporal。
           </p>

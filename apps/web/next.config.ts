@@ -4,6 +4,10 @@ import type { NextConfig } from "next";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const config: NextConfig = {
+  // Keep browser acceptance runs separate from the developer's active server.
+  ...(process.env.WEB_TEST_ISOLATED_BUILD === "true"
+    ? { distDir: ".next-e2e", devIndicators: false }
+    : {}),
   output: "standalone",
   outputFileTracingRoot: root,
   turbopack: { root },

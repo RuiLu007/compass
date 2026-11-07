@@ -55,10 +55,718 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/models/available": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Available */
+        get: operations["available_v1_models_available_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/models/calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Chat */
+        post: operations["chat_v1_models_calls_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/models/calls/{call_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Call */
+        get: operations["get_call_v1_models_calls__call_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/models/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catalog */
+        get: operations["catalog_v1_models_catalog_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/models/observability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Observability */
+        get: operations["observability_v1_models_observability_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/models/observability/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Summary */
+        get: operations["summary_v1_models_observability_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/models/operations/{operation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Operation */
+        get: operations["operation_v1_models_operations__operation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/models/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Providers */
+        get: operations["providers_v1_models_providers_get"];
+        put?: never;
+        /** Create Provider */
+        post: operations["create_provider_v1_models_providers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/models/providers/{provider_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Provider */
+        get: operations["provider_v1_models_providers__provider_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Provider */
+        patch: operations["patch_provider_v1_models_providers__provider_id__patch"];
+        trace?: never;
+    };
+    "/v1/models/providers/{provider_id}/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Changes */
+        get: operations["changes_v1_models_providers__provider_id__changes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/models/providers/{provider_id}/tests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Model */
+        post: operations["test_model_v1_models_providers__provider_id__tests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/models/reliability/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reliability Run */
+        post: operations["reliability_run_v1_models_reliability_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/models/reliability/scenarios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Reliability Scenarios */
+        get: operations["reliability_scenarios_v1_models_reliability_scenarios_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/models/test-calls/{call_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Test Call */
+        get: operations["get_test_call_v1_models_test_calls__call_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AttemptSummary */
+        AttemptSummary: {
+            /**
+             * Attempt Id
+             * Format: uuid
+             */
+            attempt_id: string;
+            /** Binding Version */
+            binding_version: number;
+            /**
+             * Cleanup Confirmed
+             * @default true
+             */
+            cleanup_confirmed: boolean;
+            /** Config Version */
+            config_version: number;
+            /** Duration Ms */
+            duration_ms: number;
+            /**
+             * Error Code
+             * @default null
+             */
+            error_code: string | null;
+            /** Number */
+            number: number;
+            /**
+             * Provider Id
+             * Format: uuid
+             */
+            provider_id: string;
+            /**
+             * Sent
+             * @default false
+             */
+            sent: boolean;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "completed" | "failed" | "canceled" | "incomplete";
+            /**
+             * Upstream Outcome Unknown
+             * @default false
+             */
+            upstream_outcome_unknown: boolean;
+            /**
+             * Upstream Request Id
+             * @default null
+             */
+            upstream_request_id: string | null;
+            usage?: components["schemas"]["ModelUsage"];
+        };
+        /** AvailableModel */
+        AvailableModel: {
+            /** Alias */
+            alias: string;
+            /** Api Model */
+            api_model: string;
+            capabilities: components["schemas"]["ModelCapabilities"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "llm";
+        };
+        /** AvailableModels */
+        AvailableModels: {
+            /** Items */
+            items: components["schemas"]["AvailableModel"][];
+        };
+        /** CallOutcome */
+        CallOutcome: {
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            /** Config Version */
+            config_version: number;
+            /** Duration Ms */
+            duration_ms: number;
+            /**
+             * Error Code
+             * @default null
+             */
+            error_code: string | null;
+            /** @default null */
+            execution: components["schemas"]["ExecutionSummary"] | null;
+            /**
+             * Finish Reason
+             * @default null
+             */
+            finish_reason: string | null;
+            /**
+             * Provider Id
+             * Format: uuid
+             */
+            provider_id: string;
+            /** Requested Model */
+            requested_model: string;
+            /**
+             * Response Model
+             * @default null
+             */
+            response_model: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "completed" | "failed" | "canceled" | "incomplete";
+            /**
+             * Upstream Outcome Unknown
+             * @default false
+             */
+            upstream_outcome_unknown: boolean;
+            /**
+             * Upstream Request Id
+             * @default null
+             */
+            upstream_request_id: string | null;
+            usage?: components["schemas"]["ModelUsage"];
+            validation?: components["schemas"]["OutputValidation"];
+        };
+        /** CallRecordView */
+        CallRecordView: {
+            /** Binding Version */
+            binding_version: number;
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            /** Config Version */
+            config_version: number;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** Error Code */
+            error_code: string | null;
+            /** @default null */
+            execution: components["schemas"]["ExecutionSummary"] | null;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Provider Id
+             * Format: uuid
+             */
+            provider_id: string;
+            /**
+             * Purpose
+             * @enum {string}
+             */
+            purpose: "test" | "chat";
+            /** Requested Model */
+            requested_model: string;
+            /** Response Model */
+            response_model: string | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "running" | "completed" | "failed" | "canceled" | "incomplete";
+            /** Upstream Outcome Unknown */
+            upstream_outcome_unknown: boolean;
+            usage: components["schemas"]["ModelUsage"];
+        };
+        /** CallResponse */
+        CallResponse: {
+            /**
+             * Answers
+             * @default null
+             */
+            answers: {
+                [key: string]: components["schemas"]["DecisionAnswer"];
+            } | null;
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            /** Config Version */
+            config_version: number;
+            /**
+             * Continuation Token
+             * @default null
+             */
+            continuation_token: string | null;
+            /** Duration Ms */
+            duration_ms: number;
+            /**
+             * Error Code
+             * @default null
+             */
+            error_code: string | null;
+            /** @default null */
+            execution: components["schemas"]["ExecutionSummary"] | null;
+            /**
+             * Finish Reason
+             * @default null
+             */
+            finish_reason: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "generate" | "decision";
+            /**
+             * Provider Id
+             * Format: uuid
+             */
+            provider_id: string;
+            /**
+             * Raw Response
+             * @default null
+             */
+            raw_response: {
+                [key: string]: unknown;
+            } | null;
+            /** Requested Model */
+            requested_model: string;
+            /**
+             * Response Model
+             * @default null
+             */
+            response_model: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "completed" | "failed" | "canceled" | "incomplete";
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+            /** Tool Calls */
+            tool_calls?: components["schemas"]["ToolCall"][];
+            /**
+             * Upstream Outcome Unknown
+             * @default false
+             */
+            upstream_outcome_unknown: boolean;
+            /**
+             * Upstream Request Id
+             * @default null
+             */
+            upstream_request_id: string | null;
+            usage?: components["schemas"]["ModelUsage"];
+            validation?: components["schemas"]["OutputValidation"];
+        };
+        /** Capability */
+        Capability: {
+            /** Reason */
+            reason: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "supported" | "unsupported" | "unknown";
+        };
+        /** CatalogItem */
+        CatalogItem: {
+            /** Adapter Supported */
+            adapter_supported: boolean;
+            /** Api Model */
+            api_model: string;
+            /**
+             * Base Url
+             * @default null
+             */
+            base_url: string | null;
+            capabilities: components["schemas"]["ModelCapabilities"];
+            /**
+             * Chat Supported
+             * @default false
+             */
+            chat_supported: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "llm" | "decision" | "unsupported";
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "litellm" | "project_verified" | "systemone";
+            /** Vendor */
+            vendor: string;
+        };
+        /** CatalogPage */
+        CatalogPage: {
+            /** Items */
+            items: components["schemas"]["CatalogItem"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Sdk Version */
+            sdk_version: string;
+            /** Total */
+            total: number;
+        };
+        /** ChatCallInput */
+        ChatCallInput: {
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            input: components["schemas"]["GenerateInput"];
+            /** @default null */
+            main_model: components["schemas"]["MainModelSelection"] | null;
+            /**
+             * Provider Id
+             * @default null
+             */
+            provider_id: string | null;
+        };
+        /** ChatMessage */
+        ChatMessage: {
+            /**
+             * Content
+             * @default null
+             */
+            content: string | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "system" | "user" | "assistant" | "tool";
+            /**
+             * Tool Call Id
+             * @default null
+             */
+            tool_call_id: string | null;
+            /**
+             * Tool Calls
+             * @default null
+             */
+            tool_calls: components["schemas"]["ToolCall"][] | null;
+        };
+        /** ClassificationEvent */
+        ClassificationEvent: {
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "jev" | "flash";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "classification_status";
+        };
+        /** DecisionAnswer */
+        DecisionAnswer: {
+            /**
+             * Choice
+             * @default null
+             */
+            choice: string | null;
+            /**
+             * Confidence
+             * @default null
+             */
+            confidence: number | null;
+            /**
+             * Legend
+             * @default null
+             */
+            legend: {
+                [key: string]: string | {
+                    [key: string]: unknown;
+                } | unknown[];
+            } | null;
+            /**
+             * Noul
+             * @default null
+             */
+            noul: number | null;
+            /**
+             * Probabilities
+             * @default null
+             */
+            probabilities: {
+                [key: string]: number;
+            } | null;
+            /**
+             * Score
+             * @default null
+             */
+            score: number | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "choice" | "noul" | "score";
+        };
+        /** DecisionInput */
+        DecisionInput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "decision";
+            /** Questions */
+            questions: {
+                [key: string]: components["schemas"]["DecisionQuestion"];
+            };
+            /** State */
+            state: string | {
+                [key: string]: unknown;
+            } | unknown[];
+            /**
+             * Stream
+             * @default false
+             * @constant
+             */
+            stream: false;
+        };
+        /** DecisionQuestion */
+        DecisionQuestion: {
+            /**
+             * Criteria
+             * @default null
+             */
+            criteria: {
+                [key: string]: string | {
+                    [key: string]: unknown;
+                } | unknown[] | null;
+            } | (string | {
+                [key: string]: unknown;
+            } | unknown[])[] | null;
+            /**
+             * Instructions
+             * @default
+             */
+            instructions: string | {
+                [key: string]: unknown;
+            } | unknown[];
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "choice" | "noul" | "score";
+        };
         /** DemoOverview */
         DemoOverview: {
             /**
@@ -96,6 +804,161 @@ export interface components {
              */
             start_date: string;
         };
+        /** ExecutionSummary */
+        ExecutionSummary: {
+            /** Attempts */
+            attempts?: components["schemas"]["AttemptSummary"][];
+            /**
+             * Max Attempts
+             * @enum {integer}
+             */
+            max_attempts: 1 | 2;
+            /** Queue Wait Ms */
+            queue_wait_ms: number;
+            /**
+             * Stop Reason
+             * @enum {string}
+             */
+            stop_reason: "completed" | "non_retryable" | "attempts_exhausted" | "deadline_exceeded" | "canceled" | "overloaded" | "cleanup_unconfirmed";
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+        };
+        /** FinalEvent */
+        FinalEvent: {
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            /** Config Version */
+            config_version: number;
+            /**
+             * Continuation Token
+             * @default null
+             */
+            continuation_token: string | null;
+            /** Duration Ms */
+            duration_ms: number;
+            /**
+             * Error Code
+             * @default null
+             */
+            error_code: string | null;
+            /** @default null */
+            execution: components["schemas"]["ExecutionSummary"] | null;
+            /**
+             * Finish Reason
+             * @default null
+             */
+            finish_reason: string | null;
+            /**
+             * Provider Id
+             * Format: uuid
+             */
+            provider_id: string;
+            /** Requested Model */
+            requested_model: string;
+            /**
+             * Response Model
+             * @default null
+             */
+            response_model: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "completed" | "failed" | "canceled" | "incomplete";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "final";
+            /**
+             * Upstream Outcome Unknown
+             * @default false
+             */
+            upstream_outcome_unknown: boolean;
+            /**
+             * Upstream Request Id
+             * @default null
+             */
+            upstream_request_id: string | null;
+            usage?: components["schemas"]["ModelUsage"];
+            validation?: components["schemas"]["OutputValidation"];
+        };
+        /** GateSnapshot */
+        GateSnapshot: {
+            /** Active */
+            active: number;
+            /** Available */
+            available: number;
+            /** Capacity */
+            capacity: number;
+            /** Inflight */
+            inflight: number;
+            /** Max Inflight */
+            max_inflight: number;
+            /** Peak Active */
+            peak_active: number;
+            /** Peak Inflight */
+            peak_inflight: number;
+            /** Quarantined */
+            quarantined: number;
+        };
+        /** GenerateInput */
+        GenerateInput: {
+            /**
+             * Continuation Token
+             * @default null
+             */
+            continuation_token: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "generate";
+            /**
+             * Max Tokens
+             * @default 8192
+             */
+            max_tokens: number;
+            /** Messages */
+            messages: components["schemas"]["ChatMessage"][];
+            /**
+             * Output Format
+             * @default text
+             * @enum {string}
+             */
+            output_format: "text" | "json" | "schema";
+            /**
+             * Output Schema
+             * @default null
+             */
+            output_schema: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Reasoning Effort
+             * @default null
+             */
+            reasoning_effort: ("low" | "medium" | "high" | "max") | null;
+            /**
+             * Stream
+             * @default false
+             */
+            stream: boolean;
+            /**
+             * Thinking
+             * @default false
+             */
+            thinking: boolean;
+            /** Tools */
+            tools?: components["schemas"]["ToolDefinition"][];
+        };
         /** Health */
         Health: {
             /**
@@ -110,6 +973,914 @@ export interface components {
              * @constant
              */
             status: "ok";
+        };
+        /** Intent */
+        Intent: {
+            /** Category Id */
+            category_id: string;
+            /** Scene Id */
+            scene_id: string;
+        };
+        /** MainModelSelection */
+        MainModelSelection: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "fixed" | "auto";
+            /**
+             * Provider Id
+             * @default null
+             */
+            provider_id: string | null;
+        };
+        /** ModelCapabilities */
+        ModelCapabilities: {
+            json_output: components["schemas"]["Capability"];
+            /** Reasoning Efforts */
+            reasoning_efforts: string[];
+            schema_output: components["schemas"]["Capability"];
+            stream: components["schemas"]["Capability"];
+            sync: components["schemas"]["Capability"];
+            thinking: components["schemas"]["Capability"];
+            tools: components["schemas"]["Capability"];
+        };
+        /** ModelChangePage */
+        ModelChangePage: {
+            /** Items */
+            items: components["schemas"]["ModelChangeView"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+        };
+        /** ModelChangeView */
+        ModelChangeView: {
+            /**
+             * Actor User Id
+             * Format: uuid
+             */
+            actor_user_id: string;
+            /** After Version */
+            after_version: number;
+            /** Before Version */
+            before_version: number | null;
+            /** Changed Fields */
+            changed_fields: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /**
+             * Provider Id
+             * Format: uuid
+             */
+            provider_id: string;
+        };
+        /** ModelComparison */
+        ModelComparison: {
+            /** Environment */
+            environment: string;
+            /**
+             * From Timestamp
+             * Format: date-time
+             */
+            from_timestamp: string;
+            /** Items */
+            items: components["schemas"]["ModelComparisonRow"][];
+            /** Sample Ratio */
+            sample_ratio: number;
+            /**
+             * To Timestamp
+             * Format: date-time
+             */
+            to_timestamp: string;
+        };
+        /** ModelComparisonRow */
+        ModelComparisonRow: {
+            /**
+             * Attempt Count
+             * @default null
+             */
+            attempt_count: number | null;
+            /**
+             * Canceled
+             * @default null
+             */
+            canceled: number | null;
+            /**
+             * Completed
+             * @default null
+             */
+            completed: number | null;
+            /**
+             * Data State
+             * @enum {string}
+             */
+            data_state: "observed" | "empty" | "unavailable";
+            /**
+             * Estimated Usd
+             * @default null
+             */
+            estimated_usd: number | null;
+            /**
+             * Failed
+             * @default null
+             */
+            failed: number | null;
+            /**
+             * Incomplete
+             * @default null
+             */
+            incomplete: number | null;
+            /**
+             * Known Estimated Usd
+             * @default null
+             */
+            known_estimated_usd: number | null;
+            /**
+             * Known Input Tokens
+             * @default null
+             */
+            known_input_tokens: number | null;
+            /**
+             * Known Output Tokens
+             * @default null
+             */
+            known_output_tokens: number | null;
+            /**
+             * Logical Count
+             * @default null
+             */
+            logical_count: number | null;
+            /**
+             * Mean Duration Ms
+             * @default null
+             */
+            mean_duration_ms: number | null;
+            /** Model */
+            model: string;
+            /**
+             * Provider Id
+             * Format: uuid
+             */
+            provider_id: string;
+            /**
+             * Success Rate
+             * @default null
+             */
+            success_rate: number | null;
+            /**
+             * Unknown Cost Attempts
+             * @default null
+             */
+            unknown_cost_attempts: number | null;
+            /**
+             * Unknown Usage Attempts
+             * @default null
+             */
+            unknown_usage_attempts: number | null;
+        };
+        /** ModelErrorDetail */
+        ModelErrorDetail: {
+            /** Code */
+            code: string;
+            /**
+             * Currentversion
+             * @default null
+             */
+            currentVersion: number | null;
+            /** Message */
+            message: string;
+            /** Requestid */
+            requestId: string;
+        };
+        /** ModelErrorResponse */
+        ModelErrorResponse: {
+            error: components["schemas"]["ModelErrorDetail"];
+        };
+        /** ModelEvent */
+        ModelEvent: components["schemas"]["StartEvent"] | components["schemas"]["TextDeltaEvent"] | components["schemas"]["ToolDeltaEvent"] | components["schemas"]["ReasoningMetaEvent"] | components["schemas"]["FinalEvent"];
+        /** ModelRoute */
+        ModelRoute: {
+            /** Dictionary Version */
+            dictionary_version: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "fixed" | "auto";
+            /** Model */
+            model: string;
+            /**
+             * Provider Id
+             * Format: uuid
+             */
+            provider_id: string;
+            /** Reason */
+            reason: string;
+            /** Routing Version */
+            routing_version: string;
+        };
+        /** ModelUsage */
+        ModelUsage: {
+            /**
+             * Input Tokens
+             * @default null
+             */
+            input_tokens: number | null;
+            /**
+             * Output Tokens
+             * @default null
+             */
+            output_tokens: number | null;
+            /**
+             * Reasoning Tokens
+             * @default null
+             */
+            reasoning_tokens: number | null;
+        };
+        /** ObservabilityStatus */
+        ObservabilityStatus: {
+            /** Configured */
+            configured: boolean;
+            /** Dropped */
+            dropped: number;
+            /** Enabled */
+            enabled: boolean;
+            /** Environment */
+            environment: string;
+            /** Export Failures */
+            export_failures: number;
+            /** Instance Id */
+            instance_id: string;
+            /** Instrumentation Errors */
+            instrumentation_errors: number;
+            /**
+             * Last Export
+             * @enum {string}
+             */
+            last_export: "never" | "success" | "failure";
+            /** Queue Capacity */
+            queue_capacity: number;
+            /** Queue Size */
+            queue_size: number;
+            /** Sample Ratio */
+            sample_ratio: number;
+        };
+        /** OutputValidation */
+        OutputValidation: {
+            /**
+             * Mode
+             * @default text
+             * @enum {string}
+             */
+            mode: "text" | "json" | "schema" | "decision";
+            /** Paths */
+            paths?: string[];
+            /**
+             * Status
+             * @default not_requested
+             * @enum {string}
+             */
+            status: "not_requested" | "valid" | "invalid";
+        };
+        /** PlatformScope */
+        PlatformScope: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "platform";
+        };
+        /** ProviderCreate */
+        ProviderCreate: {
+            /** Alias */
+            alias: string;
+            /**
+             * Api Key
+             * @default
+             */
+            api_key: string;
+            /** Api Model */
+            api_model: string;
+            /**
+             * Base Url
+             * @default
+             */
+            base_url: string;
+            /** Catalog Id */
+            catalog_id: string;
+            /**
+             * Chat Visible
+             * @default false
+             */
+            chat_visible: boolean;
+            /**
+             * Connection Params
+             * @default null
+             */
+            connection_params: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+        };
+        /** ProviderPage */
+        ProviderPage: {
+            /** Items */
+            items: components["schemas"]["ProviderView"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+        };
+        /** ProviderPatch */
+        ProviderPatch: {
+            /**
+             * Alias
+             * @default null
+             */
+            alias: string | null;
+            /**
+             * Api Key
+             * @default null
+             */
+            api_key: string | null;
+            /**
+             * Api Model
+             * @default null
+             */
+            api_model: string | null;
+            /**
+             * Base Url
+             * @default null
+             */
+            base_url: string | null;
+            /**
+             * Catalog Id
+             * @default null
+             */
+            catalog_id: string | null;
+            /**
+             * Chat Visible
+             * @default null
+             */
+            chat_visible: boolean | null;
+            /**
+             * Connection Params
+             * @default null
+             */
+            connection_params: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Enabled
+             * @default null
+             */
+            enabled: boolean | null;
+            /** Expected Version */
+            expected_version: number;
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+        };
+        /** ProviderView */
+        ProviderView: {
+            /** Alias */
+            alias: string;
+            /** Api Model */
+            api_model: string;
+            /** Base Url */
+            base_url: string;
+            /** Binding Version */
+            binding_version: number;
+            capabilities: components["schemas"]["ModelCapabilities"];
+            /** Catalog Id */
+            catalog_id: string;
+            /** Chat Supported */
+            chat_supported: boolean;
+            /** Chat Visible */
+            chat_visible: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Has Api Key */
+            has_api_key: boolean;
+            /**
+             * Has Connection Params
+             * @default false
+             */
+            has_connection_params: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "llm" | "decision";
+            /** @default null */
+            latest_test: components["schemas"]["TestSummary"] | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Vendor */
+            vendor: string;
+            /** Version */
+            version: number;
+        };
+        /** ReasoningMetaEvent */
+        ReasoningMetaEvent: {
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            /**
+             * Reasoning Effort
+             * @default null
+             */
+            reasoning_effort: string | null;
+            /** Thinking */
+            thinking: boolean;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "reasoning_meta";
+        };
+        /** @enum {string} */
+        ReliabilityScenario: "success" | "rate_limit" | "unavailable" | "exhausted" | "authentication" | "timeout" | "interrupted" | "schema_invalid" | "cancel" | "concurrency" | "cleanup_failed";
+        /** RouteSelectedEvent */
+        RouteSelectedEvent: {
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            features: components["schemas"]["RoutingFeatures"];
+            intent: components["schemas"]["Intent"];
+            routing: components["schemas"]["ModelRoute"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "route_selected";
+        };
+        /** RoutedCallResponse */
+        RoutedCallResponse: {
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            /**
+             * Error Code
+             * @default null
+             */
+            error_code: string | null;
+            /** @default null */
+            features: components["schemas"]["RoutingFeatures"] | null;
+            /** @default null */
+            intent: components["schemas"]["Intent"] | null;
+            metrics?: components["schemas"]["RoutingMetrics"];
+            /** @default null */
+            result: components["schemas"]["CallResponse"] | null;
+            /** @default null */
+            routing: components["schemas"]["ModelRoute"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "completed" | "failed" | "canceled" | "incomplete";
+        };
+        /** RoutedModelEvent */
+        RoutedModelEvent: components["schemas"]["RoutingStartEvent"] | components["schemas"]["ClassificationEvent"] | components["schemas"]["RouteSelectedEvent"] | components["schemas"]["TextDeltaEvent"] | components["schemas"]["ToolDeltaEvent"] | components["schemas"]["ReasoningMetaEvent"] | components["schemas"]["RoutingFinalEvent"];
+        /** RoutingFeatures */
+        RoutingFeatures: {
+            /**
+             * Difficulty
+             * @enum {string}
+             */
+            difficulty: "L1" | "L2" | "L3" | "undetermined";
+            /** Required Capabilities */
+            required_capabilities?: string[];
+            /**
+             * Response Mode
+             * @enum {string}
+             */
+            response_mode: "answer" | "clarify" | "refuse" | "handoff";
+            /** Task Type */
+            task_type: string;
+        };
+        /** RoutingFinalEvent */
+        RoutingFinalEvent: {
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            /**
+             * Error Code
+             * @default null
+             */
+            error_code: string | null;
+            /** @default null */
+            features: components["schemas"]["RoutingFeatures"] | null;
+            /** @default null */
+            intent: components["schemas"]["Intent"] | null;
+            metrics?: components["schemas"]["RoutingMetrics"];
+            /** @default null */
+            result: components["schemas"]["CallResponse"] | null;
+            /** @default null */
+            routing: components["schemas"]["ModelRoute"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "completed" | "failed" | "canceled" | "incomplete";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "final";
+        };
+        /** RoutingMetrics */
+        RoutingMetrics: {
+            /** Classification Calls */
+            classification_calls?: components["schemas"]["CallOutcome"][];
+            /**
+             * Classifier Source
+             * @default null
+             */
+            classifier_source: ("jev" | "flash") | null;
+            /**
+             * Duration Ms
+             * @default 0
+             */
+            duration_ms: number;
+            /**
+             * Fallback Reason
+             * @default null
+             */
+            fallback_reason: string | null;
+            /**
+             * Usage Complete
+             * @default false
+             */
+            usage_complete: boolean;
+        };
+        /** RoutingStartEvent */
+        RoutingStartEvent: {
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "start";
+        };
+        /** SavedProvider */
+        SavedProvider: {
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /**
+             * Provider Id
+             * Format: uuid
+             */
+            provider_id: string;
+            /** Version */
+            version: number;
+        };
+        /** ShowcaseCall */
+        ShowcaseCall: {
+            /** Accepted */
+            accepted: boolean;
+            /** Number */
+            number: number;
+            /** Preview */
+            preview: string;
+            result: components["schemas"]["CallResponse"];
+            /** Upstream Requests */
+            upstream_requests: number;
+        };
+        /** ShowcaseCatalog */
+        ShowcaseCatalog: {
+            /** Items */
+            items: components["schemas"]["ShowcaseScenario"][];
+        };
+        /** ShowcaseEvent */
+        ShowcaseEvent: components["schemas"]["ShowcaseStart"] | components["schemas"]["ShowcaseProgress"] | components["schemas"]["ShowcaseFinal"];
+        /** ShowcaseFinal */
+        ShowcaseFinal: {
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            /** Calls */
+            calls: components["schemas"]["ShowcaseCall"][];
+            capacity: components["schemas"]["GateSnapshot"];
+            /** Duration Ms */
+            duration_ms: number;
+            /** Passed */
+            passed: boolean;
+            scenario: components["schemas"]["ReliabilityScenario"];
+            /**
+             * Simulation
+             * @default true
+             * @constant
+             */
+            simulation: true;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "final";
+        };
+        /** ShowcaseInput */
+        ShowcaseInput: {
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            scenario: components["schemas"]["ReliabilityScenario"];
+        };
+        /** ShowcaseProgress */
+        ShowcaseProgress: {
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            capacity: components["schemas"]["GateSnapshot"];
+            /** Message */
+            message: string;
+            /** Number */
+            number: number;
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "progress";
+        };
+        /** ShowcaseReport */
+        ShowcaseReport: {
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            /** Calls */
+            calls: components["schemas"]["ShowcaseCall"][];
+            capacity: components["schemas"]["GateSnapshot"];
+            /** Duration Ms */
+            duration_ms: number;
+            /** Passed */
+            passed: boolean;
+            scenario: components["schemas"]["ReliabilityScenario"];
+            /**
+             * Simulation
+             * @default true
+             * @constant
+             */
+            simulation: true;
+        };
+        /** ShowcaseScenario */
+        ShowcaseScenario: {
+            /** Description */
+            description: string;
+            /** Expected */
+            expected: string;
+            id: components["schemas"]["ReliabilityScenario"];
+            /** Title */
+            title: string;
+        };
+        /** ShowcaseStart */
+        ShowcaseStart: {
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "start";
+        };
+        /** StartEvent */
+        StartEvent: {
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            /** Config Version */
+            config_version: number;
+            /**
+             * Provider Id
+             * Format: uuid
+             */
+            provider_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "start";
+        };
+        /** TenantScope */
+        TenantScope: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "tenant";
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /** TestCallInput */
+        TestCallInput: {
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            /** Input */
+            input: components["schemas"]["GenerateInput"] | components["schemas"]["DecisionInput"];
+        };
+        /** TestSummary */
+        TestSummary: {
+            /** Binding Version */
+            binding_version: number;
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            /** Capabilities */
+            capabilities: string[];
+            /** Stale */
+            stale: boolean;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Status */
+            status: string;
+        };
+        /** TextDeltaEvent */
+        TextDeltaEvent: {
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            /** Text */
+            text: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "text_delta";
+        };
+        /** ToolCall */
+        ToolCall: {
+            function: components["schemas"]["ToolCallFunction"];
+            /** Id */
+            id: string;
+            /**
+             * Type
+             * @default function
+             * @constant
+             */
+            type: "function";
+        };
+        /** ToolCallFunction */
+        ToolCallFunction: {
+            /** Arguments */
+            arguments: string;
+            /** Name */
+            name: string;
+        };
+        /** ToolDefinition */
+        ToolDefinition: {
+            function: components["schemas"]["ToolFunction"];
+            /**
+             * Type
+             * @default function
+             * @constant
+             */
+            type: "function";
+        };
+        /** ToolDeltaEvent */
+        ToolDeltaEvent: {
+            /**
+             * Arguments
+             * @default
+             */
+            arguments: string;
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            /**
+             * Id
+             * @default null
+             */
+            id: string | null;
+            /** Index */
+            index: number;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "tool_delta";
+        };
+        /** ToolFunction */
+        ToolFunction: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Name */
+            name: string;
+            /** Parameters */
+            parameters?: {
+                [key: string]: unknown;
+            };
+        };
+        /** TrustedContext */
+        TrustedContext: {
+            /**
+             * Actor User Id
+             * Format: uuid
+             */
+            actor_user_id: string;
+            /**
+             * Purpose
+             * @enum {string}
+             */
+            purpose: "manage" | "test" | "chat" | "module_read";
+            /** Scope */
+            scope: components["schemas"]["PlatformScope"] | components["schemas"]["TenantScope"];
         };
     };
     responses: never;
@@ -176,6 +1947,1292 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DemoOverview"];
+                };
+            };
+        };
+    };
+    available_v1_models_available_get: {
+        parameters: {
+            query?: {
+                view?: "chat" | "module";
+            };
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AvailableModels"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    chat_v1_models_calls_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatCallInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoutedCallResponse"];
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    get_call_v1_models_calls__call_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path: {
+                call_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallRecordView"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    catalog_v1_models_catalog_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                vendor?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogPage"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    observability_v1_models_observability_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObservabilityStatus"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    summary_v1_models_observability_summary_get: {
+        parameters: {
+            query: {
+                provider_ids: string;
+                window?: "1h" | "24h" | "7d";
+            };
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelComparison"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    operation_v1_models_operations__operation_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path: {
+                operation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedProvider"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    providers_v1_models_providers_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                kind?: ("llm" | "decision") | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderPage"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    create_provider_v1_models_providers_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedProvider"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    provider_v1_models_providers__provider_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderView"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    patch_provider_v1_models_providers__provider_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedProvider"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    changes_v1_models_providers__provider_id__changes_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelChangePage"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    test_model_v1_models_providers__provider_id__tests_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TestCallInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallResponse"];
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    reliability_run_v1_models_reliability_runs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShowcaseInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShowcaseReport"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    reliability_scenarios_v1_models_reliability_scenarios_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShowcaseCatalog"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    get_test_call_v1_models_test_calls__call_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path: {
+                call_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallRecordView"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
                 };
             };
         };

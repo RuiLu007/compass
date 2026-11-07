@@ -1,0 +1,36 @@
+{
+  "title": "DataAgent 意图分类体系定义",
+  "subtitle": "场景边界、两级分类与字典特征",
+  "brand": "Compass",
+  "label": "第 12 课 · 意图分类体系",
+  "source": "../../../spec/PRD.md",
+  "guide": "guide.md",
+  "output": "../../INTENT_TAXONOMY.html",
+  "topics": [
+    "40 个场景",
+    "特征设计",
+    "分类边界"
+  ],
+  "metrics": [
+    {
+      "value": "10",
+      "label": "一级分类",
+      "detail": "业务域与输入边界"
+    },
+    {
+      "value": "40",
+      "label": "二级场景",
+      "detail": "完整场景目录"
+    },
+    {
+      "value": "88",
+      "label": "规格问题",
+      "detail": "原工作簿样例"
+    },
+    {
+      "value": "2 + 4",
+      "label": "分类与特征",
+      "detail": "两字段分类、四项字典特征"
+    }
+  ]
+}

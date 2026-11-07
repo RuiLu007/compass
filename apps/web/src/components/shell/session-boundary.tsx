@@ -53,11 +53,7 @@ export function ProductApplication({ children }: { children: ReactNode }) {
       const compatible =
         previous?.session.sessionId === page.payload.session.sessionId &&
         previous.session.viewRevision === page.payload.session.viewRevision;
-      const session = new DocumentSession(
-        page.payload,
-        router,
-        compatible ? old?.session.displayDeadline : 0,
-      );
+      const session = new DocumentSession(page.payload, router);
       old?.session.dispose();
       const next = { payload: page.payload, session, previous: compatible ? previous : null };
       current.current = next;
@@ -97,7 +93,7 @@ function SessionBoundary({ frame }: { frame: Frame }) {
   useSyncExternalStore(session.subscribe, session.snapshot, session.serverSnapshot);
   useEffect(() => session.start(), [session]);
   const active = session.phase === "active";
-  const visibleShell = active ? payload : session.phase === "boot" ? previous : null;
+  const shell = session.retainsContent ? payload : session.phase === "boot" ? previous : null;
   function submit(event: FormEvent<HTMLDivElement>) {
     const form = event.target;
     if (!(form instanceof HTMLFormElement) || form.getAttribute("method")?.toLowerCase() !== "get")
@@ -110,7 +106,7 @@ function SessionBoundary({ frame }: { frame: Frame }) {
   }
   return (
     <SessionContext.Provider value={session}>
-      {!visibleShell && (
+      {!shell && (
         <main className="safe-state" role="status">
           <div className="brand-mark">C</div>
           <h1>Compass</h1>
@@ -128,8 +124,8 @@ function SessionBoundary({ frame }: { frame: Frame }) {
       <div
         data-protected-root
         ref={(element) => session.attach(element)}
-        hidden={!visibleShell}
-        inert={!visibleShell}
+        hidden={!shell}
+        inert={!shell}
         onSubmitCapture={submit}
         onInputCapture={(event) => {
           const target = event.target as HTMLElement;
@@ -137,9 +133,9 @@ function SessionBoundary({ frame }: { frame: Frame }) {
             session.setDirty(true);
         }}
       >
-        {visibleShell && (
-          <AppShell payload={visibleShell} busy={!active}>
-            {active ? (
+        {shell && (
+          <AppShell payload={shell} busy={!active}>
+            {session.retainsContent ? (
               <ProductContent key={payload.viewKey} payload={payload} />
             ) : (
               <p className="content-loading" role="status">

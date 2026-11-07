@@ -24,5 +24,5 @@ export default defineConfig([
     },
   },
   prettier,
-  globalIgnores([".next/**", "next-env.d.ts", "src/generated/**"]),
+  globalIgnores([".next/**", ".next-e2e/**", "next-env.d.ts", "src/generated/**"]),
 ]);

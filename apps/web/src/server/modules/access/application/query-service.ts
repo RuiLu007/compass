@@ -43,12 +43,12 @@ export function createQueryService({ context: ctx, digest, newId }: Dependencies
   async function revision(actor: Actor) {
     return digest(
       JSON.stringify([
-        "v2-readable-routes",
+        "v3-platform-access",
         actor.userId,
         actor.sessionId,
         actor.isPlatformAdmin,
         PERMISSION_CATALOG_VERSION,
-        await ctx.access.activeTenantVersions(actor.userId),
+        await ctx.access.activeTenantVersions(actor),
       ]),
     );
   }
@@ -81,8 +81,20 @@ export function createQueryService({ context: ctx, digest, newId }: Dependencies
     );
   }
   async function session(token: string, scope: PageScope = {}): Promise<SessionView> {
+    const requestedScope = scope;
     const actor = await ctx.identity.requireActor(token);
     const user = await ctx.identity.profile(actor.userId);
+    if (actor.isPlatformAdmin && !scope.tenantId && !scope.workspaceId) {
+      const tenants = await ctx.access.tenants(actor, firstPage);
+      const chosen =
+        tenants.items.find((t) => t.id === user.preferences.lastTenantId) ?? tenants.items[0];
+      if (chosen) {
+        const spaces = await ctx.access.workspaces(chosen.id, null, firstPage);
+        const space =
+          spaces.items.find((w) => w.id === user.preferences.lastWorkspaceId) ?? spaces.items[0];
+        scope = { tenantId: chosen.id, workspaceId: space?.id };
+      }
+    }
     let access: CurrentAccess | null = null;
     let tenant: SessionView["tenant"] = null;
     let workspace: SessionView["workspace"] = null;
@@ -125,7 +137,7 @@ export function createQueryService({ context: ctx, digest, newId }: Dependencies
         : [],
       tenantCapabilities: access ? effectivePermissions(access, { tenantId: access.tenantId }) : [],
       navigation,
-      scope,
+      scope: requestedScope,
       tenant,
       workspace,
     };
@@ -151,12 +163,11 @@ export function createQueryService({ context: ctx, digest, newId }: Dependencies
       }
     }
     const actor = await ctx.identity.requireActor(token);
-    if (actor.isPlatformAdmin) return "/platform/tenants";
     const user = await ctx.identity.profile(actor.userId);
     const tenants = await ctx.access.tenants(actor, firstPage);
     const preferred = user.preferences.lastTenantId;
     const chosen = tenants.items.find((t) => t.id === preferred) ?? tenants.items[0];
-    if (!chosen) return "/access";
+    if (!chosen) return actor.isPlatformAdmin ? "/platform/tenants" : "/access";
     const access = await ctx.access.current(actor, chosen.id);
     const spaces = await ctx.access.workspaces(
       chosen.id,

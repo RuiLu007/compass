@@ -4,6 +4,7 @@ export const navigation = [
   { href: "/architecture", label: "技术架构" },
   { href: "/scaffold", label: "项目脚手架" },
   { href: "/course", label: "课程任务" },
+  { href: "/resources", label: "课程资料" },
   { href: "/learning", label: "学习指南" },
 ] as const;
 
@@ -114,7 +115,7 @@ export const codeMap = [
   {
     path: "apps/home/",
     role: "官网与课程入口",
-    detail: "当前页面所在的独立 Next.js App；端口 3001，无数据库或模型密钥依赖。",
+    detail: "当前页面所在的独立 Next.js App；端口 8101，无数据库或模型密钥依赖。",
     status: "已实现",
   },
   {
@@ -127,14 +128,14 @@ export const codeMap = [
     path: "apps/agent/",
     role: "Agent 主后端",
     detail:
-      "FastAPI，端口 8000；已具备接口契约、应用库迁移和三天演示样本。普通执行、分派与 Sandbox 控制待在内部实现。",
+      "FastAPI，端口 8102；已具备接口契约、应用库迁移和三天演示样本。普通执行、分派与 Sandbox 控制待在内部实现。",
     status: "已实现",
   },
   {
     path: "apps/memory/",
     role: "独立记忆服务",
     detail:
-      "Python / FastAPI，端口 8001；当前提供健康检查，无数据库依赖，记忆业务与工具接口待实现。",
+      "Python / FastAPI，端口 8103；当前提供健康检查，无数据库依赖，记忆业务与工具接口待实现。",
     status: "脚手架",
   },
   {

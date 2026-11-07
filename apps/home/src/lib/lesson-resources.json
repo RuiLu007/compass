@@ -1,0 +1,60 @@
+[
+  {
+    "number": 11,
+    "title": "统一模型调用与 Runtime",
+    "description": "模型接入、调用协议与 Runtime 的核心设计。",
+    "artifacts": [
+      {
+        "id": "technical-design",
+        "title": "技术方案 · 精简阅读版",
+        "source": "mai-specs/993-lesson-11-llm-runtime/design/TECH_DESIGN.compact.html",
+        "href": "/resources/lessons/11/technical-design.html"
+      }
+    ]
+  },
+  {
+    "number": 12,
+    "title": "多模型路由",
+    "description": "意图分类、模型分层与自动选模的核心设计。",
+    "artifacts": [
+      {
+        "id": "technical-design",
+        "title": "技术方案 · 精简阅读版",
+        "source": "mai-specs/992-lesson-12-multi-model-routing/design/TECH_DESIGN.compact.html",
+        "href": "/resources/lessons/12/technical-design.html"
+      },
+      {
+        "id": "intent-taxonomy",
+        "title": "意图分类体系定义",
+        "source": "mai-specs/992-lesson-12-multi-model-routing/design/INTENT_TAXONOMY.html",
+        "href": "/resources/lessons/12/intent-taxonomy.html"
+      }
+    ]
+  },
+  {
+    "number": 13,
+    "title": "可靠模型执行",
+    "description": "逻辑调用、恢复策略、共享并发与流式提交。",
+    "artifacts": [
+      {
+        "id": "technical-design",
+        "title": "技术方案 · 精简阅读版",
+        "source": "mai-specs/991-lesson-13-reliable-model-execution/design/TECH_DESIGN.html",
+        "href": "/resources/lessons/13/technical-design.html"
+      }
+    ]
+  },
+  {
+    "number": 14,
+    "title": "模型调用可观测与运营治理",
+    "description": "调用关联、安全采集、Token 统计与模型对比。",
+    "artifacts": [
+      {
+        "id": "technical-design",
+        "title": "技术方案 · 精简阅读版",
+        "source": "mai-specs/990-lesson-14-model-observability/design/TECH_DESIGN.html",
+        "href": "/resources/lessons/14/technical-design.html"
+      }
+    ]
+  }
+]

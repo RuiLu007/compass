@@ -1,0 +1,84 @@
+/* Lesson 13: table, diagram and code reading layout, using the shared document theme. */
+.doc-layout {
+  display: block;
+  max-width: 1200px;
+  margin-inline: auto;
+  padding-inline: 40px;
+}
+.type-index {
+  display: none;
+}
+.hero-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 28px;
+}
+.hero-topics span {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 5px 11px;
+  color: var(--green);
+  font: 12px/1.6 var(--mono);
+  background: var(--surface);
+}
+.document .table-wrap {
+  margin-block: 24px 40px;
+}
+.document .diagram {
+  margin-block: 28px 40px;
+}
+.document .diagram-stage {
+  overflow: auto;
+}
+.document .diagram-stage > svg {
+  max-height: none;
+}
+#figure-0 .diagram-stage > svg {
+  max-width: 620px !important;
+}
+#figure-5 .diagram-stage > svg,
+#figure-7 .diagram-stage > svg {
+  max-width: 800px !important;
+}
+.document .code-block {
+  margin-block: 24px 36px;
+}
+.document h4 {
+  margin-top: 38px;
+}
+.document table td {
+  vertical-align: top;
+}
+.code-bar > span {
+  overflow-wrap: anywhere;
+}
+.plain-button,
+.code-tools button {
+  min-height: 44px;
+}
+@media (max-width: 760px) {
+  .doc-layout {
+    padding-inline: 20px;
+  }
+  .hero-topics {
+    margin-bottom: 22px;
+  }
+  .code-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .figure-bar {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}
+@media print {
+  .doc-layout {
+    max-width: none;
+    padding: 0;
+  }
+  .hero-topics {
+    display: none;
+  }
+}

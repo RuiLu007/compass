@@ -5,7 +5,7 @@ SET LOCAL ROLE compass_web_owner;
 SELECT pg_advisory_xact_lock(995001::bigint);
 DO $$ BEGIN
  IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname=current_database() AND shobj_description(oid,'pg_database')='compass:web/main') THEN RAISE EXCEPTION 'Unregistered database'; END IF;
- IF (SELECT count(*) FROM web_meta.pgmigrations) <> 1 OR NOT EXISTS (SELECT 1 FROM web_meta.pgmigrations WHERE name='0001_web_foundation') OR (SELECT count(*) FROM web_meta.migration_source) <> 1 OR NOT EXISTS (SELECT 1 FROM web_meta.migration_source WHERE revision='0001_web_foundation' AND sha256='3d9c4e530c5416ceb3d89273ab32145912d379637f7b8b2076dab5163c25956f') THEN RAISE EXCEPTION 'Unexpected starting revision or source checksum'; END IF;
+ IF (SELECT count(*) FROM web_meta.pgmigrations) <> 1 OR (SELECT count(*) FROM web_meta.migration_source) <> 1 OR NOT EXISTS (SELECT 1 FROM web_meta.pgmigrations WHERE name='0001_web_foundation') OR NOT EXISTS (SELECT 1 FROM web_meta.migration_source WHERE revision='0001_web_foundation' AND sha256='3d9c4e530c5416ceb3d89273ab32145912d379637f7b8b2076dab5163c25956f') THEN RAISE EXCEPTION 'Unexpected starting revision or source checksum'; END IF;
 END $$;
 ALTER TABLE web.tenant ADD COLUMN slug text NOT NULL DEFAULT ('tenant-' || left(replace(gen_random_uuid()::text,'-',''),12));
 ALTER TABLE web.workspace ADD COLUMN slug text NOT NULL DEFAULT ('space-' || left(replace(gen_random_uuid()::text,'-',''),12));

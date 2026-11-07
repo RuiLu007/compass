@@ -5,6 +5,8 @@ import path from "node:path";
 import { parseBusinessSchema } from "./business-schema.mjs";
 import { parseSystemSchema } from "./system-schema.mjs";
 
+import { prepareLessonResources } from "./lesson-resources.mjs";
+
 const app = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const distributedSource = path.join(app, "reference");
 const feature = existsSync(distributedSource)
@@ -46,6 +48,7 @@ await writeFile(
   JSON.stringify(parseSystemSchema(systemDesign)),
 );
 await writeFile(path.join(resources, "system-data-model.md"), systemDesign);
+await prepareLessonResources(app);
 console.log(
   "Prepared prototype, architecture image and canonical business/system schema distribution copies.",
 );

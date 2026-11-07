@@ -154,28 +154,28 @@ export default function ScaffoldPage() {
                 {
                   path: "apps/home",
                   title: "产品官网",
-                  text: "Next.js · 3001",
+                  text: "Next.js · 8101",
                   detail: "独立展示，无后端依赖",
                   icon: Monitor,
                 },
                 {
                   path: "apps/web",
                   title: "工作台与 BFF",
-                  text: "Next.js · 3000",
+                  text: "Next.js · 8100",
                   detail: "通过 HTTP 调用 Agent",
                   icon: Code2,
                 },
                 {
                   path: "apps/agent",
                   title: "Agent 主后端",
-                  text: "FastAPI · 8000",
+                  text: "FastAPI · 8102",
                   detail: "已具备 API、应用迁移与三天样本",
                   icon: Server,
                 },
                 {
                   path: "apps/memory",
                   title: "独立记忆服务",
-                  text: "FastAPI · 8001",
+                  text: "FastAPI · 8103",
                   detail: "健康检查已就绪，记忆业务待接入",
                   icon: Brain,
                 },
@@ -394,9 +394,9 @@ export default function ScaffoldPage() {
               />
             </div>
             <p className={s.footnote}>
-              已有 .env 时保留本地配置。home 3001 · Web 3000 · Agent 8000 · Memory 8001 · PostgreSQL
+              已有 .env 时保留本地配置。home 8101 · Web 8100 · Agent 8102 · Memory 8103 · PostgreSQL
               55432；Worker 无 HTTP 端口，通过启动日志与退出状态检查。启动后在 Web
-              点击“查看示例数据”，Agent 的接口文档位于 8000 端口的 /docs。
+              点击“查看示例数据”，Agent 的接口文档位于 8102 端口的 /docs。
             </p>
           </Disclosure>
           <div className={s.faq}>

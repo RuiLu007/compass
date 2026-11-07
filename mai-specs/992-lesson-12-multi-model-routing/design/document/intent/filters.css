@@ -1,0 +1,28 @@
+.scene-filters {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0 12px;
+  padding: 16px;
+  border: 1px solid #dce4db;
+  border-radius: 10px;
+  background: #edf2eb;
+}
+.scene-filters label { display: grid; gap: 6px; font-size: 13px; }
+.scene-search { flex: 1; min-width: 220px; }
+.scene-filters select, .scene-filters input, .scene-filters button {
+  font: inherit;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid #789181;
+  border-radius: 6px;
+  background: white;
+  color: #245847;
+}
+.scene-filters [role="status"] { padding: 10px 0; font-size: 13px; }
+.scene-empty { padding: 20px; text-align: center; }
+@media print {
+  .scene-filters, .scene-empty { display: none; }
+  tr[hidden] { display: table-row; }
+}

@@ -9,7 +9,7 @@ import { reject } from "../../../platform/errors.ts";
 export type Scope = { tenantId: string; workspaceId?: string };
 export type CurrentAccess = {
   tenantId: string;
-  memberId: string;
+  memberId: string | null;
   role: TenantRole;
   authzVersion: string;
   tenantPermissions: readonly Permission[];

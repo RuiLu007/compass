@@ -8,14 +8,14 @@ services:
       args:
         COMPASS_NPM_REGISTRY: ${COMPASS_NPM_REGISTRY:-https://registry.npmjs.org/}
     ports:
-      - "127.0.0.1:3001:3001"
+      - "127.0.0.1:8101:8101"
     healthcheck:
       test:
         [
           "CMD",
           "node",
           "-e",
-          "fetch('http://127.0.0.1:3001/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:8101/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 5s
       timeout: 5s
@@ -41,21 +41,38 @@ services:
       context: ../..
       dockerfile: deploy/containers/agent.Dockerfile
     environment:
-      DATABASE_URL: postgresql+psycopg://compass:compass_local_only@postgres:5432/compass
+      DATABASE_URL: ${COMPASS_AGENT_RUNTIME_URL:-postgresql+psycopg://compass_agent_runtime:compass_agent_runtime_local_only@postgres:5432/compass_agent}
+      AGENT_MIGRATION_DATABASE_URL: ${COMPASS_AGENT_MIGRATOR_URL:-postgresql+psycopg://compass_agent_migrator:compass_agent_migration_local_only@postgres:5432/compass_agent}
+      AGENT_PROVISION_DATABASE_URL: postgresql://compass:compass_local_only@postgres:5432/compass
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["/bin/sh", "-c", "alembic upgrade head && python -m compass_agent.seed"]
+    command:
+      [
+        "/bin/sh",
+        "-c",
+        "python scripts/database.py provision && python scripts/database.py migrate && python -m compass_agent.seed",
+      ]
   agent:
+    env_file:
+      - path: ../../work/observability/agent.env
+        required: false
+    stop_grace_period: 45s
     profiles: [app]
     build:
       context: ../..
       dockerfile: deploy/containers/agent.Dockerfile
     environment:
-      DATABASE_URL: postgresql+psycopg://compass:compass_local_only@postgres:5432/compass
+      DATABASE_URL: ${COMPASS_AGENT_RUNTIME_URL:-postgresql+psycopg://compass_agent_runtime:compass_agent_runtime_local_only@postgres:5432/compass_agent}
       COMPASS_DEMO_ENABLED: "true"
+      COMPASS_AGENT_SERVICE_TOKEN: ${COMPASS_AGENT_SERVICE_TOKEN:-}
+      COMPASS_MODEL_ENCRYPTION_KEY: ${COMPASS_MODEL_ENCRYPTION_KEY:-}
+      COMPASS_MODEL_ALLOWED_ORIGINS: ${COMPASS_MODEL_ALLOWED_ORIGINS:-https://api.deepseek.com}
+      COMPASS_MODEL_MAX_CONCURRENCY: ${COMPASS_MODEL_MAX_CONCURRENCY:-8}
+      COMPASS_MODEL_MAX_INFLIGHT: ${COMPASS_MODEL_MAX_INFLIGHT:-32}
+      LITELLM_LOCAL_MODEL_COST_MAP: "True"
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8102:8102"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -65,7 +82,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz')",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8102/readyz')",
         ]
       interval: 5s
       timeout: 5s
@@ -86,6 +103,9 @@ services:
       postgres:
         condition: service_healthy
   web:
+    env_file:
+      - path: ../../work/observability/web.env
+        required: false
     profiles: [app, web]
     build:
       context: ../..
@@ -93,15 +113,16 @@ services:
       args:
         COMPASS_NPM_REGISTRY: ${COMPASS_NPM_REGISTRY:-https://registry.npmjs.org/}
     environment:
-      AGENT_API_URL: http://agent:8000
+      AGENT_API_URL: http://agent:8102
+      COMPASS_AGENT_SERVICE_TOKEN: ${COMPASS_AGENT_SERVICE_TOKEN:-}
       COMPASS_DEMO_ENABLED: "true"
       WEB_DATABASE_URL: postgresql://compass_web_runtime:compass_web_runtime_local_only@postgres:5432/compass_web
-      WEB_PUBLIC_ORIGIN: http://127.0.0.1:3000
+      WEB_PUBLIC_ORIGIN: http://127.0.0.1:8100
       WEB_AUTH_ALLOW_LOCAL_HTTP: "true"
       HOSTNAME: 0.0.0.0
-      PORT: "3000"
+      PORT: "8100"
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:8100:8100"
     depends_on:
       web-migrate:
         condition: service_completed_successfully
@@ -111,7 +132,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://127.0.0.1:3000/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:8100/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 5s
       timeout: 5s
@@ -122,14 +143,14 @@ services:
       context: ../..
       dockerfile: deploy/containers/memory.Dockerfile
     ports:
-      - "127.0.0.1:8001:8001"
+      - "127.0.0.1:8103:8103"
     healthcheck:
       test:
         [
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/readyz')",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8103/readyz')",
         ]
       interval: 5s
       timeout: 5s

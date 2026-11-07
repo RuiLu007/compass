@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node scripts/prepare-assets.mjs && next dev --hostname 127.0.0.1 --port 3009",
+    "dev": "node scripts/prepare-assets.mjs && next dev --hostname 127.0.0.1 --port 8101",
     "build": "node scripts/prepare-assets.mjs && next build",
-    "start": "next start --hostname 127.0.0.1 --port 3001",
+    "start": "next start --hostname 127.0.0.1 --port 8101",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "node --test tests/*.test.mjs",

@@ -3,6 +3,8 @@
 > 日期：2026-11-03｜Profile：standard｜技术范围结论：通过  
 > [返回 BRIEF](../BRIEF.md) · [PRD](../spec/PRD.md) · [技术方案](../design/TECH_DESIGN.md) · [代码设计](../design/CODE_DESIGN.md)
 
+2026-11-04 增补：[V2 与当前实现的架构比较](#2026-11-04-v2-与当前实现的架构比较)。下方 2026-11-03 记录保留当时状态。
+
 ## 总体结论
 
 按用户授权，三个独立 subAgent 分别审查课程边界与 MVP、Web/权限/API、Agent/Runtime/数据库。主 Agent 修正发现后，三者重新读取方案及代码设计复评。共 13 项去重后的设计问题，8 项 P1、5 项 P2，已全部修复；复评无剩余 P0/P1/P2。
@@ -63,3 +65,74 @@
 范围变更依据为用户 2026-11-03 的明确选择。取消 Chat 决策表单与自动转换，保留三模型管理和真实联调；补充共用 chat_supported 规则、配置改绑校验、列表过滤、仅生成输入的 Chat DTO 及调用前检查。
 
 scope_review 已独立复核本次增量并通过，无新增问题：需求、AC、任务、代码分支与视觉说明一致，决策管理端测试保留，未增加其它课程内容。本轮 7 份文档的格式、85 个内部链接、空白与措辞检查通过；PRD/design/design-review 路径校验和 git diff --check 通过。未执行功能测试。
+
+## 2026-11-04 V2 与当前实现的架构比较
+
+本轮任务是比较 [V2 架构材料](../context/archiitecture_design.v2.md)与现有技术方案对 Compass 的适用性。采用 standard Profile，增量维护本报告；核对当前需求、代码设计、Agent 与 Web 实现和现有模型测试。方案、源码、Feature Phase 与 ROADMAP 保持原状。
+
+### 结论
+
+**Compass 应继续以 TECH_DESIGN 为工程主方案，吸收 V2 的执行内核分层。V2 原样替换现有方案的结论为「需要修改」。**
+
+现有方案更完整地覆盖平台管理、租户使用、配置持久化、调用执行、结果展示和故障处理，关键取舍也匹配当前需求。V2 对稳定调用入口、策略与执行分离、逻辑调用与物理尝试的表达更清晰，适合补充后续演进设计。
+
+两份方案的基础选型一致：Python 进程内组件、自有契约、LiteLLM 适配、特殊决策协议适配、工具执行归上层。建议保留这些共识，集中调整执行职责和未来扩展方式。
+
+### 适用性对照
+
+| 维度 | 现有方案与实现 | V2 | Compass 取舍 |
+| --- | --- | --- | --- |
+| 系统范围 | Web/BFF、Agent、数据库、管理与 Chat 链路完整 | 主要描述 Harness 下的调用内核 | 系统架构采用现有方案，V2 补内核视图 |
+| 部署归属 | Runtime 位于 apps/agent；Worker 当前为进程脚手架 | 默认嵌入 DataAgent Worker | 继续留在 Agent；后续明确执行宿主再讨论提取共享包 |
+| 配置 | 数据库保存可编辑接入，调用取得不可变快照 | 静态 YAML Registry、启动校验 | 保留数据库真源；Registry 可成为快照之上的只读解析器 |
+| 模型选择 | 用户指定 provider_id，精确绑定配置 | ModelIntent、Profile、候选集合 | 当前保留精确选择；规则路由随后续明确需求接入 |
+| 执行策略 | 一次物理请求，固定总超时、取消和显式重发 | 默认 max_attempts=2，委托 SDK 重试并可扩展 Fallback | 当前保持单次尝试；未来先定义预算所有权与 Attempt 语义 |
+| 生成与决策 | GenerateInput / DecisionInput 分支，阿里云独立适配 | 文字支持决策，主要接口仍围绕 messages/tools/generate | 保留现有判别联合及决策输入输出 |
+| 流与私有状态 | 有界流、完整性检查、尾部用量、加密工具续接、公开推理元信息 | 统一事件方向清晰，包含 reasoning_delta，续接契约未展开 | 保留现有公开协议与私有状态保护，吸收事件转换唯一归属原则 |
+| 观测与用量 | 调用元记录、版本、耗时、可得 Token | Call/Attempt Trace、成本、并发准入 | 当前元记录继续保留；多次尝试落地后再扩展计量与 Trace |
+| 可复用内核 | Runtime 较薄，执行生命周期主要在 ModelService | LLMClient 统一生命周期，职责表达更集中 | 借鉴 V2 收拢执行职责，保持应用层配置和持久化边界 |
+
+### V2 用于 Compass 前必须修正的事项
+
+**P1：补齐宿主应用与配置边界。** V2 §1.1 的 Worker 定位、§3.2 的 YAML 方案没有衔接 Compass 已有管理链路。若 YAML 成为接入配置来源，界面保存、启停、换密钥和配置版本需要新增同步机制；若直接迁入 apps/worker，还涉及应用间源码、配置与数据访问边界。应明确：Agent 应用服务负责读取已授权配置和凭据；Runtime 接收不可变执行输入；静态文件可保存能力定义，端点、密钥和开放状态继续由 Agent 数据库维护。V2 中的通用 Worker 概念需要与 Compass 的 apps/worker 分开定义。
+
+**P1：统一一次调用的执行预算。** V2 §3.1 默认 max_attempts=2，§3.3/4.5/末尾修订均优先委托 LiteLLM，但尚未定义 SDK 重试、Deployment Fallback、跨 Adapter Fallback 如何共享物理请求计数。它与当前 BR-993-09 的单次尝试约定存在差异。当前继续 attempts=1、fallback=false。以后启用重试时，由一个执行计划持有绝对 deadline、总尝试数和流输出提交状态，明确 SDK 可执行的次数、实际尝试回报和跨 Adapter 接续规则；等待、退避和流消费均计入同一 deadline。SDK 参数取值须结合锁定版本验证。
+
+**P1：把决策模型补进公共契约。** V2 §3.1 的 LLMRequest 以 messages 为基础，§3.7/§6 只展示 generate/stream；choice/score 等主要停留在扩展说明。Compass 已有 state/questions/answers 和非流式决策分支。演进时保留生成与决策的判别联合；共同封装调用标识、状态、错误和用量，分别定义有效载荷与能力限制。
+
+**P1：明确内部事件与公开事件边界。** V2 §4.6 的 reasoning_delta 若直接接入浏览器，将改变现有 Thinking 展示约定；工具续接还需要保存供应商所需的私有状态。继续保留公开 reasoning_meta 和受保护 continuation_token。Adapter 处理供应商私有协议，Runtime 决定调用终态，应用层完成元记录后发出当前 HTTP final。未来添加内部事件时，应明确其消费者与可见性。
+
+**P2：收敛观测、限流和阶段安排。** V2 将成本、Trace、Attempt、并发准入放入总体图，但末尾只列出 Phase 1，也没有给出 Compass Collector 接入或后续配置演进路径。当前 Agent 与 Compose 中尚无该观测链路。按明确需求分步建设；单进程 Semaphore 应有进程级生命周期和有界等待，不能被描述成租户全局配额。成本估算、调用诊断记录与未来预算账本分别定义用途和失败处理。
+
+### 现有方案值得改进的部分
+
+**P2：执行生命周期的公共入口尚未收拢。** 当前 `llm/runtime.py` 负责解密和适配器分发；`models/service.py` 负责总超时、取消、资源关闭、错误归一和元记录落库；`model_api.py` 负责队列与 SSE final。现有调用链可以正常工作。接入 Agent Loop 或第二种执行宿主时，直接复用 Runtime 将缺少应用服务提供的执行控制。
+
+建议在该扩展启动前，将 deadline、取消、资源释放和统一执行结果收拢到一个 Runtime / LLMClient 入口。ModelService 继续拥有配置、准入、调用占位和结果持久化；HTTP 路由继续拥有连接与 SSE 编码。元记录失败仍保持现有 record_write_failed 语义，避免迁移职责时改变最终用户结果。
+
+**P2：内核接口携带较多应用细节。** 当前 invoke 接收可变 CallResponse、可信上下文、资源集合、回调及 Secrets，生成/决策适配器签名也不同；llm 层使用带 HTTP 状态的 models.errors。后续可引入小型、类型明确的执行请求、结果与 Adapter Protocol，减少上层对 SDK 与具体适配器的耦合。工具续接绑定必须保留，通过专门的续接上下文或能力接口传入；HTTP 状态映射留在应用边界。共享字段可复用已有 DTO，避免同时维护两份相同结构。
+
+**P2：能力定义需随模型扩展细化。** 当前 capabilities 主要按 kind/vendor 判断，Chat 两款模型另有明确白名单。增加更多模型前，应把协议支持、具体型号支持、平台开放范围和真实接入验证状态分别表达。优先演进现有 catalog/capabilities，减少平行 Registry；不因 LiteLLM 目录出现某模型就自动开放全部能力。
+
+### 推荐的组合结构与实施次序
+
+```text
+Web UI / BFF：身份、权限、页面会话、HTTP 契约
+  → Agent ModelService：配置快照、调用准入、占位与元记录
+    → Runtime / LLMClient：统一执行入口、能力校验、deadline、取消、结果
+      → LiteLLMChatAdapter / AliyunDecisionAdapter：协议与事件归一
+        → 模型供应商
+```
+
+能力解析、调用策略和观测作为 Runtime 的内部协作模块；保持进程内组合，按需求增加实现。ModelService 的产品准入与 Runtime 的能力校验分开：前者检查开放范围和调用用途，后者检查模型是否接受本次参数。
+
+1. **优先补设计地图。** 在现有技术方案中补充目标内核视图、职责归属和当前实现映射，吸收 V2 末尾合并 LLMClient/CallExecutor 的结论；保留现有 Web、数据库和接口章节。
+2. **在接入 Agent Loop 前收拢执行入口。** 以现有模型测试约束单次请求、取消、流完整性、工具续接及记录失败行为；本轮仅给出建议，不实施重构。
+3. **第 12–14 课按需扩展。** 分别承接模型选择策略、LogicalCall/Attempt 与受控重试、Trace 与预算治理。引入多次尝试时同步更新调用记录语义，不能继续把一条调用的最终 usage 视为全部尝试用量。
+4. **出现第二个应用真实消费者后再提取共享包。** 提取前明确配置快照、凭据和元记录如何由 owner API 提供，遵守跨 app 边界。
+
+### 本轮验证与边界
+
+执行 `pnpm test -F agent -- -k 'model'`：47 项通过，14 项未选中；覆盖模型管理、单次出站、生成/决策、流式完整性、取消、续接与元记录异常等已有用例。存在两条第三方弃用/类型提示。未执行真实供应商调用、数据库集成、浏览器或部署验收；历史真实联调状态仍由 IMPLEMENTATION 维护，阿里云真实验收继续后置。
+
+本轮为架构比较，未发现需要为当前单次调用链新增的 P0 项。现有方案作为当前基线建议保留；上述 P2 在相应扩展发生前处理。V2 的 P1 是将其用于 Compass 替代设计的修正条件，不改变现有 Feature 的验收状态。

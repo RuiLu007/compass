@@ -1,5 +1,7 @@
 # 工程脚本
 
+- `observability.mjs`：`pnpm observability <init|up|status|logs|down>` 创建私有配置、启停同项目的六个 Langfuse 服务；固定本机 Docker、独立持久卷和无覆盖初始化。`observability.test.mjs` 验证权限、凭据分配与命令范围；运行参数及存储见 [观测说明](../deploy/observability/README.md)。
+
 - `deploy.mjs`：`pnpm run deploy [app]` 本机 Docker 部署入口，省略 app 部署全部五个应用。固定本地 socket、Compose 文件和项目名；预检端口与已有数据库健康，构建后停止所选应用，显式执行所属迁移，再启动并验证。使用 `work/local-deploy.lock` 互斥，失败保留现场和卷。`deploy:status` / `deploy:logs` 支持 app，`deploy:down` 停止整个项目并保留卷。参数和执行顺序由 `deploy.test.mjs` 验证，详见 [部署说明](../deploy/README.md)。
 
 - `format-hook.test.mjs`：用隔离目录和真实格式化器验证 [共享编辑 Hook](../.agents/hooks/README.md) 的 Claude Code / Codex 输入、文件范围、排除规则、错误反馈和配置入口；由 `pnpm test:tooling` 自动发现。

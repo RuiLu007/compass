@@ -3,11 +3,12 @@ import pg from "pg";
 import { readFileSync } from "node:fs";
 import { PAGE_CATALOG, pageUrl } from "../../src/lib/page-catalog";
 import { DEFAULT_TEMPLATES } from "../../src/contracts/authorization";
+import { setVisibility, observePageFlashes, pageFlashes } from "./visibility";
 const fid = (n: number) => `99500000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const tenantId = fid(10),
   workspaceId = fid(20),
   scope = { tenantId, workspaceId };
-const origin = `http://127.0.0.1:${process.env.WEB_TEST_PORT ?? 3010}`;
+const origin = `http://127.0.0.1:${process.env.WEB_TEST_PORT ?? 8110}`;
 const password = process.env.WEB_TEST_PASSWORD ?? "teaching-995-only-password";
 let owner: pg.Client;
 test.beforeAll(async () => {
@@ -335,18 +336,22 @@ test("prototype frame and mobile navigation remain usable at five viewport width
   }
 });
 
-test("a timed-out heartbeat and its late success cannot reopen protected content", async ({
+test("a timed-out heartbeat and its late success do not hide or reload a valid page", async ({
   page,
   context,
 }) => {
   await page.clock.install();
   await login(context);
   await active(page, `/t/${tenantId}/admin/organization/members`);
+  await observePageFlashes(page);
   let release!: () => void;
   const deferred = new Promise<void>((resolve) => (release = resolve));
   let entered!: () => void;
+  let held = false;
   const started = new Promise<void>((resolve) => (entered = resolve));
   await page.route("**/api/web/v1/session?**", async (route) => {
+    if (held) return route.fulfill({ status: 503, body: "{}" });
+    held = true;
     const response = await route.fetch();
     entered();
     await deferred;
@@ -355,11 +360,16 @@ test("a timed-out heartbeat and its late success cannot reopen protected content
   await page.clock.fastForward(15001);
   await started;
   await page.clock.fastForward(5001);
-  await expect(page.locator("[data-protected-root]")).toBeHidden();
+  await expect(page.locator("[data-protected-root]")).toBeVisible();
+  await page.clock.fastForward(10001);
+  await expect(page.locator("[data-protected-root]")).toBeVisible();
   release();
-  await expect(page.locator(".table-wrap")).toHaveCount(0);
-  await page.clock.fastForward(30000);
-  await expect(page.locator("[data-protected-root]")).toBeHidden();
+  await expect(page.locator(".table-wrap")).toHaveCount(1);
+  await expect(page.locator("[data-protected-root]")).toBeVisible();
+  await page.unroute("**/api/web/v1/session?**");
+  await page.clock.fastForward(15000);
+  expect(await pageFlashes(page)).toEqual({ sameRoot: true, flashes: [] });
+  await expect(page.locator("[data-protected-root]")).toBeVisible();
 });
 
 test("two tabs replace identity and history reloads without restoring the former member list", async ({
@@ -411,7 +421,7 @@ test("applying a workspace template persists its source and the explicit persona
   expect(saved.permission_keys.sort()).toEqual([...DEFAULT_TEMPLATES.auditor].sort());
 });
 
-test("platform tenant creation and disable persist without granting access to tenant data", async ({
+test("platform tenant creation permits management and disablement blocks tenant access", async ({
   page,
   context,
 }) => {
@@ -430,7 +440,7 @@ test("platform tenant creation and disable persist without granting access to te
     rows: [tenant],
   } = await owner.query("SELECT id FROM web.tenant WHERE name=$1", [name]);
   expect((await context.request.get(`/api/web/v1/tenants/${tenant.id}/members`)).status()).toBe(
-    404,
+    200,
   );
   page.once("dialog", (dialog) => dialog.accept());
   await row.getByRole("button", { name: "停用", exact: true }).click();
@@ -438,6 +448,28 @@ test("platform tenant creation and disable persist without granting access to te
   expect(
     (await owner.query("SELECT status FROM web.tenant WHERE id=$1", [tenant.id])).rows[0].status,
   ).toBe("disabled");
+  expect((await context.request.get(`/api/web/v1/tenants/${tenant.id}/members`)).status()).toBe(
+    404,
+  );
+});
+
+test("platform administrators see every module on platform pages and can switch across tenants", async ({
+  page,
+  context,
+}) => {
+  await login(context, "platform");
+  await active(page, "/platform/tenants");
+  for (const name of ["分析", "报告空间", "插件", "定时任务", "看板", "管理与治理"])
+    await expect(
+      page.locator(".primary-rail").getByRole("link", { name, exact: true }),
+    ).toBeVisible();
+  await page.getByRole("link", { name: "管理与治理", exact: true }).click();
+  await expect(page.locator(".secondary-links .nav-item")).toHaveCount(8);
+  await active(page, "/t/yuanshan/w/zongbu/reports");
+  await expect(page.locator("#main-content h1")).toHaveText("全部产物");
+  await active(page, "/t/xinghe/w/dianshang/analysis");
+  await expect(page.getByLabel("分析问题")).toBeVisible();
+  await expect(page.locator("a.context-switch")).toHaveText("电商运营");
 });
 
 test("sidebar pinning persists and cancelling navigation preserves a permission draft", async ({
@@ -644,12 +676,12 @@ test("analysis sidebar and composer follow the prototype interaction", async ({
     "true",
   );
   await expect(page.locator(".conversation-list")).toHaveAttribute("data-group-by", "topic");
-  await page.getByRole("button", { name: "上周经营表现", exact: true }).click();
-  await expect(page.getByLabel("分析问题")).toHaveValue("上周经营表现");
+  await page.getByRole("button", { name: "如何拆解销售增长的影响因素？", exact: true }).click();
+  await expect(page.getByLabel("分析问题")).toHaveValue("如何拆解销售增长的影响因素？");
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "新建分析", exact: true }).click();
   await expect(page.getByLabel("分析问题")).toHaveValue("");
-  await expect(page.getByRole("button", { name: "发送分析（待接入）" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "发送消息" })).toBeDisabled();
   await page.setViewportSize({ width: 375, height: 812 });
   await expect(page.getByLabel("分析问题")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -809,4 +841,89 @@ test("floating navigation previews without routing and supports pointer, keyboar
   await expect(page.getByRole("dialog", { name: "导航" })).toHaveCount(0);
   await expect(sidebar).toBeVisible();
   await expect(sidebar.locator(".secondary-brand")).toHaveText("报告空间");
+});
+
+test("app switching preserves analysis drafts, attachments and the same document beyond 30 seconds", async ({
+  page,
+  context,
+}) => {
+  await page.clock.install();
+  await login(context, "platform");
+  await active(page, "/t/yuanshan/w/zongbu/analysis");
+  await page.getByLabel("分析问题").fill("切换应用后继续写的草稿");
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "draft.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from("item,amount\na,10"),
+  });
+  await page.evaluate(() =>
+    Reflect.set(window, "retainedComposer", document.querySelector("textarea")),
+  );
+  let documents = 0;
+  page.on("request", (request) => {
+    if (request.isNavigationRequest()) documents++;
+  });
+  await observePageFlashes(page);
+  await setVisibility(page, "hidden");
+  await expect(page.locator("[data-protected-root]")).toBeVisible();
+  await expect(page.getByLabel("分析问题")).toHaveCount(1);
+  await page.clock.fastForward(45000);
+  await setVisibility(page, "visible");
+  await expect(page.locator("[data-protected-root]")).toBeVisible();
+  await expect(page.getByLabel("分析问题")).toHaveValue("切换应用后继续写的草稿");
+  await expect(page.locator(".analysis-welcome")).toContainText("draft.csv");
+  expect(
+    await page.evaluate(
+      () => Reflect.get(window, "retainedComposer") === document.querySelector("textarea"),
+    ),
+  ).toBe(true);
+  expect(documents).toBe(0);
+  expect(await pageFlashes(page)).toEqual({ sameRoot: true, flashes: [] });
+});
+
+test("app switching leaves the permission editor unchanged even when heartbeats fail", async ({
+  page,
+  context,
+}) => {
+  await page.clock.install();
+  await login(context);
+  await active(page, "/t/yuanshan/admin/organization/members");
+  await page
+    .getByRole("row")
+    .filter({ hasText: "teaching.analyst" })
+    .getByRole("button", { name: "配置权限" })
+    .click();
+  const checkbox = page.getByRole("checkbox").first();
+  await checkbox.check();
+  await observePageFlashes(page);
+  let sessionRequests = 0;
+  await page.route("**/api/web/v1/session?**", (route) => {
+    sessionRequests++;
+    return route.fulfill({ status: 503, body: "{}" });
+  });
+  await setVisibility(page, "hidden");
+  await setVisibility(page, "visible");
+  expect(sessionRequests).toBe(0);
+  await page.clock.fastForward(45000);
+  await expect(page.locator("[data-protected-root]")).toBeVisible();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(checkbox).toBeChecked();
+  expect(sessionRequests).toBeGreaterThan(0);
+  expect(await pageFlashes(page)).toEqual({ sameRoot: true, flashes: [] });
+});
+
+test("a background heartbeat clears revoked state without waiting for an app switch", async ({
+  page,
+  context,
+}) => {
+  await page.clock.install();
+  await login(context, "analyst");
+  await active(page, "/t/yuanshan/w/huadong/analysis");
+  await page.getByLabel("分析问题").fill("失权后应清除的草稿");
+  await setVisibility(page, "hidden");
+  await revokeB();
+  await page.clock.fastForward(15001);
+  await expect(page.locator("[data-protected-root]")).toBeHidden();
+  await expect(page.getByLabel("分析问题")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "重新加载", exact: true })).toBeVisible();
 });

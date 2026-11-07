@@ -1,6 +1,6 @@
 # Compass Home
 
-Compass 独立产品官网与课程项目指南，包名 `@compass/home`。React 19.3 + TypeScript + Next.js 16.4 App Router，shadcn/ui（Radix）+ Tailwind CSS 4。默认由 Next.js 服务端提供页面，端口 **3001**。
+Compass 独立产品官网与课程项目指南，包名 `@compass/home`。React 19.3 + TypeScript + Next.js 16.4 App Router，shadcn/ui（Radix）+ Tailwind CSS 4。默认由 Next.js 服务端提供页面，端口 **8101**。
 
 首版预览：[Compass Home](https://compass-home-20261020.guomeiqing1984.chatgpt.site)，仅当前 Sites 账号所有者可见。
 
@@ -10,17 +10,17 @@ Compass 独立产品官网与课程项目指南，包名 `@compass/home`。React
 
 ```bash
 pnpm dev -F home
-# http://127.0.0.1:3001
+# http://127.0.0.1:8101
 
 pnpm lint -F home
 pnpm typecheck -F home
 pnpm test -F home
 pnpm build -F home
-pnpm run deploy home # 本机 Docker 部署，需先停止占用 3001 的开发服务
+pnpm run deploy home # 本机 Docker 部署，需先停止占用 8101 的开发服务
 pnpm --filter @compass/home start
 ```
 
-运行 `start` 前停止占用 3001 的开发服务。官网只需 Node.js 和 pnpm，无需 uv、Python 虚拟环境或 `pnpm setup`，不依赖数据库、API 服务、模型密钥或用户登录；根 `pnpm dev` 也会通过 Turborepo 启动它。`pnpm dev:home` / `pnpm build:home` 是上述 Turbo 命令的快捷入口。
+运行 `start` 前停止占用 8101 的开发服务。官网只需 Node.js 和 pnpm，无需 uv、Python 虚拟环境或 `pnpm setup`，不依赖数据库、API 服务、模型密钥或用户登录；根 `pnpm dev` 也会通过 Turborepo 启动它。`pnpm dev:home` / `pnpm build:home` 是上述 Turbo 命令的快捷入口。
 
 ## 页面与交互
 
@@ -28,6 +28,7 @@ Docker 入口先从规范源准备 public 素材，再在镜像内以 `HOME_STAN
 
 | 地址                    | 内容与交互                                                                                                                                                                                          |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/resources`            | 课程资料；按课号分组，支持每课多个 HTML 产物，提供在线打开与离线下载                                                                                                                                |
 | `/`                     | 产品营销首页；绿色 GhostFibers 首屏、五步经营调查、口径与证据、决策方法、成果复用与持续跟进、企业管控及体验入口                                                                                     |
 | `/product`              | 七屏纵向介绍：企业经营、商品渠道、经营挑战、岗位需求、课程情节、iframe 原型首页、Agent 挑战；右侧浮动导航、四类挑战切换、六个情节与 12 类分析案例                                                   |
 | `/architecture`         | 六屏纵向介绍：架构挑战、业务数据结构、Runtime / Harness 与核心目标、架构选型、指定架构原图、Compass DataAgent 系统数据结构；业务九域与系统十二域均支持完整 Mermaid ER、表字段、缩放、拖动与按表定位 |
@@ -61,7 +62,7 @@ Docker 入口先从规范源准备 public 素材，再在镜像内以 `HOME_STAN
 
 统一墨绿 `#1c5145`、暖白 `#f8f9f6` 与浅绿 `#dceab8`。叙事标题使用系统宋体，正文使用系统无衬线；没有远程字体依赖。导航在滚动距离超过自身实际高度后切换为半透明玻璃，回到阈值以内恢复实色；桌面与手机分别按 80 px、68 px 的当前高度触发。产品、技术架构、脚手架和学习指南页采用一屏一个主题的纵向叙事，共用 `components/story-page.tsx` 的右侧圆点导航；工程两页的图示与排版由 `engineering-story.module.css` 维护。课程页采用同样的逐屏叙事，每篇有独立锚点与任务视图，完整任务查询收于页尾；学习指南按授课、准备、资料、作业与提交顺序阅读，长清单与展开内容可自然增高。动画支持 Reduced Motion；首页背景可以暂停，不可见时停止渲染，无 WebGL 时保留渐变背景和全部正文。
 
-全站六个页面通过 `components/page-scroll.tsx` 共用滚轮翻屏：一次连续滚轮或触控板手势只前进 / 后退一屏，惯性尾段不连跳；普通章节落在导航下沿，超出一屏的内容按视口逐段翻阅，展开内容始终可读。切换约 640 ms，标题与正文使用不同位移形成视差；锚点与右侧圆点导航使用同一动效。表格、滚动面板、ER 图和 iframe 保留原生交互，表单与对话框不触发翻屏。键盘翻屏即时完成，Reduced Motion 关闭位移与视差，触摸滑动保持原生。路由切换、缩放或触摸介入会取消当前动画；不锁定文档高度，页脚和浏览器查找仍可访问。手势与长章节边界由 `tests/screen-scroll.test.mjs` 验证。
+全站页面通过 `components/page-scroll.tsx` 共用滚轮翻屏：一次连续滚轮或触控板手势只前进 / 后退一屏，惯性尾段不连跳；普通章节落在导航下沿，超出一屏的内容按视口逐段翻阅，展开内容始终可读。切换约 640 ms，标题与正文使用不同位移形成视差；锚点与右侧圆点导航使用同一动效。表格、滚动面板、ER 图和 iframe 保留原生交互，表单与对话框不触发翻屏。键盘翻屏即时完成，Reduced Motion 关闭位移与视差，触摸滑动保持原生。路由切换、缩放或触摸介入会取消当前动画；不锁定文档高度，页脚和浏览器查找仍可访问。手势与长章节边界由 `tests/screen-scroll.test.mjs` 验证。
 
 按钮统一采用项目定义的 ghost：`Button` 默认使用 `variant="ghost"`；标签页、筛选、步骤选择和折叠触发器复用 `ghost-control`。默认透明背景并保留 1 px 实线边框，浅色区域使用 `--ghost-border: #789181`，深色区域使用 `#86a38b`；hover 加深边框并以鼠尾草绿 → 浅青绿的邻近色渐变淡入。深色区域通过 `data-ghost-theme="dark"` 或现有深色容器继承对应 Token。选中项使用文字同色边框和下划线标记，键盘焦点使用独立描边，禁用项保留边框并降低整体透明度，Reduced Motion 关闭按压缩放。折叠组件的边框由外层容器绘制，标题保留相同的文字、渐变反馈与焦点配色，具体规则见下文。该规范只作用于 home 页面，独立原型及 iframe 内样式保持原样。
 
@@ -109,3 +110,13 @@ Agent 决策权标签页使用 `public/resources/agent-authority-architecture.pn
 - 强强调：`className="emphasis-strong"`，主色至深绿渐变背景、白色文字、700 字重、轻微圆角与内边距；用于关键判断、核心结论。正文建议每段一处短语，避免整段高亮。
 
 四大选型理由的核心判断采用强强调。强调保持正文行内排版，无交互与悬停效果。
+
+## 课程资料维护
+
+“课程资料”栏目位于 `/resources`，左侧按第 11–14 课呈现可折叠的课程树，点击子项后右侧 iframe 直接加载对应 HTML，默认打开第 11 课。索引真源为 [lesson-resources.json](src/lib/lesson-resources.json)，每课的 `artifacts` 数组可登记多个 HTML 产物；每项记录稳定 ID、展示标题、Compass 根目录下的源路径和访问地址。
+
+当前第 11、12 课使用 `TECH_DESIGN.compact.html`；第 13、14 课使用各自 `design/TECH_DESIGN.html` 的学员阅读版。设计与 HTML 继续在对应 Feature 维护。`dev` / `build` 通过 [lesson-resources.mjs](scripts/lesson-resources.mjs) 将登记文件同步到 `public/resources/lessons/<课号>/<产物>.html`，生成文件不提交 Git。新增产物时同步登记 `turbo.json` 的 build / test 源文件输入，确保更新后刷新构建缓存。
+
+隔离的 Sites 发布副本需在 `reference/lessons/<课号>/<产物>.html` 放入相同文件；缺少登记文件时构建会报错。本机 Docker 部署沿用部署入口预先准备 public 素材的流程。页面采用占满导航下方视口的文档阅读布局，隐藏站点页脚，不参与滚轮翻屏；目录与正文独立滚动，窄屏可收起目录，工具栏提供新窗口打开与下载。分发时隐藏 HTML 自带的整条顶部栏（Logo、页内导航及工具），并收紧锚点滚动留白；保留正文、图表、代码交互与离线能力。Feature 原始文件保持原样。
+
+第 12 课另收录“意图分类体系定义”，源文件为 [INTENT_TAXONOMY.html](../../mai-specs/992-lesson-12-multi-model-routing/design/INTENT_TAXONOMY.html)，访问地址为 `/resources/lessons/12/intent-taxonomy.html`。与技术方案并列，沿用顶部栏隐藏规则，保留场景表筛选和代码复制。

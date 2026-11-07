@@ -1,0 +1,55 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 500 320"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">统一执行入口与两种协议适配</title>
+  <desc id="desc">应用层提交已授权快照，Runtime 负责一次执行，再由生成或决策适配器连接模型。</desc>
+  <defs>
+    <marker
+      id="arrow"
+      viewBox="0 0 10 10"
+      refX="8"
+      refY="5"
+      markerWidth="6"
+      markerHeight="6"
+      orient="auto"
+    >
+      <path d="M0 0 L10 5 L0 10Z" fill="#648372" />
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="500" height="320" rx="16" fill="#f4f7f0" />
+  <g
+    font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif"
+    text-anchor="middle"
+  >
+    <text x="250" y="31" font-size="12" letter-spacing="3" fill="#648372">
+      ONE CALL · TWO ADAPTERS
+    </text>
+    <rect x="111" y="50" width="278" height="48" rx="8" fill="#fff" stroke="#c9d9ca" />
+    <text x="250" y="80" font-size="16" fill="#245847">已授权快照 + 输入 + 调用策略</text>
+    <path d="M250 99 V126" stroke="#648372" stroke-width="1.5" marker-end="url(#arrow)" />
+    <rect x="66" y="134" width="368" height="68" rx="10" fill="#245847" />
+    <text x="250" y="162" font-size="21" font-weight="600" fill="#fff">Runtime.invoke</text>
+    <text x="250" y="185" font-size="13" fill="#e3efde">执行 · 期限 · 输出 · 资源</text>
+    <path
+      d="M250 202 V221 H129 V240"
+      fill="none"
+      stroke="#648372"
+      stroke-width="1.5"
+      marker-end="url(#arrow)"
+    />
+    <path
+      d="M250 221 H371 V240"
+      fill="none"
+      stroke="#648372"
+      stroke-width="1.5"
+      marker-end="url(#arrow)"
+    />
+    <rect x="26" y="246" width="206" height="49" rx="8" fill="#e4eedb" stroke="#c9d9ca" />
+    <rect x="268" y="246" width="206" height="49" rx="8" fill="#e4eedb" stroke="#c9d9ca" />
+    <text x="129" y="276" font-size="16" fill="#245847">LiteLLM · 生成</text>
+    <text x="371" y="276" font-size="16" fill="#245847">System One · 决策</text>
+  </g>
+</svg>

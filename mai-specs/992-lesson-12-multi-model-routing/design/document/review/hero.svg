@@ -1,0 +1,61 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 500 320"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">从两级意图到本轮推理</title>
+  <desc id="desc">
+    两级分类输出两个标识，字典提供场景特征，路由选择一个模型，Runtime 执行一次最终推理。
+  </desc>
+  <defs>
+    <marker
+      id="arrow"
+      viewBox="0 0 10 10"
+      refX="8"
+      refY="5"
+      markerWidth="6"
+      markerHeight="6"
+      orient="auto"
+    >
+      <path d="M0 0 L10 5 L0 10Z" fill="#648372" />
+    </marker>
+  </defs>
+  <rect width="500" height="320" rx="16" fill="#f4f7f0" />
+  <g font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif">
+    <text x="250" y="31" font-size="12" letter-spacing="3" text-anchor="middle" fill="#648372">
+      CLASSIFY · LOOK UP · SELECT · CALL
+    </text>
+    <path d="M64 83 V257" stroke="#b0c5ae" stroke-width="2" />
+    <g fill="#fff" stroke="#c9d9ca">
+      <rect x="95" y="48" width="374" height="49" rx="8" />
+      <rect x="95" y="108" width="374" height="49" rx="8" />
+      <rect x="95" y="168" width="374" height="49" rx="8" />
+    </g>
+    <rect x="95" y="228" width="374" height="59" rx="8" fill="#245847" />
+    <g fill="#e4eedb" stroke="#c9d9ca">
+      <circle cx="64" cy="73" r="17" />
+      <circle cx="64" cy="133" r="17" />
+      <circle cx="64" cy="193" r="17" />
+    </g>
+    <circle cx="64" cy="257" r="17" fill="#245847" />
+    <g text-anchor="middle" font-size="13" font-weight="600" fill="#245847">
+      <text x="64" y="78">01</text>
+      <text x="64" y="138">02</text>
+      <text x="64" y="198">03</text>
+      <text x="64" y="262" fill="#fff">04</text>
+    </g>
+    <g font-size="17" fill="#245847">
+      <text x="116" y="79">两级分类</text>
+      <text x="116" y="139">字典查表</text>
+      <text x="116" y="199">确定选模</text>
+    </g>
+    <g font-size="13" fill="#648372">
+      <text x="235" y="79">category_id · scene_id</text>
+      <text x="235" y="139">40 场景 · 4 类特征</text>
+      <text x="235" y="199">SC-39 → fixed → 难度</text>
+    </g>
+    <text x="116" y="263" font-size="18" fill="#fff">Runtime</text>
+    <text x="235" y="263" font-size="14" fill="#e3efde">一次最终推理</text>
+  </g>
+</svg>

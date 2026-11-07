@@ -11,7 +11,7 @@
 | 架构     | pnpm + uv 双语言 workspace，Turborepo 编排；`home`、`web`、`agent`、`memory`、`worker` 五个应用按部署职责分离。                              |
 | 工程取舍 | 按实际需求逐步建设，先验证 HTTP 契约与工程链路；共享包须有至少两个独立 app 的真实消费者。                                                    |
 
-本仓库为 Compass 学员脚手架，远程地址为 https://github.com/shanggqm/compass；CI 入口位于 `.github/workflows/compass.yml`。
+Compass 的开发源码维护在 `https://github.com/shanggqm/compass`。课程仓库以 `learner-kit/code/compass` 子模块固定提交。先在 Compass 提交并推送，再回到课程仓库更新子模块指针。首个脚手架标签为 `v0.0.1`。
 
 ## 2. 仓库结构
 
@@ -61,7 +61,7 @@
 - 所有命令从 Compass 根目录执行。工具版本以 `.node-version`、`.python-version`、`package.json` 和两份锁文件为准；当前 pnpm 为 11.3.0，uv 在 README 与 CI 中固定为 0.13.0。macOS / Linux 可直接运行，Windows 使用 WSL2。
 - 完整本地开发先从 `.env.example` 创建根 `.env`。根运行入口加载它；缓存构建与静态检查不加载它。绕过根入口执行子应用脚本时需显式注入所需环境。
 - 使用 `pnpm <任务> -F <短名>`；`pnpm -F <短名> <任务>` 会绕过根环境加载与 Turbo 编排。`--` 后的参数直接传给子应用；复合 Turbo 选择器中的包名写完整。
-- 默认端口：home 3001、Web 3000、agent 8000、memory 8001；worker 不监听 HTTP。home 仅需 Node / pnpm，Web 的 build / typecheck 需要 Python 契约生成环境。
+- 默认端口：home 8101、Web 8100、agent 8102、memory 8103；worker 不监听 HTTP。home 仅需 Node / pnpm，Web 的 build / typecheck 需要 Python 契约生成环境。
 
 ## 4. 规则与约束
 
@@ -70,7 +70,7 @@
 - 演示接口只返回固定合成数据，需显式设置 `COMPASS_DEMO_ENABLED=true`；关闭时返回 404，不接收租户、SQL 或自由代码输入。
 - `db:seed` 必须保持幂等；空数据、数据库不可用或缺少迁移时不得报告查询成功。`/healthz` 只检查进程，Agent `/readyz` 检查数据库与初始表。
 - BFF 对上游数据做 JSON Schema 运行时校验；成功和失败响应均 `no-store`，上游失败或契约不兼容统一返回 503，隐藏内部错误详情。
-- 本地登录、数据库会话、租户与个人权限、设置和 Web 通知/审计已接入；OIDC、Run / SSE、模型执行、Sandbox 与 EvalOps 尚未交付；Memory 健康检查和 Worker 存活只代表脚手架入口可用，不能表述为记忆业务或任务消费已就绪。
+- 本地登录、数据库会话、租户与个人权限、设置、Web 通知/审计、模型 Provider 管理、能力测试和 LiteLLM 生成调用已接入；生成模型的接入与 Chat 按 SDK 协议能力、平台配置和权限开放；OIDC、Run / SSE、Sandbox 与 EvalOps 尚未交付；Memory 健康检查和 Worker 存活只代表脚手架入口可用，不能表述为记忆业务或任务消费已就绪。
 - 涉及零售数据时遵守 [数据操作说明](../../docs/data-seeding.md)：保持可复现摘要与私有运行记录分离，保留旧库和旧活动清单；合成结果不用于宣称真实市场因果关系。
 
 ### 架构边界
@@ -132,7 +132,7 @@ ADR 的日期条目保留当时的实施背景；当前五应用结构见应用 
 
 ## 7. 维护约定
 
-- 根 `AGENTS.md` 通过软链接指向 `.agents/rules/AGENTS.md`；编辑真实正文并保留链接，Markdown 链接按正文真实位置解析。该目录沿用现有 `.gitignore` 的本地记忆配置；没有共享正文的 `CLAUDE.md`。
+- 根 `AGENTS.md` 通过软链接指向 `.agents/rules/AGENTS.md`；编辑真实正文并保留链接，Markdown 链接按正文真实位置解析。共享正文由 Compass 跟踪；目录内其他本地记忆仍按 `.gitignore` 排除。
 - 修改 Next.js 应用前先读 [web 局部规则](../../apps/web/AGENTS.md) 或 [home 局部规则](../../apps/home/AGENTS.md)，按其要求查阅该 app 安装的 Next.js 文档，保留受管区块；home 的视觉与交互细则留在其 README。
 - 命令、目录、应用职责或交付边界变化时，同步相关 README、规范入口和受影响的 `manifest.yml`；生成契约随源一起更新。保留无关未提交修改，不用本次初始化顺带清理历史资产。
 - 需求和任务材料放入 `mai-specs/NNN-<slug>/`，依 [SDD 工作区说明](../../mai-specs/README.md) 使用 Feature 初始化入口与有效路径契约；当前任务进度不写入长期记忆。所有承诺条件有当前通过证据后才结项。

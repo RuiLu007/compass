@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { handleModelRequest, isModelRoute } from "./model-handler";
 import * as dto from "../../contracts/web";
 import {
   sessionSchema,
@@ -50,6 +51,7 @@ async function dispatchWebRequest(request: Request): Promise<Response> {
     const route = path.join("/");
     const method = request.method;
     const token = tokenFromCookie(request.headers.get("cookie"));
+    if (isModelRoute(route)) return handleModelRequest(request, token);
     const writing = method !== "GET";
     if (writing) requireSameOrigin(request);
     const query = queryValues(url);

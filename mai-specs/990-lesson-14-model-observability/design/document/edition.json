@@ -1,0 +1,39 @@
+{
+  "title": "模型调用可观测与运营治理",
+  "subtitle": "显式分布式关联、安全采集与跨实例模型对比。",
+  "brand": "Compass",
+  "label": "《企业级Agent工程架构实战营》 · 第 14 课 · 设计示意",
+  "topics": ["OTel 1.45.2", "W3C carrier", "实例身份", "Langfuse v4.75.0"],
+  "source": "../TECH_DESIGN.md",
+  "guide": "guide.md",
+  "output": "../TECH_DESIGN.html",
+  "metrics": [
+    {
+      "value": "1",
+      "label": "个入口 span / 服务请求",
+      "detail": "可信远程父继承同一 Trace ID"
+    },
+    {
+      "value": "512",
+      "label": "span / 进程队列",
+      "detail": "64 / 批，1 秒间隔，2 秒网络预算"
+    },
+    {
+      "value": "14",
+      "label": "个固定聚合查询",
+      "detail": "两模型对比，硬上限 24 个"
+    }
+  ],
+  "code": {
+    "headers": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "function readTraceHeaders(",
+      "language": "typescript"
+    },
+    "summary": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "def comparison_row(",
+      "language": "python"
+    }
+  }
+}

@@ -47,7 +47,28 @@ jobs:
           WEB_TEST_MIGRATION_DATABASE_URL: postgresql://compass_web_migrator:compass_web_migration_local_only@127.0.0.1:55432/compass_web_test_browser
           WEB_TEST_ADMIN_URL: postgresql://compass:compass_local_only@127.0.0.1:55432/compass
           WEB_TEST_PASSWORD: teaching-995-only-password
+          DATABASE_URL: postgresql+psycopg://compass_agent_runtime:compass_agent_runtime_local_only@127.0.0.1:55432/compass_agent_test_ci
+          AGENT_MIGRATION_DATABASE_URL: postgresql+psycopg://compass_agent_migrator:compass_agent_migration_local_only@127.0.0.1:55432/compass_agent_test_ci
+          AGENT_PROVISION_DATABASE_URL: postgresql://compass:compass_local_only@127.0.0.1:55432/compass
+          AGENT_TEST_DATABASE_URL: postgresql+psycopg://compass_agent_runtime:compass_agent_runtime_local_only@127.0.0.1:55432/compass_agent_test_ci
+          AGENT_TEST_MIGRATION_DATABASE_URL: postgresql+psycopg://compass_agent_migrator:compass_agent_migration_local_only@127.0.0.1:55432/compass_agent_test_ci
+          AGENT_TEST_ADMIN_URL: postgresql://compass:compass_local_only@127.0.0.1:55432/compass
+          AGENT_TEST_PG_CONTAINER: compass-postgres-1
+          COMPASS_AGENT_SERVICE_TOKEN: feature-993-controlled-provider-test-only
+          COMPASS_MODEL_ALLOWED_ORIGINS: https://api.deepseek.com,https://fixture.cn-beijing.maas.aliyuncs.com
+          LITELLM_LOCAL_MODEL_COST_MAP: "True"
+          AGENT_API_URL: http://127.0.0.1:8013
         run: |
+          export COMPASS_MODEL_ENCRYPTION_KEY="$(uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+          pnpm db:provision -F agent
+          pnpm db:migrate -F agent
+          pnpm db:sql:check -F agent
+          pnpm test:integration -F agent
+          mkdir -p work/993
+          PYTHONPATH=apps/agent/tests uv run uvicorn e2e_app:app --host 127.0.0.1 --port 8013 > work/993/agent-browser.log 2>&1 &
+          agent_test_pid=$!
+          trap 'kill "$agent_test_pid" 2>/dev/null || true' EXIT
+          node --input-type=module -e 'for(let i=0;i<40;i++){try{const r=await fetch("http://127.0.0.1:8013/readyz");if(r.ok)process.exit(0)}catch{}await new Promise(r=>setTimeout(r,500))}process.exit(1)'
           pnpm test:setup -F web -- --fixture teaching
           pnpm --filter @compass/web exec playwright install --with-deps chromium
           pnpm test:e2e -F web
@@ -55,7 +76,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: compass-web-browser-evidence
-          path: work/995-playwright*
+          path: |
+            work/995-playwright*
+            work/993/*.png
           if-no-files-found: ignore
       - if: failure()
         run: pnpm deploy:logs

@@ -3,12 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "uv run --locked --package compass-agent uvicorn compass_agent.main:app --host 127.0.0.1 --port 8000 --reload",
+    "dev": "uv run --locked --package compass-agent uvicorn compass_agent.main:app --host 127.0.0.1 --port 8102 --reload",
     "build": "uv build --package compass-agent --out-dir dist",
     "lint": "uv run --locked ruff check . && uv run --locked ruff format --check .",
     "typecheck": "uv run --locked pyright --project ../../pyproject.toml src tests",
-    "test": "uv run --locked pytest tests",
-    "db:migrate": "uv run --locked alembic upgrade head",
-    "seed": "uv run --locked python -m compass_agent.seed"
+    "test": "uv run --locked pytest tests --ignore=tests/test_database_tools_integration.py --ignore=tests/test_models_integration.py",
+    "db:migrate": "uv run --locked python scripts/database.py migrate",
+    "seed": "uv run --locked python -m compass_agent.seed",
+    "db:provision": "uv run --locked python scripts/database.py provision",
+    "db:sql": "uv run --locked python scripts/database.py sql",
+    "db:sql:check": "uv run --locked python scripts/database.py sql --check",
+    "db:apply-sql": "uv run --locked python scripts/database.py apply-sql",
+    "test:integration": "uv run --locked pytest tests/test_database_tools_integration.py tests/test_models_integration.py"
   }
 }

@@ -266,3 +266,68 @@ it("upgrades v1 through native and incremental SQL while retaining IDs and enfor
   }
   expect(await schema(urls[0])).toEqual(await schema(urls[1]));
 }, 30000);
+
+it("upgrades v2 permission constraints without changing grants and keeps all whitelist checks", async () => {
+  const urls = [await target("models_native"), await target("models_sql")];
+  for (const [index, url] of urls.entries()) {
+    await migrate({ url, to: "0002_readable_routes" });
+    const client = await connectManaged(url);
+    const user = randomUUID(),
+      tenant = randomUUID(),
+      workspace = randomUUID(),
+      member = randomUUID(),
+      binding = randomUUID();
+    try {
+      await client.query(
+        "INSERT INTO web.app_user(id,login_name,password_hash,display_name) VALUES($1,'model.grantee','fixture','Grantee')",
+        [user],
+      );
+      await client.query(
+        "INSERT INTO web.tenant(id,name,timezone) VALUES($1,'Model tenant','UTC')",
+        [tenant],
+      );
+      await client.query(
+        "INSERT INTO web.workspace(id,tenant_id,name) VALUES($1,$2,'Model space')",
+        [workspace, tenant],
+      );
+      await client.query(
+        "INSERT INTO web.tenant_member(id,tenant_id,user_id,role_key,permission_keys) VALUES($1,$2,$3,'member',ARRAY['module.analysis'])",
+        [member, tenant, user],
+      );
+      await client.query(
+        "INSERT INTO web.workspace_member(id,tenant_id,workspace_id,tenant_member_id,role_key,permission_keys) VALUES($1,$2,$3,$4,'analyst',ARRAY['module.analysis'])",
+        [binding, tenant, workspace, member],
+      );
+      await migrate({ url, from: "0002_readable_routes", mode: index ? "sql" : "native" });
+      for (const [table, key, max] of [
+        ["tenant_member", member, 23],
+        ["workspace_member", binding, 17],
+      ] as const) {
+        expect(
+          (await client.query(`SELECT permission_keys FROM web.${table} WHERE id=$1`, [key]))
+            .rows[0].permission_keys,
+        ).toEqual(["module.analysis"]);
+        await client.query(
+          `UPDATE web.${table} SET permission_keys=ARRAY['module.analysis','models.invoke'] WHERE id=$1`,
+          [key],
+        );
+        for (const invalid of [
+          "ARRAY['future.execute']",
+          "ARRAY[NULL]::text[]",
+          "ARRAY[['models.invoke'],['module.analysis']]",
+          `array_fill('models.invoke'::text, ARRAY[${max + 1}])`,
+        ])
+          await expect(
+            client.query(`UPDATE web.${table} SET permission_keys=${invalid} WHERE id=$1`, [key]),
+          ).rejects.toMatchObject({ code: "23514" });
+      }
+      await expect(
+        client.query("UPDATE web.tenant_member SET role_key='admin' WHERE id=$1", [member]),
+      ).rejects.toMatchObject({ code: "23514" });
+      expect(await migrate({ url })).toBe("already_applied");
+    } finally {
+      await client.end();
+    }
+  }
+  expect(await schema(urls[0])).toEqual(await schema(urls[1]));
+}, 30000);

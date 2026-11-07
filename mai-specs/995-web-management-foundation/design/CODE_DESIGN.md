@@ -11,11 +11,20 @@
 - 使用 `(product)` 共享布局持有 AppShell；页面 RSC 继续调用原有查询用例，客户端通过页面载荷桥接到持久框架。Next Link/router 负责路由、历史和 RSC 请求，不另建路由引擎或页面 API。
 - 每次接收页面载荷创建新的页面请求作用域，取消旧请求并清理旧页面草稿；候选载荷通过当前 session/version 探测后才显示。框架 DOM 在普通导航中保留；切页期间内容区可显示加载态，既有侧栏的展示期限沿用原作用域期限。
 - 页面载荷、API 与探测都遵守当前身份、展示版本、URL 和请求世代。迟到响应只丢弃自身结果；已销毁作用域不能清屏或重定向新页面。Next 历史缓存的页面同样重新探测，旧版本拒绝显示。
-- `reload()` 用于正常保存后的 router.refresh；退出、失权、离线/身份恢复使用独立完整文档恢复入口。初始 RSC 保持隐藏，首次校验后展示；后台/BFCache 恢复保持失权清理要求。
+- `reload()` 用于正常保存后的 router.refresh；退出、失权、离线/身份恢复使用独立完整文档恢复入口。初始 RSC 保持隐藏，首次校验后展示；普通App切换保持界面原样，遵循下方 2026-11-05 修订，BFCache 恢复保留原门禁。
 - 内部链接统一 Next Link，GET 表单、搜索、分页和空间切换走客户端导航。未保存草稿在 SPA 导航前确认，取消保留编辑；文档离开继续使用 beforeunload。
 - 浏览器验收补齐：连续导航无 document 请求，侧栏/顶部 DOM 和 window 身份保持；前进后退、空间切换、移动抽屉关闭、取消草稿离开；原有撤权、迟到响应、离线与换身份回归保持。
 
 实现位置：`components/shell/session-boundary.tsx` 持有框架和页面作用域，`components/product-page.tsx` 发布已查询载荷，`components/product-content.tsx` 渲染当前业务内容，`client/request-scope.ts` 区分客户端更新与失权恢复。`AppLink` 复用 Next Link 的 onNavigate；数据模型与服务端授权接口保持当前设计。
+
+## 2026-11-05 切换 App 保持原样（当前有效）
+
+用户再次明确：离开再回来与原来一模一样，移除切换处理。本节及 §6.2/6.3 覆盖此前后台遮蔽、suspended、返回前台复验与30秒展示期限规则。
+
+- 删除 visibilitychange/focus/blur 监听与恢复处理。切换App不发请求、不abort、不改phase、不操作根节点或浮层hidden/inert；界面、焦点、滚动、草稿和聊天保持。
+- `DocumentSession` 保留 boot/active/retired 三态；删除 suspended、展示deadline、浮层恢复映射和“重新确认”UI。每15秒会话检查静默执行，后台无需单独暂停；临时网络错误/503/检查超时保留active，下一轮重试。浏览器暂停定时器后也不按客户端展示期限隐藏页面。
+- 真实会话过期、当前401/403、身份与权限版本变化、退出、离线和文档离开继续按已有逻辑清理。每次API请求继续由服务端鉴权。初始页面和新RSC载荷继续通过初始门禁。
+- 生成中的SSE和后台完成的聊天轮次维持当前处理，无自动重放。测试使用MutationObserver检测根节点hidden/inert的每次变更，断言普通切换及临时心跳失败均无隐藏闪烁，生成与聊天上下文完整。
 
 ## 1. 代码组织与依赖
 
@@ -100,14 +109,14 @@ type CurrentAccess = {
   sessionId: string;
   tenantId: string;
   tenantRole: TenantRole;
-  tenantMemberId: string;
+  tenantMemberId: string | null;
   authzVersion: Version;
   tenantPermissions: ReadonlySet<Permission>;
   workspacePermissions: ReadonlyMap<string, ReadonlySet<Permission>>;
 };
 ```
 
-ResolvedScope必须由服务端加载并核对资源归属后构造，不能把请求body直接断言成该类型。CurrentAccess仅在用户/会话/租户/租户成员有效时产生。IMPLEMENTED_PERMISSION_IDS取路由附录的有限目录，无通配权限。
+ResolvedScope必须由服务端加载并核对资源归属后构造，不能把请求body直接断言成该类型。CurrentAccess在用户/会话/租户有效，并具备平台资格或有效租户成员关系时产生。平台管理员派生role=admin、memberId=null，不写入成员记录。IMPLEMENTED_PERMISSION_IDS取路由附录的有限目录，无通配权限。
 
 状态：user/tenant/member active↔disabled；workspace active↔archived；session active→expired/revoked；workspace_member存在→解除关系；notification unread→read。没有邀请/授权审批状态机。权限编辑器在当前数据上计算直接、继承和有效权限，不持久化预览。恢复tenant_member明确恢复其保留的个人清单和空间分配，不隐式改角色或权限。
 
@@ -233,7 +242,7 @@ function mayExportEvent(access: CurrentAccess, eventScope: ResolvedScope): boole
 }
 ```
 
-数组shape、字符串类型、长度上限由strict DTO先检查，纯规则再次验证目录与范围。空数组合法且永不回退模板；personalGrantable=false即使误出现在普通成员记录中也不能生效。返回CurrentAccess前先核验有效user/session/tenant/tenant_member；ResolvedScope先核验真实资源归属，归档空间业务写入再经领域规则拒绝，成员权限治理按接口契约处理。admin只拥有本租户、相应范围的已登记Web动作。
+数组shape、字符串类型、长度上限由strict DTO先检查，纯规则再次验证目录与范围。空数组合法且永不回退模板；personalGrantable=false即使误出现在普通成员记录中也不能生效。返回CurrentAccess前先核验有效user/session/tenant，以及平台资格或有效tenant_member；ResolvedScope先核验真实资源归属，归档空间业务写入再经领域规则拒绝，成员权限治理按接口契约处理。admin只拥有本租户、相应范围的已登记Web动作。
 
 mayOpenAggregatePage只用于总览/安全框架，内容继续按read动作筛选；组织页要求tenant范围module.admin.organization，成员和权限写入保留给admin。module入口与动作分别校验，导出按同一事件scope同时满足read/export；不能组合A空间的read和B空间的export。
 
@@ -548,11 +557,11 @@ function buildViewRevision(facts: ViewRevisionFacts): string {
     ]),
   ); // sha256Hex 在服务端使用 Node crypto，非密码哈希或授权凭证。
 }
-// activeTenants 仅包含本人 active 成员关系且 tenant active 的租户；输出只返回摘要。
+// activeTenants：平台管理员包含全部 active 租户；普通账号仅包含本人 active 成员关系且 tenant active 的租户。输出只返回摘要。
 // 不读取时间、个人偏好或显示名，不造成每次心跳/保存普通偏好都变化。
 ```
 
-服务端先验证用户/session 当前有效，再在同一快照读本人有效租户的版本；任何这些租户的权限相关变化都会保守地改变摘要。用户切换、会话更换、平台资格变化、成员/租户停用也会改变摘要或直接拒绝请求。这样个人通知、租户选择等跨本人多个租户的页面也能感知失权，不需新增用户级授权版本列。所有影响访问的租户/空间状态与成员变化必须同事务递增所属 tenant.authz_version，具体写入覆盖见数据设计 §4。目录语义变更更新代码中的目录版本。只读摘要不暴露其他租户的 ID 或权限。
+服务端先验证用户/session 当前有效，再在同一快照读可访问有效租户的版本（平台管理员覆盖全部有效租户）；任何这些租户的权限相关变化都会保守地改变摘要。用户切换、会话更换、平台资格变化、成员/租户停用也会改变摘要或直接拒绝请求。这样个人通知、租户选择等跨本人多个租户的页面也能感知失权，不需新增用户级授权版本列。所有影响访问的租户/空间状态与成员变化必须同事务递增所属 tenant.authz_version，具体写入覆盖见数据设计 §4。目录语义变更更新代码中的目录版本。只读摘要不暴露其他租户的 ID 或权限。
 
 RSC 页面由一次有界页面查询返回 `{ viewRevision, navigation, pageData }`；其中身份、页面权限、导航和敏感投影共享一个 `REPEATABLE READ READ ONLY` 快照。页内多个模块通过同连接协作，禁止分别查询后拼接不同时点的版本与数据。查询完成并结束事务后才进入渲染，不在网络发送期间保持事务，也不让后续流式子组件另查敏感数据。DTO 作为初始页面载荷交给边界，服务端组件不在边界外显示用户名、租户名、通知或其他敏感片段。Route Handler 在自己查询/写入的事务中取得响应版本，经 `X-Compass-View-Revision` 返回；普通 DTO 形状保留。GET/session 在 body 中返回同算法的 viewRevision，仍返回当前租户的 authzVersion 和 CSRF。
 
@@ -560,59 +569,24 @@ RSC 页面由一次有界页面查询返回 `{ viewRevision, navigation, pageDat
 
 受保护的产品、个人和平台页面使用 Next Link/router 导航，共享 `(product)` 布局持有框架。页签、空间切换、搜索与筛选分页均局部更新；正常保存调用 router.refresh。AppLink 的 onNavigate 和程序式入口处理未保存草稿确认。登录与失权恢复使用完整文档导航。
 
-每次接收 RSC 载荷创建新的请求作用域，销毁旧作用域并取消旧请求。身份与展示版本一致时保留侧栏/顶部 DOM，内容区等待当前权限探测；框架沿用原展示期限。前进后退的缓存载荷同样重新探测，通过后显示内容。已退役应用拒绝后续迟到的 RSC 载荷；已销毁作用域的结果和错误都不能操作新页面。
+每次接收 RSC 载荷创建新的请求作用域，销毁旧作用域并取消旧请求。身份与展示版本一致时保留侧栏/顶部 DOM，内容区等待当前权限探测；框架保留至候选页面初始核验完成。前进后退的缓存载荷同样重新探测，通过后显示内容。已退役应用拒绝后续迟到的 RSC 载荷；已销毁作用域的结果和错误都不能操作新页面。
 
 每份新文档的敏感根节点在服务端 HTML 中默认 `hidden`/`inert`，首个绘制及 hydration 前均保持遮蔽；只显示不含个人数据的加载状态。不得只用 hydration 后的 useEffect 再遮蔽。初始复验有效、版本与本次 RSC 载荷相同、页面权限仍满足且期限有效后，才开放敏感子树与写入；初始复验失败/版本不匹配保持遮蔽，提供完整文档重新加载的安全重试或回到获权入口，不自动连续 reload。
 
-已显示页面发生权限变化或恢复事件时，先不可逆地清理该文档的敏感状态，再重新加载完整文档；旧文档不重新开放。新文档继续执行初始门禁。新页面加载或复验失败只保留安全错误/重试入口，不能回显旧 children 或草稿。每份 RSC 载荷必须同时满足当前身份、页面权限、展示版本和有效期限。
+已显示页面确认权限变化、登录失效、离线或文档离开时清理并退役。App和标签页切换不触发任何界面状态变化。定时检查的临时失败保持已显示页面；受保护操作由服务端逐请求校验。
 
-### 6.3 请求世代与复验状态机
+### 6.3 请求世代与静默会话检查
 
-边界仅保留以下内存状态；不写浏览器持久化存储：
+内存仅保留 boot/active/retired、generation、viewKey、viewRevision、probeSequence、CSRF和在途请求控制器；没有展示deadline或后台恢复状态，不写浏览器持久化存储。
 
-```ts
-type DisplayState = {
-  phase: "boot" | "active" | "retired";
-  generation: number; // 每次失效增加；覆盖数据请求、心跳、错误及保存回调。
-  viewKey: string; // 当前规范化本地 URL，含 tenant/workspace/page/过滤与分页。
-  viewRevision: string | null;
-  probeSequence: number;
-  deadline: number; // performance.now() 的期限；另受 session expiresAt 限制。
-};
-type RequestTicket = { generation: number; viewKey: string; viewRevision: string };
-type ProbeTicket = { generation: number; viewKey: string; sequence: number; sentAt: number };
-```
+- boot检查通过且与本次RSC的身份/版本一致后显示；boot失败保持安全重试入口。
+- 每15秒发起静默检查，同一作用域最多一个在途检查、5秒超时。超时abort；检查结果须匹配generation/viewKey/sequence且控制器未取消。已销毁或退役作用域的晚到成功、拒绝、异常均丢弃。
+- active当前检查成功只更新CSRF；临时网络/503失败不改变界面。当前401/403、身份或权限版本变化清空旧状态并走原退役恢复；真实session.expiresAt仍由到期检查和每次请求入口核验。
+- 新请求、下载、结果接收要求当前active、generation/viewKey及真实session未过期。请求成功的版本头须与当前载荷一致。数据响应不改变权限版本，写操作与模型调用不自动重放。
+- visibilitychange/focus/blur不注册处理；后台仍可按浏览器调度静默检查。页面及浮层不因离开/返回或检查超时隐藏、禁用、卸载。
+- pagehide、offline、本地身份广播继续退役；online与BFCache恢复保留既有门禁。普通SPA导航和历史载荷继续核验当前身份和版本。
 
-`retire(reason)` 的统一顺序是：同步设置敏感根节点 hidden/inert 并禁写 → phase=retired、generation++、probeSequence++ → abort 所有数据请求及心跳 → 清 DTO、草稿、旧 CSRF、游标、通知浮层及 Blob URL → 卸载敏感子树。安全事件触发时不弹出“保留草稿”阻止清理。旧 generation 的成功、失败、finally 回调全部失效，不得改 DOM、显示 toast、续期或重定向。当前文档进入 retired 后只允许安全重试/整页导航。
-
-```text
-boot：只启动一次初始复验；初次 pageshow(persisted=false) 不重复启动第二条链路
-startProbe：同一文档最多一个在途复验；记录 generation/viewKey/sequence/sentAt，5秒超时
-  超时先作废 sequence 并 abort；晚到响应即使成功也丢弃；不续期
-onProbeResult：先比对 generation/viewKey/sequence、abort 状态及当前文档可见/在线
-  任一不符 → 丢弃；此规则同样用于旧 401/403/网络错误
-  当前 401/403 → retire，按安全登录/获权入口完整文档回退
-  boot 中 503/网络错误 → 保持遮蔽，只显示安全重试
-  active 中临时失败 → 不延长原 deadline；到期必须 retire，离线则立即 retire
-  成功但返回时已超过 sentAt+30秒或 session 已到期 → 不开放/不续期
-  boot 且响应版本 == 本次 RSC 载荷版本、页面仍获权 → active，安装 CSRF 与 deadline
-  active 且响应版本 == 当前 viewRevision → 只更新安全上下文及 deadline，不恢复已清内容
-  active 且响应版本不同（即使 HTTP 200）→ retire，重新加载当前安全 URL
-  retired → 丢弃所有复验结果；恢复必须经过新文档 boot
-
-数据请求/保存回调：仅 active 且未到期/在线时发出，捕获 RequestTicket
-  返回后先比对 generation/viewKey/phase、abort、deadline，失配直接丢弃
-  当前 401/403 → retire；当前其他错误按既有表单错误规则处理
-  成功且 X-Compass-View-Revision 缺失/不同 → 不安装结果，retire 并重新载入
-  成功且版本相同 → 仍属当前世代时才显示 DTO、保存反馈或创建下载链接
-  响应不得直接覆盖边界版本、延长 deadline 或自动重放写操作
-```
-
-有效心跳从发起时间计算最多 30 秒的期限，前台每 15 秒复验；专用到期定时器负责清屏，所有异步回调和写入入口也检查期限。成功心跳只有仍处 active 时才能续期；一次失效后的新成功响应无法恢复旧子树。新 revision 不比较字符串大小，也不由任意数据响应“升级”；通过新文档当前服务端查询重新建立上下文。
-
-`visibilitychange(hidden)`、pagehide、offline、本地身份/撤权广播都先 retire。visibility 返回 visible、online 或 pageshow(persisted=true) 时保持旧根节点遮蔽并完整重新加载当前 URL；重复事件每份文档只发起一次 reload。正常首次 pageshow 只走 boot。意外发生同文档 popstate 也 retire 并重载，不能在旧文档直接恢复敏感路由。重新加载不增加历史条目；正常链接导航增加条目，前进/后退与深链仍可用。
-
-同步遮蔽使用显式 DOM hidden/inert 配合 React 同步清理，下一次 React 提交不得解除 retired 文档的遮蔽。默认隐藏和 visibility/pagehide 双入口共同处理恢复；浏览器生命周期事件的实际时序仍须 V05 证明。依据 [pageshow](https://developer.mozilla.org/en-US/docs/Web/API/Window/pageshow_event) 与 [pagehide](https://developer.mozilla.org/en-US/docs/Web/API/Window/pagehide_event) 的事件语义设计，不依赖 pagehide 在所有移动场景必达，也不宣称能撤回已经获得的截图或信息。
+`retire(reason)` 同步隐藏根节点与敏感浮层、增加世代并取消请求、清理草稿/聊天/CSRF/Blob等，再卸载子树。仅当前确认失权或真实离开等既有清理场景调用；普通切换不经过此路径。
 
 ### 6.4 D01 的实施反例
 
@@ -626,7 +600,7 @@ onProbeResult：先比对 generation/viewKey/sequence、abort 状态及当前文
 | 另一标签页换用户/会话；平台资格变化；本人退出某个租户后查看个人通知 | revision 变化或身份拒绝触发清理；无前一身份/租户信息回填           |
 | 当前页权限丢失、失效响应为 401/403、旧请求错误迟到                  | 当前失权立即清理；旧错误不干扰新文档                               |
 | hidden、离线、BFCache、浏览器前进/后退、窄屏恢复                    | 恢复前遮蔽；重新加载和核验通过后才开放，无失权闪现                 |
-| 心跳失败、数据请求持续挂起、保存回调延迟                            | 原 deadline 到期仍清屏，禁止写入；不靠请求未结束延长展示           |
+| 心跳失败、数据请求持续挂起、保存回调延迟                            | 界面保持原样，临时失败等待下次检查；受保护请求继续服务端鉴权       |
 | 普通切页/带过滤分页/新标签页/取消脏表单离开                         | 导航入口一致；取消不离开，确认后完整导航；无 Next SPA 缓存捷径     |
 
 以上为待实施验证清单，不能以状态机文字或定时器单测替代真实浏览器证据。

@@ -1,0 +1,17 @@
+{
+  "title": "第 12 课 · 多模型路由",
+  "subtitle": "从两级意图到一次模型推理",
+  "brand": "Compass",
+  "label": "精简阅读版 · 设计与代码摘录",
+  "source": "../../TECH_DESIGN.md",
+  "guide": "guide.md",
+  "output": "../../TECH_DESIGN.compact.html",
+  "hero": "hero.svg",
+  "topics": ["两级意图", "确定性选模", "统一响应"],
+  "metrics": [
+    { "value": "2", "label": "意图输出字段", "detail": "category_id / scene_id" },
+    { "value": "40", "label": "字典场景", "detail": "特征由服务端查表" },
+    { "value": "≤ 3", "label": "每轮模型调用", "detail": "最多 2 次分类 + 1 次生成" },
+    { "value": "1", "label": "前端请求", "detail": "统一 models/calls" }
+  ]
+}

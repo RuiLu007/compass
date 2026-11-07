@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Compass LLM Runtime V2 完整技术设计：架构、数据库 ER、UML、推理时序、类型契约与实施验收。"
+    />
+    <meta name="color-scheme" content="light" />
+    <title>LLM Runtime V2 · Compass 技术设计</title>
+    <style>
+      {{styles}}
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#document">跳至设计正文</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="#top"
+          >{{icon-compass}}Compass<span>ENGINEERING<br />DESIGN NOTES</span></a
+        >
+        <nav class="top-links" aria-label="快捷导航">
+          <a class="desktop-link" href="{{architecture}}">架构设计</a>
+          <a class="desktop-link" href="{{types}}">类型契约</a>
+          <a class="desktop-link" href="#acceptance">实施验收</a>
+          <button class="search-trigger" type="button" data-search>
+            {{icon-search}}<span>检索文档</span><kbd>⌘ K</kbd>
+          </button>
+        </nav>
+      </div>
+      <div class="reading-progress" aria-hidden="true"></div>
+    </header>
+    <main id="top">
+      <section class="hero" aria-labelledby="page-title">
+        <div class="eyebrow">
+          <span class="dash"></span>COMPASS / ARCHITECTURE SERIES <span>011</span>
+        </div>
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <h1 id="page-title">
+              LLM Runtime<span>从模型接入，<br />到可控的每次推理。</span>
+            </h1>
+            <p>
+              在 Agent
+              进程内建立统一的模型执行内核。以清晰的契约与职责边界，连接模型管理、能力测试和分析
+              Chat。
+            </p>
+            <div class="hero-actions">
+              <a class="primary-link" href="{{architecture}}">阅读架构设计{{icon-arrow}}</a>
+              <a class="secondary-link" href="{{sequence}}">跟随一次请求{{icon-arrow-up}}</a>
+            </div>
+            <div class="hero-note">
+              <span class="status-dot"></span>V2 · 已实施<span> / </span
+              ><time datetime="2026-11-04">2026.11.04</time><span> / </span>Feature 993
+            </div>
+          </div>
+          <div class="hero-visual">
+            <div class="visual-top">
+              <span>ONE REQUEST. CLEAR OWNERSHIP.</span><span class="visual-tag">IN-PROCESS</span>
+            </div>
+            <svg
+              viewBox="0 0 480 330"
+              role="img"
+              aria-labelledby="hero-diagram-title hero-diagram-desc"
+            >
+              <title id="hero-diagram-title">Compass 的单次模型执行路径</title>
+              <desc id="hero-diagram-desc">
+                Web BFF 经过 Agent API 和 ModelService，将快照和策略交给 Runtime。Runtime
+                选择生成或决策适配器，通过单次 HTTP 请求访问供应商。
+              </desc>
+              <defs>
+                <marker
+                  id="hero-arrow"
+                  markerWidth="7"
+                  markerHeight="7"
+                  refX="6"
+                  refY="3"
+                  orient="auto"
+                >
+                  <path d="M0 0 6 3 0 6" fill="none" stroke="#6b8767" stroke-width="1.3" />
+                </marker>
+              </defs>
+              <g font-family="-apple-system, BlinkMacSystemFont, PingFang SC, sans-serif">
+                <rect x="22" y="10" width="175" height="49" rx="7" fill="#fff" stroke="#cbd9c3" />
+                <text x="37" y="30" font-size="12" fill="#23462f">Web BFF</text>
+                <text x="37" y="46" font-size="9" fill="#64785b">身份 · 权限 · 契约</text>
+                <path d="M199 35 H253" stroke="#6b8767" marker-end="url(#hero-arrow)" />
+                <rect x="260" y="10" width="198" height="49" rx="7" fill="#fff" stroke="#cbd9c3" />
+                <text x="275" y="30" font-size="12" fill="#23462f">Agent API / ModelService</text>
+                <text x="275" y="46" font-size="9" fill="#64785b">快照 · 占位 · 元记录</text>
+                <path d="M358 59 V87" stroke="#6b8767" marker-end="url(#hero-arrow)" />
+                <rect x="22" y="95" width="436" height="136" rx="9" fill="#234b3d" />
+                <text x="40" y="122" fill="#f0f6e7" font-size="18" font-weight="500">Runtime</text>
+                <text x="439" y="120" text-anchor="end" fill="#b4cda6" font-size="9">
+                  ExecutionRequest → RuntimeResult
+                </text>
+                <text x="40" y="145" fill="#bdd0b5" font-size="10">
+                  绝对期限 / 取消传播 / 资源关闭 / 安全结果
+                </text>
+                <rect
+                  x="39"
+                  y="163"
+                  width="192"
+                  height="48"
+                  rx="6"
+                  fill="#335d49"
+                  stroke="#668365"
+                />
+                <text x="54" y="183" fill="#f0f6e7" font-size="11">LiteLLMChatAdapter</text>
+                <text x="54" y="200" fill="#bed2b2" font-size="9">
+                  生成模型 · Stream / Tools / JSON
+                </text>
+                <rect
+                  x="244"
+                  y="163"
+                  width="196"
+                  height="48"
+                  rx="6"
+                  fill="#335d49"
+                  stroke="#668365"
+                />
+                <text x="259" y="183" fill="#f0f6e7" font-size="11">SystemOneDecisionAdapter</text>
+                <text x="259" y="200" fill="#bed2b2" font-size="9">
+                  决策模型 · Choice / Score / Noul
+                </text>
+                <path
+                  d="M135 231 V257 H240 M342 231 V257 H240 V278"
+                  stroke="#6b8767"
+                  fill="none"
+                  marker-end="url(#hero-arrow)"
+                />
+                <rect
+                  x="110"
+                  y="285"
+                  width="260"
+                  height="32"
+                  rx="16"
+                  fill="#d7edb4"
+                  stroke="#bacf99"
+                />
+                <text x="240" y="306" text-anchor="middle" font-size="10" fill="#34502a">
+                  LiteLLM Core · 各供应商原生协议
+                </text>
+              </g>
+            </svg>
+            <p class="visual-caption">应用管理配置与记录，Runtime 管理执行生命周期。</p>
+          </div>
+        </div>
+        <div class="metrics" aria-label="设计约束">
+          <div class="metric">
+            <strong>3</strong><small>张持久化表</small>
+            <p>Provider / Change / Call</p>
+          </div>
+          <div class="metric">
+            <strong>2</strong><small>种适配器</small>
+            <p>生成与决策，共同调用协议</p>
+          </div>
+          <div class="metric">
+            <strong>1</strong><small>次 SDK 推理调用</small>
+            <p>固定尝试策略，关闭自动重试</p>
+          </div>
+          <div class="metric">
+            <strong>180</strong><small>秒执行预算</small>
+            <p>从准备开始，共用绝对期限</p>
+          </div>
+        </div>
+      </section>
+      <nav class="guide" aria-label="五项完整设计">
+        <a href="{{er}}"><span class="index">01</span>{{icon-database}}数据库 ER</a>
+        <a href="{{uml}}"><span class="index">02</span>{{icon-boxes}}完整 UML</a>
+        <a href="{{sequence}}"><span class="index">03</span>{{icon-flow}}推理请求时序</a>
+        <a href="{{types}}"><span class="index">04</span>{{icon-code}}完整类型定义</a>
+        <a href="{{directory}}"><span class="index">05</span>{{icon-folder}}目录组织规范</a>
+      </nav>
+      <div class="doc-layout">
+        <aside class="sidebar" aria-label="文档目录">
+          <div class="nav-label">IN THIS DOCUMENT</div>
+          <nav class="side-nav">{{toc}}</nav>
+          <div class="side-foot">
+            <strong>阅读提示</strong><br />图表支持全屏缩放与 SVG 导出。<br />代码可复制、展开与按类型跳转。<br /><br />单文件
+            · 无需联网
+          </div>
+        </aside>
+        <div class="document" id="document">
+          <details class="mobile-nav">
+            <summary>浏览文档目录</summary>
+            <nav class="side-nav">{{toc}}</nav>
+          </details>
+          <section class="status-panel" aria-labelledby="delivery-title">
+            <div class="eyebrow">IMPLEMENTATION STATUS</div>
+            <h2 id="delivery-title">设计已落地，调用链已验收。</h2>
+            <p>
+              V2 的类型边界、统一适配器、执行生命周期与能力解析已完成。数据库已升级 Agent 0003 / Web
+              0003，公开 HTTP 契约与 SSE 事件保持兼容。阿里云真实调用按既定安排后测。
+            </p>
+            <div class="proof-row">
+              <span>{{icon-check}}242 单元与工程</span><span>{{icon-check}}33 PostgreSQL</span
+              ><span>{{icon-check}}31 浏览器回归</span
+              ><span>{{icon-check}}26 DeepSeek 真实调用</span>
+            </div>
+            <p class="reference-links">
+              设计依据：<a href="../spec/PRD.md">产品需求</a> ·
+              <a href="TECH_DESIGN.md">原技术方案</a> ·
+              <a href="../review/design_review.md">融合评审</a> ·
+              <a href="../../../docs/database-migrations.md">数据库规范</a>
+            </p>
+          </section>
+          {{article}}
+          <h2 id="acceptance">
+            <span class="section-label">IMPLEMENTATION & VALIDATION</span>实施结果与验收
+          </h2>
+          {{implementation}}
+        </div>
+      </div>
+    </main>
+    <footer class="footer">
+      <span>COMPASS · LLM RUNTIME V2<br />《企业级Agent工程架构实战营》工程设计文档</span
+      ><span
+        ><a href="TECH_DESIGN.v2.md">Markdown 设计源</a> ·
+        <a href="../IMPLEMENTATION.md">实施记录</a> · <a href="#top">返回顶部 ↑</a><br />Mermaid
+        {{mermaidVersion}} · highlight.js {{highlightVersion}} · 离线静态阅读版</span
+      >
+    </footer>
+    <dialog id="search-dialog" aria-labelledby="search-title">
+      <div class="dialog-header">
+        <h2 id="search-title">检索设计与类型</h2>
+        <button class="close-button" data-close aria-label="关闭检索">{{icon-close}}</button>
+      </div>
+      <div class="search-field">
+        {{icon-search}}<input
+          id="search-input"
+          aria-label="搜索章节、类型或设计内容"
+          placeholder="试试 RuntimeResult、取消、数据库…"
+          autocomplete="off"
+        />
+      </div>
+      <div id="search-results"></div>
+      <p class="search-meta" id="search-meta" role="status">输入关键词检索完整文档</p>
+    </dialog>
+    <dialog id="diagram-dialog" aria-labelledby="zoom-title">
+      <div class="dialog-header">
+        <h2 id="zoom-title">架构图</h2>
+        <button class="close-button" data-close aria-label="关闭图表">{{icon-close}}</button>
+      </div>
+      <div class="zoom-toolbar">
+        <button class="plain-button" data-zoom="out" aria-label="缩小图表">{{icon-minus}}</button
+        ><output id="zoom-level" aria-label="缩放比例">100%</output
+        ><button class="plain-button" data-zoom="in" aria-label="放大图表">{{icon-plus}}</button
+        ><button class="plain-button" data-zoom="fit">适应窗口</button
+        ><button class="plain-button" data-zoom="actual">原始尺寸</button
+        ><button class="plain-button" id="download-svg">{{icon-download}}SVG</button
+        ><span class="zoom-hint">缩放后可横向、纵向滚动 · Esc 关闭</span>
+      </div>
+      <div id="zoom-viewport" tabindex="0" aria-label="图表滚动区域">
+        <div id="zoom-content"></div>
+      </div>
+    </dialog>
+    <div class="toast" role="status" aria-live="polite"></div>
+    <script type="application/json" id="search-index">
+      {{searchIndex}}
+    </script>
+    <script>
+      /* DOCUMENT_INTERACTIONS */
+    </script>
+  </body>
+</html>

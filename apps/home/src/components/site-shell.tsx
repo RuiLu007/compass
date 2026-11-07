@@ -112,6 +112,8 @@ export function SiteHeader() {
 }
 
 export function SiteFooter() {
+  const pathname = usePathname();
+  if (pathname.replace(/\/$/, "") === "/resources") return null;
   return (
     <footer className="site-footer">
       <div className="container footer-top">

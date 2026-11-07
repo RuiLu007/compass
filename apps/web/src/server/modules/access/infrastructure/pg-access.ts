@@ -83,6 +83,18 @@ export function bindAccess(client: SqlClient): AccessStore {
     return rows[0];
   }
   async function current(actor: Actor, tenantId: string): Promise<CurrentAccess> {
+    if (actor.isPlatformAdmin) {
+      const value = await tenant(tenantId);
+      if (value.status !== "active") reject("not_found");
+      return {
+        tenantId,
+        memberId: null,
+        role: "admin",
+        authzVersion: value.authzVersion,
+        tenantPermissions: [],
+        workspacePermissions: new Map(),
+      };
+    }
     const { rows } = await client.query<{
       id: string;
       role_key: "admin" | "member";
@@ -113,10 +125,10 @@ export function bindAccess(client: SqlClient): AccessStore {
     workspace,
     member,
     binding,
-    async activeTenantVersions(userId) {
+    async activeTenantVersions(actor) {
       const { rows } = await client.query<{ tenantId: string; authzVersion: string }>(
-        `SELECT t.id AS "tenantId",t.authz_version::text AS "authzVersion" FROM web.tenant t JOIN web.tenant_member m ON m.tenant_id=t.id WHERE m.user_id=$1 AND m.status='active' AND t.status='active' ORDER BY t.id`,
-        [userId],
+        `SELECT t.id AS "tenantId",t.authz_version::text AS "authzVersion" FROM web.tenant t WHERE t.status='active' AND ($2::boolean OR EXISTS (SELECT 1 FROM web.tenant_member m WHERE m.tenant_id=t.id AND m.user_id=$1 AND m.status='active')) ORDER BY t.id`,
+        [actor.userId, actor.isPlatformAdmin],
       );
       return rows;
     },
@@ -137,14 +149,19 @@ export function bindAccess(client: SqlClient): AccessStore {
       return { tenantId, workspaceId };
     },
     async tenants(actor, query, platform = false) {
-      const where = `name ILIKE $2 ESCAPE '\\' AND ($3::boolean OR (status='active' AND EXISTS (SELECT 1 FROM web.tenant_member m WHERE m.tenant_id=t.id AND m.user_id=$1 AND m.status='active')))`;
-      const args = [actor.userId, searchPattern(query.q), platform];
+      const where = `name ILIKE $2 ESCAPE '\\' AND ($3::boolean OR (status='active' AND ($4::boolean OR EXISTS (SELECT 1 FROM web.tenant_member m WHERE m.tenant_id=t.id AND m.user_id=$1 AND m.status='active'))))`;
+      const args = [
+        actor.userId,
+        searchPattern(query.q),
+        platform && actor.isPlatformAdmin,
+        actor.isPlatformAdmin,
+      ];
       const count = await client.query<{ total: number }>(
         `SELECT count(*)::int AS total FROM web.tenant t WHERE ${where}`,
         args,
       );
       const { rows } = await client.query<TenantDto>(
-        `SELECT ${tenantColumns} FROM web.tenant t WHERE ${where} ORDER BY ${query.sort === "createdAt" ? "created_at DESC" : "name"},id LIMIT $4 OFFSET $5`,
+        `SELECT ${tenantColumns} FROM web.tenant t WHERE ${where} ORDER BY ${query.sort === "createdAt" ? "created_at DESC" : "name"},id LIMIT $5 OFFSET $6`,
         [...args, query.limit, (query.page - 1) * query.limit],
       );
       return { items: rows, total: count.rows[0].total, page: query.page, limit: query.limit };

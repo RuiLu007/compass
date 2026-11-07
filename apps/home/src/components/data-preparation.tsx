@@ -280,7 +280,7 @@ pnpm db:seed`}
 pnpm smoke`}
             />
             <p className={s.note}>
-              Web 端口 3000，Agent 端口 8000。停止数据库使用 pnpm db:down，数据卷会保留。
+              Web 端口 8100，Agent 端口 8102。停止数据库使用 pnpm db:down，数据卷会保留。
               本页官网单独运行时无需初始化数据库。
             </p>
           </div>

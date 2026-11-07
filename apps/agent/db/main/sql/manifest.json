@@ -1,0 +1,43 @@
+{
+  "owner": "agent",
+  "databaseKey": "main",
+  "feature": "991",
+  "from": "empty",
+  "to": "0004",
+  "engine": "PostgreSQL 17",
+  "tool": "Alembic 1.20.0",
+  "sourceRevision": "working-tree; fixed by source SHA-256",
+  "sources": [
+    {
+      "source": "../../migrations/versions/0001_demo_fixture.py",
+      "sha256": "9513f1fcaa4a4f65d43e3942745c4e794dab30b10425d31be26c427dc379d1ac"
+    },
+    {
+      "source": "../../migrations/versions/0002_llm_runtime.py",
+      "sha256": "98c56506d80e00c70a9ff542ea252d0e51fbf6aae310e61b9e21ae0dd2b72202"
+    },
+    {
+      "source": "../../migrations/versions/0003_systemone_decision.py",
+      "sha256": "fca5d24e5ec8a8d83e3e2195a42c0842e2768111b46e3046897e9e9bde199c08"
+    },
+    {
+      "source": "../../migrations/versions/0004_reliable_execution.py",
+      "sha256": "0de305dc970161bc065373d077f441277e2d2094e21e819e3f76692a74e646cb"
+    }
+  ],
+  "files": {
+    "bootstrap.sql": "eba8c4f22a8d802c5b25e90e976fec4a78e5788762c122512f136c063c05aa4d",
+    "upgrades/0001__0002.sql": "471825e3af6e2d456e1973e62bd3545a5fc47fa4a84a6e599df86173753772ea",
+    "upgrades/0001__0003.sql": "80d749841c34b3567a5d085892068d7de4e273c92c2248ebb7f99e173ae77565",
+    "upgrades/0002__0003.sql": "fbc8e5d4c434c7d06c4326a697b62789ea959ee8d1df59bb26cbd2b1daaf96e1",
+    "upgrades/0001__0004.sql": "ba362ad778a52d84df41f5fb0ca8090026dc6f71d156095746bc38be4b964e8c",
+    "upgrades/0002__0004.sql": "cd0690f7f69828132c9f6dd15a57f397cd6adedfd987397a4263b397c4512623",
+    "upgrades/0003__0004.sql": "b39ec36208a1be36e46875ebe520b8db612c40ce5d1ffc8b3b734612bdb96c31"
+  },
+  "generate": "pnpm db:sql -F agent",
+  "apply": "pnpm db:apply-sql -F agent -- --from empty --to 0004",
+  "transaction": "single transaction with advisory lock",
+  "prerequisites": "Provisioned Agent-owned database; expected start and source checksums",
+  "dataImpact": "Adds model configuration and metadata; renames decision adapter; adds nullable execution summary; preserves keys and rows",
+  "recovery": "Restore verified backup to new owned database with original encryption key"
+}

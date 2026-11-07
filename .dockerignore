@@ -1,6 +1,7 @@
 **/node_modules
 **/.venv
 **/.next
+**/.next-e2e
 **/.turbo
 **/.git
 **/__pycache__

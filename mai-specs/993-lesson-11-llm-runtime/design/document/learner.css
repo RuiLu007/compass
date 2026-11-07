@@ -1,0 +1,189 @@
+:root {
+  --reading-size: 14px;
+  --secondary-size: 13px;
+}
+.document,
+.document > p,
+.document > ul,
+.document > ol,
+.document > blockquote,
+.document table {
+  font-size: var(--reading-size);
+  line-height: 1.9;
+}
+.document th,
+.document td {
+  min-width: 130px;
+  padding: 14px 16px;
+}
+.document h2 {
+  font-size: 30px;
+}
+.document h3 {
+  font-size: 24px;
+}
+.document h4 {
+  font-size: 19px;
+}
+.document :not(pre) > code {
+  font-size: var(--secondary-size);
+}
+.code-block pre {
+  font-size: var(--reading-size);
+  line-height: 1.85;
+}
+.top-links,
+.side-nav a,
+.guide a,
+.figure-label,
+.mobile-nav summary,
+.search-result strong {
+  font-size: var(--reading-size);
+}
+.side-nav a.sub,
+.side-foot,
+.search-trigger,
+.plain-button,
+.source-details summary,
+.diagram figcaption,
+.visual-caption,
+.metric p,
+.metric small,
+.footer,
+.search-result p,
+.search-meta,
+.type-index a {
+  font-size: var(--secondary-size);
+}
+.code-bar,
+.code-tools button,
+.line-num,
+.figure-label small,
+.nav-label,
+.hero-note,
+.guide .index {
+  font-size: 12px;
+}
+.code-tools button {
+  min-height: 32px;
+}
+.dialog-header h2 {
+  font-size: 18px;
+}
+.hero-note {
+  flex-wrap: wrap;
+  line-height: 1.7;
+}
+.diagram--overview .diagram-stage {
+  display: block;
+  overflow: auto;
+  padding: 16px;
+}
+.diagram--overview .diagram-stage > svg {
+  min-width: 1000px;
+  max-height: none;
+}
+.diagram--er .diagram-stage {
+  display: block;
+  overflow: auto;
+  max-height: 760px;
+  padding: 16px;
+}
+.diagram--er .diagram-stage > svg {
+  min-width: 1280px;
+  max-height: none;
+}
+.product-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin: 24px 0 40px;
+}
+.product-shot {
+  display: block;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.product-shot button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: var(--soft);
+  cursor: zoom-in;
+}
+.product-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1440 / 1110;
+  object-fit: contain;
+}
+.product-caption {
+  display: block;
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--muted);
+}
+#screenshot-dialog {
+  width: min(1480px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+}
+.screenshot-viewport {
+  overflow: auto;
+  max-height: calc(100dvh - 130px);
+}
+#screenshot-full {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+@media (max-width: 700px) {
+  .product-gallery {
+    grid-template-columns: 1fr;
+  }
+  #screenshot-full {
+    width: 1100px;
+    max-width: none;
+  }
+}
+@media (max-width: 760px) {
+  .document h2 {
+    font-size: 27px;
+  }
+  .document h3 {
+    font-size: 23px;
+  }
+  .guide {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .figure-bar {
+    flex-wrap: wrap;
+  }
+}
+@media print {
+  .diagram--overview .diagram-stage > svg {
+    min-width: 0;
+  }
+  .diagram--er .diagram-stage {
+    max-height: none;
+  }
+  .diagram--er .diagram-stage > svg {
+    min-width: 0;
+  }
+  .product-shot {
+    break-inside: avoid;
+  }
+  .product-gallery {
+    display: block;
+  }
+  .product-shot + .product-shot {
+    margin-top: 20px;
+  }
+}

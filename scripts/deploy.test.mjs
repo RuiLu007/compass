@@ -25,10 +25,10 @@ function fixture(
                   {
                     host_ip: "127.0.0.1",
                     published: {
-                      home: 3001,
-                      web: 3000,
-                      agent: 8000,
-                      memory: 8001,
+                      home: 8101,
+                      web: 8100,
+                      agent: 8102,
+                      memory: 8103,
                       postgres: 55432,
                     }[app],
                   },
@@ -186,7 +186,7 @@ test("re-deploy allows ports already published by the selected running container
       {
         Service: "home",
         State: "running",
-        Publishers: [{ URL: "127.0.0.1", PublishedPort: 3001 }],
+        Publishers: [{ URL: "127.0.0.1", PublishedPort: 8101 }],
       },
     ],
   });

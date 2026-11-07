@@ -7,7 +7,7 @@ import { navigation, analysisCases } from "../src/lib/content.ts";
 
 const app = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 test("all navigation destinations and twelve prototype scenario deep links exist", () => {
-  assert.equal(navigation.length, 6);
+  assert.equal(navigation.length, 7);
   for (const page of navigation)
     assert.ok(existsSync(path.join(app, "src/app", page.href, "page.tsx")), page.href);
   const prototype = path.resolve(

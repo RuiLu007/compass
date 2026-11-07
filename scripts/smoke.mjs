@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 const local = process.argv.includes("--local");
 if (!local && existsSync(".env")) process.loadEnvFile(".env");
-const web = (!local && process.env.COMPASS_WEB_URL) || "http://127.0.0.1:3000";
-const api = (!local && process.env.AGENT_API_URL) || "http://127.0.0.1:8000";
+const web = (!local && process.env.COMPASS_WEB_URL) || "http://127.0.0.1:8100";
+const api = (!local && process.env.AGENT_API_URL) || "http://127.0.0.1:8102";
 const appIndex = process.argv.indexOf("--apps");
 const selected = appIndex < 0 ? null : process.argv[appIndex + 1]?.split(",");
 if (
@@ -58,7 +58,7 @@ if (selected?.includes("agent") && !full) {
   console.log("Smoke passed: Agent readiness and seeded PostgreSQL.");
 }
 if (selected?.includes("memory") || process.argv.includes("--memory")) {
-  const memory = (!local && process.env.MEMORY_API_URL) || "http://127.0.0.1:8001";
+  const memory = (!local && process.env.MEMORY_API_URL) || "http://127.0.0.1:8103";
   const response = await fetch(`${memory}/readyz`, { signal: AbortSignal.timeout(10000) });
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
@@ -69,7 +69,7 @@ if (selected?.includes("memory") || process.argv.includes("--memory")) {
   console.log("Smoke passed: Memory scaffold readiness.");
 }
 if (selected?.includes("home")) {
-  const home = (!local && process.env.COMPASS_HOME_URL) || "http://127.0.0.1:3001";
+  const home = (!local && process.env.COMPASS_HOME_URL) || "http://127.0.0.1:8101";
   for (const endpoint of [
     "/",
     "/scaffold",

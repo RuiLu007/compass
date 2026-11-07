@@ -3,7 +3,7 @@
 独立 Python 记忆服务脚手架，使用 FastAPI / Uvicorn；分发包 `compass-memory`、导入包 `compass_memory`。从 Compass 根目录执行：
 
 ```bash
-pnpm dev -F memory       # http://127.0.0.1:8001/docs
+pnpm dev -F memory       # http://127.0.0.1:8103/docs
 pnpm lint -F memory
 pnpm typecheck -F memory
 pnpm test -F memory

@@ -1,0 +1,490 @@
+"""Managed Agent/main migrations and deterministic SQL delivery (Feature 993)."""
+
+import argparse
+import hashlib
+import io
+import json
+import os
+import re
+from pathlib import Path
+from urllib.parse import unquote, urlsplit, urlunsplit
+
+import alembic
+import psycopg
+from alembic import command
+from alembic.autogenerate import compare_metadata
+from alembic.config import Config
+from alembic.migration import MigrationContext
+from compass_agent.models import entities
+from psycopg import sql
+from sqlalchemy import CheckConstraint, MetaData, create_engine, inspect, text
+
+APP = Path(__file__).resolve().parents[1]
+SQL_ROOT = APP / "db/main/sql"
+REVISIONS = {
+    "0001": "0001_demo_fixture.py",
+    "0002": "0002_llm_runtime.py",
+    "0003": "0003_systemone_decision.py",
+    "0004": "0004_reliable_execution.py",
+}
+TARGET = "0004"
+MARKER = "compass:agent/main"
+OWNER = "compass_agent_owner"
+MIGRATOR = "compass_agent_migrator"
+RUNTIME = "compass_agent_runtime"
+LOCK = 993001
+
+
+class DatabaseError(Exception):
+    """Safe, operator-facing errors only; database exceptions are never echoed."""
+
+
+def digest(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
+
+
+def sources(target: str = TARGET) -> dict[str, str]:
+    return {
+        revision: digest((APP / "migrations/versions" / name).read_bytes())
+        for revision, name in REVISIONS.items()
+        if revision <= target
+    }
+
+
+def ledger_comment(target: str) -> str:
+    return MARKER + ";sources=" + json.dumps(sources(target), sort_keys=True)
+
+
+def connection_url(name: str) -> str:
+    value = os.environ.get(name, "")
+    parsed = urlsplit(value)
+    if parsed.scheme not in {"postgresql", "postgres", "postgresql+psycopg"}:
+        raise DatabaseError(f"Explicit PostgreSQL {name} required")
+    if name != "AGENT_PROVISION_DATABASE_URL" and not re.fullmatch(
+        r"/(?:compass|compass_agent(?:_[a-z0-9_]+)?)", parsed.path
+    ):
+        raise DatabaseError("Refusing a non-Agent database target")
+    return value
+
+
+def dsn(value: str) -> str:
+    return value.replace("postgresql+psycopg://", "postgresql://", 1)
+
+
+def config(connection=None) -> Config:
+    result = Config(str(APP / "alembic.ini"))
+    result.set_main_option("path_separator", "os")
+    result.set_main_option("sqlalchemy.url", "postgresql+psycopg://offline/offline")
+    if connection is not None:
+        result.attributes["connection"] = connection
+    return result
+
+
+def inspect_version(connection, *, legacy: bool = False) -> str:
+    unexpected = connection.execute(
+        text("""
+        SELECT nspname FROM pg_namespace
+        WHERE nspname NOT IN ('public','information_schema') AND nspname NOT LIKE 'pg_%'
+        UNION ALL SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='public' AND c.relkind NOT IN ('r','i','p','I')
+        UNION ALL SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+        WHERE n.nspname='public'
+    """)
+    ).all()
+    if unexpected:
+        raise DatabaseError("Unknown database objects; refusing migration")
+    tables = set(
+        connection.execute(
+            text("""
+        SELECT tablename FROM pg_tables WHERE schemaname='public'
+    """)
+        ).scalars()
+    )
+    if not tables:
+        return "empty"
+    if "alembic_version" not in tables:
+        raise DatabaseError("Missing Agent version ledger")
+    revisions = connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all()
+    if len(revisions) != 1 or revisions[0] not in REVISIONS:
+        raise DatabaseError("Unknown Agent revision")
+    revision = revisions[0]
+    expected = {"alembic_version", "demo_daily_sales"}
+    if revision in {"0002", "0003", "0004"}:
+        expected |= {"model_provider", "model_change", "model_call"}
+    if tables != expected:
+        raise DatabaseError("Unknown database tables; refusing migration")
+    actual = connection.execute(
+        text("SELECT obj_description('public.alembic_version'::regclass,'pg_class')")
+    ).scalar_one()
+    if actual != ledger_comment(revision):
+        if not legacy or revision != "0001" or actual is not None:
+            raise DatabaseError("Agent migration source checksum mismatch")
+    if revision == "0001":
+        columns = connection.execute(
+            text("""
+            SELECT column_name,udt_name,is_nullable FROM information_schema.columns
+            WHERE table_schema='public' AND table_name='demo_daily_sales'
+            ORDER BY ordinal_position
+        """)
+        ).all()
+        if [tuple(row) for row in columns] != [
+            ("day", "date", "NO"),
+            ("revenue_minor", "int4", "NO"),
+            ("orders", "int4", "NO"),
+        ]:
+            raise DatabaseError("Legacy Agent schema does not match revision 0001")
+        checks = connection.execute(
+            text("""
+            SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+            WHERE conrelid='public.demo_daily_sales'::regclass ORDER BY conname
+        """)
+        ).all()
+        if [tuple(row) for row in checks] != [
+            ("ck_demo_orders_nonnegative", "CHECK ((orders >= 0))"),
+            ("ck_demo_revenue_nonnegative", "CHECK ((revenue_minor >= 0))"),
+            ("demo_daily_sales_pkey", "PRIMARY KEY (day)"),
+        ]:
+            raise DatabaseError("Legacy Agent constraints do not match revision 0001")
+    elif revision in {"0002", "0003", "0004"}:
+        # 0002 and 0003 share columns, indexes and keys. Their adapter CHECK differs;
+        # verify its version-specific definition separately below.
+        metadata = entities.Base.metadata
+        if revision in {"0002", "0003"}:
+            metadata = MetaData()
+            for table in entities.Base.metadata.sorted_tables:
+                copied = table.to_metadata(metadata)
+                if table.name == "model_call":
+                    copied._columns.remove(copied.c.execution)
+        context = MigrationContext.configure(
+            connection, opts={"compare_type": True, "compare_server_default": True}
+        )
+        if compare_metadata(context, metadata):
+            raise DatabaseError("Agent schema drift at current revision")
+        expected_keys = {
+            table.name: [column.name for column in table.primary_key.columns]
+            for table in metadata.tables.values()
+        }
+        expected_keys["alembic_version"] = ["version_num"]
+        inspector = inspect(connection)
+        for table_name, columns in expected_keys.items():
+            if inspector.get_pk_constraint(table_name).get("constrained_columns") != columns:
+                raise DatabaseError("Agent primary key drift at current revision")
+        expected_checks = sorted(
+            (table.name, str(constraint.name), True)
+            for table in metadata.tables.values()
+            for constraint in table.constraints
+            if isinstance(constraint, CheckConstraint)
+        )
+        actual_checks = connection.execute(
+            text("""
+            SELECT c.relname,t.conname,t.convalidated FROM pg_constraint t
+            JOIN pg_class c ON c.oid=t.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+            WHERE n.nspname='public' AND t.contype='c' ORDER BY 1,2
+            """)
+        ).all()
+        if [tuple(row) for row in actual_checks] != expected_checks:
+            raise DatabaseError("Agent check constraints drift at current revision")
+        adapter_check = next(
+            item["sqltext"]
+            for item in inspector.get_check_constraints("model_provider")
+            if item["name"] == "ck_model_provider_adapter"
+        )
+        expected_adapter = "aliyun_decision" if revision == "0002" else "systemone_decision"
+        # PostgreSQL renders IN as = ANY(ARRAY[...]); literals are stable across both.
+        if re.findall(r"'([^']*)'", adapter_check) != ["litellm_chat", expected_adapter]:
+            raise DatabaseError("Agent adapter constraint drift at registered revision")
+    return revision
+
+
+def role_grants() -> str:
+    return f"""REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC;
+GRANT SELECT, INSERT, UPDATE ON demo_daily_sales TO {RUNTIME};
+GRANT SELECT ON alembic_version TO {RUNTIME};
+GRANT SELECT, INSERT, UPDATE ON model_provider, model_call TO {RUNTIME};
+GRANT SELECT, INSERT ON model_change TO {RUNTIME};"""
+
+
+def sql_delivery(start: str, target: str = TARGET) -> str:
+    buffer = io.StringIO()
+    cfg = config()
+    cfg.output_buffer = buffer
+    command.upgrade(cfg, f"{'base' if start == 'empty' else start}:{target}", sql=True)
+    generated = buffer.getvalue().replace("BEGIN;\n", "").replace("COMMIT;\n", "").strip()
+    if target >= "0004":
+        # Normalize new deliveries while preserving immutable historical SQL bytes.
+        generated = "\n".join(line.rstrip() for line in generated.splitlines())
+    comment = ledger_comment(target).replace("'", "''")
+    return (
+        f"-- Generated from Agent Alembic migrations; do not edit.\n"
+        f"-- owner=agent/main; feature={'991' if target >= '0004' else '993'}; "
+        f"PostgreSQL 17; from={start}; to={target}\n"
+        "-- Apply through db:apply-sql after provision and ownership/version/checksum checks.\n"
+        "-- Single transaction; additive schema; restore verified backup to a new owned database.\n"
+        "BEGIN;\n" + generated + "\n" + role_grants() + "\n"
+        f"COMMENT ON TABLE alembic_version IS '{comment}';\nCOMMIT;\n"
+    )
+
+
+def write_sql(*, check: bool = False) -> None:
+    files = {
+        "bootstrap.sql": sql_delivery("empty"),
+        "upgrades/0001__0002.sql": sql_delivery("0001", "0002"),
+        "upgrades/0001__0003.sql": sql_delivery("0001", "0003"),
+        "upgrades/0002__0003.sql": sql_delivery("0002", "0003"),
+        "upgrades/0001__0004.sql": sql_delivery("0001"),
+        "upgrades/0002__0004.sql": sql_delivery("0002"),
+        "upgrades/0003__0004.sql": sql_delivery("0003"),
+    }
+    manifest = {
+        "owner": "agent",
+        "databaseKey": "main",
+        "feature": "991",
+        "from": "empty",
+        "to": TARGET,
+        "engine": "PostgreSQL 17",
+        "tool": "Alembic " + alembic.__version__,
+        "sourceRevision": "working-tree; fixed by source SHA-256",
+        "sources": [
+            {"source": "../../migrations/versions/" + REVISIONS[rev], "sha256": sha}
+            for rev, sha in sources().items()
+        ],
+        "files": {name: digest(content.encode()) for name, content in files.items()},
+        "generate": "pnpm db:sql -F agent",
+        "apply": f"pnpm db:apply-sql -F agent -- --from empty --to {TARGET}",
+        "transaction": "single transaction with advisory lock",
+        "prerequisites": "Provisioned Agent-owned database; expected start and source checksums",
+        "dataImpact": (
+            "Adds model configuration and metadata; renames decision adapter; "
+            "adds nullable execution summary; preserves keys and rows"
+        ),
+        "recovery": "Restore verified backup to new owned database with original encryption key",
+    }
+    files["manifest.json"] = json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
+    for name, content in files.items():
+        path = SQL_ROOT / name
+        if check:
+            if not path.exists() or path.read_text() != content:
+                raise DatabaseError("SQL delivery drift; run pnpm db:sql -F agent")
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
+
+
+def migrate(*, mode: str = "native", start: str | None = None, target: str = TARGET) -> str:
+    if target not in REVISIONS or start not in {None, "empty", *REVISIONS}:
+        raise DatabaseError("Unknown migration range")
+    if mode == "sql":
+        if target != TARGET:
+            raise DatabaseError(f"SQL delivery targets {TARGET}")
+        write_sql(check=True)
+    url = connection_url("AGENT_MIGRATION_DATABASE_URL")
+    engine = create_engine(dsn(url).replace("postgresql://", "postgresql+psycopg://", 1))
+    try:
+        with engine.begin() as connection:
+            marker = connection.execute(
+                text("""
+                SELECT shobj_description(oid,'pg_database'),pg_get_userbyid(datdba)
+                FROM pg_database WHERE datname=current_database()
+            """)
+            ).one()
+            if tuple(marker) != (MARKER, OWNER):
+                raise DatabaseError("Unregistered Agent database")
+            connection.execute(text(f"SET ROLE {OWNER}"))
+            connection.execute(text("SET LOCAL lock_timeout='5s'"))
+            connection.execute(text("SET LOCAL statement_timeout='30s'"))
+            connection.execute(text("SET LOCAL search_path=public,pg_catalog"))
+            connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": LOCK})
+            current = inspect_version(connection)
+            if current == target:
+                return "already_applied"
+            if current > target or start is not None and current != start:
+                if current != "empty":
+                    raise DatabaseError("Unexpected starting revision")
+                if start not in {None, "empty"}:
+                    raise DatabaseError("Unexpected starting revision")
+            if mode == "sql":
+                name = (
+                    "bootstrap.sql" if current == "empty" else f"upgrades/{current}__{target}.sql"
+                )
+                content = (SQL_ROOT / name).read_text()
+                # The surrounding managed transaction owns BEGIN/COMMIT.
+                content = content.replace("BEGIN;\n", "").replace("COMMIT;\n", "")
+                connection.exec_driver_sql(content, execution_options={"no_parameters": True})
+            else:
+                command.upgrade(config(connection), target)
+                grants = (
+                    role_grants()
+                    if target in {"0002", "0003", "0004"}
+                    else (
+                        f"GRANT SELECT, INSERT, UPDATE ON demo_daily_sales TO {RUNTIME};"
+                        f"GRANT SELECT ON alembic_version TO {RUNTIME};"
+                    )
+                )
+                connection.exec_driver_sql(grants)
+                connection.exec_driver_sql(
+                    "COMMENT ON TABLE alembic_version IS '"
+                    + ledger_comment(target).replace("'", "''")
+                    + "'"
+                )
+            if inspect_version(connection) != target:
+                raise DatabaseError("Migration did not reach expected target")
+        return "applied"
+    finally:
+        engine.dispose()
+
+
+def provision() -> str:
+    admin = urlsplit(connection_url("AGENT_PROVISION_DATABASE_URL"))
+    migration = urlsplit(connection_url("AGENT_MIGRATION_DATABASE_URL"))
+    runtime = urlsplit(connection_url("DATABASE_URL"))
+    if admin.hostname not in {"localhost", "127.0.0.1", "::1", "postgres"}:
+        raise DatabaseError("Provision is limited to local teaching deployments")
+    if (
+        migration.username != MIGRATOR
+        or runtime.username != RUNTIME
+        or migration.path != runtime.path
+        or (admin.hostname, admin.port) != (migration.hostname, migration.port)
+        or (admin.hostname, admin.port) != (runtime.hostname, runtime.port)
+        or not migration.password
+        or not runtime.password
+    ):
+        raise DatabaseError("Inconsistent Agent targets or role credentials")
+    database = migration.path[1:]
+    with psycopg.connect(dsn(admin.geturl()), autocommit=True) as connection:
+        connection.execute("SELECT pg_advisory_lock(%s)", (LOCK - 1,))
+        existing = connection.execute(
+            "SELECT shobj_description(oid,'pg_database'),pg_get_userbyid(datdba) "
+            "FROM pg_database WHERE datname=%s",
+            (database,),
+        ).fetchone()
+        legacy_revision = "empty"
+        if existing:
+            if existing[0] not in {None, MARKER} or existing[0] == MARKER and existing[1] != OWNER:
+                raise DatabaseError("Refusing an unknown existing database")
+            inspect_url = urlunsplit(admin._replace(path=migration.path))
+            probe = create_engine(
+                dsn(inspect_url).replace("postgresql://", "postgresql+psycopg://", 1)
+            )
+            try:
+                with probe.connect() as target_connection:
+                    legacy_revision = inspect_version(target_connection, legacy=existing[0] is None)
+            finally:
+                probe.dispose()
+            if existing[0] is None and legacy_revision not in {"empty", "0001"}:
+                raise DatabaseError("Only empty or original 0001 databases can be adopted")
+        for name, password in [
+            (OWNER, None),
+            (MIGRATOR, migration.password),
+            (RUNTIME, runtime.password),
+        ]:
+            role = connection.execute(
+                "SELECT rolsuper,rolcreatedb,rolcreaterole,rolbypassrls,rolreplication,"
+                "shobj_description(oid,'pg_authid') FROM pg_roles WHERE rolname=%s",
+                (name,),
+            ).fetchone()
+            if role:
+                if any(role[:5]) or role[5] != MARKER:
+                    raise DatabaseError("Refusing an unknown or privileged existing role")
+            else:
+                login = (
+                    sql.SQL("NOLOGIN")
+                    if password is None
+                    else sql.SQL("LOGIN PASSWORD {}").format(sql.Literal(unquote(password)))
+                )
+                connection.execute(
+                    sql.SQL(
+                        "CREATE ROLE {} {} NOSUPERUSER NOCREATEDB NOCREATEROLE "
+                        "NOREPLICATION NOBYPASSRLS"
+                    ).format(sql.Identifier(name), login)
+                )
+                connection.execute(
+                    sql.SQL("COMMENT ON ROLE {} IS {}").format(
+                        sql.Identifier(name), sql.Literal(MARKER)
+                    )
+                )
+        connection.execute(
+            sql.SQL("GRANT {} TO {}").format(sql.Identifier(OWNER), sql.Identifier(MIGRATOR))
+        )
+        if not existing:
+            connection.execute(
+                sql.SQL("CREATE DATABASE {} OWNER {}").format(
+                    sql.Identifier(database), sql.Identifier(OWNER)
+                )
+            )
+        else:
+            connection.execute(
+                sql.SQL("ALTER DATABASE {} OWNER TO {}").format(
+                    sql.Identifier(database), sql.Identifier(OWNER)
+                )
+            )
+        connection.execute(
+            sql.SQL("COMMENT ON DATABASE {} IS {}").format(
+                sql.Identifier(database), sql.Literal(MARKER)
+            )
+        )
+        connection.execute(
+            sql.SQL("REVOKE ALL ON DATABASE {} FROM PUBLIC").format(sql.Identifier(database))
+        )
+        connection.execute(
+            sql.SQL("GRANT CONNECT ON DATABASE {} TO {},{}").format(
+                sql.Identifier(database), sql.Identifier(MIGRATOR), sql.Identifier(RUNTIME)
+            )
+        )
+        target_url = urlunsplit(admin._replace(path=migration.path))
+        with psycopg.connect(dsn(target_url)) as target_connection:
+            target_connection.execute(
+                sql.SQL("ALTER SCHEMA public OWNER TO {}").format(sql.Identifier(OWNER))
+            )
+            target_connection.execute("REVOKE ALL ON SCHEMA public FROM PUBLIC")
+            target_connection.execute(
+                sql.SQL("GRANT USAGE ON SCHEMA public TO {}").format(sql.Identifier(RUNTIME))
+            )
+            if legacy_revision != "empty":
+                tables = target_connection.execute(
+                    "SELECT tablename FROM pg_tables WHERE schemaname='public'"
+                ).fetchall()
+                for (table,) in tables:
+                    target_connection.execute(
+                        sql.SQL("ALTER TABLE {} OWNER TO {}").format(
+                            sql.Identifier(table), sql.Identifier(OWNER)
+                        )
+                    )
+                target_connection.execute(
+                    sql.SQL("COMMENT ON TABLE alembic_version IS {}").format(
+                        sql.Literal(ledger_comment(legacy_revision))
+                    )
+                )
+    return "already_provisioned" if existing and existing[0] == MARKER else "provisioned"
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("action", choices=["provision", "migrate", "sql", "apply-sql"])
+    parser.add_argument("--check", action="store_true")
+    parser.add_argument("--from", dest="start")
+    parser.add_argument("--to", dest="target", default=TARGET)
+    args = parser.parse_args()
+    try:
+        if args.action == "provision":
+            print(provision())
+        elif args.action == "sql":
+            write_sql(check=args.check)
+            print("SQL delivery matches" if args.check else "SQL delivery generated")
+        else:
+            print(
+                migrate(
+                    mode="sql" if args.action == "apply-sql" else "native",
+                    start=args.start,
+                    target=args.target,
+                )
+            )
+    except DatabaseError as error:
+        parser.exit(1, str(error) + "\n")
+    except Exception:
+        parser.exit(
+            1, "Agent database operation failed; check target, credentials and database state.\n"
+        )
+
+
+if __name__ == "__main__":
+    main()

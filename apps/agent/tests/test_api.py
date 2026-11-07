@@ -7,7 +7,7 @@ from compass_agent.main import app
 from compass_agent.seed import seed
 from compass_agent.settings import Settings
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -73,3 +73,49 @@ def test_readiness_fails_without_database() -> None:
     failure = OperationalError("SELECT", {}, Exception("unavailable"))
     with patch("compass_agent.main.get_engine", side_effect=failure), TestClient(app) as client:
         assert client.get("/readyz").status_code == 503
+
+
+@pytest.fixture
+def readiness_engine():
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(engine)
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32))"))
+        connection.execute(text("INSERT INTO alembic_version VALUES ('0004')"))
+    yield engine
+    engine.dispose()
+
+
+def test_readiness_accepts_current_empty_schema_without_model_key(readiness_engine):
+    with (
+        patch("compass_agent.main.get_engine", return_value=readiness_engine),
+        patch("compass_agent.main.get_settings", return_value=Settings()),
+        TestClient(app) as client,
+    ):
+        assert client.get("/readyz").status_code == 200
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "UPDATE alembic_version SET version_num='0001'",
+        "UPDATE alembic_version SET version_num='0002'",
+        "DELETE FROM alembic_version",
+        "DROP TABLE alembic_version",
+        "ALTER TABLE model_provider DROP COLUMN api_key_ciphertext",
+        "ALTER TABLE model_call DROP COLUMN usage",
+        "ALTER TABLE model_change DROP COLUMN request_mac",
+    ],
+)
+def test_readiness_rejects_old_revision_or_missing_required_columns(readiness_engine, change):
+    with readiness_engine.begin() as connection:
+        connection.execute(text(change))
+    with (
+        patch("compass_agent.main.get_engine", return_value=readiness_engine),
+        TestClient(app) as client,
+    ):
+        response = client.get("/readyz")
+        assert response.status_code == 503
+        assert response.json() == {"detail": "Database or migration unavailable"}

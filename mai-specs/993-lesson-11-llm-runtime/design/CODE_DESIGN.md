@@ -1,5 +1,7 @@
 # 993 核心代码设计
 
+> 2026-11-04 协议复用修正：当前增量以 [V2 接入设计](TECH_DESIGN.v2.md#2026-11-04-litellm-协议复用增量设计当前有效) 和 PRD AC-993-34～36 为准；本文保留原实现基线。
+
 [返回技术方案](TECH_DESIGN.md) · [需求与 AC](../spec/PRD.md)
 
 本文是供评审的设计片段，尚未写入应用、运行或通过功能测试。Python/TypeScript 片段表达拟新增符号及关键分支；仓储 SQL、DTO 完整序列化和 UI 样式由实施补齐。伪代码调用的操作语义在相邻文字中定义，不以空函数代表待定逻辑。公共 HTTP DTO 仍集中在 Agent `schemas.py`；`llm/contracts.py` 只放进程内类型并引用这些 DTO。
@@ -16,7 +18,7 @@ classDiagram
   Runtime --> GenerateInput
   Runtime --> DecisionInput
   Runtime --> LiteLLMChatAdapter
-  Runtime --> AliyunDecisionAdapter
+  Runtime --> SystemOneDecisionAdapter
   ModelSpec : provider_id UUID
   ModelSpec : config_version int
   ModelSpec : binding_version int
@@ -41,7 +43,7 @@ class ModelSpec:
     config_version: int
     binding_version: int
     kind: Literal["llm", "decision"]
-    adapter: Literal["litellm_chat", "aliyun_decision"]
+    adapter: Literal["litellm_chat", "systemone_decision"]
     api_model: str
     sdk_model: str | None
     api_base: str
@@ -263,7 +265,7 @@ def deepseek_kwargs(spec, request, context):
 
 请求无 `extra_body` 输入通道，SDK 调用 kwargs 不能合并任意用户字典。Schema 模式由明确的 system 消息要求 JSON 和目标 Schema，结果在本地验证；UI 标记“JSON + 本地 Schema 校验”。一般目录模型走各自已实现的 chat 映射；DeepSeek 特有 thinking 字段不得发送给其它供应商。
 
-`AliyunDecisionAdapter` 直接按阿里官方协议：
+`SystemOneDecisionAdapter` 按阿里云与 JEV 共用的 System One 基础协议执行，型号及 API Base URL 来自配置：
 
 ```python
 async def decide(spec, request, resources):
@@ -406,3 +408,11 @@ try {
 7. Chat 仅列两款 DeepSeek LLM；决策及其他目录模型不能开启展示、通过改绑保留开放状态或直调 Chat API，出站计数为 0；平台管理员仍能使用 DecisionInput 进行真实决策测试。
 
 以上属于实施验证清单，本次未执行应用功能测试。
+
+## H. 分析输入框交互补充（2026-11-03）
+
+用户确认本轮仅改界面交互，验收引用 PRD AC-993-31～33。`analysis-composer.tsx` 继续拥有页面内消息、选模及调用状态；首条消息触发 started 布局，使用 `analysis-main` 的可视高度、history 独立滚动及底部 dock，不新增服务端 session 字段。新建恢复初始居中布局。
+
+`analysis-attachments.tsx` 只渲染本地 File 元信息及单行滚动轨道，最多 10 个；File 不写浏览器存储、网络请求或数据库，未接入后台时拒绝带附件发送并给出说明。删除最后附件时保留对话 dirty 状态，reset/onClear 清理本页文件引用。低高度视口为 dock 提供有界滚动，所有按钮仍可触达。
+
+Chat 对支持的模型默认传 thinking=true、reasoning_effort=high。输入区保留原生可访问 select 和发送/停止语义，Enter/Shift+Enter 区分发送与换行并尊重 IME。所有改动位于 Web；模型 HTTP DTO、数据库、管理端能力测试及第 12–14 课边界保持原契约。

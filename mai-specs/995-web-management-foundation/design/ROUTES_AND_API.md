@@ -78,27 +78,27 @@
 
 ### 1.3 附加、个人与系统路由
 
-| 入口               | 工程 URL                  | 行为与权限                                                             |
-| ------------------ | ------------------------- | ---------------------------------------------------------------------- |
-| 知识文档           | W/admin/data/documents    | 规划空页 1，module.admin.data                                          |
-| 文件               | W/admin/memory/files      | 规划空页 2，module.admin.memory                                        |
-| 处理记录           | W/admin/memory/processing | 规划空页 3，module.admin.memory                                        |
-| 记忆候选           | W/admin/memory/candidates | 规划空页 4，module.admin.memory                                        |
-| 头像/个人信息      | /settings/profile         | 已登录本人，真实显示名与偏好                                           |
-| 本人会话           | /settings/sessions        | 已登录本人，真实会话列表与撤销                                         |
-| 通知/偏好          | /settings/notifications   | 已登录本人，真实获权站内通知和已读                                     |
-| 我的记忆           | /settings/memory          | 已登录本人，空页                                                       |
-| 设计体系与体验指南 | /guide                    | 已登录；沿用原型控件规范的工程版说明，无合成业务演示                   |
-| 工作空间选择       | /workspaces               | 已登录，列当前获权租户/空间，授权后导航                                |
-| 平台租户管理       | /platform/tenants         | app_user.is_platform_admin；租户生命周期和首管理员，不自动访问租户业务 |
-| 根入口             | /                         | 按主方案解析默认入口；匿名进入 login                                   |
-| 登录 / 无成员资格  | /login、/access           | 登录页面可匿名；access 不展示其他租户信息                              |
-| 工程演示           | /demo                     | COMPASS_DEMO_ENABLED；关闭时 404，样式独立，原 API 契约保留            |
-| 就绪/存活          | /readyz、/healthz         | 最小部署状态，不含凭据、schema 详情或成员数量                          |
+| 入口               | 工程 URL                  | 行为与权限                                                                     |
+| ------------------ | ------------------------- | ------------------------------------------------------------------------------ |
+| 知识文档           | W/admin/data/documents    | 规划空页 1，module.admin.data                                                  |
+| 文件               | W/admin/memory/files      | 规划空页 2，module.admin.memory                                                |
+| 处理记录           | W/admin/memory/processing | 规划空页 3，module.admin.memory                                                |
+| 记忆候选           | W/admin/memory/candidates | 规划空页 4，module.admin.memory                                                |
+| 头像/个人信息      | /settings/profile         | 已登录本人，真实显示名与偏好                                                   |
+| 本人会话           | /settings/sessions        | 已登录本人，真实会话列表与撤销                                                 |
+| 通知/偏好          | /settings/notifications   | 已登录本人，真实获权站内通知和已读                                             |
+| 我的记忆           | /settings/memory          | 已登录本人，空页                                                               |
+| 设计体系与体验指南 | /guide                    | 已登录；沿用原型控件规范的工程版说明，无合成业务演示                           |
+| 工作空间选择       | /workspaces               | 已登录，列当前获权租户/空间，授权后导航                                        |
+| 平台租户管理       | /platform/tenants         | app_user.is_platform_admin；租户生命周期和首管理员，同时可进入全部有效租户业务 |
+| 根入口             | /                         | 按主方案解析默认入口；匿名进入 login                                           |
+| 登录 / 无成员资格  | /login、/access           | 登录页面可匿名；access 不展示其他租户信息                                      |
+| 工程演示           | /demo                     | COMPASS_DEMO_ENABLED；关闭时 404，样式独立，原 API 契约保留                    |
+| 就绪/存活          | /readyz、/healthz         | 最小部署状态，不含凭据、schema 详情或成员数量                                  |
 
 404 显示通用未找到；无权显示 PRD 文案和回到获权入口；不重定向到可能无权的分析页造成循环。个人入口保持原型头像菜单形态，内容页使用应用同一布局。未登录时原型“体验身份”选择器完全移除。
 
-受保护页面、页签及范围/过滤/分页 URL 使用 Next Link/router 客户端导航，应用框架由共享布局持续保留；保存后使用 router.refresh。每份候选载荷含历史缓存恢复均须经过当前身份与版本校验再显示。登录、退出和失权恢复采用安全的完整文档跳转。详细分支以[代码设计的 SPA 修订](CODE_DESIGN.md#2026-11-02-spa-导航修订当前有效)为准。
+受保护页面、页签及范围/过滤/分页 URL 使用 Next Link/router 客户端导航，应用框架由共享布局持续保留；保存后使用 router.refresh。每份候选载荷含历史缓存恢复均须经过当前身份与版本校验再显示。切换 App 不触发遮蔽、刷新或恢复复验，页面及生成保持原样；登录、退出和已确认失权恢复采用安全的完整文档跳转。详细分支以[代码设计的 SPA 修订](CODE_DESIGN.md#2026-11-02-spa-导航修订当前有效)为准。
 
 ### 1.4 原型 UI 到工程的映射与验证
 
@@ -203,15 +203,15 @@ type ApiError = {
 
 /auth/login、/auth/logout均在API基址下；不存在/auth/callback、/session/activity或邀请入口。无self密码修改/找回邮件，本期通过db:manage受管重置并撤销会话。认证成功后的跳转由客户端按安全URL导航，保留cookie；网络中断后先GET/session核对状态，不重复创建用户。
 
-受保护页面初始复验和心跳必须传登记pageId及其URL范围；未知pageId/不合法scope组合422，无页面权限403。范围仍获权且仅部分操作/空间收窄时可返回200，此时viewRevision改变也必须清屏。无context的session用于本人入口，authzVersion为空；viewRevision仍覆盖本人有效租户版本和平台资格，支持个人通知失权与账号切换。请求序号和generation仅在客户端用于丢弃迟到响应，不参与服务端授权。平台和个人页面同样使用页面目录中的明确ID。
+受保护页面初始复验和心跳必须传登记pageId及其URL范围；未知pageId/不合法scope组合422，无页面权限403。范围仍获权且仅部分操作/空间收窄时可返回200，此时viewRevision改变也必须清屏。无context的session用于本人或平台入口；平台管理员恢复偏好/首个有效租户及工作区以生成完整导航，并返回其authzVersion，scope保持请求的空范围以供页面心跳校验；普通账号authzVersion为空。viewRevision覆盖可访问有效租户版本和平台资格，支持个人通知失权与账号切换。请求序号和generation仅在客户端用于丢弃迟到响应，不参与服务端授权。平台和个人页面同样使用页面目录中的明确ID。
 
 ### 4.2 平台、租户与直接成员
 
-简写 `U=/tenants/:tenantId`。服务端核验URL tenant、目标实体归属与角色，平台资格不能借普通tenant接口绕过成员检查。
+简写 `U=/tenants/:tenantId`。服务端核验URL tenant、目标实体归属与角色，平台管理员可直接访问所有有效tenant接口；普通账号继续校验当前有效成员资格。
 
 | Method / URL                                         | 输入→输出                                                                                                                    | 权限与规则                                                                                               |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| GET /tenants                                         | 分页 → 可进入租户摘要                                                                                                        | 本人active tenant_member；平台全量另走专用接口                                                           |
+| GET /tenants                                         | 分页 → 可进入租户摘要                                                                                                        | 普通账号按active tenant_member；平台管理员列出全部有效租户，停用租户见平台专用接口                       |
 | GET /platform/tenants                                | 分页 → 租户控制面摘要                                                                                                        | is_platform_admin；不附业务数据                                                                          |
 | POST /platform/tenants                               | id、name、timezone、initialAdminLoginName → MutationResult                                                                   | 平台资格；目标为已有active用户，租户+首管理员同事务；初始空间后续创建                                    |
 | GET/PATCH /platform/tenants/:id                      | 无 / name?/status?、expectedVersion → DTO / MutationResult                                                                   | 平台资格；只读控制面摘要；停用/恢复不改变成员授权                                                        |

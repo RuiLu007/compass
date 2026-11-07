@@ -15,10 +15,10 @@ RUN test -f apps/home/public/resources/system-schema.json && \
 
 FROM node:24.16.0-bookworm-slim@sha256:2c87ef9bd3c6a3bd4b472b4bec2ce9d16354b0c574f736c476489d09f560a203 AS runtime
 WORKDIR /app
-ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3001
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=8101
 COPY --from=build --chown=node:node /app/apps/home/.next/standalone ./
 COPY --from=build --chown=node:node /app/apps/home/.next/static ./apps/home/.next/static
 COPY --from=build --chown=node:node /app/apps/home/public ./apps/home/public
 USER node
-EXPOSE 3001
+EXPOSE 8101
 CMD ["node", "apps/home/server.js"]

@@ -15,5 +15,5 @@ RUN useradd --create-home --uid 10001 compass
 USER compass
 ENV PATH="/app/.venv/bin:$PATH"
 WORKDIR /app/apps/memory
-EXPOSE 8001
-CMD ["uvicorn", "compass_memory.main:app", "--host", "0.0.0.0", "--port", "8001"]
+EXPOSE 8103
+CMD ["uvicorn", "compass_memory.main:app", "--host", "0.0.0.0", "--port", "8103"]

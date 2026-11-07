@@ -1,0 +1,17 @@
+{
+  "title": "报表导出技术方案",
+  "subtitle": "逐批读取，逐批写出。",
+  "brand": "Report Lab",
+  "source": "source.md",
+  "guide": "guide.md",
+  "output": "review.html",
+  "topics": ["查询条件", "CSV", "批次迭代"],
+  "metrics": [
+    { "value": "500", "label": "行 / 批", "detail": "Repository 单批读取上限" },
+    { "value": "3", "label": "个可选字段", "detail": "date / region / revenue" },
+    { "value": "1", "label": "种格式", "detail": "CSV 字节流" }
+  ],
+  "code": {
+    "export": { "file": "source.md", "contains": "async def export_report", "language": "python" }
+  }
+}

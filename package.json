@@ -46,7 +46,8 @@
     "db:manage": "node scripts/tasks.mjs db:manage",
     "test:integration": "node scripts/tasks.mjs test:integration",
     "test:e2e": "node scripts/tasks.mjs test:e2e",
-    "test:setup": "node scripts/tasks.mjs test:setup"
+    "test:setup": "node scripts/tasks.mjs test:setup",
+    "observability": "node scripts/observability.mjs"
   },
   "devDependencies": {
     "openapi-typescript": "7.13.0",

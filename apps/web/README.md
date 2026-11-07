@@ -1,8 +1,10 @@
 # Web / BFF
 
-Next.js App Router + React + TypeScript。UI 与 BFF 在一个 Node 服务中部署。当前交付 [Feature 995](../../mai-specs/995-web-management-foundation/README.md)：本地账号、数据库会话、租户与工作区、直接成员、固定模板和个人权限、个人设置、通知与审计，以及原型完整导航框架。分析页提供聊天输入框架和会话分组空状态；分析执行、文件上传仍待接入。报告、看板、插件、定时及 Agent/Memory 管理保留明确空页。
+Next.js App Router + React + TypeScript。UI 与 BFF 在一个 Node 服务中部署。当前交付 [Feature 995](../../mai-specs/995-web-management-foundation/README.md)：本地账号、数据库会话、租户与工作区、直接成员、固定模板和个人权限、个人设置、通知与审计，以及原型完整导航框架。Feature 993 增加平台模型路由管理、测试与分析 Chat 模型选择；Chat 本页保留历史，支持平台开放的 LiteLLM 生成模型。决策模型仅在管理端测试。数据查询、文件上传、报告、看板、插件、定时及其余 Agent/Memory 管理保持待接入状态。
 
 ## 启动与账号
+
+第 14 课在平台模型管理页增加“调用观测”、本实例导出状态与两模型只读对比；Trace 详情进入独立登录的本地 Langfuse。Chat / 测试收到响应头后显示本轮观测编号，取消和断流时保留。平台 API 沿用管理员鉴权，浏览器 Trace Context 不进入内部链路。部署与数据边界见 [观测运行说明](../../deploy/observability/README.md)。
 
 从 Compass 根目录复制 `.env.example` 到 `.env`，安装依赖后执行：
 
@@ -14,7 +16,7 @@ pnpm db:manage -F web -- create-user --login-name local.admin --display-name 本
 pnpm dev -F web
 ```
 
-账号工具从隐藏终端输入读取密码（12–128 字符），流水线须显式使用 `--password-stdin`；密码不作为命令参数。打开 <http://127.0.0.1:3000/login>，平台管理员创建租户时指定已有账号为初始租户管理员。平台资格不自动获得租户数据权限。
+账号工具从隐藏终端输入读取密码（12–128 字符），流水线须显式使用 `--password-stdin`；密码不作为命令参数。打开 <http://127.0.0.1:8100/login>，平台管理员创建租户时指定已有账号为初始租户管理员。平台管理员可直接进入所有有效租户及其工作区，获得完整模块与管理权限；登录后恢复最近工作区或首个可用入口，平台页保留完整导航。租户停用、空间归档、资源归属及个人资料/会话边界继续校验。
 
 本地演示可显式设置 `WEB_FIXTURE_PASSWORD` 后执行 `pnpm db:seed -F web -- --fixture teaching`，初始化 `teaching.platform/admin/analyst/viewer/auditor/outsider` 六个合成账号及两租户三空间；重复执行不重置账号或覆盖业务修改。默认 seed 不写演示数据。禁止在共享环境使用此 fixture。
 
@@ -22,7 +24,7 @@ pnpm dev -F web
 
 受管工具另支持 `reset-password --login-name ...`、`set-status --login-name ... --status disabled|active`、`set-platform-admin --login-name ... --platform-admin true|false`，安全变更撤销该用户全部会话并保护最后有效管理员。`cleanup-sessions` 清理过期或撤销超过 30 天的会话。审计不自动清理；部署方须安排受控备份、容量监测和保留策略，普通运行角色不能修改或删除历史。
 
-开发启动 `pnpm dev -F web` 会先停止目标端口的监听进程及当前 Web 目录的旧 Next 开发实例，再启动自身；先正常退出，5 秒后仍未退出则强制结束。默认端口 3000，支持 `PORT` 或 `-- --port 3002`。该入口依赖 macOS / Linux / WSL2 的 `lsof` 和 `ps`，会终止占用目标端口的其他应用。
+开发启动 `pnpm dev -F web` 会先停止目标端口的监听进程及当前 Web 目录的旧 Next 开发实例，再启动自身；先正常退出，5 秒后仍未退出则强制结束。默认端口 8100，支持 `PORT` 或 `-- --port 8105`。该入口依赖 macOS / Linux / WSL2 的 `lsof` 和 `ps`，会终止占用目标端口的其他应用。
 
 页面地址使用稳定短标识，例如 `/t/yuanshan/w/huadong/analysis`。创建租户或空间时填写地址短标识；改名保持地址不变。旧 UUID 链接自动跳转，API 与权限上下文继续使用 UUID。分析侧栏仅保留新建按钮及按时间/主题的会话分组选项；侧栏顶部仅在分析模块显示“Compass / 分析空间”；其他模块直接显示一级导航标题，正文不重复标题。导航图标直接使用原型 SVG 图形，一级与二级菜单逐项映射；按钮、菜单行、浮层和移动抽屉按 [导航 UI 对照规范](../../mai-specs/995-web-management-foundation/design/NAVIGATION_UI.md) 维护。
 
@@ -57,4 +59,28 @@ pnpm --filter @compass/web exec playwright install chromium
 pnpm test:e2e -F web
 ```
 
-浏览器测试自行启动 3010 端口 Web，截图与失败 trace 放入忽略 Git 的 `work/995-playwright/`。只在已明确启动对应测试服务器时设置 `WEB_TEST_EXTERNAL_SERVER=true`。实际运行结果与验收映射见 [实施记录](../../mai-specs/995-web-management-foundation/IMPLEMENTATION.md)。
+浏览器测试自行启动 8110 端口 Web，截图与失败 trace 放入忽略 Git 的 `work/995-playwright/`。只在已明确启动对应测试服务器时设置 `WEB_TEST_EXTERNAL_SERVER=true`。实际运行结果与验收映射见 [实施记录](../../mai-specs/995-web-management-foundation/IMPLEMENTATION.md)。
+
+## 模型 Runtime 集成
+
+平台入口 `/platform/models` 不要求租户成员身份；租户“Agent 与能力 → 模型路由”仅提供开放摘要。Chat 同时要求分析入口与 `models.invoke`，升级不自动授予新动作。BFF 在授权事务结束后调用 Agent，使用服务端 `AGENT_API_URL` 与 `COMPASS_AGENT_SERVICE_TOKEN`，不接收浏览器声明的内部身份。Provider 凭据只由 Agent 加密保存，Web 数据库不保存副本。配置步骤见 [Agent 模型接入](../agent/README.md#模型接入)。
+
+模型浏览器测试需要额外启动 `apps/agent/tests/e2e_app.py`，配置专用 Agent 测试数据库、同一服务令牌和加密密钥，并使 `AGENT_API_URL` 指向该宿主。它只替换上游 HTTP，Web、BFF、Agent API 与数据库均实际运行。Playwright 使用 `.next-e2e` 独立输出目录，保留日常开发服务。真实供应商验收单独记录在 [993 实施记录](../../mai-specs/993-lesson-11-llm-runtime/IMPLEMENTATION.md)。
+
+模型目录复用 LiteLLM 支持的生成模型协议，添加 Provider 支持手工 `provider/model` 标识。Base URL 留空使用 SDK 默认；API Key 与供应商连接参数均只写不回显。连接参数 JSON 可配置 Azure 版本、Bedrock 区域及原生认证等，留空保留，`{}` 清空。Chat 按生成模型类型、启用状态、平台可见性和用户权限开放。
+
+## 切换应用与页面状态
+
+切换 App 或标签页时界面、滚动位置、草稿、附件、聊天与在途生成保持原样。离开和返回不触发遮蔽、禁用、刷新或恢复复验；定时会话检查静默执行，临时失败不影响当前界面。登录失效、权限变更、离线及文档离开仍清理旧内容；页面内存不跨整页刷新持久保存。
+
+## 意图分流与响应
+
+分析输入框可选择静态主模型或“系统优化”，每轮仍只向 `models/calls` 发起一次请求。Agent 返回两级 `intent`、字典 `features`、契约 `routing`、Runtime `result` 与 `metrics`；回答下方“意图分类与响应结构”可展开查看。闲聊命中 `SC-39` 后使用独立 prompt 调用 Flash 婉拒，并询问业务数据任务。
+
+BFF 与页面分别校验 `RoutedModelEvent` / `RoutedCallResponse`，实际 Provider 在 `route_selected` 后绑定；Provider 诊断继续沿用 `ModelEvent` / `CallResponse`。生成期间可停止，失败和不完整回答不进入成功上下文；分类详情仅保留在本页。浏览器验收位于 `tests/e2e/intent-routing.spec.ts`，使用独立Web/Agent PostgreSQL库及受控上游宿主。
+
+## 可靠性模拟测试
+
+平台管理员进入 `/platform/models`（Agent 与模型）即可运行 11 个固定场景：正常、429/503 恢复、次数耗尽、认证失败、超时、半途断流、Schema 拦截、取消、并发过载及关闭失败隔离。页面展示真实事件、预览、尝试摘要、未知用量、容量及可提交结果；无需模型密钥。普通租户用户不能访问模拟接口。
+
+Chat 与 Provider 诊断均在唯一 final 及干净 EOF 后提交成功结果；失败时清除嵌套终态与续接 token。普通调用详情展示 execution 摘要，旧记录没有明细时保持原显示。浏览器验收位于 `tests/e2e/reliability.spec.ts`，使用独立 PostgreSQL 测试库及 Agent。

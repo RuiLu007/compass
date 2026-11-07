@@ -6,7 +6,7 @@ import { setTimeout } from "node:timers/promises";
 
 const directory = realpathSync(fileURLToPath(new URL("..", import.meta.url)));
 const args = process.argv.slice(2);
-let port = process.env.PORT ?? "3000";
+let port = process.env.PORT ?? "8100";
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--port" || args[i] === "-p") port = args[++i];
   else if (args[i].startsWith("--port=")) port = args[i].slice(7);

@@ -1,5 +1,5 @@
 import { defineConfig } from "@playwright/test";
-const port = Number(process.env.WEB_TEST_PORT ?? 3010);
+const port = Number(process.env.WEB_TEST_PORT ?? 8110);
 const baseURL = `http://127.0.0.1:${port}`;
 if (!Number.isInteger(port) || port < 1024 || port > 65535)
   throw new Error("Invalid WEB_TEST_PORT");
@@ -24,7 +24,7 @@ export default defineConfig({
     process.env.WEB_TEST_EXTERNAL_SERVER === "true"
       ? undefined
       : {
-          command: `pnpm exec next dev --hostname 127.0.0.1 --port ${port}`,
+          command: `pnpm exec next dev --webpack --hostname 127.0.0.1 --port ${port}`,
           url: `${baseURL}/healthz`,
           reuseExistingServer: false,
           timeout: 120000,
@@ -32,6 +32,7 @@ export default defineConfig({
             WEB_DATABASE_URL: database,
             WEB_PUBLIC_ORIGIN: baseURL,
             WEB_AUTH_ALLOW_LOCAL_HTTP: "true",
+            WEB_TEST_ISOLATED_BUILD: "true",
             COMPASS_DEMO_ENABLED: "false",
           },
         },

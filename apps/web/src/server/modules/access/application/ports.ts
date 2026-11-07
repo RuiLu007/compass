@@ -24,7 +24,7 @@ export interface AccessStore {
     workspace?: string,
   ): Promise<{ tenantId: string; workspaceId?: string }>;
   current(actor: Actor, tenantId: string): Promise<CurrentAccess>;
-  activeTenantVersions(userId: string): Promise<{ tenantId: string; authzVersion: string }[]>;
+  activeTenantVersions(actor: Actor): Promise<{ tenantId: string; authzVersion: string }[]>;
   tenant(id: string, lock?: boolean): Promise<TenantDto>;
   tenants(actor: Actor, query: PageQuery, platform?: boolean): Promise<ListPage<TenantDto>>;
   createTenant(input: {

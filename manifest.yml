@@ -2,11 +2,12 @@ id: compass
 title: Compass 电商经营分析 Agent
 status: active
 version: 0.0.1
-updated: 2026-11-03
+updated: 2026-11-07
 scope: cross-course-learner-project
-implementation_stage: web-foundation
+implementation_stage: llm-runtime-implementation
 repository_url: https://github.com/shanggqm/compass
-pinned_revision: v0.0.1
+scaffold_release: v0.0.1
+course_submodule_path: learner-kit/code/compass
 canonical:
   control_page: README.md
   source: .
@@ -15,12 +16,16 @@ canonical:
   coding_style: docs/coding-style.md
   format_hook: .agents/hooks/hooks.json
   local_deployment: deploy/README.md
+  model_observability: deploy/observability/README.md
+  lesson_resources: apps/home/src/lib/lesson-resources.json
   learner_data: data/retail/README.md
   business_data_tool: tools/data-seed/README.md
   business_data_operations: docs/data-seeding.md
   implementation_decision: docs/adr/0001-workspace.md
 depends_on:
   local_deployment: mai-specs/994-local-docker-deploy/design/TECH_DESIGN.md
+  llm_runtime: mai-specs/993-lesson-11-llm-runtime/design/TECH_DESIGN.md
+  model_observability: mai-specs/990-lesson-14-model-observability/design/TECH_DESIGN.md
   web_foundation: mai-specs/995-web-management-foundation/design/TECH_DESIGN.md
   product_definition: mai-specs/999-compass-product-course-landing-app/spec/product-definition.md
   prd: mai-specs/999-compass-product-course-landing-app/spec/PRD.md
@@ -39,20 +44,25 @@ related_apps:
   home:
     path: apps/home
     responsibility: product-and-course-website
+    port: 8101
     status: review
   web:
     path: apps/web
     responsibility: product-web-bff-and-engineering-crud
+    port: 8100
     status: review
   agent:
     path: apps/agent
     responsibility: agent-runtime-and-inference-business
+    port: 8102
     status: review
   memory:
     path: apps/memory
     responsibility: independent-python-memory-service-scaffold
+    port: 8103
     status: review
   worker:
     path: apps/worker
     responsibility: optional-python-background-process-scaffold
+    port: null
     status: review

@@ -8,7 +8,12 @@
         "$TURBO_ROOT$/mai-specs/998-business-data-seeding-tool/design/business-schema.sql",
         "$TURBO_ROOT$/mai-specs/999-compass-product-course-landing-app/design/data-model.md",
         "$TURBO_ROOT$/mai-specs/999-compass-product-course-landing-app/design/prototype/**",
-        "$TURBO_ROOT$/mai-specs/999-compass-product-course-landing-app/context/dataagent-tech-stack/visuals/system-architecture.png"
+        "$TURBO_ROOT$/mai-specs/999-compass-product-course-landing-app/context/dataagent-tech-stack/visuals/system-architecture.png",
+        "$TURBO_ROOT$/mai-specs/993-lesson-11-llm-runtime/design/TECH_DESIGN.compact.html",
+        "$TURBO_ROOT$/mai-specs/992-lesson-12-multi-model-routing/design/TECH_DESIGN.compact.html",
+        "$TURBO_ROOT$/mai-specs/991-lesson-13-reliable-model-execution/design/TECH_DESIGN.html",
+        "$TURBO_ROOT$/mai-specs/990-lesson-14-model-observability/design/TECH_DESIGN.html",
+        "$TURBO_ROOT$/mai-specs/992-lesson-12-multi-model-routing/design/INTENT_TAXONOMY.html"
       ],
       "outputs": [
         ".next/**",
@@ -18,7 +23,8 @@
         "public/resources/system-architecture.png",
         "public/resources/business-schema.json",
         "public/resources/system-schema.json",
-        "public/resources/system-data-model.md"
+        "public/resources/system-data-model.md",
+        "public/resources/lessons/**"
       ],
       "env": ["HOME_STATIC_EXPORT", "HOME_STANDALONE"]
     },
@@ -28,7 +34,12 @@
         "$TURBO_ROOT$/mai-specs/998-business-data-seeding-tool/design/TECH_DESIGN.md",
         "$TURBO_ROOT$/mai-specs/998-business-data-seeding-tool/design/business-schema.sql",
         "$TURBO_ROOT$/mai-specs/999-compass-product-course-landing-app/design/data-model.md",
-        "$TURBO_ROOT$/mai-specs/999-compass-product-course-landing-app/design/prototype/**"
+        "$TURBO_ROOT$/mai-specs/999-compass-product-course-landing-app/design/prototype/**",
+        "$TURBO_ROOT$/mai-specs/993-lesson-11-llm-runtime/design/TECH_DESIGN.compact.html",
+        "$TURBO_ROOT$/mai-specs/992-lesson-12-multi-model-routing/design/TECH_DESIGN.compact.html",
+        "$TURBO_ROOT$/mai-specs/991-lesson-13-reliable-model-execution/design/TECH_DESIGN.html",
+        "$TURBO_ROOT$/mai-specs/990-lesson-14-model-observability/design/TECH_DESIGN.html",
+        "$TURBO_ROOT$/mai-specs/992-lesson-12-multi-model-routing/design/INTENT_TAXONOMY.html"
       ],
       "outputs": []
     }

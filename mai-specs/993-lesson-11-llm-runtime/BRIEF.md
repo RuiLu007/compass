@@ -9,6 +9,14 @@
 | 目标日期   | 待填                                                                                                                                            |
 | 涉及子系统 | apps/agent（LLM Runtime、模型运行配置与调用记录）、apps/web（模型管理 UI/BFF、权限与审计）、contracts（模型执行与管理接口）、deploy（接入配置） |
 
+## 2026-11-04 System One 接入授权
+
+用户要求将决策适配统一为 SystemOneDecisionAdapter，同时支持阿里云与 JEV 官方服务，取消决策模型名称硬编码，并连续完成需求、设计、实现、回归和本地启动。有效需求为 PRD AC-993-37～39，有效设计为 TECH_DESIGN.v2 的 System One 增量章节。实际结果登记 IMPLEMENTATION，Phase 保持原值。
+
+## 2026-11-04 当前授权与接入范围
+
+用户明确要求完整复用 LiteLLM Core 的各供应商协议，去掉模型白名单，并连续完成需求、设计、实现、回归及本地服务启动。三个指定模型作为本课重点联调对象；生成模型的接入、测试和 Chat 按 SDK 协议能力开放。当前增量需求见 PRD AC-993-34～36，增量设计见 TECH_DESIGN.v2；本节更新下方旧范围记录，Phase 保持不变。
+
 ## 一句话描述
 
 为 Compass 建立统一的 LLM Runtime，贯通模型 Provider 的持久化管理、界面能力测试、分析 Chat 主模型选择与真实模型调用，完成第 11 课的架构选型和工程落地。
@@ -34,7 +42,7 @@
 
 #### 2. 分析 Chat 手动选择主模型
 
-- 分析 Chat 本期只开放 deepseek v4 pro、deepseek v4.1 flash；平台管理员控制这两款 LLM 的 Provider 是否展示，租户用户按权限使用。阿里云 decision-model-preview 仅在管理端配置和测试。
+- 分析 Chat 支持平台开放的 LiteLLM 生成模型；平台管理员控制 Provider 是否展示，租户用户按权限使用。deepseek v4 pro、deepseek v4.1 flash 是课程重点联调对象。阿里云 decision-model-preview 仅在管理端配置和测试。
 - 用户在分析 Chat 框中手动选择对应的模型 Provider 作为主模型；该选择应传递到 Agent API 和 LLM Runtime，并用于实际调用。
 - 模型列表和调用遵守配置状态及用户权限；仅供后台测试的配置可保留在管理端。
 
@@ -75,7 +83,7 @@
 
 ### 本轮范围边界
 
-- 当前已形成需求概览、PRD 与技术方案，Feature 保持 `draft`；技术方案按 MVP 设计 Agent 内薄 Runtime、三模型适配、平台管理与单次调用链路，实施尚未开始。
+- 当前已形成需求、技术方案、实现及独立代码评审；Agent 内薄 Runtime、三模型适配、平台管理与 Chat 调用链路已落地。两款 DeepSeek 真实联调已通过，阿里云按用户安排后测；完整验收进度见 IMPLEMENTATION，Feature 暂保持 `draft`。
 - 模型接入采用轻量配置与用户手动选择。复杂自动路由、自动降级、全局预算配额、完整 Trace/Replay 与发布治理继续与第 12–14 课衔接。
 - Agent Loop、业务工具实际执行、SQL 执行、持久任务调度、Memory 与 Sandbox 由对应需求承接；本课完成模型能力调用及所需的产品入口贯通。
 - 持久化遵循项目数据库规范：模型运行配置归 Agent/main，Web/main 复用身份、权限和审计。设计阶段登记具体数据变化、迁移版本、SQL 交付与恢复安排。
@@ -88,7 +96,7 @@
 2. **deepseek v4.1 flash**。
 3. **decision-model-preview**：阿里云决策模型。
 
-三个模型均纳入统一 Runtime、真实调用调通及相应基础管理范围；决策模型通过管理端测试入口调用，Chat 仅承接两款 DeepSeek LLM。后续设计核实各模型的 API 标识、接入端点、协议、凭据配置与能力支持，并分别明确验收条件。
+三个模型均纳入统一 Runtime、真实调用调通及相应基础管理范围；决策模型通过管理端测试入口调用，Chat 承接平台开放的 LiteLLM 生成模型。后续设计核实各模型的 API 标识、接入端点、协议、凭据配置与能力支持，并分别明确验收条件。
 
 2026-11-03 用户明确产品入口、数据库持久化、Chat 主模型选择、界面能力测试及 LiteLLM 模型清单下拉选择。以上需求覆盖此前尚待明确的管理与测试范围。
 
@@ -96,13 +104,25 @@
 
 2026-11-03 用户确认“本期仅在管理端测试决策模型，Chat 只开放两款 LLM”。决策模型的 Chat 展示保持关闭，不建设决策 Chat 表单或自动转换；管理端的配置与独立测试继续交付。
 
+2026-11-03 联调安排更新：用户提供 DeepSeek 接入凭据，要求先完成两款 DeepSeek 的真实测试，阿里云决策模型后续再测。决策模型的管理与适配范围保留，真实供应商验收单独登记为后续事项；本轮不等待阿里云账号配置。
+
 架构材料作为技术参考保留原文。其“决策模型待定”及静态文件配置描述，在本需求中按已指定的阿里云 `decision-model-preview` 和数据库持久化管理要求落实。Runtime 库与宿主应用的职责在后续设计中衔接。
+
+2026-11-03 输入框交互补充：新建居中加高，开始对话后底部停靠，模型选择器置左下，附件最多 10 个并单行横向滚动。用户确认本轮先完成界面交互，上传解析、联网搜索和服务端会话后续接入；Chat 默认开启 Thinking。细则见 PRD UI-993-03、AC-993-31～33。
 
 ## 上下文索引
 
+- [第 11 课学员资料包](lesson-11-learning-materials.zip)：包含当前有效 PRD、完整 Markdown 技术方案、独立离线 HTML 和阅读所需图片；包内文件与维护入口见 [README](README.md)。
+- [V3 学员技术方案](design/TECH_DESIGN.v3.html)：独立离线 HTML，包含产品需求简述与实际界面截图、可检验目标、架构原则和完整详细设计；不依赖其他文档，V2 保留。生成入口见阅读版构建说明。
+- [V2 HTML 技术设计阅读版](design/TECH_DESIGN.v2.html)：完整设计的离线静态页面，提供六张可缩放 Mermaid/SVG 图、代码高亮、类型检索、目录导航与最新验收结果；生成方式见[阅读版构建说明](design/document/README.md)。
 - [产品需求文档](spec/PRD.md)：本 Feature 的功能、业务规则、交互文案和 AC 统一维护源；已登记决策模型仅管理端测试的确认结果；真实接入条件见实施前待验证事项。
 - [技术方案](design/TECH_DESIGN.md)与[代码设计](design/CODE_DESIGN.md)：2026-11-03 按用户要求完成 MVP 分层、接口、数据、迁移恢复与文件级任务；明确第 12–14 课和 Agent Loop 的范围边界。
-- [技术方案评审与复评](review/design_review.md)：三位 subAgent 独立审查，13 项设计问题全部修复并复评通过；决策模型的 Chat 范围已按用户选择收口，尚未开始实施或推进 Phase。
+- [V2 技术方案](design/TECH_DESIGN.v2.md)：2026-11-04 按用户要求融合现有方案与更新架构材料，完整提供数据库 ER、Runtime UML、请求时序、类型定义和目录规范；随后按用户授权完成 V2 实现，本轮验收与内部类型细节登记在实施记录，既有技术方案保留基线，Phase 保持不变。
+- [技术方案评审与复评](review/design_review.md)：三位 subAgent 独立审查，13 项设计问题全部修复并复评通过；决策模型的 Chat 范围已按用户选择收口，评审记录保留设计阶段结论，实施状态见下方记录。
+- [实施记录](IMPLEMENTATION.md)：已授权连续实现、审查与修复；代码、受控测试及两款 DeepSeek 真实联调已完成；决策模型真实测试按用户安排后置，Phase 尚未结项。
+- [代码评审与复评](review/code_review.md)：独立审查覆盖 UI/BFF、Runtime、数据库与本课范围；发现、修复及最终验证统一登记。
 - [高保真交互图与实际截图](spec/visuals/README.md)：2026-11-03 基于运行中的模型路由、分析页面截图，通过内置 image_gen 生成模型列表、添加 Provider、能力测试和 Chat 选模四张设计图，已关联 PRD UI 章节。
 - [素材索引](context/_INDEX.md)
 - [DataAgent LLM Runtime 架构参考](context/DataAgent_LLM_Runtime_Architecture_v1.0.md)
+
+本轮协议复用修正已完成需求、设计、实现和回归，Web/Agent 已在本机重新启动。验证明细见 [实施记录](IMPLEMENTATION.md#2026-11-04-sdk-协议复用与移除模型白名单)；阿里云真实账号测试仍按原安排后测，Phase 保持不变。
