@@ -15,7 +15,12 @@ coverage/
 !.env.example
 *.log
 .DS_Store
-.claude/settings.local.json
+
+# Local Agent and editor configuration.
+/.agents/
+/.claude/
+/.codex/
+/.vscode/
 
 # Local work and generated output.
 /work/
@@ -25,13 +30,6 @@ out/
 # Derived from the Git LFS learner dataset by pnpm data:prepare.
 /data/retail/compass-retail.sql
 /data/retail/.prepare-*/
-
-# Share only the project's editor defaults; keep personal VS Code files ignored.
-!.vscode/
-.vscode/*
-!.vscode/settings.json
-!.vscode/extensions.json
-!.vscode/README.md
 
 # <!-- my-ai-infra:start -->
 .agents/.generated/

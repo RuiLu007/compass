@@ -8,7 +8,7 @@ Compass 的规则由以下配置执行，`pnpm check` 和 CI 使用同一入口�
 | 前端与工程配置格式 | 根 [`.prettierrc.json`](../.prettierrc.json)    | 2 空格、双引号、分号、尾逗号、箭头参数括号，目标行宽 100                                         |
 | Python             | 根 [`pyproject.toml`](../pyproject.toml)        | Python 3.13；Ruff `E / F / I / UP / B`；4 空格、双引号、行宽 100；Pyright `standard`             |
 | 跨编辑器基础风格   | 根 [`.editorconfig`](../.editorconfig)          | UTF-8、LF、文件末尾换行、删除行尾空格；默认 2 空格，Python 4 空格；保留 Markdown 硬换行          |
-| VS Code / Cursor   | [`.vscode/`](../.vscode/README.md)              | 保存时格式化、ESLint 安全修复、Ruff 安全修复与导入排序                                           |
+| VS Code / Cursor   | 本地 `.vscode/`                                 | 保存时格式化、ESLint 安全修复、Ruff 安全修复与导入排序                                           |
 
 ESLint 负责代码质量，Prettier 负责前端排版；两个 ESLint 配置末尾接入 `eslint-config-prettier/flat`，关闭与格式化冲突的规则。Python 由 Ruff 同时提供 lint、导入排序和格式化，无需额外安装 Black 或 isort。Python 类型检查仍由 Pyright 提供。
 
@@ -38,7 +38,7 @@ uv run --locked ruff check apps/agent --fix
 
 `format` 只调整排版；未使用变量、React Hooks 违规等仍需按 lint 提示修复。Ruff 的导入排序由 `ruff check --fix` 或编辑器保存动作执行。
 
-Claude Code / Codex 的编辑工具通过 [共享 `PostToolUse` Hook](../.agents/hooks/README.md) 自动格式化当前编辑文件，直接调用已安装的 Prettier / Ruff 并保留本页的排除规则。Shell 脚本等其他写入入口继续显式运行上面的单文件命令。配置加载、信任与测试入口见 Hook 说明。
+可在本地为 Claude Code 和 Codex 配置 `PostToolUse` Hook，对当前编辑文件调用 Prettier 或 Ruff。也可直接使用上面的单文件命令。
 
 ## 覆盖范围与配置维护
 

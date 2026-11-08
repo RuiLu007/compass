@@ -1,6 +1,6 @@
 # 第 11 课精简技术方案阅读版
 
-本目录使用项目 [my-design-to-html Skill](../../../../../.agents/skills/my-design-to-html/SKILL.md)生成独立的[精简版 HTML](../../TECH_DESIGN.compact.html)。原有 V2、V3 HTML 及其生成配置保留。
+本目录使用本地安装的 `my-design-to-html` Skill 生成独立的[精简版 HTML](../../TECH_DESIGN.compact.html)。原有 V2、V3 HTML 及其生成配置保留。
 
 内容依据 [V2 技术方案](../../TECH_DESIGN.v2.md)及其当前有效的 LiteLLM、System One、诊断响应增量，聚焦职责、数据、调用流程、输入输出和核心代码。源方案继续维护技术决策；本目录负责阅读组织。
 

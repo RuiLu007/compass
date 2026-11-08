@@ -4,7 +4,7 @@
 
 - `deploy.mjs`：`pnpm run deploy [app]` 本机 Docker 部署入口，省略 app 部署全部五个应用。固定本地 socket、Compose 文件和项目名；预检端口与已有数据库健康，构建后停止所选应用，显式执行所属迁移，再启动并验证。使用 `work/local-deploy.lock` 互斥，失败保留现场和卷。`deploy:status` / `deploy:logs` 支持 app，`deploy:down` 停止整个项目并保留卷。参数和执行顺序由 `deploy.test.mjs` 验证，详见 [部署说明](../deploy/README.md)。
 
-- `format-hook.test.mjs`：用隔离目录和真实格式化器验证 [共享编辑 Hook](../.agents/hooks/README.md) 的 Claude Code / Codex 输入、文件范围、排除规则、错误反馈和配置入口；由 `pnpm test:tooling` 自动发现。
+- `format-hook.test.mjs`：本地 Claude Code 和 Codex 编辑 Hook 的验收。只有本地 Hook 和两个客户端入口齐备时，`pnpm test:tooling` 才执行这组测试。
 
 - `tasks.mjs`：透传任务和筛选参数至 Turbo；运行时任务加载根 `.env` 并跳过版本探测，构建和检查不加载本地密钥。缓存使用 Node / pnpm 指纹及独立的 Python 指纹；缺少 Python 工具时记录 `unavailable`，由实际 Python 任务报告缺失，home 可独立运行。
 - `workspace-filters.mjs`：将 `-F home` 等简单短名解析为完整包名；通过 `pnpm --recursive list --depth -1 --json` 自动发现成员，遵循 workspace 的 glob 与排除规则，无需维护 app 列表。完整包名、目录、复合 Turbo 选择器及 `--` 后的应用参数保持原样；未知短名和重名均明确报错。

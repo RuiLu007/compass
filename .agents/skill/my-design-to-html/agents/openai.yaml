@@ -1,4 +1,0 @@
-interface:
-  display_name: "技术方案 HTML 阅读版"
-  short_description: "将技术方案整理为表格、图表和代码组成的人工评审 HTML 阅读版"
-  default_prompt: "使用 $my-design-to-html 将这份技术方案生成适合人工 review 的离线 HTML，沿用第 13 课的内容结构与阅读风格。"

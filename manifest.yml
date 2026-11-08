@@ -2,7 +2,7 @@ id: compass
 title: Compass 电商经营分析 Agent
 status: active
 version: 0.0.1
-updated: 2026-11-07
+updated: 2026-11-08
 scope: cross-course-learner-project
 implementation_stage: llm-runtime-implementation
 repository_url: https://github.com/shanggqm/compass
@@ -14,7 +14,6 @@ canonical:
   verification: docs/verification.md
   database_migrations: docs/database-migrations.md
   coding_style: docs/coding-style.md
-  format_hook: .agents/hooks/hooks.json
   local_deployment: deploy/README.md
   model_observability: deploy/observability/README.md
   lesson_resources: apps/home/src/lib/lesson-resources.json

@@ -13,13 +13,18 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import nodeTest from "node:test";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const configPath = ".agents/hooks/hooks.json";
 const scriptPath = ".agents/hooks/format-edited.mjs";
-const config = JSON.parse(readFileSync(path.join(root, configPath), "utf8"));
-const command = config.hooks.PostToolUse[0].hooks[0].command;
+const clientPaths = [".claude/settings.json", ".codex/hooks.json"];
+const hookAvailable = [configPath, scriptPath, ...clientPaths].every((file) =>
+  existsSync(path.join(root, file)),
+);
+const test = hookAvailable ? nodeTest : nodeTest.skip;
+const config = hookAvailable ? JSON.parse(readFileSync(path.join(root, configPath), "utf8")) : null;
+const command = config?.hooks.PostToolUse[0].hooks[0].command;
 const ts = "const value={name:'compass',items:[1,2]}\n";
 const formattedTs = 'const value = { name: "compass", items: [1, 2] };\n';
 const python = "value={'name':'compass','items':[1,2]}\n";
@@ -81,7 +86,7 @@ function patch(body) {
 }
 
 test("both client entries resolve to the single hook source and exclude shell/read tools", () => {
-  for (const file of [".claude/settings.json", ".codex/hooks.json"]) {
+  for (const file of clientPaths) {
     assert.equal(realpathSync(path.join(root, file)), realpathSync(path.join(root, configPath)));
   }
   const matcher = new RegExp(config.hooks.PostToolUse[0].matcher);

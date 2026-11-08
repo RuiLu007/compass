@@ -1,6 +1,6 @@
 # 第 12 课精简技术方案阅读版
 
-本目录使用项目 [my-design-to-html Skill](../../../../../.agents/skills/my-design-to-html/SKILL.md)生成独立的[精简版 HTML](../../TECH_DESIGN.compact.html)。原 `TECH_DESIGN.html` 和 `document/edition.mjs` 保留。
+本目录使用本地安装的 `my-design-to-html` Skill 生成独立的[精简版 HTML](../../TECH_DESIGN.compact.html)。原 `TECH_DESIGN.html` 和 `document/edition.mjs` 保留。
 
 内容依据当前[技术方案](../../TECH_DESIGN.md)及[代码设计索引](../../CODE_DESIGN.md)，聚焦两级分类、字典特征、选模顺序、统一响应与关键代码。生产类型和算法以索引链接的应用源码为维护入口；本目录的短摘录用于集中阅读，更新时重新核对对应符号。
 

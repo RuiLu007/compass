@@ -64,7 +64,7 @@ pnpm test:tooling    # 验证任务转发、工具链隔离与 Turbo 依赖图
 
 编码风格与排除范围见 [编码规范](docs/coding-style.md)：前端使用 ESLint + Prettier，Python 使用 Ruff，跨编辑器使用 EditorConfig。以 Compass 根目录打开 VS Code / Cursor 并安装推荐扩展后，保存时自动格式化；仅开发前端可使用 `pnpm format:frontend`，无需 Python。
 
-Claude Code 与 Codex 共用 [`.agents/hooks/`](.agents/hooks/README.md) 的 `PostToolUse` 配置，在编辑工具修改文件后自动执行单文件格式化。首次加载需重新开启会话；Codex 还需在 `/hooks` 中信任该 Hook。具体覆盖范围与客户端启用要求见 Hook 说明。
+Agent 与编辑器配置保存在本地的 `.agents/`、`.claude/`、`.codex/` 和 `.vscode/`。全新检出后可按需配置编辑 Hook 和编辑器。项目的格式化命令与规则见[编码规范](docs/coding-style.md)。
 
 ## 容器启动
 
