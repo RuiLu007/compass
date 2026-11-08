@@ -39,6 +39,10 @@ deliverables:
     path: data/retail/compass-retail.sql.gz
     status: review
 
+  - type: lesson-14-learning-materials
+    path: mai-specs/990-lesson-14-model-observability/lesson-14-learning-materials.zip
+    status: review
+
 related_apps:
   home:
     path: apps/home

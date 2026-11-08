@@ -139,3 +139,5 @@ Feature 991 为主生成增加有界恢复、共享并发容量和安全尝试�
 ## 模型调用观测
 
 Feature 990 增加 OTel 请求链路、Logical Call / Attempt、调用编号复制、平台观测状态与固定模型对比。默认关闭；本地后台采用 Docker Langfuse，使用 `pnpm observability init`、`pnpm observability up` 初始化并启动，页面在 <http://127.0.0.1:8104>。部署、账号配置、数据格式/存储和多实例传播见 [Langfuse 运行说明](deploy/observability/README.md)。本期无业务库迁移，Agent 仍为 0004；观测故障隔离、敏感正文排除和实际验收见 [990 实施记录](mai-specs/990-lesson-14-model-observability/IMPLEMENTATION.md)。
+
+[第 14 课学习资料包](mai-specs/990-lesson-14-model-observability/lesson-14-learning-materials.zip)包含 PRD、Markdown 技术方案与离线 HTML。

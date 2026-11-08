@@ -1,499 +1,1614 @@
+## 0. 先读懂 OTel 的几个术语
+
+```mermaid Trace、Span 与上下文
+flowchart TB
+    T["Trace：一轮跨阶段的调用链<br/>共享同一个 Trace ID"] --> R["根 Span · compass.request<br/>记录起止时间和终态"]
+    R --> L["子 Span · compass.logical<br/>一次模型逻辑调用"]
+    L --> A["孙 Span · compass.attempt<br/>一次实际尝试<br/>有独立 Span ID"]
+    A --- F["Attributes：模型、状态、用量<br/>Event：Span 内的带时间戳记录"]
+    R -.-> P["SpanContext<br/>Trace ID · Span ID · 采样标志<br/>用 W3C Trace Context 跨服务传播"]
+```
+
+下面用一次模型调用展示 `ExportTraceServiceRequest` 的 OTLP JSON 结构。三个 Span 共享同一个 `traceId`，通过 `parentSpanId` 串成「请求 → 逻辑调用 → 实际尝试」。样例选取了部分业务属性，Compass 实际用 HTTP 发送同一结构的二进制 Protobuf。
+
+```json OTLP Trace 数据样例
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          { "key": "service.name", "value": { "stringValue": "compass-agent" } },
+          { "key": "service.namespace", "value": { "stringValue": "compass" } },
+          { "key": "service.instance.id", "value": { "stringValue": "demo-agent-01" } },
+          { "key": "service.version", "value": { "stringValue": "0.1.0" } },
+          { "key": "deployment.environment.name", "value": { "stringValue": "local" } }
+        ],
+        "droppedAttributesCount": 0
+      },
+      "scopeSpans": [
+        {
+          "scope": { "name": "compass.observability" },
+          "spans": [
+            {
+              "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+              "spanId": "1111111111111111",
+              "parentSpanId": "",
+              "traceState": "",
+              "flags": 256,
+              "name": "compass.request",
+              "kind": 1,
+              "startTimeUnixNano": "1780000000000000000",
+              "endTimeUnixNano": "1780000001500000000",
+              "attributes": [
+                { "key": "langfuse.observation.type", "value": { "stringValue": "span" } },
+                {
+                  "key": "langfuse.observation.metadata.status",
+                  "value": { "stringValue": "completed" }
+                }
+              ],
+              "events": [],
+              "links": [],
+              "droppedAttributesCount": 0,
+              "droppedEventsCount": 0,
+              "droppedLinksCount": 0,
+              "status": { "code": 0 }
+            },
+            {
+              "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+              "spanId": "2222222222222222",
+              "parentSpanId": "1111111111111111",
+              "traceState": "",
+              "flags": 256,
+              "name": "compass.logical",
+              "kind": 1,
+              "startTimeUnixNano": "1780000000100000000",
+              "endTimeUnixNano": "1780000001450000000",
+              "attributes": [
+                { "key": "langfuse.observation.type", "value": { "stringValue": "span" } },
+                {
+                  "key": "langfuse.observation.metadata.stage",
+                  "value": { "stringValue": "inference" }
+                },
+                {
+                  "key": "langfuse.observation.metadata.queue_wait_ms",
+                  "value": { "intValue": "25" }
+                }
+              ],
+              "events": [],
+              "links": [],
+              "droppedAttributesCount": 0,
+              "droppedEventsCount": 0,
+              "droppedLinksCount": 0,
+              "status": { "code": 0 }
+            },
+            {
+              "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+              "spanId": "3333333333333333",
+              "parentSpanId": "2222222222222222",
+              "traceState": "",
+              "flags": 256,
+              "name": "compass.attempt",
+              "kind": 1,
+              "startTimeUnixNano": "1780000000200000000",
+              "endTimeUnixNano": "1780000001400000000",
+              "attributes": [
+                { "key": "langfuse.observation.type", "value": { "stringValue": "generation" } },
+                {
+                  "key": "langfuse.observation.metadata.first_visible_ms",
+                  "value": { "doubleValue": 268.5 }
+                },
+                {
+                  "key": "langfuse.observation.metadata.usage_complete",
+                  "value": { "boolValue": true }
+                },
+                {
+                  "key": "langfuse.observation.usage_details",
+                  "value": { "stringValue": "{\"input\":96,\"output\":24}" }
+                }
+              ],
+              "events": [],
+              "links": [],
+              "droppedAttributesCount": 0,
+              "droppedEventsCount": 0,
+              "droppedLinksCount": 0,
+              "status": { "code": 0 }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+| 看哪个字段                                       | 读出什么                                                                                                                                             |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `resourceSpans[].resource`、`scopeSpans[].scope` | 哪个服务实例产生数据，以及哪段埋点代码记录了它                                                                                                       |
+| `traceId`、`spanId`、`parentSpanId`              | 同一 Trace 共享 32 位十六进制 `traceId`。Span ID 是 16 位十六进制，根 Span 的父 ID 为空                                                              |
+| `startTimeUnixNano`、`endTimeUnixNano`           | 纳秒时间戳在 JSON 中写成十进制字符串。样例里的 Attempt 持续 1.2 秒                                                                                   |
+| `kind`、`status`、`flags`                        | `kind: 1` 表示内部操作。Compass 在成功时保留 OTel 默认状态 `code: 0`，业务完成状态写入 metadata。`flags` 是位字段，样例采用当前 SDK 的本地上下文编码 |
+| `attributes`、`events`、`links`                  | 属性值带类型。Event 是 Span 内的带时间戳记录，Link 可引用其他 Span。Compass 此处只使用属性，两个数组为空                                             |
+
+```mermaid Traces、Metrics 与 Logs 的三条路径
+flowchart TB
+    O["OpenTelemetry · 统一采集与导出接口"] --> T["Traces<br/>TracerProvider → Tracer → Span"]
+    O --> M["Metrics<br/>MeterProvider → Meter → Instrument"]
+    O --> L["Logs<br/>独立的日志记录信号"]
+    T --> E["Compass：OTLP/HTTP + protobuf<br/>Langfuse 保存调用树并聚合模型数据"]
+    M --> C["Compass：SDK 内部队列指标<br/>InMemoryMetricReader → 当前实例状态"]
+    L --> S["Compass：Python logging<br/>安全 JSON → 进程 / 容器日志"]
+```
+
+| 术语                        | 含义                                                              | 在 Compass 中怎么看                                                                                |
+| --------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Meter / Instrument / Metric | Meter 创建 Counter、Histogram 等 Instrument，测量值经聚合形成指标 | 这里读取 OTel SDK 已记录的队列深度与处理结果。模型成功率和耗时由 Langfuse 查询 Span 样本得到       |
+| Resource                    | 一组描述数据来源的属性                                            | `service.name`、`service.instance.id`、版本与环境帮助区分多个 Agent 实例                           |
+| Sampler                     | Span 创建时决定记录与采样                                         | 新根按比例采样，可信远程父链路的采样决定由 `ParentBased` 继承                                      |
+| Span Processor / Exporter   | Processor 处理 SDK 内已结束的 Span，Exporter 将批次送出           | `BatchSpanProcessor` 管队列与批次，`GuardedExporter` 核验内容，`OTLPSpanExporter` 发送             |
+| OTLP / Observation          | OTLP 是遥测数据传输协议，Observation 是 Langfuse 的观测记录       | 普通 Span 映射为 `SPAN`。进入 Adapter 的 Attempt 映射为 `GENERATION`，可带模型输入输出、用量与估价 |
+
 ## 目标
 
-| 核心问题             | 实现目标                                      | 量化指标（设计目标）                                                        |
-| -------------------- | --------------------------------------------- | --------------------------------------------------------------------------- |
-| 一轮多阶段调用难关联 | 请求根 → 分类 / 主推理逻辑阶段 → 实际 Attempt | 每轮 1 个请求入口 span；进入 Adapter 的实际尝试对应 1 个 generation         |
-| 慢与故障难定位       | 展示路由、排队、尝试、首字与收尾              | 单调时钟计时；非流式 TTFT 为 null；重复用量计数为 0                         |
-| 观测后端异常         | 后台有界导出，调用沿原执行规则完成            | 每进程队列 512 span；每批 64；间隔 1 秒；单次网络预算 2 秒                  |
-| 正文或凭据泄露       | 采集入口构造安全字段，出口再次检查            | 每 span 最多 64 属性、字符串 256 字符、16 事件、0 links；正文哨兵出现数为 0 |
-| 用量与费用汇总失真   | 只在 Attempt 写原生用量和估价，传播未知       | 本机采样率 1；未知值不填 0；reasoning 不重复计入 total                      |
-| 本地复现与模型比较   | 独立观测栈、固定只读对比                      | 6 个服务；UI 127.0.0.1:3002；2 个模型、3 种时间窗；默认 14 个聚合查询       |
-| 跨实例调用难拼接     | 显式 W3C carrier、统一项目与独立实例身份      | 每进程启动唯一 instance_id；可信远程父的 Trace ID 与采样决定保持            |
-
-表中数值为本期设计默认值。原执行链继续使用既有 8 / 32 容量、180 秒期限与取消预算。
+| 核心问题                       | 实现目标                                 | 量化指标（设计目标）                                                |
+| ------------------------------ | ---------------------------------------- | ------------------------------------------------------------------- |
+| 一轮请求跨分类、选模和生成     | 用 Trace ID 关联所有阶段和实际尝试       | 每次接入服务建立 1 个请求 Span，每次实际尝试有 1 个独立 Span        |
+| 慢请求、失败与恢复难排查       | 拆出排队、退避、尝试、首个可见片段和收尾 | 各 Span 各自计时，首片段时间用单调时钟计算                          |
+| 导出失败挤占请求资源           | 按进程异步批量上报                       | 队列 512 Span，每批最多 64，调度间隔 1 秒，HTTP 导出器 timeout 2 秒 |
+| 多实例比较与单实例诊断容易混淆 | 一处聚合模型数据，逐实例查看队列健康     | 比较两个模型、三个可选窗口，发出 14 个固定查询                      |
 
 ## 1. 方案概述
 
-### 1.1 职责与依赖
+### 1.1 职责分工
 
-| 模块                        | 本期变化                                               | 所有权与边界                                                          |
-| --------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------- |
-| Web / BFF                   | 校验并透传关联响应头；展示本轮编号、平台状态与只读对比 | 账户、授权、UI、协议校验；Langfuse 入口使用 Web 固定配置              |
-| Agent HTTP / RoutingService | 建立请求根，关联分类、字典路由与主推理                 | 原业务 call_id、父期限与分类兜底保持；根覆盖 Agent 已接纳至原任务收尾 |
-| ModelService                | prepare 前创建逻辑阶段，复用原快照绑定模型与版本       | 观测不增加业务库读取；_finish 后发布最终终态                          |
-| ReliableExecutor / Runtime  | 记录取槽、退避、实际 Attempt、首片段与清理             | 原重试和资源规则；观测句柄仅接收安全结果                              |
-| LiteLLM / SystemOne Adapter | 标准用量与安全成本回执                                 | LiteLLM 使用逐调用函数闭包；SystemOne 使用类型化结果                  |
-| Observer / OTel             | 显式句柄、W3C carrier、实例身份与有界导出              | Agent 内部模块；独立 TracerProvider，无自动 HTTP / SQL 仪表化         |
-| Langfuse                    | Trace、趋势与公开聚合 API                              | 第三方独立数据栈；Agent / BFF 通过 API 访问                           |
+| 模块                                      | 谁负责什么                                                           |
+| ----------------------------------------- | -------------------------------------------------------------------- |
+| Web / BFF                                 | 原鉴权、响应头校验与透传、编号复制、管理员状态和模型对比入口         |
+| Agent HTTP / RoutingService               | 建立请求 Span、接收可信 Trace Context，记录分类和选模关联            |
+| ModelService / ReliableExecutor / Runtime | 维护 Logical Call 和 Attempt，记录等待、首片段、输出、失败和写库收尾 |
+| Agent `observability/`                    | 明确父子关系、构造安全字段、装配 OTel SDK、导出 Span 并查询固定指标  |
+| Langfuse                                  | 接收 OTLP、处理入库、展示 Trace 与 Generation、提供查询 API          |
 
-### 1.2 整体架构
+### 1.2 Compass 整体架构
 
-```mermaid 调用路径与观测出口
+```mermaid Compass 应用层与观测层
 flowchart TB
-    UI["Chat / 平台能力测试"] --> BFF["Web BFF<br/>鉴权与协议校验"]
-    BFF --> HTTP["Agent HTTP<br/>请求根与关联响应头"]
-    HTTP --> ROUTE["RoutingService<br/>分类与选模"]
-    ROUTE --> MODEL["ModelService<br/>prepare → run → finish"]
-    MODEL --> EXEC["ReliableExecutor / Runtime<br/>取槽、重试、Adapter、清理"]
-    EXEC --> PROVIDER["LiteLLM Core / SystemOne"]
-    HTTP -.安全字段.-> OBS["显式 Observation 句柄"]
-    MODEL -.安全字段.-> OBS
-    EXEC -.安全字段.-> OBS
-    OBS --> OTEL["OTel 1.45.2<br/>有界后台导出"]
-    OTEL --> LF["Docker Langfuse v4.75.0<br/>Trace / 趋势 / 聚合 API"]
-    HTTP -.平台管理员固定查询.-> LF
+    UI["Chat / 模型能力测试"] --> B["Compass Web / BFF"]
+    B --> A["Compass Agent<br/>HTTP → Routing → ModelService → Runtime"]
+    A --> P["LiteLLM / SystemOne → 模型提供方"]
+    A --> DB["Agent 业务库<br/>调用记录与执行状态"]
+    A --> O["进程内 Observation + OTel SDK"]
+    O --> LF["本地 Langfuse<br/>调用树、Generation、指标聚合"]
+    B -.->|"管理员状态与对比"| A
+    A -.->|"固定 Metrics v2 查询"| LF
 ```
 
-### 1.3 本地栈与数据所有者
+### 1.3 OTel 工作流程
 
-```mermaid 独立 Langfuse 六服务
+```mermaid 从埋点到 OTLP 批量上报
 flowchart TB
-    WEB["langfuse-web · v4.75.0<br/>UI / OTLP ingest / 公开查询 API"]
-    PG["PostgreSQL 17.6-alpine<br/>账号 / 项目 / 配置"] --- WEB
-    WEB --> REDIS["Redis 7.4.5-alpine<br/>异步处理队列"]
-    WEB --> S3["Chainguard MinIO<br/>原始事件对象"]
-    REDIS --> WORKER["langfuse-worker · v4.75.0<br/>异步处理"]
-    S3 --> WORKER
-    WORKER --> CH["ClickHouse 26.3.62.3<br/>持久化观测数据"]
-    CH --> WEB
+    C["已鉴权入口提取远程 Context<br/>或创建本地 Trace"] --> S["独立 TracerProvider<br/>Resource + ParentBased 采样"]
+    S --> R{"当前 Span 记录吗？"}
+    R -->|"否"| N["保留链路 ID 与采样标志<br/>继续模型执行"]
+    R -->|"是"| W["start_span → 写白名单字段 → end<br/>子 Span 继承父上下文"]
+    W --> B["BatchSpanProcessor<br/>512 Span 队列 · 64 / 批 · 1 秒调度"]
+    B --> G["GuardedExporter<br/>检查 scope、属性、正文策略与事件，清除导出 tracestate"]
+    G --> E["OTLPSpanExporter<br/>HTTP/protobuf · 项目 Basic 鉴权 · timeout 2 秒"]
+    E --> L["Langfuse 接收端点"]
+    B -.-> M["本机队列深度与丢弃计数"]
+    G -.-> M
+    E -.-> D["失败计数与限频 JSON 日志"]
 ```
 
-| 设计项     | 约束                                                                                                    |
-| ---------- | ------------------------------------------------------------------------------------------------------- |
-| 版本与服务 | Web / Worker 固定 v4.75.0；全部镜像锁定 digest；完整栈 6 服务                                           |
-| 网络       | 同属 compass 网络、observability profile；仅 Web 绑定 127.0.0.1:3002:3000；内部存储与 Worker 无宿主端口 |
-| 数据归属   | Langfuse 原生维护内部 schema 与迁移；Agent/main、Web/main 无本期结构或受管数据变化                      |
-| 持久化     | 独立账号、API Key、密钥与持久卷；停止保留卷；trace_id 只存在本轮内存，旧调用按 call_id 检索             |
-| 应用关系   | Agent 不依赖 Langfuse readiness；现有五应用注册保持；本期无新增共享包、统计库或业务 SQL                 |
+| 多实例场景           | Context 处理                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------- |
+| 内部 HTTP 或消息载体 | `carrier()` 注入 W3C 头，接收端在服务鉴权和动作授权后提取。下游沿用 Trace ID，生成自己的 Span ID        |
+| 实例 A 调用实例 B    | 两边向同一项目上报。父子 Span 还原一条链路，`service.instance.id` 标记各自来源                          |
+| 浏览器和供应商边界   | BFF 丢弃浏览器传入的 Trace Context，模型供应商出站请求省略内部 carrier，OTLP 出口去掉 `tracestate` 文本 |
 
-## 2. 调用层级与收尾
+### 1.4 Langfuse 整体架构
 
-### 2.1 请求、逻辑阶段与实际尝试
-
-```mermaid 一轮 Chat 的观测树
+```mermaid 本地 Langfuse 六服务与读写路径
 flowchart TB
-    ROOT["compass.request<br/>Chat 本轮根"]
-    ROOT --> JEV["compass.logical<br/>intent_jev"]
-    ROOT --> FLASH["compass.logical<br/>intent_flash · 按需"]
-    ROOT --> ROUTE["compass.route<br/>字典与选模"]
-    ROOT --> MAIN["compass.logical<br/>inference"]
-    JEV --> JA["compass.attempt<br/>generation"]
-    FLASH --> FA["compass.attempt<br/>generation"]
+    A["Compass Agent · OTLP 导出"] -->|"POST /api/public/otel/v1/traces"| W
+    U["浏览器 · 127.0.0.1:8104<br/>Compass Agent · Metrics v2 查询"] -->|"控制台 / 公开 API"| W
+    subgraph LF["Langfuse v4.75.0"]
+      W["Langfuse Web · 接收与查询"]
+      Q["Redis · 任务队列 / 缓存"]
+      S["MinIO · 摄取事件对象"]
+      K["Langfuse Worker · 异步处理"]
+      C["ClickHouse · Span / Generation 数据"]
+      P["PostgreSQL · 账号 / 项目 / 配置"]
+      W -->|"存事件对象"| S
+      W -->|"排入处理任务"| Q
+      Q -->|"消费任务"| K
+      K -->|"读取事件对象"| S
+      K -->|"写观测记录"| C
+      W -->|"查 Trace 与聚合"| C
+      W -->|"鉴权与项目配置"| P
+    end
 ```
 
-```mermaid 主推理逻辑阶段的子 span
-flowchart LR
-    MAIN["compass.logical<br/>inference"] --> WAIT["compass.wait<br/>取槽等待"]
-    MAIN --> A1["compass.attempt<br/>generation · 第 1 次"]
-    MAIN --> BACKOFF["compass.backoff<br/>原退避规则"]
-    MAIN --> A2["compass.attempt<br/>generation · 第 2 次按需"]
-    MAIN --> FINISH["compass.finalize<br/>元记录收尾"]
+宿主机用 `http://127.0.0.1:8104`。Compose 网络内，Agent 用 `http://langfuse-web:3000`。两个地址指向同一套 Langfuse Web，Trace 数据与 Compass 业务记录分别持久化。
+
+## 2. 一张完整的埋点地图
+
+```diagram-svg Compass 模型调用埋点地图
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 862" width="1120" height="862" role="img">
+<title>Compass 模型调用埋点地图</title>
+<defs><marker id="flow-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#587769"/></marker></defs>
+<g font-family="system-ui, sans-serif">
+<rect x="1" y="1" width="1118" height="860" rx="12" fill="#f8fbf7" stroke="#c4d5c9"/>
+<rect x="20" y="20" width="744" height="782" rx="12" fill="#eef5ee" stroke="#c4d5c9"/>
+<rect x="804" y="20" width="296" height="782" rx="12" fill="#f1f6ef" stroke="#c4d5c9"/>
+<text x="39" y="51" font-size="20" font-weight="700" fill="#294538">业务埋点 · 父子关系与字段</text>
+<text x="822" y="51" font-size="20" font-weight="700" fill="#294538">采样、上报与本机诊断</text>
+<rect x="39" y="70" width="706" height="64" rx="12" fill="#ffffff" stroke="#c4d5c9"/>
+<text x="52" y="94" font-size="16" font-weight="650" fill="#294538">入口 · model_api.py</text>
+<text x="52" y="117" font-size="14" font-weight="400" fill="#294538">Chat 或 Provider 测试通过鉴权后提取 Context，创建请求句柄</text>
+<path d="M 392 134 V 154" fill="none" stroke="#587769" stroke-width="1.45" marker-end="url(#flow-arrow)"/>
+<rect x="39" y="154" width="706" height="86" rx="12" fill="#dbecde" stroke="#c4d5c9"/>
+<text x="52" y="178" font-size="16" font-weight="650" fill="#294538">compass.request · 一次服务请求</text>
+<text x="52" y="201" font-size="14" font-weight="400" fill="#294538">call_id / actor / tenant / workspace、开始与结束、终态与错误码</text>
+<text x="52" y="221" font-size="14" font-weight="400" fill="#294538">响应头带 Trace ID / sampled，Web 可用编号查找调用链</text>
+<path d="M 392 240 V 261 M 122 261 H 662" fill="none" stroke="#587769" stroke-width="1.45"/>
+<path d="M 122 261 V 280" fill="none" stroke="#587769" stroke-width="1.45" marker-end="url(#flow-arrow)"/>
+<path d="M 302 261 V 280" fill="none" stroke="#587769" stroke-width="1.45" marker-end="url(#flow-arrow)"/>
+<path d="M 482 261 V 280" fill="none" stroke="#587769" stroke-width="1.45" marker-end="url(#flow-arrow)"/>
+<path d="M 662 261 V 280" fill="none" stroke="#587769" stroke-width="1.45" marker-end="url(#flow-arrow)"/>
+<rect x="39" y="280" width="166" height="106" rx="12" fill="#ffffff" stroke="#c4d5c9"/>
+<text x="52" y="304" font-size="16" font-weight="650" fill="#294538">分类 · logical</text>
+<text x="52" y="327" font-size="14" font-weight="400" fill="#294538">intent_jev /</text>
+<text x="52" y="347" font-size="14" font-weight="400" fill="#294538">intent_flash</text>
+<text x="52" y="367" font-size="14" font-weight="400" fill="#294538">使用所选分类器</text>
+<rect x="219" y="280" width="166" height="106" rx="12" fill="#ffffff" stroke="#c4d5c9"/>
+<text x="232" y="304" font-size="16" font-weight="650" fill="#294538">compass.route</text>
+<text x="232" y="327" font-size="14" font-weight="400" fill="#294538">分类 / 场景 / 难度</text>
+<text x="232" y="347" font-size="14" font-weight="400" fill="#294538">模型、选择原因</text>
+<text x="232" y="367" font-size="14" font-weight="400" fill="#294538">字典与策略版本</text>
+<rect x="399" y="280" width="166" height="106" rx="12" fill="#ffffff" stroke="#c4d5c9"/>
+<text x="412" y="304" font-size="16" font-weight="650" fill="#294538">主推理 · logical</text>
+<text x="412" y="327" font-size="14" font-weight="400" fill="#294538">stage=inference</text>
+<text x="412" y="347" font-size="14" font-weight="400" fill="#294538">选定模型的</text>
+<text x="412" y="367" font-size="14" font-weight="400" fill="#294538">逻辑调用</text>
+<rect x="579" y="280" width="166" height="106" rx="12" fill="#ffffff" stroke="#c4d5c9"/>
+<text x="592" y="304" font-size="16" font-weight="650" fill="#294538">能力测试 · logical</text>
+<text x="592" y="327" font-size="14" font-weight="400" fill="#294538">stage=test</text>
+<text x="592" y="347" font-size="14" font-weight="400" fill="#294538">直接调用指定模型</text>
+<text x="592" y="367" font-size="14" font-weight="400" fill="#294538">支持生成与决策</text>
+<path d="M 122 386 V 405" fill="none" stroke="#587769" stroke-width="1.45" stroke-dasharray="5 5"/>
+<path d="M 482 386 V 405" fill="none" stroke="#587769" stroke-width="1.45" stroke-dasharray="5 5"/>
+<path d="M 662 386 V 405" fill="none" stroke="#587769" stroke-width="1.45" stroke-dasharray="5 5"/>
+<path d="M 122 405 H 662 M 392 405 V 429" fill="none" stroke="#587769" stroke-width="1.45" stroke-dasharray="5 5" marker-end="url(#flow-arrow)"/>
+<rect x="39" y="429" width="706" height="86" rx="12" fill="#dbecde" stroke="#c4d5c9"/>
+<text x="52" y="453" font-size="16" font-weight="650" fill="#294538">compass.logical · 上面每个 Logical Call 复用此结构</text>
+<text x="52" y="476" font-size="14" font-weight="400" fill="#294538">prepare 前开启。记录 stage、Provider、配置版本、累计排队、终态</text>
+<text x="52" y="496" font-size="14" font-weight="400" fill="#294538">准备失败或过载可能只有 logical 记录，随后结束对应句柄</text>
+<path d="M 392 515 V 539 M 107 539 H 677" fill="none" stroke="#587769" stroke-width="1.45"/>
+<path d="M 107 539 V 558" fill="none" stroke="#587769" stroke-width="1.45" marker-end="url(#flow-arrow)"/>
+<path d="M 317 539 V 558" fill="none" stroke="#587769" stroke-width="1.45" marker-end="url(#flow-arrow)"/>
+<path d="M 527 539 V 558" fill="none" stroke="#587769" stroke-width="1.45" marker-end="url(#flow-arrow)"/>
+<path d="M 677 539 V 558" fill="none" stroke="#587769" stroke-width="1.45" marker-end="url(#flow-arrow)"/>
+<rect x="39" y="558" width="136" height="111" rx="12" fill="#ffffff" stroke="#c4d5c9"/>
+<text x="52" y="582" font-size="16" font-weight="650" fill="#294538">compass.wait</text>
+<text x="52" y="605" font-size="14" font-weight="400" fill="#294538">等待并发槽</text>
+<text x="52" y="625" font-size="14" font-weight="400" fill="#294538">起止与取消 / 超时</text>
+<text x="52" y="645" font-size="14" font-weight="400" fill="#294538">累加至 logical</text>
+<rect x="188" y="558" width="258" height="146" rx="12" fill="#dbecde" stroke="#c4d5c9"/>
+<text x="201" y="582" font-size="15" font-weight="650" fill="#294538">compass.attempt · Generation</text>
+<text x="201" y="605" font-size="14" font-weight="400" fill="#294538">每次尝试的 ID、模型与终态</text>
+<text x="201" y="625" font-size="14" font-weight="400" fill="#294538">首个正文 / 工具片段、发送与清理</text>
+<text x="201" y="645" font-size="14" font-weight="400" fill="#294538">已知 Token / 估价，可选输入输出</text>
+<text x="201" y="665" font-size="14" font-weight="400" fill="#294538">重试另建一个 Attempt</text>
+<rect x="459" y="558" width="137" height="111" rx="12" fill="#ffffff" stroke="#c4d5c9"/>
+<text x="472" y="582" font-size="14" font-weight="650" fill="#294538">compass.backoff</text>
+<text x="472" y="605" font-size="14" font-weight="400" fill="#294538">退避耗时</text>
+<text x="472" y="625" font-size="14" font-weight="400" fill="#294538">取消 / 超时</text>
+<rect x="609" y="558" width="136" height="111" rx="12" fill="#ffffff" stroke="#c4d5c9"/>
+<text x="622" y="582" font-size="14" font-weight="650" fill="#294538">compass.finalize</text>
+<text x="622" y="605" font-size="14" font-weight="400" fill="#294538">记录收尾</text>
+<text x="622" y="625" font-size="14" font-weight="400" fill="#294538">状态 / 错误码</text>
+<path d="M 317 704 V 722" fill="none" stroke="#587769" stroke-width="1.45" stroke-dasharray="5 5" marker-end="url(#flow-arrow)"/>
+<rect x="188" y="722" width="270" height="61" rx="12" fill="#ffffff" stroke="#c4d5c9"/>
+<text x="201" y="746" font-size="16" font-weight="650" fill="#294538">compass.validation · 条件分支</text>
+<text x="201" y="769" font-size="14" font-weight="400" fill="#294538">Adapter 前校验失败，Attempt 改名</text>
+<rect x="822" y="70" width="260" height="87" rx="12" fill="#ffffff" stroke="#c4d5c9"/>
+<text x="835" y="94" font-size="16" font-weight="650" fill="#294538">TracerProvider + Sampler</text>
+<text x="835" y="117" font-size="14" font-weight="400" fill="#294538">识别服务、环境和实例</text>
+<text x="835" y="137" font-size="14" font-weight="400" fill="#294538">继承可信父采样或按比例采样</text>
+<rect x="822" y="179" width="260" height="87" rx="12" fill="#ffffff" stroke="#c4d5c9"/>
+<text x="835" y="203" font-size="16" font-weight="650" fill="#294538">未采样 · 保留关联 ID</text>
+<text x="835" y="226" font-size="14" font-weight="400" fill="#294538">本轮继续执行模型</text>
+<text x="835" y="246" font-size="14" font-weight="400" fill="#294538">BSP 只收已采样并结束的 Span</text>
+<path d="M 952 157 V 179" fill="none" stroke="#587769" stroke-width="1.45" stroke-dasharray="5 5" marker-end="url(#flow-arrow)"/>
+<rect x="822" y="287" width="260" height="87" rx="12" fill="#ffffff" stroke="#c4d5c9"/>
+<text x="835" y="311" font-size="16" font-weight="650" fill="#294538">BSP · 进程内批处理</text>
+<text x="835" y="334" font-size="14" font-weight="400" fill="#294538">接收已采样、已结束的 Span</text>
+<text x="835" y="354" font-size="14" font-weight="400" fill="#294538">512 队列 / 每批 64 / 1 秒</text>
+<path d="M 764 398 H 788 V 331 H 822" fill="none" stroke="#587769" stroke-width="1.45" stroke-dasharray="5 5" marker-end="url(#flow-arrow)"/>
+<rect x="822" y="398" width="260" height="87" rx="12" fill="#ffffff" stroke="#c4d5c9"/>
+<text x="835" y="422" font-size="16" font-weight="650" fill="#294538">GuardedExporter</text>
+<text x="835" y="445" font-size="14" font-weight="400" fill="#294538">白名单、正文策略、事件检查</text>
+<text x="835" y="465" font-size="14" font-weight="400" fill="#294538">清除导出上下文的 tracestate</text>
+<path d="M 952 374 V 398" fill="none" stroke="#587769" stroke-width="1.45" marker-end="url(#flow-arrow)"/>
+<rect x="822" y="509" width="260" height="87" rx="12" fill="#ffffff" stroke="#c4d5c9"/>
+<text x="835" y="533" font-size="16" font-weight="650" fill="#294538">OTLP / HTTP → Langfuse</text>
+<text x="835" y="556" font-size="14" font-weight="400" fill="#294538">protobuf 发送，HTTP timeout 2 秒</text>
+<text x="835" y="576" font-size="14" font-weight="400" fill="#294538">Trace 树 / Generation / 聚合</text>
+<path d="M 952 485 V 509" fill="none" stroke="#587769" stroke-width="1.45" marker-end="url(#flow-arrow)"/>
+<rect x="822" y="618" width="260" height="75" rx="12" fill="#ffffff" stroke="#c4d5c9"/>
+<text x="835" y="642" font-size="16" font-weight="650" fill="#294538">Metrics · 当前实例状态</text>
+<text x="835" y="665" font-size="14" font-weight="400" fill="#294538">读取队列、丢弃、失败计数</text>
+<rect x="822" y="708" width="260" height="75" rx="12" fill="#ffffff" stroke="#c4d5c9"/>
+<text x="835" y="732" font-size="16" font-weight="650" fill="#294538">Logs · 进程日志</text>
+<text x="835" y="755" font-size="14" font-weight="400" fill="#294538">导出失败 / 关机的安全 JSON</text>
+<text x="39" y="837" font-size="15" font-weight="400" fill="#294538">实线：Span 父子关系 / 导出处理顺序</text>
+<text x="393" y="837" font-size="15" font-weight="400" fill="#294538">虚线：子树复用 / 条件分支 / 已结束 Span 汇入队列</text>
+</g></svg>
 ```
 
-| 对象                             | 创建与结束                                                                        | 关键语义                                                                                    |
-| -------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 请求根                           | Agent 已鉴权后创建；原根任务返回或异常后结束                                      | call_id 保留本轮 UUID；分类使用原 uuid5(parent_call_id, role)；SDK 随机生成 trace / span ID |
-| Logical Call                     | prepare 前按请求 / Provider 建立；成功后从原快照绑定 model / 版本，_finish 后结束 | 观测不追加查询；prepare 失败无模型快照时仅关联请求 / Provider；过载可为零 Attempt           |
-| Attempt                          | 取槽成功并再检查期限后、Runtime.invoke 前创建；结果与清理登记后结束               | 进入 Adapter 的尝试记 generation；前置校验改为 compass.validation；取消保留安全结果         |
-| 路由 / wait / backoff / finalize | 围绕既有阶段建立子 span                                                           | 只记录元信息与耗时；不改变执行路径                                                          |
-| 平台测试                         | 根下直接建立 test Logical Call                                                    | 不增加分类或重试；SystemOne 复用 Attempt 外壳                                               |
-| 可靠性模拟                       | environment=showcase，simulation=true                                             | local 模型比较排除模拟数据                                                                  |
+读图时，沿绿色连线看 Span 父子关系。入口下面的分类、路由、主推理和能力测试按场景出现。分类、推理和测试复用同一个 Logical Call 执行结构，图中把这套子树展开一次。重试产生新的 Attempt Span。出口虚线汇集各阶段已结束的 Span。流式首片段、I/O 和费用都是 Attempt 上的属性，未额外创建 Span。
 
-每个服务入口创建请求 span；外部请求建立新 Trace，可信内部请求可继承远程父。父上下文由句柄持有；BFF 丢弃浏览器 carrier，Provider 出站不注入上下文，baggage 不传播。
+### 2.1 按埋点类型看源码
 
-### 2.2 响应头、调用与最终收尾
+每条中文注释放在对应源码的上一行，解释这行在观测流程中的作用。
 
-```mermaid 关联信息先返回，span 随原任务收束
-sequenceDiagram
-    participant B as Web BFF / Hook
-    participant A as Agent 请求根
-    participant M as ModelService
-    participant R as Executor / Runtime
-    participant O as Observation / OTel
-    A->>O: 鉴权后创建请求 span 与关联头
-    A-->>B: Trace-Id / Trace-Sampled 响应头
-    B->>B: body 前保存编号；取消后仍保留
-    A->>M: 分类或主推理逻辑阶段
-    M->>O: logical；绑定请求 / Provider
-    M->>M: 原 prepare；复用快照补模型 / 版本
-    M->>R: 原执行策略 + 显式句柄
-    R->>O: wait；取槽后创建 Attempt
-    R->>R: Adapter 调用
-    R->>O: 首个可见 text / tool 片段
-    R->>R: 输出校验与清理
-    R->>O: 合并安全用量 / 成本；结束 Attempt 一次
-    R-->>M: 原 Runtime 结果
-    M->>M: _finish 元记录收尾
-    M->>O: 权威 complete；结束 Logical Call
-    M-->>A: 最终安全状态
-    A->>O: 原根任务结束；结束 root 一次
-    O-->>O: BSP 后台导出，无逐请求 flush
-```
+| 类型            | 写入时机与方法                                                                           | 上报或读取方式                                       |
+| --------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| 生命周期 Span   | `root()` / `child()` 创建，`complete()` 记业务终态，`end()` 提交已结束 Span              | 共用 BSP → GuardedExporter → OTLP → Langfuse         |
+| 普通属性与状态  | `set()` 写业务 metadata，`native()` 写 Langfuse 类型、级别等原生字段                     | 随所属 Span 上报                                     |
+| 计时与分支      | wait / backoff 各有开始与结束，首次可见片段写 Attempt 时间，logical 汇总 `queue_wait_ms` | Span 起止时间与属性一起上报                          |
+| Generation 数据 | 进入 Adapter 前采集输入，Attempt 收尾采集已组装输出，写入已知用量和估价                  | `compass.attempt` 上报为 Generation                  |
+| SDK Metrics     | SDK 记录队列深度、溢出及关闭丢弃，Pipeline 汇总出口失败                                  | `InMemoryMetricReader` → Agent 状态 API → 平台管理页 |
+| 诊断 Logs       | 导出失败限频记录，正常关机写计数                                                         | Python logger → 进程 / 容器日志                      |
 
-| 条件                              | 终态与处理                                                                                      |
-| --------------------------------- | ----------------------------------------------------------------------------------------------- |
-| 输出校验与 _finish 都成功         | Logical Call / 根可为 completed                                                                 |
-| Attempt 成功，记录收尾失败        | Attempt 保留成功；Logical Call / 根为 failed，安全码 record_write_failed                        |
-| 收尾结果已发布后外层收到取消      | ModelService 的权威 complete 冻结终态；record_write_failed 提升到请求根；外围取消保持已发布状态 |
-| RuntimeCancelled / CancelledError | 保留安全结果与清理信息，原样传播取消；finally 幂等结束 span                                     |
-| failed / incomplete / canceled    | 前两者映射 ERROR；canceled 映射 WARNING；业务状态仍保存在 metadata                              |
-| 已发 final 后客户端断流           | BFF / 浏览器处理原协议异常；Agent 已完成结果保持                                                |
-| 进程崩溃或导出丢弃                | 可能只有局部 Trace；没有根补齐或重放机制                                                        |
+#### 生命周期与终态
 
-### 2.3 时间与统计口径
+入口把句柄放在请求和服务上。逻辑调用在 `prepare()` 前开启，因此配置或授权快照失败也会留下阶段记录。`_finish()` 围住原记录收尾并结束逻辑 Span。
 
-| 指标                      | 起止或分母                                                                                |
-| ------------------------- | ----------------------------------------------------------------------------------------- |
-| request.duration_ms       | Agent 已鉴权根开始 → 原根任务返回 / 异常，含分类、路由与数据库收尾                        |
-| logical.duration_ms       | prepare 开始 → _finish 完成 / 失败，含等待、退避、尝试与收尾                              |
-| attempt.duration_ms       | Runtime.invoke 前 → 结果与清理完成，含输出校验                                            |
-| queue_wait_ms             | 原取槽等待累计；wait span 展示各段，零 Attempt 也可有等待                                 |
-| 根 first_visible_ms       | 根开始 → 主推理首个 text_delta / tool_delta，转交原 sink 前捕获；分类内容不计             |
-| Attempt first_visible_ms  | Attempt 开始 → 首个 text / tool delta；Thinking 与心跳不计；非流式或无片段为 null         |
-| completion_start_time     | 流式 generation 首个可见片段的 UTC 时间；耗时使用单调时钟差值                             |
-| 主模型逻辑成功率          | inference completed / 全部已结束 inference Logical Call，含失败、取消、不完整与零 Attempt |
-| 整轮成功率                | request completed / 全部已结束 request；未选模型的根失败仅归本层                          |
-| Attempt 成功率 / 重试放大 | 成功 Attempt / 已结束 Attempt；Attempt 数 / 已结束 Logical Call                           |
-
-### 2.4 分布式上下文与实例范围
-
-```mermaid 可信 carrier 连接多个实例
-flowchart TB
-    A["实例 A · 当前 Observation<br/>唯一 instance_id"] -->|scope.carrier| B["实例 B · 鉴权与动作授权后<br/>提取 W3C 远程父"]
-    A -.安全 span / OTLP.-> LF["同一 Langfuse 项目与环境"]
-    B -.安全 span / OTLP.-> LF
-    LF --> TRACE["同一 Trace ID<br/>拼接跨实例父子关系"]
-    LF --> SUMMARY["统一时间窗 / Provider / model<br/>聚合多个实例的调用样本"]
-```
-
-| 边界 / 机制       | 规则                                                                                                                                                           |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 传播内容          | scope.carrier() 仅生成 traceparent / tracestate；可由内部 HTTP 请求头或任务消息元信息显式携带                                                                  |
-| 可信入口          | 先完成服务身份与动作权限验证，再提取长度受限的 W3C 字段；无效 carrier 建本地新根，原模型任务继续                                                               |
-| 浏览器与 Provider | BFF 丢弃浏览器 carrier；Provider 出站请求不带内部上下文；任何路径均不传播 baggage                                                                              |
-| 父子关系          | 显式 parent Context；跨实例沿用 Trace ID，新建下游 span / parent 关系；业务 call_id 与 Attempt ID 继续独立                                                     |
-| 观测出口          | tracestate 仅用于可信内部传播；GuardedExporter 重建安全 ReadableSpan / SpanContext，导出上下文保留 ID、父子关系与采样标记，清除原生 trace_state 的 vendor 文本 |
-| 一致采样          | ParentBased 继承可信远程父决定；父已采样时，下游本地 ratio=0 仍采样；没有有效远程父时才使用本地 ratio                                                          |
-| 实例身份          | service.namespace=compass；service.instance.id 默认每进程启动 UUID，可配置唯一值；metadata.instance_id 同步可筛选                                              |
-| 聚合与自诊断      | 模型对比查询同项目跨实例样本；状态接口只报告接收请求的实例；多个副本逐实例查看队列与失败                                                                       |
-| 生命周期          | 同一请求采样一致；重执行产生新的 Attempt；崩溃不补根、不重放；当前 Worker 业务队列保持后续范围                                                                 |
-
-## 3. 安全字段、Token 与估价
-
-### 3.1 采集白名单与显式映射
-
-| 字段组          | 允许输入                                                                             | 采集边界                                                                                |
-| --------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| 关联 / 上下文   | UUID、SDK ID、instance_id；可信 tenant / workspace / actor；purpose / stage          | 取现有已鉴权上下文；不存名字、邮箱、Session token                                       |
-| 路由            | category / scene、difficulty、mode、固定 reason、字典 / 策略版本                     | 只允许登记枚举；原问题与分类输出全文不进入观测                                          |
-| 模型            | Provider UUID、adapter、SDK vendor、配置 / 绑定版本、内部模型标识                    | 不放 alias、Base URL、连接参数或凭据                                                    |
-| 状态            | completed / failed / canceled / incomplete、安全码、sent、unknown、cleanup_confirmed | 不传异常对象，不调用 record_exception，不写堆栈与 str(exc)                              |
-| 性能 / 用量     | 非负有界耗时、首字、streamed、已知 Token、完整性与已知 USD                           | 不传 DTO、ExecutionRequest、模型响应或 LiteLLM kwargs                                   |
-| Resource / 事件 | 手动 service.name / namespace / instance.id / version / environment；事件预算有界    | 禁自动 Resource 探测；预算最多 16 事件、0 links；当前出口拒绝 span events；不挂 baggage |
-
-```mermaid 从安全值到可筛选 metadata
-flowchart LR
-    SAFE["安全结构值"] --> ALLOW["白名单检查<br/>64 项 / 256 字符"]
-    ALLOW --> MAP["安全字段 → 顶层 metadata"]
-    MAP --> CHECK["映射后检查<br/>字段 / 事件 / 数量"]
-    CHECK --> OTLP["OTLP span"]
-```
-
-| 内部字段                                           | Langfuse 出口字段                                           | 用途                                                      |
-| -------------------------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------- |
-| stage / status / model / provider_id / instance_id | langfuse.observation.metadata.&lt;字段名&gt;                | 顶层固定筛选；从安全字段构造顶层 metadata，实例编号可筛选 |
-| 根 call_id                                         | observation.metadata.call_id，同时补 trace.metadata.call_id | 本轮 trace_id 与既有 call_id 关联                         |
-| generation 类型、usage、cost、首片段               | 登记的 langfuse.observation.* 字段                          | 仅实际 Attempt 设置原生用量 / 成本                        |
-| 超限或未登记字段 / 事件                            | 丢弃该 span，增加本地安全计数                               | 不放行任意 metadata 前缀或对象序列化                      |
-
-LiteLLM 使用 turn_off_message_logging=True、suppress_debug_info=True。自动 Langfuse / OTel 集成关闭；第三方与 exporter 日志只保留 logger 名和固定错误类别，清除 args、exc_info、正文与 Authorization。
-
-### 3.2 唯一 generation 与未知传播
-
-| 规则                                                | 行为                                                                                   |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| 权威用量                                            | RuntimeResult.usage；input / output 已知值才写 usage_details，缺失键省略               |
-| reasoning                                           | output 的子集，只进入 metadata，不再次累计到 total                                     |
-| 原生成本                                            | 仅完整用量、结果已知且锁定 SDK 可识别价格与用量细类时写显式 USD 估价                   |
-| 回调已提供成本                                      | 采用有限非负 response_cost；回调只写当前 Attempt 的 Observation                        |
-| 回调尚未到达                                        | Adapter 使用锁定 LiteLLM 的本地 completion_cost；流式使用 SDK 标准组装结果             |
-| 模型无价格 / 用量不全 / 缓存细类无法定价 / 结果未知 | cost_state=unknown；省略原生 model 与 cost，保留 metadata.model                        |
-| 可用估价                                            | cost_state=complete_estimate；显式 model 与 cost_details={total: USD}；cost_source=sdk |
-| 父层累计                                            | 只写 known_* 与未知 Attempt 数；任何已发送尝试缺失消耗时，总消耗仅可展示已知部分       |
-
-### 3.3 回调与并发边界
-
-| 入口                   | 设计                                                                                               |
-| ---------------------- | -------------------------------------------------------------------------------------------------- |
-| LiteLLM Core 1.106.6   | 每调用 success_callback / failure_callback 函数闭包绑定当前 Observation；不修改全局 callbacks 列表 |
-| 回调处理               | 提取有限数值 / 枚举即返回；无网络、无新 span、无 flush；不保存 kwargs / response                   |
-| 缺失 / 重复 / 迟到回调 | 原执行结果继续；Observation 结束后忽略回调；Runtime 结果结束唯一 Attempt                           |
-| SystemOne              | 从现有类型化决策结果取用量，使用同一 generation 外壳                                               |
-| 模型标识               | response_model 缺失时用 requested_model 展示，并标记来源                                           |
-
-## 4. 有界导出与固定只读查询
-
-### 4.1 OTel 生命周期与自诊断
-
-| 阶段          | 设计默认值与行为                                                                                                           |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| 初始化        | FastAPI lifespan 创建独立 TracerProvider、局部 MeterProvider / InMemoryMetricReader、单个 BSP；保存 app.state.observation  |
-| 采样          | ParentBased + 本地根 ratio，默认 1；可信远程父优先，子 span 显式 parent context                                            |
-| 队列与批次    | 每进程 max_queue_size=512、max_export_batch_size=64、schedule_delay_millis=1000；队列满淘汰最旧条目                        |
-| 网络          | OTLP HTTP/protobuf，固定完整 Trace 端点；exporter timeout=2 秒；BSP export_timeout_millis 不控制 HTTP                      |
-| 自诊断        | SDK 1.45.2 公开 queue.size 与 processed 的 error.type；exporter 包装器记录失败批次及最近结果枚举；只读本地内存             |
-| 状态范围      | 返回当前实例 instance_id；队列 / 丢弃 / 失败计数重启归零；跨实例样本由统一后端聚合                                         |
-| 禁用 / 缺配置 | NoOp；disabled 或 unconfigured；无同步探测，healthz / readyz 保持原依赖                                                    |
-| 配置校验      | enabled 时非法 ratio 或明显无效固定地址阻止启动；网络不可达或认证失败只使导出降级                                          |
-| 关闭          | 先原根任务生命周期 4.5 秒，再后台 provider.shutdown，最后关闭 meter provider；观测关闭上限 33 秒，Agent grace period 45 秒 |
-
-观测关闭预算覆盖 BSP 原生 30 秒 join 与 2 秒 HTTP 预算；到期允许丢弃。模型路径不等待网络导出，不逐请求 flush。
-
-自诊断日志使用安全 JSON，包含 event、level、instance_id、固定 reason 与可得计数，按实例区分。
-
-### 4.2 两模型对比的固定计算
-
-```mermaid 平台只读对比查询
-flowchart TB
-    ADMIN["平台管理员点击查询"] --> AUTH["BFF + Agent<br/>原平台 manage 鉴权"]
-    AUTH --> INPUT["两个不同 Provider UUID<br/>1h / 24h / 7d；固定 local"]
-    INPUT --> SNAP["服务端已配置模型快照<br/>Agent UTC 时间窗口"]
-    SNAP --> QUERY["Langfuse Metrics v2<br/>固定 observations 查询"]
-    QUERY --> LOGICAL["每模型 4 个状态查询<br/>count + logical latency"]
-    QUERY --> USAGE["每模型 1 个 Attempt 用量 / 费用<br/>2 个未知计数查询"]
-    LOGICAL --> MERGE["内存组合：比例、均值与已知部分"]
-    USAGE --> MERGE
-    MERGE --> TABLE["固定只读对比表<br/>无样本 null；查询失败 unavailable"]
-```
-
-| 查询边界     | 固定值与口径                                                                                                              |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| 上游         | GET /api/public/v2/metrics；observations 视图；服务端项目 Key                                                             |
-| 逻辑筛选     | name=compass.logical、metadata.stage=inference、metadata.provider_id + 当前 metadata.model、metadata.status；分类单独统计 |
-| Attempt 筛选 | compass.attempt + metadata.stage=inference；同样匹配 Provider UUID + 当前 model；仅本层累计用量与费用                     |
-| 查询量       | 每模型 7 个，两模型跨实例默认 14 个；硬上限 24 个；最多 4 个并行                                                          |
-| 时间与响应   | 单次 HTTP 2 秒；整体 8 秒；每响应最多 256 KiB / 100 行；无自动重试、无分页全量扫描                                        |
-| 单位与数值   | Langfuse v4.75.0 latency 原生单位为 ms，直接累计与求均值；统计值有限且非负；不接受额外行与超限响应                        |
-| 结果列       | model、逻辑总数与四状态、成功率、平均逻辑耗时、Attempt 数、已知 input / output、已知 USD、未知用量 / 成本数、data_state   |
-| 空或部分失败 | 分母 0 时 success_rate=null；任一状态 / 用量 / 未知计数查询失败，整行 unavailable，不展示比例或完整费用                   |
-| 可用性说明   | 页面展示采样率与“观测数据可能缺失”；未知成本同时显示已知部分和未知样本数                                                  |
-
-服务端只接受枚举参数，不接受任意查询 JSON、无界 group-by 或任意环境。结果仅在内存组合；查询错误只影响对比表，保留上次结果时标明非最新。
-
-## 5. 输出契约与配置
-
-### 5.1 响应头与平台 API
-
-| 契约                                               | 字段与行为                                                                                            | 权限 / 输出约束                                              |
-| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| X-Compass-Trace-Id                                 | 32 位小写 hex；enabled 时发出，未采样也有有效 ID                                                      | BFF 仅正则匹配后透传；浏览器同名入站头不可信                 |
-| X-Compass-Trace-Sampled                            | 0 / 1；本轮根采样决定                                                                                 | Hook 在 body 前读取；取消 / 断流保留编号；不放入后续模型消息 |
-| Agent GET /v1/models/observability                 | instance_id / environment、enabled / configured、sample_ratio、队列 / 容量、drop / error、last_export | 原服务令牌 + trusted_context；platform manage                |
-| BFF GET /api/platform/models/observability         | Agent 安全状态 + Web 固定 Langfuse 项目主页 URL，可空                                                 | 平台管理员；不返回 Key、内部 ingest 或数据库地址             |
-| Agent GET /v1/models/observability/summary         | provider_ids：两个不同 UUID；window=1h / 24h / 7d                                                     | 平台 manage；返回 UTC 起止范围、固定行结构                   |
-| BFF GET /api/platform/models/observability/summary | 转发固定只读模型对比                                                                                  | BFF 与 Agent 双侧鉴权；private, no-store                     |
-
-ObservabilityStatus / ModelComparison 从 Agent schemas.py 派生。原 body、SSE 事件与 CallRecordView 保持；成功与原错误映射均可携带安全关联头。头缺失时保留 call_id，显示未启用或不可用。
-
-### 5.2 平台与本轮信息
-
-| 位置                          | 展示与交互                                                                                                        |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Chat / 平台能力测试的调用信息 | 沿用原折叠与标签页；增加调用编号、观测编号和复制；说明本轮采样及数据稍后可见                                      |
-| 平台模型管理“调用观测”        | 进入或点击“刷新状态”时请求，无轮询；显示当前响应实例的 instance_id、队列 / 丢弃 / 失败和导出状态                  |
-| Langfuse 入口                 | 服务端固定 http://127.0.0.1:3002/project/&lt;project-id&gt;；新标签页 noopener noreferrer；独立登录，复制编号检索 |
-| 只读对比                      | 两个已配置模型、1h / 24h / 7d，默认 24h；管理员点击“查询”获取；窗口统一 UTC，按界面时区展示                       |
-| 缺配置 / 查询失败             | 空 URL 禁用打开；加载时禁用刷新；失败可重试；无样本成功率显示未提供                                               |
-| 权限与可访问性                | 租户只复制本轮编号；平台 API 服务端拒绝无权限请求；复制有可访问名称与成功状态，窄屏编号换行                       |
-
-### 5.3 服务端配置
-
-| 配置                                     | 默认 / 缺失行为                                         | 作用域                                    |
-| ---------------------------------------- | ------------------------------------------------------- | ----------------------------------------- |
-| COMPASS_OBSERVABILITY_ENABLED            | false                                                   | Agent 启动；禁用时 NoOp、无网络           |
-| COMPASS_OBSERVABILITY_SAMPLE_RATIO       | 1；合法 0～1                                            | Agent 启动；同轮一致采样                  |
-| COMPASS_LANGFUSE_BASE_URL                | 空时 enabled 显示 unconfigured                          | Agent 固定服务端地址；自动追加 Trace 端点 |
-| COMPASS_LANGFUSE_PUBLIC_KEY / SECRET_KEY | 缺失或不完整时 NoOp + unconfigured                      | SecretStr；只供 Agent / 公开 API 查询     |
-| COMPASS_OBSERVABILITY_ENVIRONMENT        | 默认 local；可选 test / staging / production / showcase | 固定部署枚举，浏览器无法覆盖              |
-| COMPASS_OBSERVABILITY_INSTANCE_ID        | 空时每次启动生成 UUID                                   | 每进程唯一；配置覆盖值也需保证副本间唯一  |
-| COMPASS_LANGFUSE_PROJECT_URL             | 空时禁用打开                                            | Web 固定公开项目 URL，与内部 ingest 分开  |
-| OTEL_PYTHON_SDK_INTERNAL_METRICS_ENABLED | enabled 时 true                                         | SDK 初始化前；仅本地自诊断                |
-
-地址拒绝 userinfo、query 与 fragment。本机 HTTP 限固定 loopback / Compose 服务名；远程接入使用 HTTPS。队列、批次、字段与关闭预算为模块常量。
-
-### 5.4 私有配置的职责分离
-
-| 文件      | 内容与消费者                                                    |
-| --------- | --------------------------------------------------------------- |
-| stack.env | Langfuse 栈账号、项目 Key、初始化配置与独立存储密钥，仅供观测栈 |
-| agent.env | Agent 所需启用、采样、环境、内部服务地址与项目 Key              |
-| web.env   | 仅公开的固定项目页面 URL，供 Web 展示入口                       |
-
-三份文件位于忽略的 work/observability/，权限 0600。内部 ingest 地址与浏览器公开入口分别配置；Agent / Web 只读取各自所需文件。
-
-## 6. 变更文件与变更内容
-
-文件清单说明职责变化；代码片段用于阅读关键设计。
-
-```text 变更文件树
-apps/agent/
-├── src/compass_agent/
-│   ├── observability/                          [新增] Agent 内观测门面
-│   │   ├── README.md                          [新增] 字段与模块职责入口
-│   │   ├── observer.py                        [新增] 单一 Observation、W3C carrier、实例身份与幂等终态
-│   │   ├── privacy.py                         [新增] 白名单、metadata 映射与日志过滤
-│   │   ├── export.py                          [新增] OTel 装配、出口检查与自诊断
-│   │   ├── litellm_receipt.py                  [新增] 动态回调、安全标量回执
-│   │   └── summary.py                         [新增] 两模型固定查询与未知传播
-│   ├── main.py                                [调整] lifespan 装配与关闭
-│   ├── settings.py                            [调整] 启用、采样与服务端配置
-│   ├── model_api.py                           [调整] 根、响应头、平台状态 / 对比 API
-│   ├── schemas.py                             [调整] ObservabilityStatus / ModelComparison
-│   ├── routing/service.py                     [调整] 分类、路由与主推理关联
-│   ├── models/service.py                      [调整] 复用 prepare 快照、finish 后发布终态
-│   └── llm/
-│       ├── executor.py                        [调整] wait / backoff / 实际 Attempt
-│       ├── runtime.py                         [调整] 安全结果与清理信息提取
-│       ├── litellm_chat.py                    [调整] 安全回调、标准用量与 SDK 本地估价
-│       └── systemone_decision.py              [调整] 类型化决策用量适配
-├── pyproject.toml                             [调整] OTel API / SDK / HTTP exporter 1.45.2
-├── tests/test_observability.py                 [新增] 隐私、采样、状态与生命周期场景
-└── tests/observability_acceptance.py           [新增] 后端金标、固定查询与多实例场景
-apps/web/src/
-├── server/http/model-handler.ts               [调整] 平台状态 / 对比路由与权限
-├── server/model-agent-client.ts               [调整] 关联头与浏览器 carrier 边界
-├── contracts/trace-context.ts                  [新增] 安全关联头校验
-├── features/models/
-│   ├── observability-panel.tsx                [新增] 管理入口、进程状态与固定对比
-│   ├── use-model-call.ts                      [调整] body 前读头、取消保留编号
-│   ├── output.tsx / types.ts                  [调整] 本轮编号展示与客户端类型
-│   └── pages.tsx                              [调整] 平台观测小节
-├── components/analysis-composer.tsx            [调整] 本轮关联信息
-└── generated/                                 [生成] Agent 状态 / 对比 DTO
-apps/web/tests/
-├── domain/model-bff.test.ts                    [调整] 头校验与平台权限场景
-└── e2e/                                       [调整] 取消、复制与管理员入口场景
-contracts/                                     [生成] Agent DTO 派生契约
-contracts/README.md                            [调整] 新状态契约入口
-deploy/
-├── compose/compose.yaml                       [调整] Agent / Web 各自可选私有 env_file
-├── compose/observability.yaml                 [新增] 全镜像 digest 锁定的六服务配置
-├── observability/README.md                    [新增] 固定上游、私有配置与持久卷说明
-└── README.md                                  [调整] 观测栈与五应用边界
-scripts/observability.mjs / 对应工具测试         [新增] 本地栈受管入口与边界场景
-scripts/README.md                              [调整] 观测命令入口
-package.json                                   [调整] 拟交付 observability 命令
-uv.lock                                        [调整] OTel 依赖同版本锁定
-.env.example                                   [调整] 无真实凭据的配置项
-README.md / apps/{agent,web}/README.md           [调整] 新能力、边界与入口
-相关 manifest.yml                              [调整] 对应职责与交付登记
-```
-
-## 7. 核心类型与关键代码
-
-代码片段展示当前设计的安全字段与关键分支；外围业务准备、容量管理与 UI 样板由原模块负责。Observation 统一持有 metadata、终态、首片段和成本回执。
-
-### 7.1 白名单与顶层 metadata
-
-字符串、布尔值与有限非负数值逐项构造；instance_id 与业务安全字段进入同一登记集合。根额外补 trace.metadata.call_id，出口仍限制登记属性与事件。
-
-```python privacy.py · 安全字段构造
-from math import isfinite
-
-FIELDS = frozenset(
-    "call_id parent_call_id attempt_id tenant_id workspace_id actor_id purpose stage "
-    "provider_id model adapter config_version binding_version dictionary_version routing_version "
-    "category_id scene_id difficulty mode reason status error_code sent outcome_unknown "
-    "cleanup_confirmed first_visible_ms queue_wait_ms usage_complete unknown_usage_attempts "
-    "cost_state cost_source reasoning_tokens instance_id simulation".split()
-)
-DEPENDENCY_PREFIXES = ("litellm", "LiteLLM", "openai", "opentelemetry", "httpx", "httpcore")
+```python model_api.py · 请求根与结束
+# 为已通过鉴权的模型请求建立根观测句柄。
+def start_observation(request, service, context, call_id):
+    # 从应用状态取进程启动时创建的 Observer。
+    observer = getattr(request.app.state, "observation", None)
+    # 观测已启用且 Tracer 可用时才建 Span。
+    if observer and observer.tracer:
+        # 根据调用编号、可信身份和请求头创建根 Span。
+        service.root_observation = observer.root(call_id, context, request.headers)
+        # 将同一句柄挂到请求上，供响应头和执行收尾使用。
+        request.state.model_observation = service.root_observation
 
 
-def scalar(value):
-    if type(value) is str:
-        return value if len(value) <= 256 else None
-    if type(value) is bool or type(value) is int and 0 <= value <= 2**53 - 1:
-        return value
-    if type(value) is float and isfinite(value) and value >= 0:
-        return value
-    return None
-
-
-def fields(values):
-    return {
-        "langfuse.observation.metadata." + key: clean
-        for key, value in values.items()
-        if key in FIELDS and (clean := scalar(value)) is not None
-    }
-```
-
-### 7.2 prepare 快照与最终收尾
-
-逻辑阶段先绑定请求 / Provider，成功后复用原 prepare 的模型与版本快照。失败分支结束该逻辑阶段与请求状态；_finish 完成后发布权威终态，取消继续沿原生命周期传播。
-
-```python models/service.py · 关键方法
-import asyncio
-
-async def prepare(self, call_id, provider_id, request, context, *, deadline=None, grant=None):
-    observation = (
-        self.root_observation.child(
-            "compass.logical",
-            call_id=str(call_id),
-            provider_id=str(provider_id),
-            stage=self.stage,
-            purpose=context.purpose,
-        )
-        if self.root_observation
-        else None
-    )
-    if observation:
-        self.observations[call_id] = observation
+# 用请求根 Span 包住实际模型任务。
+async def observed_run(request, coroutine):
+    # 取入口保存在请求状态里的句柄。
+    observation = getattr(request.state, "model_observation", None)
+    # 进入任务执行范围，统一处理正常完成和异常。
     try:
-        prepared = await self._prepare(
-            call_id, provider_id, request, context, deadline=deadline, grant=grant
-        )
+        # 等待模型任务返回业务结果。
+        result = await coroutine
+        # 句柄存在时同步这次调用的最终状态。
         if observation:
-            observation.set(
-                model=prepared.spec.api_model,
-                config_version=prepared.spec.config_version,
-                binding_version=prepared.spec.binding_version,
-            )
-        return prepared
+            # 记录业务终态与安全错误码。
+            observation.complete(result.status, result.error_code)
+        # 把原业务结果交回调用方。
+        return result
+    # 捕获异常和任务取消，随后交回原错误处理路径。
     except BaseException as exc:
+        # 观测启用时记录异常对应的终态。
         if observation:
+            # 为失败或取消填入待上报的状态。
             observation.complete(
+                # 主动取消与一般执行失败用不同状态区分。
                 "canceled" if isinstance(exc, asyncio.CancelledError) else "failed",
+                # 沿用已有错误码，缺少时使用内部错误码。
                 getattr(exc, "code", "internal_error"),
+            # 保存根观测的异常终态。
             )
-            observation.end()
-            self.observations.pop(call_id, None)
-            if self.root_observation:
-                self.root_observation.complete(
-                    "canceled" if isinstance(exc, asyncio.CancelledError) else "failed",
-                    getattr(exc, "code", "internal_error"),
-                )
+        # 继续抛出原异常，由业务入口处理。
         raise
-
-async def _finish(self, result, sent):
-    observation = self.observations.pop(result.call_id, None)
-    finalize = observation.child("compass.finalize") if observation else None
-    try:
-        return await self._finish_record(result, sent)
+    # 成功、失败和取消均进入收尾。
     finally:
-        if finalize:
-            finalize.complete(result.status, result.error_code)
-            finalize.end()
+        # 有根 Span 时才执行结束操作。
         if observation:
-            observation.complete(result.status, result.error_code, authoritative=True)
+            # 结束根 Span，让 SDK 处理已完成的记录。
             observation.end()
 ```
 
-### 7.3 单一终态与幂等结束
+```python models/service.py · Logical Call
+# 进入模型准备阶段，兼容原期限和授权参数。
+async def prepare(self, call_id, provider_id, request, context, *, deadline=None, grant=None):
+    # 先取观测句柄，让后续准备失败也落在这个阶段内。
+    observation = (
+        # 从请求根创建子 Span。
+        self.root_observation.child(
+            # 用固定名称标识一次模型逻辑调用。
+            "compass.logical",
+            # 关联业务调用编号。
+            call_id=str(call_id),
+            # 记录本次选择的 Provider 编号。
+            provider_id=str(provider_id),
+            # 区分分类、主推理和能力测试等阶段。
+            stage=self.stage,
+            # 保留来自可信上下文的调用用途。
+            purpose=context.purpose,
+        # 完成子 Span 创建所需的初始属性。
+        )
+        # 存在请求根时创建子 Span。
+        if self.root_observation
+        # 无请求根时沿用原业务路径。
+        else None
+    # 保存这一分支产生的观测句柄。
+    )
+    # 已创建逻辑 Span 时建立本轮索引。
+    if observation:
+        # 按 call_id 保存句柄，供执行与收尾阶段取用。
+        self.observations[call_id] = observation
+    # 围住原准备逻辑并跟踪异常。
+    try:
+        # 运行原准备流程，解析并校验模型快照。
+        prepared = await self._prepare(
+            # 透传原有的期限和授权参数。
+            call_id, provider_id, request, context, deadline=deadline, grant=grant
+        # 等待准备完成后拿到实际使用的配置。
+        )
+        # 准备成功后补全已解析的模型信息。
+        if observation:
+            # 把快照字段写进逻辑 Span 的 metadata。
+            observation.set(
+                # 记录最终请求的模型标识。
+                model=prepared.spec.api_model,
+                # 记录所用 Provider 配置版本。
+                config_version=prepared.spec.config_version,
+                # 记录模型绑定版本，便于定位配置切换。
+                binding_version=prepared.spec.binding_version,
+            # 一次写入准备好的快照字段。
+            )
+        # 将原准备结果交给执行器。
+        return prepared
+    # 准备阶段报错或取消时提前收尾。
+    except BaseException as exc:
+        # 逻辑 Span 存在时才更新观测。
+        if observation:
+            # 记录尚未开始 Attempt 时的终态。
+            observation.complete(
+                # 通过取消异常区分取消与失败。
+                "canceled" if isinstance(exc, asyncio.CancelledError) else "failed",
+                # 选取安全错误码，避免记录异常正文。
+                getattr(exc, "code", "internal_error"),
+            # 保存逻辑调用的异常终态。
+            )
+            # 关闭这个未进入执行的逻辑 Span。
+            observation.end()
+            # 从索引移除已结束的句柄。
+            self.observations.pop(call_id, None)
+            # 请求根仍存在时同步整体异常。
+            if self.root_observation:
+                # 在根 Span 上标记准备阶段的失败或取消。
+                self.root_observation.complete(
+                    # 沿用同一终态口径。
+                    "canceled" if isinstance(exc, asyncio.CancelledError) else "failed",
+                    # 将同一个安全错误码带到请求根。
+                    getattr(exc, "code", "internal_error"),
+                # 完成请求根终态更新。
+                )
+        # 让业务入口继续处理原异常。
+        raise
+```
 
-complete(authoritative=True) 冻结 ModelService 收尾结果；record_write_failed 提升到仍存活的请求根。end 用同一把锁保证 span 只结束一次。
+```python models/service.py · finalize
+# 包住一次模型结果的持久化收尾。
+async def _finish(self, result, sent):
+    # 移除并取得此前保存的逻辑调用句柄。
+    observation = self.observations.pop(result.call_id, None)
+    # 用独立子 Span 测量结果收尾耗时。
+    finalize = observation.child("compass.finalize") if observation else None
+    # 把原记录写入放在这段生命周期内。
+    try:
+        # 等待原收尾逻辑，并把它的返回值交给调用方。
+        return await self._finish_record(result, sent)
+    # 返回或抛出异常前统一结束观测。
+    finally:
+        # 有收尾 Span 时先处理子节点。
+        if finalize:
+            # 写入业务结果状态和安全错误码。
+            finalize.complete(result.status, result.error_code)
+            # 关闭收尾 Span，使其进入导出流程。
+            finalize.end()
+        # 有逻辑句柄时再结束父节点。
+        if observation:
+            # 使用收尾后的业务终态，避免后续外围状态覆盖。
+            observation.complete(result.status, result.error_code, authoritative=True)
+            # 关闭逻辑 Span，保留整次调用耗时。
+            observation.end()
+```
 
-```python observer.py · 终态与结束
+#### 普通属性、耗时与重试
+
+选模后写入分类、场景、模型和版本。wait 包住取并发槽，backoff 包住重试前等待。Executor 的流式预览只用首个正文或工具片段触发 `first_visible()`。Attempt 的时间写入原生 `completion_start_time`，首片段耗时同时写到 Attempt 和本轮请求。
+
+```python routing/service.py · 路由属性
+# 本轮建立了路由 Span 时才写入选择结果。
+if route_observation:
+    # 将路由决策整理成可筛选的 metadata。
+    route_observation.set(
+        # 记录分类器判定的业务类别。
+        category_id=intent.category_id,
+        # 记录命中的业务场景。
+        scene_id=intent.scene_id,
+        # 记录用于选模的任务难度。
+        difficulty=features.difficulty,
+        # 区分固定选模和自动选模。
+        mode=selection.mode,
+        # 保留本次选择的规则原因。
+        reason=reason,
+        # 记录实际选中的 Provider 编号。
+        provider_id=str(provider_id),
+        # 记录该 Provider 快照里的模型名。
+        model=view.api_model,
+        # 记录解释分类结果所用的字典版本。
+        dictionary_version=catalog()[0],
+        # 记录这次决策所用的路由策略版本。
+        routing_version=POLICY.version,
+    # 提交这次路由选择的属性。
+    )
+```
+
+```python llm/executor.py · 并发槽等待
+# 用事件循环的单调时钟记录排队起点。
+queued = loop.time()
+# 在逻辑 Span 下建等待节点。
+wait_observation = observation.child("compass.wait") if observation else None
+# 覆盖等待并发槽的过程。
+try:
+    # 沿用模型调用的截止时间限制排队。
+    async with asyncio.timeout_at(deadline):
+        # 等待取得一个并发槽，随后才能开始尝试。
+        await self.gate.slots.acquire()
+# 排队中遇到取消、超时等异常时更新观测。
+except BaseException as exc:
+    # 只在已创建等待 Span 时写终态。
+    if wait_observation:
+        # 为这段排队过程记录结束原因。
+        wait_observation.complete(
+            # 取消记为 canceled，其余异常记为 failed。
+            "canceled" if isinstance(exc, asyncio.CancelledError) else "failed",
+            # 只有超时分支在这里补 model_timeout。
+            "model_timeout" if isinstance(exc, TimeoutError) else None,
+        # 保存这次排队的异常状态。
+        )
+    # 把异常交回执行器的原有处理路径。
+    raise
+# 无论是否取得并发槽，都结算本次等待。
+finally:
+    # 把经过的时间换算成毫秒，累加到逻辑调用。
+    run.queue_wait_ms += max(0, int((loop.time() - queued) * 1000))
+    # 等待 Span 存在时需要关闭。
+    if wait_observation:
+        # 结束排队 Span，保留实际等待区间。
+        wait_observation.end()
+```
+
+```python llm/executor.py · 退避与终态
+# 为重试前等待创建单独的退避 Span。
+backoff = observation.child("compass.backoff") if observation else None
+# 用此范围记录等待如何结束。
+try:
+    # 退避仍受原逻辑调用截止时间约束。
+    async with asyncio.timeout_at(deadline):
+        # 等待本次策略选定的退避时间。
+        await self.sleep(delay)
+# 退避中取消或到期时进入异常收尾。
+except BaseException as exc:
+    # 有退避句柄时才更新观测。
+    if backoff:
+        # 为退避节点记录异常终态。
+        backoff.complete(
+            # 区分外部取消和其他失败。
+            "canceled" if isinstance(exc, asyncio.CancelledError) else "failed",
+            # 到期时给出模型超时的安全错误码。
+            "model_timeout" if isinstance(exc, TimeoutError) else None,
+        # 保存退避节点的异常结果。
+        )
+    # 交回原异常，由上层决定逻辑调用如何结束。
+    raise
+# 正常等待完成和异常分支都经过此处。
+finally:
+    # 确认创建过退避 Span。
+    if backoff:
+        # 结束退避节点并记录完整等待区间。
+        backoff.end()
+```
+
+```python llm/executor.py · 流式正文与工具事件
+# 接收 Runtime 产生的一个流式事件。
+async def preview(event):
+    # 允许回调更新执行器持有的正文已暴露标记。
+    nonlocal content_exposed
+    # 只用正文或工具片段判断用户可见输出。
+    if event.type in {"text_delta", "tool_delta"}:
+        # 标记本次执行已有可见内容，供恢复策略使用。
+        content_exposed = True
+        # 同步写入逻辑执行状态。
+        run.content_exposed = True
+        # 有当前 Attempt 句柄时才埋点。
+        if active_observation:
+            # 尝试记录首个可见片段，后续片段由句柄忽略。
+            active_observation.first_visible()
+    # 确认调用方提供了流式事件接收器。
+    assert emit is not None
+    # 继续把原事件推给调用方。
+    await emit(event)
+```
+
+```python observer.py · 首个可见片段时间
+# 记录当前 Attempt 首个可见正文或工具片段。
+def first_visible(self):
+    # 只有首个可见片段会写入时间。
+    if self.first_ns is None:
+        # 以单调时钟记录事件时点，供耗时计算。
+        self.first_ns = monotonic_ns()
+        # 从 Attempt 起点计算首片段延迟并换算为毫秒。
+        self.set(first_visible_ms=(self.first_ns - self.started_ns) / 1e6)
+        # 另记 UTC 时刻，供 Langfuse 的 Generation 展示。
+        self.native("completion_start_time", datetime.now(UTC).isoformat())
+        # 检查本轮请求是否已记录更早的可见片段。
+        if self.root.first_ns is None:
+            # 将本次首片段时点同步到请求根。
+            self.root.first_ns = self.first_ns
+            # 按整轮请求起点计算首片段延迟。
+            self.root.set(first_visible_ms=(self.first_ns - self.root.started_ns) / 1e6)
+```
+
+#### Generation、输入输出与用量
+
+Executor 创建新 Attempt 后把句柄传给 Runtime。`capture_input()` 位于 Adapter 调用前，`finish_attempt()` 位于 Runtime 清理后。取消路径也使用 `RuntimeCancelled.result` 收尾。
+
+```python llm/executor.py · Attempt 与取消结果
+# 为即将执行的这一次尝试准备观测句柄。
+active_observation = (
+    # 在当前逻辑调用下建子 Span。
+    observation.child(
+        # 固定 Span 名称，方便筛选实际尝试。
+        "compass.attempt",
+        # 用本次尝试编号区分初次请求和重试。
+        attempt_id=str(attempt_id),
+        # 关联所属的业务逻辑调用编号。
+        call_id=str(request.context.call_id),
+        # 继承父节点的业务阶段，缺省时归为测试。
+        stage=observation.metadata.get("stage", "test"),
+        # 记录本次使用的 Provider。
+        provider_id=str(request.access.spec.provider_id),
+        # 记录本次请求的模型名。
+        model=request.access.spec.api_model,
+        # 记录执行所用的配置版本。
+        config_version=request.access.spec.config_version,
+        # 记录本次执行的模型绑定版本。
+        binding_version=request.access.spec.binding_version,
+        # 标明所用 Adapter，便于排查适配差异。
+        adapter=request.access.spec.adapter,
+    # 完成 Attempt 初始属性的传入。
+    )
+    # 父逻辑 Span 存在时才开启观测。
+    if observation
+    # 无父观测时继续正常执行模型。
+    else None
+# 保存本次尝试的可选句柄。
+)
+# 围住 Runtime 执行以获取取消时的结果。
+try:
+    # 发起单次 Runtime 调用。
+    result = await self.runtime.invoke(
+        # 传入已准备好的模型调用参数。
+        invocation,
+        # 流式请求启用预览回调以记录首片段。
+        preview if emit else None,
+        # 只在有 Attempt 句柄时传入观测参数。
+        **({"observation": active_observation} if active_observation else {}),
+    # 等待单次执行返回或抛出取消异常。
+    )
+# Runtime 取消异常携带部分结果与清理状态。
+except RuntimeCancelled as exc:
+    # 保留取消发生后资源是否已清理。
+    cleanup_confirmed = exc.result.cleanup_confirmed
+    # 先把已知尝试结果加入逻辑执行摘要。
+    run.observe(attempt_id, exc.result, started_at)
+    # 有 Attempt Span 时同步取消后的结果。
+    if active_observation:
+        # 以 Runtime 提供的取消结果完成 Attempt 上报。
+        active_observation.finish_attempt(exc.result)
+    # 继续传播取消，让外层按原规则收尾。
+    raise
+# 正常返回时保存该次执行的清理结果。
+cleanup_confirmed = result.cleanup_confirmed
+# 将本次尝试写入逻辑执行摘要。
+run.observe(attempt_id, result, started_at)
+# 有 Attempt 句柄时进入观测收尾。
+if active_observation:
+    # 根据单次运行结果完成并结束 Attempt Span。
+    active_observation.finish_attempt(result)
+```
+
+```python llm/runtime.py · Adapter 前采集
+# 标记已通过前置校验，即将进入 Adapter。
+adapter_started = True
+# 有观测句柄时才调用正文采集入口。
+if observation is not None:
+    # 由采集策略决定是否投影、过滤并记录输入。
+    observation.capture_input(request)
+# 执行原 Adapter 调用并等待模型输出。
+output = await adapter.invoke(request, session)
+```
+
+```python observer.py · Generation 上报字段
+# 把一次 Runtime 执行结果转换成 Attempt 的观测字段。
+def finish_attempt(self, result):
+    # 先判断执行是否真正进入模型 Adapter。
+    if not result.adapter_started:
+        # A pre-adapter validation is an execution phase, with no generation or charge.
+        # 前置校验失败时，确认有可更新的 Span。
+        if self.span:
+            # 将这类提前结束的 Span 标记为校验节点。
+            self.span.update_name("compass.validation")
+        # 同步校验结果和安全错误码。
+        self.complete(result.status, result.error.code if result.error else None)
+        # 结束校验 Span。
+        self.end()
+        # 到此结束校验分支，跳过 Generation 字段。
+        return
+    # 进入 Adapter 后按 Langfuse Generation 类型记录。
+    self.native("type", "generation")
+    # 按正文策略写入组装后的可见输出。
+    self.capture_output(result)
+    # 批量记录单次执行的关键结果。
+    self.set(
+        # 记录请求是否发给了上游供应商。
+        sent=result.upstream_sent,
+        # 标记供应商最终结果是否未知。
+        outcome_unknown=result.upstream_outcome_unknown,
+        # 记录本次执行所占资源是否确认清理。
+        cleanup_confirmed=result.cleanup_confirmed,
+        # 保留已知的思考 Token 数，不重复加入输出用量。
+        reasoning_tokens=result.usage.reasoning_tokens,
+    # 完成本次执行结果的 metadata 写入。
+    )
+    # 从 Runtime 结果取得供应商用量回执。
+    usage = result.usage
+    # 输入和输出 Token 都有值时才算用量完整。
+    known = usage.input_tokens is not None and usage.output_tokens is not None
+    # 先登记用量完整性，费用初始设为未知。
+    self.set(usage_complete=known, cost_state="unknown")
+    # 为 Langfuse 的原生用量字段组织数据。
+    detail = {
+        # 保留用量名称及它对应的数值。
+        k: v
+        # 从回执中分别取输入与输出 Token。
+        for k, v in {"input": usage.input_tokens, "output": usage.output_tokens}.items()
+        # 只保留已知值，零值也保留。
+        if v is not None
+    # 得到本次尝试的已知用量明细。
+    }
+    # 存在至少一项已知用量才写属性。
+    if detail:
+        # 把用量对象编码为 Langfuse 需要的 JSON 字符串。
+        self.native("usage_details", json.dumps(detail))
+    # 用量完整、结果已知且收到本地估价时才登记费用。
+    if known and not result.upstream_outcome_unknown and self.cost is not None:
+        # 写入受长度限制的原生模型名。
+        self.native("model.name", result.requested_model[:256])
+        # 将本地总估价写入原生费用字段。
+        self.native("cost_details", json.dumps({"total": self.cost}))
+        # 标记费用是完整估算，并登记估价来源。
+        self.set(cost_state="complete_estimate", cost_source="litellm-1.106.6")
+    # 记录 Attempt 自己的终态和安全错误码。
+    self.complete(result.status, result.error.code if result.error else None)
+    # 结束 Span，交给后台导出。
+    self.end()
+```
+
+#### SDK Metrics、诊断日志与统一出口
+
+状态接口读本机 SDK Meter 数据，再叠加出口自己的拒绝、失败计数。Python 日志只接收诊断事件。`GuardedExporter` 在后台批处理中检查 Span，随后把通过检查的批次交给 OTLP Exporter。
+
+```python export.py · 本机 SDK Metrics
+# 组装当前 Agent 进程的观测管道状态。
+def status(self):
+    # 将队列深度和 SDK 丢弃计数初始化为零。
+    size = dropped = 0
+    # 从本机 SDK 的内存 Reader 读取当前指标。
+    metrics = self.reader.get_metrics_data()
+    # 有指标数据时再遍历各层。
+    if metrics:
+        # 按资源遍历这次指标快照。
+        for resource in metrics.resource_metrics:
+            # 按埋点作用域取出指标。
+            for scope in resource.scope_metrics:
+                # 逐个识别与导出管道相关的指标名。
+                for metric in scope.metrics:
+                    # 找到 BSP 队列当前深度的指标。
+                    if metric.name == "otel.sdk.processor.span.queue.size":
+                        # 将深度的数据点合计到队列长度。
+                        size += sum(
+                            # 把每个深度数据点的数值转为整数。
+                            int(getattr(point, "value", 0)) for point in metric.data.data_points
+                        # 完成队列深度汇总。
+                        )
+                    # 找到 BSP 已处理 Span 的计数指标。
+                    if metric.name == "otel.sdk.processor.span.processed":
+                        # 从处理计数中单独汇总丢弃项。
+                        dropped += sum(
+                            # 把匹配的数据点数值转为整数。
+                            int(getattr(point, "value", 0))
+                            # 遍历该指标下不同结果标签的数据点。
+                            for point in metric.data.data_points
+                            # 读取数据点的处理错误类型。
+                            if (point.attributes or {}).get("error.type")
+                            # 只统计队列满和关闭后无法接受的两类丢弃。
+                            in {"queue_full", "already_shutdown"}
+                        # 完成 SDK 丢弃计数的合计。
+                        )
+    # 持有导出器的锁，读取同一份出口状态。
+    with self.exporter.lock:
+        # 返回平台管理页所需的状态字段。
+        return {
+            # 报告当前进程待导出的队列深度。
+            "queue_size": size,
+            # 给出配置的 BSP 队列上限。
+            "queue_capacity": 512,
+            # 将 SDK 丢弃与出口校验拒绝合并。
+            "dropped": dropped + self.exporter.rejected,
+            # 报告后台导出失败的累计次数。
+            "export_failures": self.exporter.failures,
+            # 报告最近一次导出状态。
+            "last_export": self.exporter.last,
+        # 完成当前进程状态快照。
+        }
+```
+
+```python privacy.py · 诊断日志
+# 为观测管道的安全诊断日志定义格式。
+class DiagnosticFormatter(logging.Formatter):
+    # 将一条 Python 日志记录转换成一行 JSON。
+    def format(self, record):
+        # 用固定字段构造输出。
+        return json.dumps(
+            # 开始组装日志记录对象。
+            {
+                # 标记这是观测管道的诊断事件。
+                "event": "observability",
+                # 保留 INFO、WARNING 等日志级别。
+                "level": record.levelname,
+                # 用实例 ID 定位产生诊断的进程。
+                "instance_id": getattr(record, "instance_id", ""),
+                # 缺少安全原因时使用固定的兜底类别。
+                "reason": getattr(record, "safe_reason", "dependency_failure"),
+                # 追加调用方已过滤的计数值。
+                **getattr(record, "safe_counts", {}),
+            # 完成单条诊断记录的数据对象。
+            },
+            # 使用紧凑分隔符，便于容器按行采集。
+            separators=(",", ":"),
+        # 返回这一条已序列化的日志。
+        )
+
+
+# 记录一次受控的观测诊断事件。
+def diagnostic(instance_id, reason, counts=None):
+    # 取得 Compass 观测模块的专用 logger。
+    logger = logging.getLogger("compass.observability")
+    # 仅在首次使用时安装日志 handler。
+    if not logger.handlers:
+        # 创建输出到标准错误流的 handler。
+        handler = logging.StreamHandler()
+        # 指定结构化 JSON 格式。
+        handler.setFormatter(DiagnosticFormatter())
+        # 把 handler 注册到专用 logger。
+        logger.addHandler(handler)
+        # 阻止同一记录再传给父 logger 重复输出。
+        logger.propagate = False
+        # 允许正常关机事件以 INFO 级别输出。
+        logger.setLevel(logging.INFO)
+    # 构造可安全输出的计数字典。
+    safe_counts = {
+        # 保留符合条件的键和值。
+        key: value
+        # 逐项检查调用方附带的计数。
+        for key, value in (counts or {}).items()
+        # 只接受已登记的观测诊断计数名。
+        if key in {"queue_size", "dropped", "export_failures", "instrumentation_errors"}
+        # 只收整数，排除布尔值及其他类型。
+        and type(value) is int
+        # 计数必须为非负数。
+        and value >= 0
+    # 得到用于诊断的安全计数。
+    }
+    # 通过专用 logger 发出诊断事件。
+    logger.log(
+        # 关机使用 INFO，其他诊断使用 WARNING。
+        logging.INFO if reason == "shutdown" else logging.WARNING,
+        # 用固定消息标识观测模块。
+        "observability",
+        # 把实例、固定原因和安全计数交给格式化器。
+        extra={"instance_id": instance_id, "safe_reason": reason, "safe_counts": safe_counts},
+    # 提交本条日志记录。
+    )
+```
+
+```python export.py · GuardedExporter.export
+# 在后台接收 BSP 交来的一个 Span 批次。
+def export(self, spans):
+    # 准备收集通过出口检查的 Span。
+    valid = []
+    # 把登记的业务字段映射为 Langfuse metadata 键，并合入允许的原生键。
+    allowed = {"langfuse.observation.metadata." + key for key in FIELDS} | {
+        # 允许区分普通 Span 和 Generation。
+        "langfuse.observation.type",
+        # 允许 Langfuse 展示本次观测的级别。
+        "langfuse.observation.level",
+        # 允许用部署环境区分不同数据。
+        "langfuse.environment",
+        # 允许设置 Trace 的固定展示名。
+        "langfuse.trace.name",
+        # 允许用业务调用编号关联请求记录。
+        "langfuse.trace.metadata.call_id",
+        # 允许写入受控的状态说明或错误码。
+        "langfuse.observation.status_message",
+        # 允许在符合估价条件时登记原生模型名。
+        "langfuse.observation.model.name",
+        # 允许发送已知 Token 用量。
+        "langfuse.observation.usage_details",
+        # 允许发送本地估价。
+        "langfuse.observation.cost_details",
+        # 允许发送流式首个可见片段的时间。
+        "langfuse.observation.completion_start_time",
+    # 完成允许字段的集合。
+    }
+    # 对这一批 Span 逐条核验。
+    for span in spans:
+        # 取得 Span 属性，缺失时用空字典。
+        attrs = span.attributes or {}
+        # 把模型输入输出作为一类单独检查。
+        body = {"langfuse.observation.input", "langfuse.observation.output"}
+        # 检查这个 Span 中实际存在的正文属性是否全部合格。
+        content_valid = all(
+            # 正文采集须经过已配置的内容策略。
+            self.content is not None
+            # 正文须通过结构、长度和清洗检查。
+            and self.content.accepts(attrs[key])
+            # 仅接受 Generation 上的输入输出。
+            and attrs.get("langfuse.observation.type") == "generation"
+            # 逐一检查已存在的输入和输出键。
+            for key in body & attrs.keys()
+        # 得到本条 Span 的正文检查结果。
+        )
+        # 以下任一条件命中时拒绝导出这条 Span。
+        if (
+            # 先判断 Span 的埋点来源。
+            (
+                # 拒绝缺少埋点作用域的记录。
+                span.instrumentation_scope is None
+                # 只接收 Compass 手动观测模块生成的 Span。
+                or span.instrumentation_scope.name != "compass.observability"
+            # 结束作用域检查。
+            )
+            # 拒绝包含未登记属性名的 Span。
+            or not set(attrs).issubset(allowed | body)
+            # 拒绝正文检查未通过的 Span。
+            or not content_valid
+            # 正文之外的属性必须符合标量类型和长度规则。
+            or any(scalar(value) is None for key, value in attrs.items() if key not in body)
+            # 拒绝包含原始 Span Event 的记录。
+            or bool(span.events)
+        # 按检查结果选择丢弃或放行。
+        ):
+            # 持锁更新共享的拒绝计数。
+            with self.lock:
+                # 本次拒绝计入本机诊断。
+                self.rejected += 1
+        # 通过所有检查后组装用于导出的安全副本。
+        else:
+            # Tracestate may contain vendor text. It is used for trusted internal
+            # propagation, while the telemetry sink receives only IDs and flags.
+            # 把清理后的 Span 放入待发送批次。
+            valid.append(
+                # 构造 SDK 导出器可读取的 Span 对象。
+                ReadableSpan(
+                    # 沿用原 Span 操作名。
+                    name=span.name,
+                    # 保留 Trace 和 Span 标识，清除内部 tracestate。
+                    context=export_context(span.context),
+                    # 保留父级关系，同样清除父上下文的 tracestate。
+                    parent=export_context(span.parent),
+                    # 保留服务、实例等资源信息。
+                    resource=span.resource,
+                    # 带上已核验的属性。
+                    attributes=span.attributes,
+                    # 沿用已通过检查的事件集合，此处为空。
+                    events=span.events,
+                    # 保留关联字段，当前 Compass Span 不添加 Link。
+                    links=span.links,
+                    # 沿用 SDK 的操作类型。
+                    kind=span.kind,
+                    # 保留 OTel 状态。
+                    status=span.status,
+                    # 沿用开始时间。
+                    start_time=span.start_time,
+                    # 沿用结束时间，便于接收端计算耗时。
+                    end_time=span.end_time,
+                    # 保留已经核验的埋点作用域。
+                    instrumentation_scope=span.instrumentation_scope,
+                # 完成安全 Span 副本的构造。
+                )
+            # 将这一条加入待发送批次。
+            )
+    # 如果整个批次没有可发送的 Span，提前结束。
+    if not valid:
+        # 这批已完成本地处理，无需发网络请求。
+        return SpanExportResult.SUCCESS
+    # 隔离底层导出器异常。
+    try:
+        # 把核验过的批次交给 OTLP 导出器发送。
+        result = self.inner.export(valid)
+    # 底层导出过程抛异常时进入失败分支。
+    except Exception:
+        # 统一转换为 SDK 可识别的导出失败。
+        result = SpanExportResult.FAILURE
+    # 持锁更新后台导出状态与计数。
+    with self.lock:
+        # 保存最近一次导出的成功或失败状态。
+        self.last = "success" if result == SpanExportResult.SUCCESS else "failure"
+        # 仅失败时累加导出失败数。
+        if result != SpanExportResult.SUCCESS:
+            # 为该次失败增加一个计数。
+            self.failures += 1
+            # 失败日志之间至少间隔 30 秒。
+            if monotonic() - self.last_warning >= 30:
+                # 更新最近一次打印告警的单调时钟时间。
+                self.last_warning = monotonic()
+                # 记录带实例 ID 的安全导出失败日志。
+                diagnostic(self.instance_id, "export_failed")
+    # 将导出结果返回给 OTel SDK。
+    return result
+```
+
+## 3. 观测字段与统计口径
+
+| 字段                                         | 写入位置                                     | 查询口径                                                                                        |
+| -------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `langfuse.observation.metadata.*`            | `fields()` 显式映射业务键                    | 在 Langfuse 可按阶段、状态、模型、Provider、版本、实例和调用编号过滤                            |
+| `langfuse.observation.input` / `output`      | 已采样的 Attempt，且开启正文采集             | 本地默认启用正文采集。每侧默认 16 KiB，过长保留预览与截断标记，失败或取消的可用片段标为 partial |
+| `langfuse.observation.usage_details`         | Generation                                   | 已知的输入、输出 Token 分别记录。reasoning Token 作为 metadata，属于输出用量子集                |
+| `langfuse.observation.cost_details`          | Generation，已知完整用量、结果已知且存在估价 | USD 本地估价。未知通过 `cost_state=unknown` 区分，汇总保留未知样本数                            |
+| `first_visible_ms` / `completion_start_time` | 流式第一个可见正文或工具片段                 | 前者由单调时钟计算，后者用于 Langfuse 识别首片段时点。纯思考与心跳不计首片段                    |
+
+**两模型对比。** Langfuse Metrics v2 以环境、时间窗、`provider_id`、当前 `model` 和 `stage=inference` 为过滤条件。逻辑调用数、成功率和耗时来自 `compass.logical`。尝试次数、Token 和费用来自 `compass.attempt`。每个模型 7 个固定查询，两个模型共 14 个，并发 4，总预算 8 秒。状态页显示当前实例，模型比较聚合同一项目的多实例样本。
+
+**本轮查链。** `X-Compass-Trace-Id` 和 `X-Compass-Trace-Sampled` 经 BFF 校验透传，Web 在读取 SSE 正文前保存编号。打开 Langfuse 后用观测编号找到 Trace，选择 `compass.attempt` 查看 Input / Output。业务 `call_id` 可作为 metadata 过滤条件。
+
+{{code:headers}}
+
+## 4. 文件变更与内容清单
+
+范围为第 14 课观测功能的运行、界面、契约、配置、测试和材料。标记以进入第 14 课前的代码为基准，路径相对 Compass 根目录。
+
+### 4.1 Agent
+
+```text Agent 文件树
+apps/agent/
+├── src/
+│   └── compass_agent/
+│       ├── llm/
+│       │   ├── contracts.py         [调整] CallSession 携带请求级观测句柄
+│       │   ├── executor.py          [调整] wait / attempt / backoff、首片段及取消收尾
+│       │   ├── litellm_chat.py      [调整] 请求级 LiteLLM 回调与安全估价
+│       │   ├── runtime.py           [调整] 传递句柄，在 Adapter 前投影输入
+│       │   └── sdk.py               [调整] SDK 加载后安装依赖日志过滤
+│       ├── models/
+│       │   └── service.py           [调整] Logical Call 贯穿准备到收尾，新增 finalize Span
+│       ├── observability/
+│       │   ├── __init__.py          [新增] 观测模块包入口
+│       │   ├── content.py           [新增] 模型输入输出投影、凭据过滤和截断
+│       │   ├── export.py            [新增] BSP、OTLP HTTP、导出检查和本机 SDK Metrics
+│       │   ├── litellm_receipt.py   [新增] 请求级成本回执与本地估价条件
+│       │   ├── observer.py          [新增] 根与子句柄、上下文、I/O、用量、状态与生命周期
+│       │   ├── privacy.py           [新增] 元数据白名单与安全诊断日志
+│       │   ├── README.md            [新增] 模块边界及验证入口
+│       │   └── summary.py           [新增] 固定 Langfuse 查询与聚合口径
+│       ├── routing/
+│       │   └── service.py           [调整] 标明分类与推理 stage，记录路由快照
+│       ├── main.py                  [调整] lifespan 创建 Observer，模型任务结束后关闭
+│       ├── model_api.py             [调整] 已授权请求根、结束与关联头、状态和比较接口
+│       ├── schemas.py               [调整] 状态与两模型对比 DTO
+│       └── settings.py              [调整] 开关、采样、实例、正文策略、项目 Key 与服务地址
+├── tests/
+│   ├── observability_acceptance.py  [新增] Langfuse、真实 PostgreSQL 与多进程验收
+│   ├── provider_fixture.py          [调整] 受控重试与模型响应
+│   └── test_observability.py        [新增] 关联、采样、安全字段、统计和有界导出
+├── pyproject.toml                   [调整] 锁定 OTel API、SDK 和 HTTP 导出依赖
+└── README.md                        [调整] Agent 观测入口与配置说明
+```
+
+### 4.2 Web
+
+```text Web 文件树
+apps/web/
+├── src/
+│   ├── app/
+│   │   └── globals.css                  [调整] 观测面板、复制行和窄屏样式
+│   ├── client/
+│   │   └── request-scope.ts             [调整] 在响应正文前读取响应头
+│   ├── components/
+│   │   └── analysis-composer.tsx        [调整] 分析 Chat 关联本轮 Trace
+│   ├── contracts/
+│   │   └── trace-context.ts             [新增] Trace ID 与 sampled 格式校验
+│   ├── features/
+│   │   └── models/
+│   │       ├── call-trace.tsx           [新增] 显示和复制本轮调用及观测编号
+│   │       ├── observability-panel.tsx  [新增] 管理员状态、Langfuse 跳转和固定对比
+│   │       ├── output.tsx               [调整] 模型测试结果显示关联信息
+│   │       ├── pages.tsx                [调整] 平台模型管理挂载调用观测小节
+│   │       ├── README.md                [调整] 功能边界与入口
+│   │       └── use-model-call.ts        [调整] 保存本轮 Trace，在取消和失败后保留
+│   ├── generated/
+│   │   ├── api.ts                       [生成] Web 使用的 Agent 类型
+│   │   └── model-contracts.schema.json  [生成] BFF 的运行时校验副本
+│   └── server/
+│       ├── http/
+│       │   └── model-handler.ts         [调整] 平台权限、固定查询转发和错误关联
+│       ├── agent-api.ts                 [调整] 暴露 BFF 使用的观测接口和头处理入口
+│       └── model-agent-client.ts        [调整] Agent 响应头、JSON/SSE 契约及错误归一
+├── tests/
+│   ├── domain/
+│   │   └── model-bff.test.ts            [调整] 平台权限、安全头及超时关联
+│   └── e2e/
+│       └── observability.spec.ts        [新增] Chat、平台对比、权限、取消与窄屏
+└── README.md                            [调整] 管理面板、地址与权限说明
+```
+
+### 4.3 共享契约、部署与工程配置
+
+```text 共享交付文件树
+compass/
+├── contracts/
+│   ├── model-contracts.schema.json  [生成] Agent 观测 DTO 的运行时校验契约
+│   ├── openapi.json                 [生成] Agent 路由及观测状态、比较模型
+│   └── README.md                    [调整] 契约生成来源与用途
+├── deploy/
+│   ├── compose/
+│   │   ├── compose.yaml             [调整] Agent / Web 可选私有配置、Agent 关闭宽限
+│   │   └── observability.yaml       [新增] 固定镜像的六服务和持久卷
+│   ├── observability/
+│   │   └── README.md                [新增] Langfuse 部署、数据路径、分布式关联与备份
+│   └── README.md                    [调整] 本地观测栈入口
+├── scripts/
+│   ├── observability.mjs            [新增] 私有配置初始化和六服务启停
+│   ├── observability.test.mjs       [新增] 初始化、文件权限与受管命令测试
+│   └── README.md                    [调整] 观测运维命令说明
+├── .env.example                     [调整] 宿主观测配置模板
+├── manifest.yml                     [调整] 第 14 课交付入口
+├── package.json                     [调整] pnpm observability 入口
+├── README.md                        [调整] Feature 990 能力与启动入口
+├── turbo.json                       [调整] dev 透传观测配置变量
+└── uv.lock                          [调整] OTel 依赖锁定
+```
+
+### 4.4 需求与课程材料
+
+```text 第 14 课材料文件树
+mai-specs/
+├── 990-lesson-14-model-observability/
+│   ├── design/
+│   │   ├── document/
+│   │   │   ├── edition.json            [新增] 渲染配置与代码引用
+│   │   │   └── guide.md                [新增] 阅读版章节、图与代码摘录
+│   │   ├── CODE_DESIGN.md              [新增] 代码设计附录
+│   │   ├── README.md                   [新增] 阅读版维护入口
+│   │   ├── TECH_DESIGN.html            [生成] 离线阅读版
+│   │   └── TECH_DESIGN.md              [新增] 技术设计真源
+│   ├── review/
+│   │   ├── code_review.md              [新增] 代码自检
+│   │   └── design_review.md            [新增] 设计评审
+│   ├── spec/
+│   │   └── PRD.md                      [新增] 产品需求与验收条件
+│   ├── BRIEF.md                        [新增] 需求入口、范围与关键决定
+│   ├── context/                        [新增] 四页 PPT 与开发上下文
+│   └── IMPLEMENTATION.md               [新增] 实施与验收记录
+└── ROADMAP.md                          [调整] 第 14 课实施登记
+```
+
+## 5. OTel 与 Langfuse 配置及初始化
+
+### 5.1 三份本地配置
+
+| 配置来源                       | 读取方           | 关键内容                                                              |
+| ------------------------------ | ---------------- | --------------------------------------------------------------------- |
+| `work/observability/stack.env` | Langfuse Compose | 初始化组织、项目、管理员、项目 Key 与独立存储凭据                     |
+| `work/observability/agent.env` | Compose Agent    | 观测开关、环境、正文开关、服务内地址、项目 Key。宿主开发对应根 `.env` |
+| `work/observability/web.env`   | Compose Web      | 固定项目 URL。宿主开发对应根 `.env` 的 Web 服务端变量                 |
+
+本地启动用 `pnpm observability init` 创建三份私有配置，`pnpm observability up` 启动栈。下面是版本库中的宿主配置模板和初始化片段。模板中 Key 为空。
+
+```bash .env.example · 宿主开发模板
+# 第14课观测默认关闭。先 pnpm observability init/up；私有 Key 见 work/observability/agent.env。
+# Docker Agent 使用自动生成的 agent.env；宿主开发使用下面的 loopback 地址。
+COMPASS_OBSERVABILITY_ENABLED=false
+COMPASS_OBSERVABILITY_SAMPLE_RATIO=1
+COMPASS_OBSERVABILITY_ENVIRONMENT=local
+# 正文采集：未配置时 local 默认开启，其他环境默认关闭。显式 false 可关闭。
+# COMPASS_OBSERVABILITY_CAPTURE_CONTENT=false
+# 每个 Attempt 的输入、输出分别最多 16 KiB；超长内容保留脱敏预览与截断标记。
+COMPASS_OBSERVABILITY_CONTENT_MAX_BYTES=16384
+# 留空时每次进程启动生成唯一实例ID；多副本配置时每个值应不同。
+COMPASS_OBSERVABILITY_INSTANCE_ID=
+COMPASS_LANGFUSE_BASE_URL=http://127.0.0.1:8104
+COMPASS_LANGFUSE_PUBLIC_KEY=
+COMPASS_LANGFUSE_SECRET_KEY=
+# Web 服务端的公开项目页面入口；不含项目 Key。
+COMPASS_LANGFUSE_PROJECT_URL=
+```
+
+```javascript scripts/observability.mjs · 项目引导与私有配置
+export function initialize(root) {
+  const directory = path.join(root, "work/observability");
+  const targets = ["stack.env", "agent.env", "web.env"];
+  if (targets.some((name) => existsSync(path.join(directory, name))))
+    throw new Error("Private observability configuration already exists; preserving it.");
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const secret = () => randomBytes(32).toString("hex");
+  const values = Object.fromEntries(
+    [
+      "LF_POSTGRES_PASSWORD",
+      "LF_CLICKHOUSE_PASSWORD",
+      "LF_REDIS_PASSWORD",
+      "LF_MINIO_PASSWORD",
+      "LF_NEXTAUTH_SECRET",
+      "LF_SALT",
+      "LF_ENCRYPTION_KEY",
+      "LF_ADMIN_PASSWORD",
+    ].map((key) => [key, secret()]),
+  );
+  Object.assign(values, {
+    LF_MINIO_USER: `lf${randomBytes(10).toString("hex")}`,
+    LF_ORG_ID: randomUUID(),
+    LF_PROJECT_ID: randomUUID(),
+    COMPASS_LANGFUSE_PUBLIC_KEY: `pk-lf-${randomUUID()}`,
+    COMPASS_LANGFUSE_SECRET_KEY: `sk-lf-${secret()}`,
+  });
+  const serialize = (data) =>
+    Object.entries(data)
+      .map(([key, value]) => `${key}=${value}`)
+      .join("\n") + "\n";
+  writeFileSync(path.join(directory, "stack.env"), serialize(values), { mode: 0o600, flag: "wx" });
+  writeFileSync(
+    path.join(directory, "agent.env"),
+    serialize({
+      COMPASS_OBSERVABILITY_ENABLED: "true",
+      COMPASS_OBSERVABILITY_ENVIRONMENT: "local",
+      COMPASS_OBSERVABILITY_CAPTURE_CONTENT: "true",
+      COMPASS_OBSERVABILITY_CONTENT_MAX_BYTES: "16384",
+      COMPASS_LANGFUSE_BASE_URL: "http://langfuse-web:3000",
+      COMPASS_LANGFUSE_PUBLIC_KEY: values.COMPASS_LANGFUSE_PUBLIC_KEY,
+      COMPASS_LANGFUSE_SECRET_KEY: values.COMPASS_LANGFUSE_SECRET_KEY,
+    }),
+    { mode: 0o600, flag: "wx" },
+  );
+  writeFileSync(
+    path.join(directory, "web.env"),
+    serialize({
+      COMPASS_LANGFUSE_PROJECT_URL: `http://127.0.0.1:8104/project/${values.LF_PROJECT_ID}`,
+    }),
+    { mode: 0o600, flag: "wx" },
+  );
+  return directory;
+}
+```
+
+```yaml deploy/compose/observability.yaml · Langfuse Web 与首次引导
+services:
+  langfuse-web:
+    profiles: [observability]
+    image: langfuse/langfuse:4.75.0@sha256:23378ae8cdf1d92b647d68b81c0d0cea3632b43e9fbcbe9b765420af9c9c8662
+    environment: &langfuse-env
+      HOSTNAME: 0.0.0.0
+      DATABASE_URL: postgresql://langfuse:${LF_POSTGRES_PASSWORD:?Run observability init}@langfuse-postgres:5432/langfuse
+      NEXTAUTH_URL: http://127.0.0.1:8104
+      NEXTAUTH_SECRET: ${LF_NEXTAUTH_SECRET:?}
+      SALT: ${LF_SALT:?}
+      ENCRYPTION_KEY: ${LF_ENCRYPTION_KEY:?}
+      TELEMETRY_ENABLED: "false"
+      LANGFUSE_MIGRATION_V4_ALLOW_PREVIEW_OPT_IN: "true"
+      LANGFUSE_MIGRATION_V4_WRITE_MODE: events_only
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: ${LF_CLICKHOUSE_PASSWORD:?}
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      REDIS_HOST: langfuse-redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: ${LF_REDIS_PASSWORD:?}
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${LF_MINIO_USER:?}
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LF_MINIO_PASSWORD:?}
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${LF_MINIO_USER:?}
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LF_MINIO_PASSWORD:?}
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_INIT_ORG_ID: ${LF_ORG_ID:?}
+      LANGFUSE_INIT_ORG_NAME: Compass Local
+      LANGFUSE_INIT_PROJECT_ID: ${LF_PROJECT_ID:?}
+      LANGFUSE_INIT_PROJECT_NAME: compass-local
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${COMPASS_LANGFUSE_PUBLIC_KEY:?}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${COMPASS_LANGFUSE_SECRET_KEY:?}
+      LANGFUSE_INIT_USER_EMAIL: local.admin@compass.invalid
+      LANGFUSE_INIT_USER_NAME: Compass Local
+      LANGFUSE_INIT_USER_PASSWORD: ${LF_ADMIN_PASSWORD:?}
+    ports: ["127.0.0.1:8104:3000"]
+```
+
+### 5.2 Agent 生命周期与 SDK 装配
+
+`lifespan()` 创建每进程一个 `Observer`。`Observer.__init__()` 装配独立 TracerProvider、实例 Resource、采样器和 Pipeline。`Pipeline.__init__()` 创建本地 MetricReader、OTLP HTTP 导出器和 BSP。退出时先收束模型任务，再关观测。
+
+```python main.py · Agent 生命周期
+@asynccontextmanager
+async def lifespan(app):
+    settings = get_settings()
+    app.state.execution_gate = ExecutionGate(
+        settings.compass_model_max_concurrency, settings.compass_model_max_inflight
+    )
+    app.state.model_tasks = ExecutionTasks()
+    app.state.observation = Observer(settings)
+    app.state.showcase_running = False
+    try:
+        yield
+    finally:
+        await app.state.model_tasks.close()
+        await asyncio.to_thread(app.state.observation.shutdown)
+```
+
+```python observer.py · OTel TracerProvider 与采样
+def __init__(self, settings, *, exporter=None):
+    self.instance_id = settings.compass_observability_instance_id or str(uuid4())
+    self.environment = settings.compass_observability_environment
+    self.ratio = settings.compass_observability_sample_ratio
+    self.enabled = settings.compass_observability_enabled
+    self.content = ContentPolicy(
+        settings.capture_observability_content,
+        settings.compass_observability_content_max_bytes,
+    )
+    self.configured = bool(
+        settings.compass_langfuse_base_url
+        and settings.compass_langfuse_public_key
+        and settings.compass_langfuse_secret_key
+    )
+    self.provider = self.tracer = self.pipeline = None
+    self.closed = False
+    self.instrumentation_errors = 0
+    install_dependency_filters()
+    if self.enabled and (self.configured or exporter is not None):
+        from compass_agent.observability.export import Pipeline
+
+        os.environ["OTEL_PYTHON_SDK_INTERNAL_METRICS_ENABLED"] = "true"
+        self.provider = TracerProvider(
+            resource=Resource(
+                {
+                    "service.name": "compass-agent",
+                    "service.namespace": "compass",
+                    "service.instance.id": self.instance_id,
+                    "service.version": "0.1.0",
+                    "deployment.environment.name": self.environment,
+                }
+            ),
+            sampler=ParentBased(TraceIdRatioBased(self.ratio)),
+            span_limits=SpanLimits(
+                max_attributes=64,
+                max_events=16,
+                max_links=0,
+                max_attribute_length=self.content.max_bytes if self.content.enabled else 256,
+            ),
+            shutdown_on_exit=False,
+        )
+        self.pipeline = Pipeline(
+            settings, self.provider, exporter=exporter, instance_id=self.instance_id
+        )
+        self.tracer = self.provider.get_tracer("compass.observability")
+```
+
+```python export.py · OTel Pipeline 与 Langfuse OTLP
+def __init__(self, settings, provider, *, exporter=None, instance_id=""):
+    self.reader = InMemoryMetricReader()
+    self.meters = MeterProvider(metric_readers=[self.reader])
+    if exporter is None:
+        auth = base64.b64encode(
+            f"{settings.compass_langfuse_public_key}:{settings.compass_langfuse_secret_key.get_secret_value()}".encode()
+        ).decode()
+        exporter = OTLPSpanExporter(
+            endpoint=settings.compass_langfuse_base_url.rstrip("/")
+            + "/api/public/otel/v1/traces",
+            headers={"Authorization": "Basic " + auth, "x-langfuse-ingestion-version": "4"},
+            timeout=2,
+        )
+    from compass_agent.observability.content import ContentPolicy
+
+    self.exporter = GuardedExporter(
+        exporter,
+        instance_id,
+        ContentPolicy(
+            settings.capture_observability_content,
+            settings.compass_observability_content_max_bytes,
+        ),
+    )
+    self.processor = BatchSpanProcessor(
+        self.exporter,
+        max_queue_size=512,
+        max_export_batch_size=64,
+        schedule_delay_millis=1000,
+        meter_provider=self.meters,
+    )
+    provider.add_span_processor(self.processor)
+```
+
+## 6. 核心 Observation 模块解析
+
+| 源码                          | 关注点                                                               |
+| ----------------------------- | -------------------------------------------------------------------- |
+| `observer.py` · `Observer`    | 配置判定、实例身份、根 Span、状态与关闭                              |
+| `observer.py` · `Observation` | 当前 Span 的显式所有者。建立父子关系，累积属性、状态与估价，统一结束 |
+| `privacy.py` / `content.py`   | 元数据白名单、正文选取与限长、凭据过滤、依赖日志清洗                 |
+| `litellm_receipt.py`          | 请求级用量/估价回执，流式完成后补充已知估价                          |
+| `export.py`                   | 有界批处理、出口校验、传输和本机 SDK 诊断                            |
+| `summary.py`                  | 固定观察数据筛选，限制聚合并发、响应体和总等待                       |
+
+### 6.1 创建句柄与关联上下文
+
+`Observation` 使用显式父句柄建立子 Span。业务 metadata 从父句柄复制，子级按自己的 `call_id`、阶段和模型补充。内部传播调用 `carrier()`，响应关联调用 `headers()`。
+
+```python observer.py · W3C 上下文提取
+def remote_context(carrier):
+    """Call only after service authentication; ignore baggage and malformed carriers."""
+    safe = {}
+    for name in ("traceparent", "tracestate"):
+        value = carrier.get(name)
+        if isinstance(value, str) and len(value) <= 512:
+            safe[name] = value
+    return PROPAGATOR.extract(safe, context=Context())
+```
+
+```python observer.py · 显式父子关系与字段写入
+def __init__(self, owner, name, attributes=None, parent=None, context=None):
+    self.owner, self.name, self.parent = owner, name, parent
+    self.metadata = {**(parent.metadata if parent else {}), **(attributes or {})}
+    self.root = parent.root if parent else self
+    self.started_ns = monotonic_ns()
+    self.ended = self.authoritative = False
+    self.first_ns = None
+    self.status = None
+    self.lock = Lock()
+    self.cost = None
+    self._content_secrets = ()
+    self.span = None
+    if owner.tracer:
+        try:
+            self.span = owner.tracer.start_span(
+                name,
+                context=trace.set_span_in_context(parent.span)
+                if parent and parent.span
+                else context or Context(),
+                attributes={
+                    "langfuse.observation.type": "span",
+                    "langfuse.environment": owner.environment,
+                    "langfuse.trace.name": "compass.request",
+                    **fields({"instance_id": owner.instance_id, **self.metadata}),
+                },
+            )
+        except Exception:
+            owner.instrumentation_errors += 1
+
+def child(self, name, **attributes):
+    return Observation(self.owner, name, attributes, parent=self)
+
+def set(self, **attributes):
+    self.metadata.update(attributes)
+    if self.span and not self.ended:
+        try:
+            self.span.set_attributes(fields(attributes))
+        except Exception:
+            self.owner.instrumentation_errors += 1
+
+def native(self, key, value):
+    if self.span and not self.ended:
+        try:
+            self.span.set_attribute("langfuse.observation." + key, value)
+        except Exception:
+            self.owner.instrumentation_errors += 1
+```
+
+```python observer.py · 响应关联与内部传播
+def headers(self):
+    if not self.span:
+        return {}
+    ctx = self.span.get_span_context()
+    return {
+        "X-Compass-Trace-Id": f"{ctx.trace_id:032x}",
+        "X-Compass-Trace-Sampled": "1" if ctx.trace_flags.sampled else "0",
+    }
+
+def carrier(self):
+    result = {}
+    if self.span:
+        PROPAGATOR.inject(result, context=trace.set_span_in_context(self.span))
+    return result
+```
+
+### 6.2 正文字段、估价与晚到回调
+
+`ContentPolicy` 控制正文写入范围。只投影可见消息、工具字段及类型化结果。正文开关未设置时，仅 `local` 默认开启。其他环境可通过部署配置显式覆盖。输入在 Runtime 准备完成后抓取，流式输出以组装后的可用结果为准。配置的供应商 Key 用于替换正文里的精确匹配，私有思考、续接 Token、原始异常和 HTTP 头留在遥测字段之外。
+
+```python observer.py · 正文采集与安全边界
+def capture_input(self, request):
+    if not self.owner.content.enabled or not self.span or not self.span.is_recording():
+        return
+    try:
+        self._content_secrets = (request.access.api_key.get_secret_value(),)
+        encoded, truncated = self.owner.content.encode(
+            input_snapshot(request.input), self._content_secrets
+        )
+        self.native("input", encoded)
+        self.set(content_input_truncated=truncated)
+    except Exception:
+        self.owner.instrumentation_errors += 1
+
+def capture_output(self, result):
+    if not self.owner.content.enabled or not self.span or not self.span.is_recording():
+        return
+    try:
+        value = output_snapshot(getattr(result, "output", None))
+        if value is not None:
+            encoded, truncated = self.owner.content.encode(value, self._content_secrets)
+            self.native("output", encoded)
+            self.set(
+                content_output_truncated=truncated,
+                content_output_partial=result.status != "completed",
+            )
+    except Exception:
+        self.owner.instrumentation_errors += 1
+```
+
+```python litellm_receipt.py · 请求级成本回执与本地估价
+def callbacks(observation):
+    async def success(kwargs, response_obj, start_time, end_time):
+        try:
+            if complete_usage(response_obj):
+                observation.accept_cost(kwargs.get("response_cost"))
+        except Exception:
+            return
+
+    async def failure(kwargs, response_obj, start_time, end_time):
+        return
+
+    return {"success_callback": [success], "failure_callback": [failure]}
+
+
+def estimate(observation, sdk, response, model):
+    if observation.cost is not None:
+        return
+    try:
+        if complete_usage(response):
+            observation.accept_cost(sdk.completion_cost(completion_response=response, model=model))
+    except Exception:
+        # Missing prices and unsupported usage categories remain unknown.
+        return
+```
+
+### 6.3 一处结束，收尾失败优先
+
+`complete()` 保存终态。业务写库失败会将权威失败提升到请求 Span，避免覆盖成普通取消。`end()` 在锁内做幂等检查、映射状态和结束 Span，已结束句柄忽略迟到的估价回执。
+
+```python observer.py · 权威终态
 def complete(self, status, code=None, *, authoritative=False):
     with self.lock:
         if self.ended or self.authoritative:
@@ -502,11 +1617,14 @@ def complete(self, status, code=None, *, authoritative=False):
         self.authoritative = authoritative
     if code == "record_write_failed" and self.root is not self:
         self.root.complete("failed", code, authoritative=True)
+```
 
+```python observer.py · 幂等结束
 def end(self):
     with self.lock:
         if self.ended:
             return
+        self._content_secrets = ()
         status, code = self.status or ("completed", None)
         self.set(status=status, error_code=code)
         if self.span:
@@ -528,189 +1646,3 @@ def end(self):
                 self.owner.instrumentation_errors += 1
         self.ended = True
 ```
-
-### 7.4 Attempt 用量与晚到回调
-
-accept_cost 只接收有限非负标量，已结束句柄忽略晚到结果。Adapter 未启动的前置校验改为 compass.validation；进入 Adapter 的尝试才写 generation。缺估价时省略原生 model / cost。
-
-```python observer.py · Attempt 与成本
-import json
-
-def accept_cost(self, value):
-    from compass_agent.observability.privacy import scalar
-
-    if type(value) not in {int, float} or scalar(value) is None:
-        return
-    with self.lock:
-        if not self.ended:
-            self.cost = float(value)
-
-def finish_attempt(self, result):
-    if not result.adapter_started:
-        # A pre-adapter validation is an execution phase, with no generation or charge.
-        if self.span:
-            self.span.update_name("compass.validation")
-        self.complete(result.status, result.error.code if result.error else None)
-        self.end()
-        return
-    self.native("type", "generation")
-    self.set(
-        sent=result.upstream_sent,
-        outcome_unknown=result.upstream_outcome_unknown,
-        cleanup_confirmed=result.cleanup_confirmed,
-        reasoning_tokens=result.usage.reasoning_tokens,
-    )
-    usage = result.usage
-    known = usage.input_tokens is not None and usage.output_tokens is not None
-    self.set(usage_complete=known, cost_state="unknown")
-    detail = {
-        k: v
-        for k, v in {"input": usage.input_tokens, "output": usage.output_tokens}.items()
-        if v is not None
-    }
-    if detail:
-        self.native("usage_details", json.dumps(detail))
-    if known and not result.upstream_outcome_unknown and self.cost is not None:
-        self.native("model.name", result.requested_model[:256])
-        self.native("cost_details", json.dumps({"total": self.cost}))
-        self.set(cost_state="complete_estimate", cost_source="litellm-1.106.6")
-    self.complete(result.status, result.error.code if result.error else None)
-    self.end()
-```
-
-### 7.5 安全回调与 SDK 本地估价
-
-函数闭包持有当前 Observation；用量完整才接受成本。回调、缺价与 SDK 估价异常均保持原模型结果，未知继续传播。
-
-```python litellm_receipt.py · 无网络回执
-def complete_usage(response):
-    usage = getattr(response, "usage", None)
-    if usage is None:
-        return False
-    value = usage if isinstance(usage, dict) else usage.model_dump()
-    if any(
-        type(value.get(k)) is not int or value[k] < 0
-        for k in ("prompt_tokens", "completion_tokens")
-    ):
-        return False
-    # An explicitly incomplete cache category cannot support a complete estimate.
-    for key in ("prompt_tokens_details", "completion_tokens_details"):
-        details = value.get(key)
-        if isinstance(details, dict):
-            for name, count in details.items():
-                if "cache" in name and (type(count) is not int or count < 0):
-                    return False
-    return True
-
-def callbacks(observation):
-    async def success(kwargs, response_obj, start_time, end_time):
-        try:
-            if complete_usage(response_obj):
-                observation.accept_cost(kwargs.get("response_cost"))
-        except Exception:
-            return
-
-    async def failure(kwargs, response_obj, start_time, end_time):
-        return
-
-    return {"success_callback": [success], "failure_callback": [failure]}
-
-def estimate(observation, sdk, response, model):
-    if observation.cost is not None:
-        return
-    try:
-        if complete_usage(response):
-            observation.accept_cost(sdk.completion_cost(completion_response=response, model=model))
-    except Exception:
-        # Missing prices and unsupported usage categories remain unknown.
-        return
-```
-
-### 7.6 显式 W3C 提取与注入
-
-提取在 trusted_context 和动作权限验证后调用。PROPAGATOR 仅处理 W3C Trace Context；carrier 从当前句柄的 span 生成，内部调用者显式附加。
-
-```python observer.py · W3C carrier
-from opentelemetry import trace
-from opentelemetry.context import Context
-from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
-
-PROPAGATOR = TraceContextTextMapPropagator()
-
-def remote_context(carrier):
-    """Call only after service authentication; ignore baggage and malformed carriers."""
-    safe = {}
-    for name in ("traceparent", "tracestate"):
-        value = carrier.get(name)
-        if isinstance(value, str) and len(value) <= 512:
-            safe[name] = value
-    return PROPAGATOR.extract(safe, context=Context())
-
-def carrier(self):
-    result = {}
-    if self.span:
-        PROPAGATOR.inject(result, context=trace.set_span_in_context(self.span))
-    return result
-```
-
-```python 已鉴权入口与内部出站 · 设计示意
-# trusted_context 与当前动作权限在进入此段前已经验证。
-scope = observer.root(call_id, trusted_context, request.headers)
-# 同一 scope 贯穿原异步任务，内部 HTTP / 消息工具显式附加 carrier。
-outbound_context = scope.carrier()
-```
-
-### 7.7 实例身份与 ParentBased
-
-本地根使用本进程 ratio，远程父采用 ParentBased 的继承决定。Resource 手工登记实例身份，避免环境与主机信息自动探测；状态接口返回同一 instance_id。
-
-```python Observer 初始化 · 设计示意
-from uuid import uuid4
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import SpanLimits, TracerProvider
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-
-instance_id = settings.compass_observability_instance_id or str(uuid4())
-provider = TracerProvider(
-    resource=Resource({
-        "service.name": "compass-agent",
-        "service.namespace": "compass",
-        "service.instance.id": instance_id,
-        "service.version": "0.1.0",
-        "deployment.environment.name": settings.compass_observability_environment,
-    }),
-    sampler=ParentBased(TraceIdRatioBased(settings.compass_observability_sample_ratio)),
-    span_limits=SpanLimits(
-        max_attributes=64, max_events=16, max_links=0, max_attribute_length=256,
-    ),
-    shutdown_on_exit=False,
-)
-```
-
-### 7.8 BFF 响应头
-
-BFF 主动构造上游请求头，浏览器 carrier 不进入 Agent。校验后的关联响应头用于成功 JSON / SSE 及原错误映射，Hook 在 body 前保存编号。
-
-{{code:headers}}
-
-### 7.9 固定模型对比
-
-Logical Call 与 Attempt 同时筛选 inference、Provider UUID 和当前 model。跨实例不加 instance_id 过滤；latency 原生为毫秒。以下展示固定筛选和计算口径。
-
-```python summary.py · 固定筛选形状
-selected = [meta("provider_id", str(model.id)), meta("model", model.api_model)]
-logical = [
-    {"column": "name", "type": "string", "operator": "=", "value": "compass.logical"},
-    meta("stage", "inference"),
-    *selected,
-]
-attempts = [
-    {"column": "name", "type": "string", "operator": "=", "value": "compass.attempt"},
-    meta("stage", "inference"),
-    *selected,
-]
-```
-
-统计值由固定查询校验后传入。任何查询失败返回 unavailable；零分母为 null；存在未知成本时完整估价为空，保留已知 USD 与未知数。
-
-{{code:summary}}

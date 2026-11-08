@@ -31,7 +31,11 @@
 
 2026-11-06：用户要求补齐分布式观测并完整实现验收。已交付 OTel / LiteLLM 接入、Logical Call / Attempt、可信 W3C 传播与实例隔离、安全导出、平台对比与调用编号 UI、本地 Docker Langfuse 六服务。`pnpm check` / `pnpm build`、真实 PostgreSQL / Langfuse / 浏览器 / 生产镜像 / 默认端口 smoke 通过；18 项 AC 完成，代码自检问题已修复。当前主应用 3000 与 Langfuse 3002 可访问，既有业务记录保留，前置数据库版本已对齐 0004。
 
-学员 HTML 同步分布式与实施收敛，离线和窄屏 QA 通过。完整范围、实际数字、私有配置位置和保留边界见[实施记录](IMPLEMENTATION.md)及[代码自检](review/code_review.md)。本期未提交、推送或发布课程节点。
+学员 HTML 同步分布式与实施收敛，离线和窄屏 QA 通过。完整范围、实际数字、私有配置位置和保留边界见[实施记录](IMPLEMENTATION.md)及[代码自检](review/code_review.md)。工程实现随后纳入 Compass 独立仓库的附注标签 `compass/L14-complete`。
+
+## 学员交付
+
+[第 14 课学习资料包](lesson-14-learning-materials.zip)收录 PRD、Markdown 技术方案与离线 HTML。包内按当前工程版本说明端口和正文采集策略。
 
 ## 上下文索引
 

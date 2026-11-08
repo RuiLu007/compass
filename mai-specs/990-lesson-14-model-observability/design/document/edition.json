@@ -1,9 +1,9 @@
 {
   "title": "模型调用可观测与运营治理",
-  "subtitle": "显式分布式关联、安全采集与跨实例模型对比。",
+  "subtitle": "从 OTel 术语和一张埋点地图，读到 Compass 的采集、上报与 Langfuse 查询源码。",
   "brand": "Compass",
-  "label": "《企业级Agent工程架构实战营》 · 第 14 课 · 设计示意",
-  "topics": ["OTel 1.45.2", "W3C carrier", "实例身份", "Langfuse v4.75.0"],
+  "label": "《企业级Agent工程架构实战营》 · 第 14 课 · 架构设计与源码导读",
+  "topics": ["OTel 1.45.2", "埋点地图", "Observation", "Langfuse v4.75.0"],
   "source": "../TECH_DESIGN.md",
   "guide": "guide.md",
   "output": "../TECH_DESIGN.html",
@@ -29,11 +29,6 @@
       "file": "../CODE_DESIGN.md",
       "contains": "function readTraceHeaders(",
       "language": "typescript"
-    },
-    "summary": {
-      "file": "../CODE_DESIGN.md",
-      "contains": "def comparison_row(",
-      "language": "python"
     }
   }
 }
