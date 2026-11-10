@@ -5,6 +5,10 @@
     "cursor"
   ],
   "skills": [
+    "my-auto-design",
+    "my-auto-feature",
+    "my-init-repo-memory",
+    "my-simple-feature",
     "my-create-feature",
     "my-create-prd",
     "my-create-design",
@@ -12,9 +16,7 @@
     "my-create-test-plan",
     "my-implement-code",
     "my-review-code",
-    "my-auto-feature",
-    "my-auto-design",
-    "my-simple-feature",
-    "my-init-repo-memory"
+    "my-render-design-html",
+    "my-create-memory"
   ]
 }
