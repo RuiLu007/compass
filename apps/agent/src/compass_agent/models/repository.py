@@ -384,7 +384,15 @@ class ModelRepository:
             )
 
     def begin(
-        self, call_id, provider_id, request, context, policy=None, started_at=None, grant=None
+        self,
+        call_id,
+        provider_id,
+        request,
+        context,
+        policy=None,
+        started_at=None,
+        grant=None,
+        expected_binding_version=None,
     ):
         started = started_at or now()
         mono = time.monotonic()
@@ -396,6 +404,11 @@ class ModelRepository:
                 )
                 if row is None:
                     raise ModelError("not_found", 404)
+                if (
+                    expected_binding_version is not None
+                    and row.binding_version != expected_binding_version
+                ):
+                    raise ModelError("model_unavailable", 409)
                 if grant is not None:
                     if (
                         not isinstance(grant, RoutingGrant)

@@ -1,6 +1,234 @@
 {
   "components": {
     "schemas": {
+      "AnalysisCancelAccepted": {
+        "additionalProperties": false,
+        "properties": {
+          "runId": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Runid",
+            "type": "string"
+          },
+          "status": {
+            "const": "accepted",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId",
+          "status"
+        ],
+        "title": "AnalysisCancelAccepted",
+        "type": "object"
+      },
+      "AnalysisCancelAck": {
+        "discriminator": {
+          "mapping": {
+            "accepted": "#/components/schemas/AnalysisCancelAccepted",
+            "already_terminal": "#/components/schemas/AnalysisCancelAlreadyTerminal"
+          },
+          "propertyName": "status"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AnalysisCancelAccepted"
+          },
+          {
+            "$ref": "#/components/schemas/AnalysisCancelAlreadyTerminal"
+          }
+        ],
+        "title": "AnalysisCancelAck"
+      },
+      "AnalysisCancelAlreadyTerminal": {
+        "additionalProperties": false,
+        "properties": {
+          "runId": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Runid",
+            "type": "string"
+          },
+          "status": {
+            "const": "already_terminal",
+            "title": "Status",
+            "type": "string"
+          },
+          "terminalStatus": {
+            "enum": [
+              "completed",
+              "failed",
+              "canceled",
+              "cleanup_unconfirmed"
+            ],
+            "title": "Terminalstatus",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId",
+          "status",
+          "terminalStatus"
+        ],
+        "title": "AnalysisCancelAlreadyTerminal",
+        "type": "object"
+      },
+      "AnalysisFileNone": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "const": "none",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "AnalysisFileNone",
+        "type": "object"
+      },
+      "AnalysisFileReady": {
+        "additionalProperties": false,
+        "properties": {
+          "byteLength": {
+            "maximum": 131072,
+            "minimum": 1,
+            "title": "Bytelength",
+            "type": "integer"
+          },
+          "contentBase64": {
+            "maxLength": 174764,
+            "minLength": 4,
+            "title": "Contentbase64",
+            "type": "string"
+          },
+          "filename": {
+            "pattern": "^retail-products-[a-f0-9-]{36}\\.csv$",
+            "title": "Filename",
+            "type": "string"
+          },
+          "mediaType": {
+            "const": "text/csv; charset=utf-8",
+            "title": "Mediatype",
+            "type": "string"
+          },
+          "rowCount": {
+            "maximum": 200,
+            "minimum": 1,
+            "title": "Rowcount",
+            "type": "integer"
+          },
+          "status": {
+            "const": "ready",
+            "title": "Status",
+            "type": "string"
+          },
+          "stepId": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Stepid",
+            "type": "string"
+          },
+          "toolCallId": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Toolcallid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "stepId",
+          "toolCallId",
+          "filename",
+          "mediaType",
+          "rowCount",
+          "byteLength",
+          "contentBase64"
+        ],
+        "title": "AnalysisFileReady",
+        "type": "object"
+      },
+      "AnalysisFileUnavailable": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "enum": [
+              "file_limit",
+              "file_generation_failed"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "status": {
+            "const": "unavailable",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "code"
+        ],
+        "title": "AnalysisFileUnavailable",
+        "type": "object"
+      },
+      "AnalysisHistoryTurn": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "maxLength": 32768,
+            "minLength": 1,
+            "title": "Answer",
+            "type": "string"
+          },
+          "question": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question",
+          "answer"
+        ],
+        "title": "AnalysisHistoryTurn",
+        "type": "object"
+      },
+      "AnalysisRunInput": {
+        "additionalProperties": false,
+        "properties": {
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/AnalysisHistoryTurn"
+            },
+            "maxItems": 12,
+            "title": "History",
+            "type": "array"
+          },
+          "question": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "requestId": {
+            "format": "uuid",
+            "title": "Requestid",
+            "type": "string"
+          },
+          "selection": {
+            "$ref": "#/components/schemas/MainModelSelection"
+          }
+        },
+        "required": [
+          "requestId",
+          "question",
+          "selection"
+        ],
+        "title": "AnalysisRunInput",
+        "type": "object"
+      },
       "AttemptSummary": {
         "additionalProperties": false,
         "properties": {
@@ -716,6 +944,36 @@
           "sdk_version"
         ],
         "title": "CatalogPage",
+        "type": "object"
+      },
+      "ChannelRunParams": {
+        "additionalProperties": false,
+        "properties": {
+          "compareTo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunPeriod"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dimension": {
+            "const": "channel",
+            "title": "Dimension",
+            "type": "string"
+          },
+          "period": {
+            "$ref": "#/components/schemas/RunPeriod"
+          }
+        },
+        "required": [
+          "dimension",
+          "period",
+          "compareTo"
+        ],
+        "title": "ChannelRunParams",
         "type": "object"
       },
       "ChatCallInput": {
@@ -1542,6 +1800,7 @@
         "title": "Intent",
         "type": "object"
       },
+      "JsonValue": {},
       "MainModelSelection": {
         "additionalProperties": false,
         "properties": {
@@ -2233,6 +2492,42 @@
           "kind"
         ],
         "title": "PlatformScope",
+        "type": "object"
+      },
+      "ProductRunParams": {
+        "additionalProperties": false,
+        "properties": {
+          "channelCode": {
+            "pattern": "^[A-Z0-9_]{1,24}$",
+            "title": "Channelcode",
+            "type": "string"
+          },
+          "compareTo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunPeriod"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dimension": {
+            "const": "product",
+            "title": "Dimension",
+            "type": "string"
+          },
+          "period": {
+            "$ref": "#/components/schemas/RunPeriod"
+          }
+        },
+        "required": [
+          "dimension",
+          "period",
+          "compareTo",
+          "channelCode"
+        ],
+        "title": "ProductRunParams",
         "type": "object"
       },
       "ProviderCreate": {
@@ -2994,6 +3289,422 @@
         "title": "RoutingStartEvent",
         "type": "object"
       },
+      "RunCanceled": {
+        "additionalProperties": false,
+        "properties": {
+          "cleanup": {
+            "const": "confirmed",
+            "title": "Cleanup",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "user",
+              "disconnected",
+              "shutdown"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "status": {
+            "const": "canceled",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "reason",
+          "cleanup"
+        ],
+        "title": "RunCanceled",
+        "type": "object"
+      },
+      "RunCleanupUnconfirmed": {
+        "additionalProperties": false,
+        "properties": {
+          "cleanup": {
+            "const": "unconfirmed",
+            "title": "Cleanup",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "user",
+                  "disconnected",
+                  "shutdown"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "deadline",
+                  "execution_error"
+                ],
+                "type": "string"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "const": "cleanup_unconfirmed",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "reason",
+          "cleanup"
+        ],
+        "title": "RunCleanupUnconfirmed",
+        "type": "object"
+      },
+      "RunCompleted": {
+        "additionalProperties": false,
+        "properties": {
+          "file": {
+            "discriminator": {
+              "mapping": {
+                "none": "#/components/schemas/AnalysisFileNone",
+                "ready": "#/components/schemas/AnalysisFileReady",
+                "unavailable": "#/components/schemas/AnalysisFileUnavailable"
+              },
+              "propertyName": "status"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AnalysisFileNone"
+              },
+              {
+                "$ref": "#/components/schemas/AnalysisFileUnavailable"
+              },
+              {
+                "$ref": "#/components/schemas/AnalysisFileReady"
+              }
+            ],
+            "title": "File"
+          },
+          "finalAnswer": {
+            "maxLength": 32768,
+            "minLength": 1,
+            "title": "Finalanswer",
+            "type": "string"
+          },
+          "status": {
+            "const": "completed",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "finalAnswer",
+          "file"
+        ],
+        "title": "RunCompleted",
+        "type": "object"
+      },
+      "RunContractModel": {
+        "additionalProperties": false,
+        "properties": {},
+        "title": "RunContractModel",
+        "type": "object"
+      },
+      "RunEmpty": {
+        "additionalProperties": false,
+        "properties": {},
+        "title": "RunEmpty",
+        "type": "object"
+      },
+      "RunExtensionPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Data",
+            "type": "object"
+          },
+          "name": {
+            "maxLength": 96,
+            "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)+$",
+            "title": "Name",
+            "type": "string"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          },
+          "version": {
+            "maximum": 65535,
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "required",
+          "data"
+        ],
+        "title": "RunExtensionPayload",
+        "type": "object"
+      },
+      "RunFailed": {
+        "additionalProperties": false,
+        "properties": {
+          "errorCode": {
+            "enum": [
+              "model_failed",
+              "model_incomplete",
+              "model_unavailable",
+              "run_timeout",
+              "context_limit",
+              "step_limit",
+              "internal_error"
+            ],
+            "title": "Errorcode",
+            "type": "string"
+          },
+          "status": {
+            "const": "failed",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "errorCode"
+        ],
+        "title": "RunFailed",
+        "type": "object"
+      },
+      "RunFinished": {
+        "additionalProperties": false,
+        "properties": {
+          "payload": {
+            "discriminator": {
+              "mapping": {
+                "canceled": "#/components/schemas/RunCanceled",
+                "cleanup_unconfirmed": "#/components/schemas/RunCleanupUnconfirmed",
+                "completed": "#/components/schemas/RunCompleted",
+                "failed": "#/components/schemas/RunFailed"
+              },
+              "propertyName": "status"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RunCompleted"
+              },
+              {
+                "$ref": "#/components/schemas/RunFailed"
+              },
+              {
+                "$ref": "#/components/schemas/RunCanceled"
+              },
+              {
+                "$ref": "#/components/schemas/RunCleanupUnconfirmed"
+              }
+            ],
+            "title": "Payload"
+          },
+          "type": {
+            "const": "run.finished",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "payload"
+        ],
+        "title": "RunFinished",
+        "type": "object"
+      },
+      "RunPacket": {
+        "additionalProperties": false,
+        "properties": {
+          "event": {
+            "discriminator": {
+              "mapping": {
+                "run.finished": "#/components/schemas/RunFinished",
+                "run.routed": "#/components/schemas/RunRouted",
+                "run.started": "#/components/schemas/RunStarted",
+                "step.finished": "#/components/schemas/StepFinished",
+                "step.started": "#/components/schemas/StepStarted",
+                "stream.batch": "#/components/schemas/StreamBatch",
+                "stream.extension": "#/components/schemas/StreamExtension",
+                "tool.finished": "#/components/schemas/ToolFinished",
+                "tool.started": "#/components/schemas/ToolStarted"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RunStarted"
+              },
+              {
+                "$ref": "#/components/schemas/RunRouted"
+              },
+              {
+                "$ref": "#/components/schemas/StepStarted"
+              },
+              {
+                "$ref": "#/components/schemas/ToolStarted"
+              },
+              {
+                "$ref": "#/components/schemas/ToolFinished"
+              },
+              {
+                "$ref": "#/components/schemas/StepFinished"
+              },
+              {
+                "$ref": "#/components/schemas/StreamExtension"
+              },
+              {
+                "$ref": "#/components/schemas/StreamBatch"
+              },
+              {
+                "$ref": "#/components/schemas/RunFinished"
+              }
+            ],
+            "title": "Event"
+          },
+          "protocol": {
+            "const": "compass.run",
+            "title": "Protocol",
+            "type": "string"
+          },
+          "requestId": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Requestid",
+            "type": "string"
+          },
+          "runId": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Runid",
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 96,
+            "minimum": 1,
+            "title": "Seq",
+            "type": "integer"
+          },
+          "version": {
+            "const": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "protocol",
+          "version",
+          "requestId",
+          "runId",
+          "seq",
+          "event"
+        ],
+        "title": "RunPacket",
+        "type": "object"
+      },
+      "RunPeriod": {
+        "additionalProperties": false,
+        "properties": {
+          "end": {
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "End",
+            "type": "string"
+          },
+          "start": {
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "RunPeriod",
+        "type": "object"
+      },
+      "RunRouted": {
+        "additionalProperties": false,
+        "properties": {
+          "payload": {
+            "$ref": "#/components/schemas/RunRoutedPayload"
+          },
+          "type": {
+            "const": "run.routed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "payload"
+        ],
+        "title": "RunRouted",
+        "type": "object"
+      },
+      "RunRoutedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "modelLabel": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Modellabel",
+            "type": "string"
+          },
+          "providerId": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Providerid",
+            "type": "string"
+          },
+          "sceneId": {
+            "pattern": "^SC-[0-9]{2}$",
+            "title": "Sceneid",
+            "type": "string"
+          },
+          "toolsEnabled": {
+            "title": "Toolsenabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "providerId",
+          "modelLabel",
+          "sceneId",
+          "toolsEnabled"
+        ],
+        "title": "RunRoutedPayload",
+        "type": "object"
+      },
+      "RunStarted": {
+        "additionalProperties": false,
+        "properties": {
+          "payload": {
+            "$ref": "#/components/schemas/RunEmpty"
+          },
+          "type": {
+            "const": "run.started",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "payload"
+        ],
+        "title": "RunStarted",
+        "type": "object"
+      },
       "SavedProvider": {
         "additionalProperties": false,
         "properties": {
@@ -3345,6 +4056,171 @@
         "title": "StartEvent",
         "type": "object"
       },
+      "StepFinished": {
+        "additionalProperties": false,
+        "properties": {
+          "payload": {
+            "$ref": "#/components/schemas/StepFinishedPayload"
+          },
+          "type": {
+            "const": "step.finished",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "payload"
+        ],
+        "title": "StepFinished",
+        "type": "object"
+      },
+      "StepFinishedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "enum": [
+              "completed",
+              "failed",
+              "canceled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stepId": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Stepid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stepId",
+          "status"
+        ],
+        "title": "StepFinishedPayload",
+        "type": "object"
+      },
+      "StepStarted": {
+        "additionalProperties": false,
+        "properties": {
+          "payload": {
+            "$ref": "#/components/schemas/StepStartedPayload"
+          },
+          "type": {
+            "const": "step.started",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "payload"
+        ],
+        "title": "StepStarted",
+        "type": "object"
+      },
+      "StepStartedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "modelCallId": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Modelcallid",
+            "type": "string"
+          },
+          "stepId": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Stepid",
+            "type": "string"
+          },
+          "stepIndex": {
+            "maximum": 6,
+            "minimum": 1,
+            "title": "Stepindex",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stepId",
+          "stepIndex",
+          "modelCallId"
+        ],
+        "title": "StepStartedPayload",
+        "type": "object"
+      },
+      "StreamBatch": {
+        "additionalProperties": false,
+        "properties": {
+          "payload": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "run.routed": "#/components/schemas/RunRouted",
+                  "step.finished": "#/components/schemas/StepFinished",
+                  "step.started": "#/components/schemas/StepStarted",
+                  "stream.extension": "#/components/schemas/StreamExtension",
+                  "tool.finished": "#/components/schemas/ToolFinished",
+                  "tool.started": "#/components/schemas/ToolStarted"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/RunRouted"
+                },
+                {
+                  "$ref": "#/components/schemas/StepStarted"
+                },
+                {
+                  "$ref": "#/components/schemas/ToolStarted"
+                },
+                {
+                  "$ref": "#/components/schemas/ToolFinished"
+                },
+                {
+                  "$ref": "#/components/schemas/StepFinished"
+                },
+                {
+                  "$ref": "#/components/schemas/StreamExtension"
+                }
+              ]
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Payload",
+            "type": "array"
+          },
+          "type": {
+            "const": "stream.batch",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "payload"
+        ],
+        "title": "StreamBatch",
+        "type": "object"
+      },
+      "StreamExtension": {
+        "additionalProperties": false,
+        "properties": {
+          "payload": {
+            "$ref": "#/components/schemas/RunExtensionPayload"
+          },
+          "type": {
+            "const": "stream.extension",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "payload"
+        ],
+        "title": "StreamExtension",
+        "type": "object"
+      },
       "TenantScope": {
         "additionalProperties": false,
         "properties": {
@@ -3595,6 +4471,162 @@
         "title": "ToolDeltaEvent",
         "type": "object"
       },
+      "ToolEmptyPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "rowCount": {
+            "const": 0,
+            "title": "Rowcount",
+            "type": "integer"
+          },
+          "status": {
+            "const": "empty",
+            "title": "Status",
+            "type": "string"
+          },
+          "stepId": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Stepid",
+            "type": "string"
+          },
+          "toolCallId": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Toolcallid",
+            "type": "string"
+          },
+          "toolIndex": {
+            "maximum": 4,
+            "minimum": 1,
+            "title": "Toolindex",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stepId",
+          "toolCallId",
+          "toolIndex",
+          "status",
+          "rowCount"
+        ],
+        "title": "ToolEmptyPayload",
+        "type": "object"
+      },
+      "ToolEventKey": {
+        "additionalProperties": false,
+        "properties": {
+          "stepId": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Stepid",
+            "type": "string"
+          },
+          "toolCallId": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Toolcallid",
+            "type": "string"
+          },
+          "toolIndex": {
+            "maximum": 4,
+            "minimum": 1,
+            "title": "Toolindex",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stepId",
+          "toolCallId",
+          "toolIndex"
+        ],
+        "title": "ToolEventKey",
+        "type": "object"
+      },
+      "ToolFailedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "errorCode": {
+            "enum": [
+              "unknown_tool",
+              "invalid_parameters",
+              "retail_unavailable",
+              "retail_query_failed",
+              "retail_query_timeout",
+              "result_limit"
+            ],
+            "title": "Errorcode",
+            "type": "string"
+          },
+          "status": {
+            "const": "error",
+            "title": "Status",
+            "type": "string"
+          },
+          "stepId": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Stepid",
+            "type": "string"
+          },
+          "toolCallId": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Toolcallid",
+            "type": "string"
+          },
+          "toolIndex": {
+            "maximum": 4,
+            "minimum": 1,
+            "title": "Toolindex",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stepId",
+          "toolCallId",
+          "toolIndex",
+          "status",
+          "errorCode"
+        ],
+        "title": "ToolFailedPayload",
+        "type": "object"
+      },
+      "ToolFinished": {
+        "additionalProperties": false,
+        "properties": {
+          "payload": {
+            "discriminator": {
+              "mapping": {
+                "empty": "#/components/schemas/ToolEmptyPayload",
+                "error": "#/components/schemas/ToolFailedPayload",
+                "ok": "#/components/schemas/ToolSucceededPayload"
+              },
+              "propertyName": "status"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ToolSucceededPayload"
+              },
+              {
+                "$ref": "#/components/schemas/ToolEmptyPayload"
+              },
+              {
+                "$ref": "#/components/schemas/ToolFailedPayload"
+              }
+            ],
+            "title": "Payload"
+          },
+          "type": {
+            "const": "tool.finished",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "payload"
+        ],
+        "title": "ToolFinished",
+        "type": "object"
+      },
       "ToolFunction": {
         "additionalProperties": false,
         "properties": {
@@ -3619,6 +4651,131 @@
           "name"
         ],
         "title": "ToolFunction",
+        "type": "object"
+      },
+      "ToolStarted": {
+        "additionalProperties": false,
+        "properties": {
+          "payload": {
+            "$ref": "#/components/schemas/ToolStartedPayload"
+          },
+          "type": {
+            "const": "tool.started",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "payload"
+        ],
+        "title": "ToolStarted",
+        "type": "object"
+      },
+      "ToolStartedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "params": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "channel": "#/components/schemas/ChannelRunParams",
+                    "product": "#/components/schemas/ProductRunParams"
+                  },
+                  "propertyName": "dimension"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ChannelRunParams"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ProductRunParams"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params"
+          },
+          "stepId": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Stepid",
+            "type": "string"
+          },
+          "toolCallId": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Toolcallid",
+            "type": "string"
+          },
+          "toolIndex": {
+            "maximum": 4,
+            "minimum": 1,
+            "title": "Toolindex",
+            "type": "integer"
+          },
+          "toolKind": {
+            "enum": [
+              "retail_sales",
+              "unavailable"
+            ],
+            "title": "Toolkind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stepId",
+          "toolCallId",
+          "toolIndex",
+          "toolKind",
+          "params"
+        ],
+        "title": "ToolStartedPayload",
+        "type": "object"
+      },
+      "ToolSucceededPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "rowCount": {
+            "maximum": 200,
+            "minimum": 1,
+            "title": "Rowcount",
+            "type": "integer"
+          },
+          "status": {
+            "const": "ok",
+            "title": "Status",
+            "type": "string"
+          },
+          "stepId": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Stepid",
+            "type": "string"
+          },
+          "toolCallId": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Toolcallid",
+            "type": "string"
+          },
+          "toolIndex": {
+            "maximum": 4,
+            "minimum": 1,
+            "title": "Toolindex",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stepId",
+          "toolCallId",
+          "toolIndex",
+          "status",
+          "rowCount"
+        ],
+        "title": "ToolSucceededPayload",
         "type": "object"
       },
       "TrustedContext": {
@@ -3709,6 +4866,270 @@
           }
         },
         "summary": "Readiness"
+      }
+    },
+    "/v1/analysis/runs": {
+      "post": {
+        "operationId": "start_run_v1_analysis_runs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalysisRunInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/event-stream": {
+                "schema": {
+                  "description": "compass.run v1 SSE packets",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Start Run",
+        "tags": [
+          "analysis"
+        ]
+      }
+    },
+    "/v1/analysis/runs/{run_id}/cancel": {
+      "post": {
+        "operationId": "cancel_run_v1_analysis_runs__run_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunEmpty"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisCancelAck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Cancel Run",
+        "tags": [
+          "analysis"
+        ]
       }
     },
     "/v1/demo/overview": {

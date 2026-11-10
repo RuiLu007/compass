@@ -34,6 +34,10 @@ try {
     ["demo-overview.schema.json", "apps/web/src/generated/demo-overview.schema.json"],
     ["model-contracts.schema.json", "contracts/model-contracts.schema.json"],
     ["model-contracts.schema.json", "apps/web/src/generated/model-contracts.schema.json"],
+    ["run-stream.schema.json", "contracts/run-stream.schema.json"],
+    ["run-stream.schema.json", "apps/web/src/generated/run-stream.schema.json"],
+    ["run-stream-limits.ts", "contracts/run-stream-limits.ts"],
+    ["run-stream-limits.ts", "apps/web/src/generated/run-stream-limits.ts"],
   ];
   for (const [source, dest] of outputs) {
     const target = path.join(root, dest);

@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { handleAnalysisRunRequest, isAnalysisRunRoute } from "./analysis-run-handler";
 import { handleModelRequest, isModelRoute } from "./model-handler";
 import * as dto from "../../contracts/web";
 import {
@@ -51,6 +52,7 @@ async function dispatchWebRequest(request: Request): Promise<Response> {
     const route = path.join("/");
     const method = request.method;
     const token = tokenFromCookie(request.headers.get("cookie"));
+    if (isAnalysisRunRoute(route)) return handleAnalysisRunRequest(request, token);
     if (isModelRoute(route)) return handleModelRequest(request, token);
     const writing = method !== "GET";
     if (writing) requireSameOrigin(request);

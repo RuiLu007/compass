@@ -1,6 +1,6 @@
 # Web / BFF
 
-Next.js App Router + React + TypeScript。UI 与 BFF 在一个 Node 服务中部署。当前交付 [Feature 995](../../mai-specs/995-web-management-foundation/README.md)：本地账号、数据库会话、租户与工作区、直接成员、固定模板和个人权限、个人设置、通知与审计，以及原型完整导航框架。Feature 993 增加平台模型路由管理、测试与分析 Chat 模型选择；Chat 本页保留历史，支持平台开放的 LiteLLM 生成模型。决策模型仅在管理端测试。数据查询、文件上传、报告、看板、插件、定时及其余 Agent/Memory 管理保持待接入状态。
+Next.js App Router + React + TypeScript。UI 与 BFF 在一个 Node 服务中部署。当前交付 [Feature 995](../../mai-specs/995-web-management-foundation/README.md)：本地账号、数据库会话、租户与工作区、直接成员、固定模板和个人权限、个人设置、通知与审计，以及原型完整导航框架。Feature 993 增加平台模型路由管理、测试与分析 Chat 模型选择；Feature 989 将 Chat 接入同步 Agent Run，展示多轮 Retail 工具过程、最终回答和 CSV，并支持终止。决策模型仍仅在管理端测试。通用文件上传、报告、看板、插件、定时及其余 Agent/Memory 管理保持待接入状态。
 
 ## 启动与账号
 
@@ -78,6 +78,14 @@ pnpm test:e2e -F web
 分析输入框可选择静态主模型或“系统优化”，每轮仍只向 `models/calls` 发起一次请求。Agent 返回两级 `intent`、字典 `features`、契约 `routing`、Runtime `result` 与 `metrics`；回答下方“意图分类与响应结构”可展开查看。闲聊命中 `SC-39` 后使用独立 prompt 调用 Flash 婉拒，并询问业务数据任务。
 
 BFF 与页面分别校验 `RoutedModelEvent` / `RoutedCallResponse`，实际 Provider 在 `route_selected` 后绑定；Provider 诊断继续沿用 `ModelEvent` / `CallResponse`。生成期间可停止，失败和不完整回答不进入成功上下文；分类详情仅保留在本页。浏览器验收位于 `tests/e2e/intent-routing.spec.ts`，使用独立Web/Agent PostgreSQL库及受控上游宿主。
+
+## Agent Run 与 Retail 分析
+
+分析 Chat 的发送入口为 `POST /api/web/v1/analysis/runs`，停止入口为 `POST /api/web/v1/analysis/runs/{runId}/cancel`。两者复用同源、CSRF、有效工作区、`module.analysis` 与 `models.invoke` 检查；授权事务提交后，BFF 才携服务端可信主体请求 Agent。浏览器不能传内部身份、Retail 账号或连接信息。
+
+BFF 严格校验 `compass.run` v1 的 UTF-8 SSE、包 Schema、序号、Run / Step / ToolCall 生命周期、唯一终态、文件来源和干净 EOF，再重新编号转发。页面按 Step 显示工具卡，只有成功终态在完整 EOF 后提交 `finalAnswer`、历史和 Blob 文件。重置对话、退出、权限版本变化或范围切换会中止活动请求并撤销下载 URL。
+
+当前部署要求 Agent 单进程、单副本。Retail 发布绑定只配置在 Agent；Web 只使用当前会话范围。课堂配置、对照 SQL 和停止演示见 [第 15 课复现说明](../../docs/lesson-15-agent-run.md)。
 
 ## 可靠性模拟测试
 

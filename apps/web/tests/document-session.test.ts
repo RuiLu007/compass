@@ -162,6 +162,85 @@ describe("quiet background authorization", () => {
     expect(replace).not.toHaveBeenCalled();
   });
 
+  it("binds analysis streams to the document generation and aborts them on retirement", async () => {
+    await start();
+    let streamSignal!: AbortSignal;
+    fetcher.mockImplementation(
+      async () =>
+        new Response(new ReadableStream(), {
+          headers: {
+            "content-type": "text/event-stream",
+            "X-Compass-View-Revision": view.viewRevision,
+          },
+        }),
+    );
+    const owner = new AbortController();
+    const pending = session.streamRequest(
+      "analysis/runs",
+      { tenantId: "tenant", workspaceId: "workspace", question: "分析" },
+      {
+        signal: owner.signal,
+        consume: async (_body, signal) => {
+          streamSignal = signal;
+          await new Promise<never>((_resolve, reject) => {
+            const aborted = () => reject(signal.reason);
+            if (signal.aborted) aborted();
+            else signal.addEventListener("abort", aborted, { once: true });
+          });
+        },
+      },
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(streamSignal.aborted).toBe(false);
+
+    session.retire("访问范围已变化，请重新加载。");
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(streamSignal.aborted).toBe(true);
+    expect(session.phase).toBe("retired");
+    expect(clear).toHaveBeenCalledOnce();
+  });
+
+  it("rejects oversized analysis input before issuing a request", async () => {
+    await start();
+    const calls = fetcher.mock.calls.length;
+    await expect(
+      session.streamRequest(
+        "analysis/runs",
+        { question: "问".repeat(64 * 1024) },
+        {
+          signal: new AbortController().signal,
+          consume: async () => undefined,
+        },
+      ),
+    ).rejects.toMatchObject({ status: 422 });
+    expect(fetcher).toHaveBeenCalledTimes(calls);
+  });
+
+  it("uses the delivered CSV filename and releases download URLs on conversation reset", async () => {
+    await start();
+    const click = vi.fn();
+    const anchor = { href: "", download: "", click };
+    Object.assign(documentEvents, { createElement: vi.fn(() => anchor) });
+    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:analysis");
+    const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+
+    session.download(new Blob(["a,b\n1,2\n"]), "retail-products-run.csv");
+
+    expect(createObjectURL).toHaveBeenCalledOnce();
+    expect(anchor).toMatchObject({
+      href: "blob:analysis",
+      download: "retail-products-run.csv",
+    });
+    expect(click).toHaveBeenCalledOnce();
+    session.releaseDownloads();
+    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith("blob:analysis");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+    createObjectURL.mockRestore();
+    revokeObjectURL.mockRestore();
+  });
+
   it.each(["denial", "revision", "error"])(
     "keeps an in-flight probe current through app switches and processes its %s",
     async (kind) => {

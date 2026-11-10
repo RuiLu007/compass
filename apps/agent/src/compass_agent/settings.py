@@ -3,8 +3,29 @@ from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class RetailRunScopeConfig(BaseModel):
+    """One deployment-owned Web scope mapped to the Lesson 15 read-only source."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, populate_by_name=True, frozen=True)
+
+    tenant_id: UUID = Field(alias="tenantId")
+    workspace_id: UUID = Field(alias="workspaceId")
+    release: Literal["retail-dev-20261022b"]
+    content_hash: str = Field(
+        alias="contentHash",
+        pattern=r"^7ae26405a71589c98ca8379bec1e1ec1ff77e16232ff2e1bf26b6d4501b8183e$",
+    )
+    role: str = Field(
+        min_length=8,
+        max_length=63,
+        pattern=r"^[a-z_][a-z0-9_]{0,55}_a_east$",
+    )
+    retail_tenant_id: Literal[101] = Field(alias="retailTenantId")
+    schema_name: Literal["core"] = Field(alias="schema")
 
 
 class Settings(BaseSettings):
@@ -33,6 +54,25 @@ class Settings(BaseSettings):
     compass_agent_service_token: str = ""
     compass_model_encryption_key: str = ""
     compass_model_allowed_origins: str = "https://api.deepseek.com"
+    compass_retail_run_scope: str = ""
+    compass_retail_run_readonly_dsn: SecretStr = SecretStr("")
+
+    def retail_run_configuration(
+        self,
+    ) -> tuple[RetailRunScopeConfig | None, SecretStr | None, str | None]:
+        """Parse the optional pair without making an unrelated Agent startup fail closed."""
+
+        raw_scope = self.compass_retail_run_scope.strip()
+        raw_dsn = self.compass_retail_run_readonly_dsn.get_secret_value().strip()
+        if not raw_scope and not raw_dsn:
+            return None, None, None
+        if not raw_scope or not raw_dsn:
+            return None, None, "partial_configuration"
+        try:
+            scope = RetailRunScopeConfig.model_validate_json(raw_scope)
+        except ValidationError:
+            return None, None, "invalid_scope"
+        return scope, SecretStr(raw_dsn), None
 
     @property
     def capture_observability_content(self) -> bool:

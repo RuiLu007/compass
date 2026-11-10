@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, RootModel, model_validator
 
 
 class Health(BaseModel):
@@ -285,6 +285,344 @@ class MainModelSelection(StrictModel):
         if (self.mode == "fixed") != (self.provider_id is not None):
             raise ValueError("fixed requires provider_id; auto must omit it")
         return self
+
+
+# Feature 989: a single, versioned Agent Run stream contract.  These models stay
+# top-level so the repository contract exporter can discover every named branch.
+
+RUN_STREAM_PROTOCOL: Literal["compass.run"] = "compass.run"
+RUN_STREAM_VERSION: Literal[1] = 1
+RUN_STREAM_LIMITS = {
+    "frameBytes": 256 * 1024,
+    "streamBytes": 2 * 1024 * 1024,
+    "events": 96,
+    "batchItems": 16,
+    "batchBytes": 32 * 1024,
+    "batchWaitMs": 100,
+    "heartbeatMs": 15_000,
+    "extensionBytes": 4 * 1024,
+    "jsonDepth": 20,
+    "answerBytes": 32 * 1024,
+    "fileBytes": 128 * 1024,
+    "fileRows": 200,
+    "steps": 6,
+    "toolsPerStep": 4,
+}
+
+RunUUID = Annotated[str, Field(pattern=r"^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$")]
+RunToolId = Annotated[str, Field(min_length=1, max_length=200)]
+RunDay = Annotated[str, Field(pattern=r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")]
+RunRowCount = Annotated[int, Field(ge=1, le=RUN_STREAM_LIMITS["fileRows"])]
+
+RunToolError = Literal[
+    "unknown_tool",
+    "invalid_parameters",
+    "retail_unavailable",
+    "retail_query_failed",
+    "retail_query_timeout",
+    "result_limit",
+]
+RunError = Literal[
+    "model_failed",
+    "model_incomplete",
+    "model_unavailable",
+    "run_timeout",
+    "context_limit",
+    "step_limit",
+    "internal_error",
+]
+RunStopCause = Literal["user", "disconnected", "shutdown"]
+RunCleanupCause = RunStopCause | Literal["deadline", "execution_error"]
+RunTerminalStatus = Literal["completed", "failed", "canceled", "cleanup_unconfirmed"]
+
+
+class RunContractModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True, populate_by_name=True)
+
+
+class AnalysisHistoryTurn(RunContractModel):
+    question: str = Field(min_length=1, max_length=8000)
+    answer: str = Field(min_length=1, max_length=RUN_STREAM_LIMITS["answerBytes"])
+
+
+class AnalysisRunInput(RunContractModel):
+    # JSON carries UUID text; keep the rest of the Run contract strictly typed.
+    request_id: UUID = Field(alias="requestId", strict=False)
+    question: str = Field(min_length=1, max_length=8000)
+    history: list[AnalysisHistoryTurn] = Field(default_factory=list, max_length=12)
+    selection: MainModelSelection
+
+    @model_validator(mode="after")
+    def validate_visible_context_bytes(self):
+        # Match the BFF's newline-separated byte accounting before any Run can
+        # route, invoke a model, or open a tool connection.
+        visible = [
+            self.question,
+            *(value for turn in self.history for value in (turn.question, turn.answer)),
+        ]
+        if len("\n".join(visible).encode()) > 32 * 1024:
+            raise ValueError("visible context exceeds 32 KiB")
+        return self
+
+
+class RunPeriod(RunContractModel):
+    start: RunDay
+    end: RunDay
+
+
+class ChannelRunParams(RunContractModel):
+    dimension: Literal["channel"]
+    period: RunPeriod
+    compare_to: RunPeriod | None = Field(alias="compareTo")
+
+
+class ProductRunParams(RunContractModel):
+    dimension: Literal["product"]
+    period: RunPeriod
+    compare_to: RunPeriod | None = Field(alias="compareTo")
+    channel_code: Annotated[str, Field(pattern=r"^[A-Z0-9_]{1,24}$")] = Field(alias="channelCode")
+
+
+RetailRunParams = Annotated[
+    ChannelRunParams | ProductRunParams,
+    Field(discriminator="dimension"),
+]
+
+
+class RunEmpty(RunContractModel):
+    pass
+
+
+class RunRoutedPayload(RunContractModel):
+    provider_id: RunUUID = Field(alias="providerId")
+    model_label: Annotated[str, Field(min_length=1, max_length=160)] = Field(alias="modelLabel")
+    scene_id: Annotated[str, Field(pattern=r"^SC-[0-9]{2}$")] = Field(alias="sceneId")
+    tools_enabled: bool = Field(alias="toolsEnabled")
+
+
+class StepStartedPayload(RunContractModel):
+    step_id: RunUUID = Field(alias="stepId")
+    step_index: Annotated[int, Field(ge=1, le=RUN_STREAM_LIMITS["steps"])] = Field(
+        alias="stepIndex"
+    )
+    model_call_id: RunUUID = Field(alias="modelCallId")
+
+
+class ToolEventKey(RunContractModel):
+    step_id: RunUUID = Field(alias="stepId")
+    tool_call_id: RunToolId = Field(alias="toolCallId")
+    tool_index: Annotated[int, Field(ge=1, le=RUN_STREAM_LIMITS["toolsPerStep"])] = Field(
+        alias="toolIndex"
+    )
+
+
+class ToolStartedPayload(ToolEventKey):
+    tool_kind: Literal["retail_sales", "unavailable"] = Field(alias="toolKind")
+    params: RetailRunParams | None
+
+
+class ToolSucceededPayload(ToolEventKey):
+    status: Literal["ok"]
+    row_count: RunRowCount = Field(alias="rowCount")
+
+
+class ToolEmptyPayload(ToolEventKey):
+    status: Literal["empty"]
+    row_count: Literal[0] = Field(alias="rowCount")
+
+
+class ToolFailedPayload(ToolEventKey):
+    status: Literal["error"]
+    error_code: RunToolError = Field(alias="errorCode")
+
+
+ToolFinishedPayload = Annotated[
+    ToolSucceededPayload | ToolEmptyPayload | ToolFailedPayload,
+    Field(discriminator="status"),
+]
+
+
+class StepFinishedPayload(RunContractModel):
+    step_id: RunUUID = Field(alias="stepId")
+    status: Literal["completed", "failed", "canceled"]
+
+
+class AnalysisFileNone(RunContractModel):
+    status: Literal["none"]
+
+
+class AnalysisFileUnavailable(RunContractModel):
+    status: Literal["unavailable"]
+    code: Literal["file_limit", "file_generation_failed"]
+
+
+class AnalysisFileReady(RunContractModel):
+    status: Literal["ready"]
+    step_id: RunUUID = Field(alias="stepId")
+    tool_call_id: RunToolId = Field(alias="toolCallId")
+    filename: Annotated[
+        str,
+        Field(pattern=r"^retail-products-[a-f0-9-]{36}\.csv$"),
+    ]
+    media_type: Literal["text/csv; charset=utf-8"] = Field(alias="mediaType")
+    row_count: RunRowCount = Field(alias="rowCount")
+    byte_length: Annotated[int, Field(ge=1, le=RUN_STREAM_LIMITS["fileBytes"])] = Field(
+        alias="byteLength"
+    )
+    content_base64: Annotated[
+        str,
+        Field(
+            min_length=4,
+            max_length=4 * ((RUN_STREAM_LIMITS["fileBytes"] + 2) // 3),
+        ),
+    ] = Field(alias="contentBase64")
+
+
+AnalysisFile = Annotated[
+    AnalysisFileNone | AnalysisFileUnavailable | AnalysisFileReady,
+    Field(discriminator="status"),
+]
+
+
+class RunCompleted(RunContractModel):
+    status: Literal["completed"]
+    final_answer: Annotated[
+        str,
+        Field(min_length=1, max_length=RUN_STREAM_LIMITS["answerBytes"]),
+    ] = Field(alias="finalAnswer")
+    file: AnalysisFile
+
+
+class RunFailed(RunContractModel):
+    status: Literal["failed"]
+    error_code: RunError = Field(alias="errorCode")
+
+
+class RunCanceled(RunContractModel):
+    status: Literal["canceled"]
+    reason: RunStopCause
+    cleanup: Literal["confirmed"]
+
+
+class RunCleanupUnconfirmed(RunContractModel):
+    status: Literal["cleanup_unconfirmed"]
+    reason: RunCleanupCause
+    cleanup: Literal["unconfirmed"]
+
+
+RunResult = Annotated[
+    RunCompleted | RunFailed | RunCanceled | RunCleanupUnconfirmed,
+    Field(discriminator="status"),
+]
+
+
+class RunExtensionPayload(RunContractModel):
+    name: Annotated[
+        str,
+        Field(max_length=96, pattern=r"^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)+$"),
+    ]
+    version: int = Field(ge=1, le=65535)
+    required: bool
+    data: dict[str, JsonValue]
+
+
+class RunStarted(RunContractModel):
+    type: Literal["run.started"]
+    payload: RunEmpty
+
+
+class RunRouted(RunContractModel):
+    type: Literal["run.routed"]
+    payload: RunRoutedPayload
+
+
+class StepStarted(RunContractModel):
+    type: Literal["step.started"]
+    payload: StepStartedPayload
+
+
+class ToolStarted(RunContractModel):
+    type: Literal["tool.started"]
+    payload: ToolStartedPayload
+
+
+class ToolFinished(RunContractModel):
+    type: Literal["tool.finished"]
+    payload: ToolFinishedPayload
+
+
+class StepFinished(RunContractModel):
+    type: Literal["step.finished"]
+    payload: StepFinishedPayload
+
+
+class StreamExtension(RunContractModel):
+    type: Literal["stream.extension"]
+    payload: RunExtensionPayload
+
+
+RunProgressEvent = Annotated[
+    RunRouted | StepStarted | ToolStarted | ToolFinished | StepFinished | StreamExtension,
+    Field(discriminator="type"),
+]
+
+
+class StreamBatch(RunContractModel):
+    type: Literal["stream.batch"]
+    payload: list[RunProgressEvent] = Field(
+        min_length=1,
+        max_length=RUN_STREAM_LIMITS["batchItems"],
+    )
+
+
+class RunFinished(RunContractModel):
+    type: Literal["run.finished"]
+    payload: RunResult
+
+
+RunStreamEvent = Annotated[
+    RunStarted
+    | RunRouted
+    | StepStarted
+    | ToolStarted
+    | ToolFinished
+    | StepFinished
+    | StreamExtension
+    | StreamBatch
+    | RunFinished,
+    Field(discriminator="type"),
+]
+
+
+class RunPacket(RunContractModel):
+    protocol: Literal["compass.run"]
+    version: Literal[1]
+    request_id: RunUUID = Field(alias="requestId")
+    run_id: RunUUID = Field(alias="runId")
+    seq: int = Field(ge=1, le=RUN_STREAM_LIMITS["events"])
+    event: RunStreamEvent
+
+
+class AnalysisCancelAccepted(RunContractModel):
+    run_id: RunUUID = Field(alias="runId")
+    status: Literal["accepted"]
+
+
+class AnalysisCancelAlreadyTerminal(RunContractModel):
+    run_id: RunUUID = Field(alias="runId")
+    status: Literal["already_terminal"]
+    terminal_status: RunTerminalStatus = Field(alias="terminalStatus")
+
+
+class AnalysisCancelAck(
+    RootModel[
+        Annotated[
+            AnalysisCancelAccepted | AnalysisCancelAlreadyTerminal,
+            Field(discriminator="status"),
+        ]
+    ]
+):
+    pass
 
 
 class ChatCallInput(StrictModel):

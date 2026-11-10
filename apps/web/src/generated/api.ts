@@ -38,6 +38,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/analysis/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Run */
+        post: operations["start_run_v1_analysis_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/analysis/runs/{run_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Run */
+        post: operations["cancel_run_v1_analysis_runs__run_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/demo/overview": {
         parameters: {
             query?: never;
@@ -299,6 +333,99 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AnalysisCancelAccepted */
+        AnalysisCancelAccepted: {
+            /** Runid */
+            runId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "accepted";
+        };
+        /** AnalysisCancelAck */
+        AnalysisCancelAck: components["schemas"]["AnalysisCancelAccepted"] | components["schemas"]["AnalysisCancelAlreadyTerminal"];
+        /** AnalysisCancelAlreadyTerminal */
+        AnalysisCancelAlreadyTerminal: {
+            /** Runid */
+            runId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "already_terminal";
+            /**
+             * Terminalstatus
+             * @enum {string}
+             */
+            terminalStatus: "completed" | "failed" | "canceled" | "cleanup_unconfirmed";
+        };
+        /** AnalysisFileNone */
+        AnalysisFileNone: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "none";
+        };
+        /** AnalysisFileReady */
+        AnalysisFileReady: {
+            /** Bytelength */
+            byteLength: number;
+            /** Contentbase64 */
+            contentBase64: string;
+            /** Filename */
+            filename: string;
+            /**
+             * Mediatype
+             * @constant
+             */
+            mediaType: "text/csv; charset=utf-8";
+            /** Rowcount */
+            rowCount: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "ready";
+            /** Stepid */
+            stepId: string;
+            /** Toolcallid */
+            toolCallId: string;
+        };
+        /** AnalysisFileUnavailable */
+        AnalysisFileUnavailable: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "file_limit" | "file_generation_failed";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "unavailable";
+        };
+        /** AnalysisHistoryTurn */
+        AnalysisHistoryTurn: {
+            /** Answer */
+            answer: string;
+            /** Question */
+            question: string;
+        };
+        /** AnalysisRunInput */
+        AnalysisRunInput: {
+            /** History */
+            history?: components["schemas"]["AnalysisHistoryTurn"][];
+            /** Question */
+            question: string;
+            /**
+             * Requestid
+             * Format: uuid
+             */
+            requestId: string;
+            selection: components["schemas"]["MainModelSelection"];
+        };
         /** AttemptSummary */
         AttemptSummary: {
             /**
@@ -617,6 +744,16 @@ export interface components {
             sdk_version: string;
             /** Total */
             total: number;
+        };
+        /** ChannelRunParams */
+        ChannelRunParams: {
+            compareTo: components["schemas"]["RunPeriod"] | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            dimension: "channel";
+            period: components["schemas"]["RunPeriod"];
         };
         /** ChatCallInput */
         ChatCallInput: {
@@ -981,6 +1118,7 @@ export interface components {
             /** Scene Id */
             scene_id: string;
         };
+        JsonValue: unknown;
         /** MainModelSelection */
         MainModelSelection: {
             /**
@@ -1260,6 +1398,18 @@ export interface components {
              * @enum {string}
              */
             kind: "platform";
+        };
+        /** ProductRunParams */
+        ProductRunParams: {
+            /** Channelcode */
+            channelCode: string;
+            compareTo: components["schemas"]["RunPeriod"] | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            dimension: "product";
+            period: components["schemas"]["RunPeriod"];
         };
         /** ProviderCreate */
         ProviderCreate: {
@@ -1572,6 +1722,148 @@ export interface components {
              */
             type: "start";
         };
+        /** RunCanceled */
+        RunCanceled: {
+            /**
+             * Cleanup
+             * @constant
+             */
+            cleanup: "confirmed";
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "user" | "disconnected" | "shutdown";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "canceled";
+        };
+        /** RunCleanupUnconfirmed */
+        RunCleanupUnconfirmed: {
+            /**
+             * Cleanup
+             * @constant
+             */
+            cleanup: "unconfirmed";
+            /** Reason */
+            reason: ("user" | "disconnected" | "shutdown") | ("deadline" | "execution_error");
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "cleanup_unconfirmed";
+        };
+        /** RunCompleted */
+        RunCompleted: {
+            /** File */
+            file: components["schemas"]["AnalysisFileNone"] | components["schemas"]["AnalysisFileUnavailable"] | components["schemas"]["AnalysisFileReady"];
+            /** Finalanswer */
+            finalAnswer: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "completed";
+        };
+        /** RunContractModel */
+        RunContractModel: Record<string, never>;
+        /** RunEmpty */
+        RunEmpty: Record<string, never>;
+        /** RunExtensionPayload */
+        RunExtensionPayload: {
+            /** Data */
+            data: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Name */
+            name: string;
+            /** Required */
+            required: boolean;
+            /** Version */
+            version: number;
+        };
+        /** RunFailed */
+        RunFailed: {
+            /**
+             * Errorcode
+             * @enum {string}
+             */
+            errorCode: "model_failed" | "model_incomplete" | "model_unavailable" | "run_timeout" | "context_limit" | "step_limit" | "internal_error";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "failed";
+        };
+        /** RunFinished */
+        RunFinished: {
+            /** Payload */
+            payload: components["schemas"]["RunCompleted"] | components["schemas"]["RunFailed"] | components["schemas"]["RunCanceled"] | components["schemas"]["RunCleanupUnconfirmed"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "run.finished";
+        };
+        /** RunPacket */
+        RunPacket: {
+            /** Event */
+            event: components["schemas"]["RunStarted"] | components["schemas"]["RunRouted"] | components["schemas"]["StepStarted"] | components["schemas"]["ToolStarted"] | components["schemas"]["ToolFinished"] | components["schemas"]["StepFinished"] | components["schemas"]["StreamExtension"] | components["schemas"]["StreamBatch"] | components["schemas"]["RunFinished"];
+            /**
+             * Protocol
+             * @constant
+             */
+            protocol: "compass.run";
+            /** Requestid */
+            requestId: string;
+            /** Runid */
+            runId: string;
+            /** Seq */
+            seq: number;
+            /**
+             * Version
+             * @constant
+             */
+            version: 1;
+        };
+        /** RunPeriod */
+        RunPeriod: {
+            /** End */
+            end: string;
+            /** Start */
+            start: string;
+        };
+        /** RunRouted */
+        RunRouted: {
+            payload: components["schemas"]["RunRoutedPayload"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "run.routed";
+        };
+        /** RunRoutedPayload */
+        RunRoutedPayload: {
+            /** Modellabel */
+            modelLabel: string;
+            /** Providerid */
+            providerId: string;
+            /** Sceneid */
+            sceneId: string;
+            /** Toolsenabled */
+            toolsEnabled: boolean;
+        };
+        /** RunStarted */
+        RunStarted: {
+            payload: components["schemas"]["RunEmpty"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "run.started";
+        };
         /** SavedProvider */
         SavedProvider: {
             /**
@@ -1730,6 +2022,62 @@ export interface components {
              */
             type: "start";
         };
+        /** StepFinished */
+        StepFinished: {
+            payload: components["schemas"]["StepFinishedPayload"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "step.finished";
+        };
+        /** StepFinishedPayload */
+        StepFinishedPayload: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "completed" | "failed" | "canceled";
+            /** Stepid */
+            stepId: string;
+        };
+        /** StepStarted */
+        StepStarted: {
+            payload: components["schemas"]["StepStartedPayload"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "step.started";
+        };
+        /** StepStartedPayload */
+        StepStartedPayload: {
+            /** Modelcallid */
+            modelCallId: string;
+            /** Stepid */
+            stepId: string;
+            /** Stepindex */
+            stepIndex: number;
+        };
+        /** StreamBatch */
+        StreamBatch: {
+            /** Payload */
+            payload: (components["schemas"]["RunRouted"] | components["schemas"]["StepStarted"] | components["schemas"]["ToolStarted"] | components["schemas"]["ToolFinished"] | components["schemas"]["StepFinished"] | components["schemas"]["StreamExtension"])[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "stream.batch";
+        };
+        /** StreamExtension */
+        StreamExtension: {
+            payload: components["schemas"]["RunExtensionPayload"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "stream.extension";
+        };
         /** TenantScope */
         TenantScope: {
             /**
@@ -1853,6 +2201,63 @@ export interface components {
              */
             type: "tool_delta";
         };
+        /** ToolEmptyPayload */
+        ToolEmptyPayload: {
+            /**
+             * Rowcount
+             * @constant
+             */
+            rowCount: 0;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "empty";
+            /** Stepid */
+            stepId: string;
+            /** Toolcallid */
+            toolCallId: string;
+            /** Toolindex */
+            toolIndex: number;
+        };
+        /** ToolEventKey */
+        ToolEventKey: {
+            /** Stepid */
+            stepId: string;
+            /** Toolcallid */
+            toolCallId: string;
+            /** Toolindex */
+            toolIndex: number;
+        };
+        /** ToolFailedPayload */
+        ToolFailedPayload: {
+            /**
+             * Errorcode
+             * @enum {string}
+             */
+            errorCode: "unknown_tool" | "invalid_parameters" | "retail_unavailable" | "retail_query_failed" | "retail_query_timeout" | "result_limit";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "error";
+            /** Stepid */
+            stepId: string;
+            /** Toolcallid */
+            toolCallId: string;
+            /** Toolindex */
+            toolIndex: number;
+        };
+        /** ToolFinished */
+        ToolFinished: {
+            /** Payload */
+            payload: components["schemas"]["ToolSucceededPayload"] | components["schemas"]["ToolEmptyPayload"] | components["schemas"]["ToolFailedPayload"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "tool.finished";
+        };
         /** ToolFunction */
         ToolFunction: {
             /**
@@ -1866,6 +2271,47 @@ export interface components {
             parameters?: {
                 [key: string]: unknown;
             };
+        };
+        /** ToolStarted */
+        ToolStarted: {
+            payload: components["schemas"]["ToolStartedPayload"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "tool.started";
+        };
+        /** ToolStartedPayload */
+        ToolStartedPayload: {
+            /** Params */
+            params: (components["schemas"]["ChannelRunParams"] | components["schemas"]["ProductRunParams"]) | null;
+            /** Stepid */
+            stepId: string;
+            /** Toolcallid */
+            toolCallId: string;
+            /** Toolindex */
+            toolIndex: number;
+            /**
+             * Toolkind
+             * @enum {string}
+             */
+            toolKind: "retail_sales" | "unavailable";
+        };
+        /** ToolSucceededPayload */
+        ToolSucceededPayload: {
+            /** Rowcount */
+            rowCount: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "ok";
+            /** Stepid */
+            stepId: string;
+            /** Toolcallid */
+            toolCallId: string;
+            /** Toolindex */
+            toolIndex: number;
         };
         /** TrustedContext */
         TrustedContext: {
@@ -1927,6 +2373,171 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Health"];
+                };
+            };
+        };
+    };
+    start_run_v1_analysis_runs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalysisRunInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    cancel_run_v1_analysis_runs__run_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunEmpty"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisCancelAck"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
                 };
             };
         };

@@ -1,67 +1,61 @@
 "use client";
+
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ArrowUp,
   ChartNoAxesColumn,
   ChevronDown,
   Paperclip,
-  Square,
   RotateCcw,
+  Square,
 } from "lucide-react";
-import { AnalysisAttachments, type ComposerAttachment } from "./analysis-attachments";
-import { useDocumentSession } from "./shell/session-boundary";
+import {
+  AnalysisRunClient,
+  completedAnalysisHistory,
+  type AnalysisTurnView,
+} from "@/client/analysis-run";
 import type { PagePayload } from "@/contracts/page";
-import type { AvailableModels, GenerateInput, RoutedCallResponse } from "@/features/models/types";
-import { modelStatus } from "@/features/models/types";
-import { CallTrace } from "@/features/models/call-trace";
-import type { TraceInfo } from "@/contracts/trace-context";
-import { useModelCall } from "@/features/models/use-model-call";
-import { modelErrorMessage } from "@/contracts/model-errors";
+import type { AvailableModels } from "@/features/models/types";
+import { AnalysisAttachments, type ComposerAttachment } from "./analysis-attachments";
+import { AnalysisRunTurn } from "./analysis-run-turn";
+import { useDocumentSession } from "./shell/session-boundary";
 
 const suggestions = [
+  "比较 2025-11-17 至 11-23 和 11-24 至 11-30 两周，哪个渠道的实付金额变化最大？变化主要来自哪些商品？",
   "如何拆解销售增长的影响因素？",
   "怎样评估库存健康度？",
-  "设计一份渠道分析提纲",
 ];
-type Turn = TraceInfo & {
-  id: string;
-  question: string;
-  alias: string;
-  text: string;
-  status: string;
-  errorCode?: string | null;
-  unknownOutcome?: boolean;
-  errorMessage?: string;
-  routed?: RoutedCallResponse;
-};
+
 export function AnalysisComposer({ payload }: { payload: PagePayload }) {
   const api = useDocumentSession();
-  const call = useModelCall();
   const input = useRef<HTMLTextAreaElement>(null);
   const form = useRef<HTMLFormElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const history = useRef<HTMLDivElement>(null);
   const followOutput = useRef(true);
+  const active = useRef<AnalysisRunClient | null>(null);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState("");
   const [question, setQuestion] = useState("");
   const [models, setModels] = useState<AvailableModels | null>(null);
   const [providerId, setProviderId] = useState("");
-  const [turns, setTurns] = useState<Turn[]>([]);
-  const [messages, setMessages] = useState<GenerateInput["messages"]>([]);
-  const [activeQuestion, setActiveQuestion] = useState("");
-  const [activeAlias, setActiveAlias] = useState("");
+  const [turns, setTurns] = useState<AnalysisTurnView[]>([]);
+  const [historyStart, setHistoryStart] = useState(0);
+  const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [retry, setRetry] = useState(0);
   const [formError, setFormError] = useState("");
   const allowed = payload.session.capabilities.includes("models.invoke");
   const automatic = providerId === "auto";
   const selected = models?.items.find((model) => model.id === providerId);
-  const started = turns.length > 0 || Boolean(activeQuestion);
+  const started = turns.length > 0;
+  const activeTurn = busy ? turns.at(-1) : undefined;
+
   useLayoutEffect(() => {
     const node = history.current;
     if (node && followOutput.current) node.scrollTop = node.scrollHeight;
-  }, [turns, activeQuestion, call.output?.text]);
+  }, [turns]);
+
   useEffect(() => {
     let live = true;
     if (allowed)
@@ -78,14 +72,21 @@ export function AnalysisComposer({ payload }: { payload: PagePayload }) {
         .catch(() => {
           if (live) setLoadError("可用模型加载失败，请重新加载。");
         });
+    return () => {
+      live = false;
+    };
+  }, [api, allowed, payload.session.scope, retry]);
+
+  useEffect(() => {
     const remove = api.onClear(() => {
+      active.current?.dispose();
+      active.current = null;
       setQuestion("");
       setModels(null);
       setProviderId("");
-      setMessages([]);
       setTurns([]);
-      setActiveQuestion("");
-      setActiveAlias("");
+      setHistoryStart(0);
+      setBusy(false);
       setAttachments([]);
       setAttachmentError("");
       setFormError("");
@@ -93,128 +94,92 @@ export function AnalysisComposer({ payload }: { payload: PagePayload }) {
       if (fileInput.current) fileInput.current.value = "";
     });
     return () => {
-      live = false;
       remove();
+      active.current?.dispose();
+      active.current = null;
     };
-  }, [api, allowed, payload.session.scope, retry]);
+  }, [api]);
+
   function changeModel(value: string) {
-    if (call.busy) return;
+    if (busy) return;
     if (
-      messages.length &&
+      completedAnalysisHistory(turns.slice(historyStart)).length > 0 &&
       !window.confirm("切换模型将开启新的对话上下文，已有内容仍保留在当前页面。继续？")
     )
       return;
-    call.reset();
     setProviderId(value);
-    setMessages([]);
-    setActiveQuestion("");
+    setHistoryStart(turns.length);
     setFormError("");
   }
-  async function send(event: React.FormEvent) {
+
+  function updateTurn(next: AnalysisTurnView) {
+    setTurns((items) => {
+      const index = items.findIndex((item) => item.id === next.id);
+      if (index < 0) return [...items, next];
+      const copy = [...items];
+      copy[index] = next;
+      return copy;
+    });
+  }
+
+  function send(event: React.FormEvent) {
     event.preventDefault();
-    if (!allowed || (!selected && !automatic) || !question.trim() || call.busy) return;
+    if (!allowed || (!selected && !automatic) || !question.trim() || busy) return;
     if (attachments.length) {
       setFormError("附件暂不支持发送给模型，请移除附件后发送文字。");
       return;
     }
-    if (messages.length > 60) {
-      setFormError("当前对话已达到消息上限，请新建对话后继续。");
+    const { tenantId, workspaceId } = payload.session.scope;
+    if (!tenantId || !workspaceId) {
+      setFormError("当前工作区范围无效，请重新进入分析页面。");
       return;
     }
     const text = question.trim();
-    if (activeQuestion && call.output) {
-      const previous = call.output;
-      setTurns((items) => [
-        ...items,
-        {
-          id: previous.callId,
-          question: activeQuestion,
-          alias: activeAlias,
-          text: previous.text,
-          status: previous.status,
-          errorMessage: call.error,
-          unknownOutcome: true,
+    let client: AnalysisRunClient;
+    try {
+      client = new AnalysisRunClient({
+        api,
+        scope: { tenantId, workspaceId },
+        question: text,
+        history: completedAnalysisHistory(turns.slice(historyStart)),
+        selection: automatic
+          ? { mode: "auto", provider_id: null }
+          : { mode: "fixed", provider_id: selected!.id },
+        modelLabel: selected?.alias ?? "系统优化",
+        onChange: updateTurn,
+        onSettled(settled) {
+          if (active.current !== settled) return;
+          active.current = null;
+          setBusy(false);
+          if (api.phase === "active") input.current?.focus();
         },
-      ]);
+      });
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "无法启动本轮分析。");
+      return;
     }
-    const nextMessages: GenerateInput["messages"] = [
-      ...messages,
-      { role: "user", content: text, tool_call_id: null, tool_calls: null },
-    ];
-    const generate: GenerateInput = {
-      kind: "generate",
-      messages: nextMessages,
-      stream: automatic || selected?.capabilities.stream.state === "supported",
-      thinking: selected?.capabilities.thinking.state === "supported",
-      reasoning_effort: selected?.capabilities.thinking.state === "supported" ? "high" : null,
-      tools: [],
-      output_format: "text",
-      output_schema: null,
-      max_tokens: 8192,
-      continuation_token: null,
-    };
-    setActiveQuestion(text);
-    setActiveAlias(selected?.alias ?? "系统优化");
+    active.current = client;
+    setBusy(true);
     setQuestion("");
     setFormError("");
     followOutput.current = true;
-    const result = await call.run(
-      "models/calls",
-      {
-        ...payload.session.scope,
-        ...(automatic ? { main_model: { mode: "auto" } } : { provider_id: selected!.id }),
-        input: generate,
-      },
-      {
-        onError: (code) => {
-          if (code === "model_unavailable" || code === "chat_model_not_supported") {
-            setProviderId("");
-            setMessages([]);
-            setQuestion(text);
-            api.setDirty(true);
-            setRetry((value) => value + 1);
-          }
-        },
-      },
-    );
-    if (!api.retainsContent) return;
-    if (result) {
-      setTurns((items) => [
-        ...items,
-        {
-          id: result.call_id,
-          question: text,
-          alias: result.routed?.routing?.model ?? selected?.alias ?? "系统优化",
-          routed: result.routed,
-          traceId: result.traceId,
-          traceSampled: result.traceSampled,
-          text: result.text,
-          status: result.status,
-          errorCode: result.error_code,
-          unknownOutcome: result.upstream_outcome_unknown,
-        },
-      ]);
-      if (result.status === "completed" && !result.tool_calls?.length)
-        setMessages([
-          ...nextMessages,
-          { role: "assistant", content: result.text, tool_call_id: null, tool_calls: null },
-        ]);
-      setActiveQuestion("");
-      call.reset();
-      if (api.phase === "active") input.current?.focus();
-    }
+    api.setDirty(true);
+    void client.start();
   }
+
   function reset() {
     if (
-      (turns.length || question || activeQuestion || attachments.length) &&
+      (turns.length || question || busy || attachments.length) &&
       !window.confirm("清空当前页面的对话内容并新建对话？")
     )
       return;
-    call.reset();
+    active.current?.dispose();
+    active.current = null;
+    api.releaseDownloads();
     setTurns([]);
-    setMessages([]);
+    setHistoryStart(0);
+    setBusy(false);
     setQuestion("");
-    setActiveQuestion("");
     setProviderId("");
     setRetry((value) => value + 1);
     setFormError("");
@@ -225,8 +190,9 @@ export function AnalysisComposer({ payload }: { payload: PagePayload }) {
     api.setDirty(false);
     input.current?.focus();
   }
+
   function addAttachments(files: FileList | null) {
-    if (!files?.length || !allowed || call.busy) return;
+    if (!files?.length || !allowed || busy) return;
     const incoming = Array.from(files);
     const available = 10 - attachments.length;
     setAttachmentError(incoming.length > available ? "每条消息最多添加 10 个附件。" : "");
@@ -241,13 +207,27 @@ export function AnalysisComposer({ payload }: { payload: PagePayload }) {
     api.setDirty(true);
     if (fileInput.current) fileInput.current.value = "";
   }
+
   function removeAttachment(id: string) {
     const remaining = attachments.filter((item) => item.id !== id);
     setAttachments(remaining);
     setAttachmentError("");
     setFormError("");
-    api.setDirty(Boolean(question || remaining.length || turns.length || activeQuestion));
+    api.setDirty(Boolean(question || remaining.length || turns.length || busy));
   }
+
+  const stopWaiting =
+    activeTurn &&
+    ["waiting_for_run", "requesting", "accepted", "already_terminal"].includes(
+      activeTurn.stopState,
+    );
+  const stopLabel =
+    activeTurn?.stopState === "unconfirmed"
+      ? "重试停止"
+      : activeTurn?.stopState === "already_terminal"
+        ? "等待结果流"
+        : "停止任务";
+
   return (
     <section
       className={`analysis-welcome ${started ? "model-chat-started" : ""}`}
@@ -266,7 +246,7 @@ export function AnalysisComposer({ payload }: { payload: PagePayload }) {
         <>
           <div className="model-chat-heading">
             <span>当前对话</span>
-            <button type="button" className="new-chat-button" onClick={reset} disabled={call.busy}>
+            <button type="button" className="new-chat-button" onClick={reset}>
               <RotateCcw size={15} aria-hidden="true" />
               新建对话
             </button>
@@ -282,79 +262,17 @@ export function AnalysisComposer({ payload }: { payload: PagePayload }) {
             }}
           >
             {turns.map((turn) => (
-              <article key={turn.id} className="model-chat-turn">
-                <p className="model-chat-question">{turn.question}</p>
-                <div className="model-chat-answer">
-                  <span className="model-chat-label">
-                    {turn.alias} · {modelStatus[turn.status]}
-                  </span>
-                  <pre className="model-prose">{turn.text || "本次调用没有返回正文。"}</pre>
-                  {turn.routed && <RoutingDetails value={turn.routed} />}
-                  <CallTrace
-                    callId={turn.id}
-                    traceId={turn.traceId}
-                    traceSampled={turn.traceSampled}
-                  />
-                  {turn.errorMessage && (
-                    <p className="form-error" role="alert">
-                      {turn.errorMessage}
-                    </p>
-                  )}
-                  {turn.errorCode && (
-                    <p className="form-error" role="alert">
-                      {modelErrorMessage(turn.errorCode)}
-                    </p>
-                  )}
-                  {turn.status !== "completed" && (
-                    <p className="model-help muted">
-                      调用 ID：{turn.id}
-                      {turn.unknownOutcome ? " · 上游执行结果待确认，可能已经产生用量。" : ""}
-                    </p>
-                  )}
-                </div>
-              </article>
+              <AnalysisRunTurn
+                key={turn.id}
+                turn={turn}
+                onDownload={(file) => api.download(file.blob, file.filename)}
+              />
             ))}
-            {activeQuestion && (
-              <article className="model-chat-turn">
-                <p className="model-chat-question">{activeQuestion}</p>
-                <div className="model-chat-answer">
-                  <span className="model-chat-label" role="status">
-                    {activeAlias} ·{" "}
-                    {call.busy
-                      ? (call.output?.phase ?? "准备识别任务")
-                      : call.output
-                        ? modelStatus[call.output.status]
-                        : "准备调用"}
-                  </span>
-                  <pre className="model-prose">
-                    {call.output?.text || (call.busy ? "正在思考…" : "本次调用未返回内容。")}
-                  </pre>
-                  {call.output?.routed && <RoutingDetails value={call.output.routed} />}
-                  {call.output && (
-                    <CallTrace
-                      callId={call.output.callId}
-                      traceId={call.output.traceId}
-                      traceSampled={call.output.traceSampled}
-                    />
-                  )}
-                  {call.error && (
-                    <p className="form-error" role="alert">
-                      {call.error}
-                    </p>
-                  )}
-                </div>
-              </article>
-            )}
           </div>
         </>
       )}
       <div className="analysis-composer-dock">
-        <form
-          ref={form}
-          className="analysis-composer"
-          data-editor
-          onSubmit={(event) => void send(event)}
-        >
+        <form ref={form} className="analysis-composer" data-editor onSubmit={send}>
           <input
             ref={fileInput}
             type="file"
@@ -362,18 +280,14 @@ export function AnalysisComposer({ payload }: { payload: PagePayload }) {
             hidden
             aria-label="选择附件"
             onChange={(event) => addAttachments(event.target.files)}
-            disabled={!allowed || call.busy}
+            disabled={!allowed || busy}
           />
-          <AnalysisAttachments
-            items={attachments}
-            disabled={call.busy}
-            onRemove={removeAttachment}
-          />
+          <AnalysisAttachments items={attachments} disabled={busy} onRemove={removeAttachment} />
           <textarea
             ref={input}
             aria-label="分析问题"
             aria-describedby={attachments.length ? "analysis-attachment-notice" : undefined}
-            placeholder="给 Compass 发送消息"
+            placeholder={busy ? "Compass 正在分析…" : "给 Compass 发送消息"}
             value={question}
             onChange={(event) => {
               setQuestion(event.target.value);
@@ -391,14 +305,14 @@ export function AnalysisComposer({ payload }: { payload: PagePayload }) {
               }
             }}
             maxLength={8000}
-            disabled={call.busy}
+            disabled={busy}
           />
           <div className="composer-toolbar">
             <label className="composer-model-picker">
               <select
                 aria-label="选择 Chat 主模型"
                 value={providerId}
-                disabled={!allowed || call.busy || !models?.items.length}
+                disabled={!allowed || busy || !models?.items.length}
                 onChange={(event) => changeModel(event.target.value)}
               >
                 <option value="">选择模型</option>
@@ -417,20 +331,31 @@ export function AnalysisComposer({ payload }: { payload: PagePayload }) {
                 className="composer-attach"
                 aria-label="添加附件"
                 title="添加附件，最多 10 个"
-                disabled={!allowed || call.busy}
+                disabled={!allowed || busy}
                 onClick={() => fileInput.current?.click()}
               >
                 <Paperclip size={21} aria-hidden="true" />
               </button>
-              {call.busy ? (
+              {busy ? (
                 <button
                   type="button"
-                  className="composer-stop"
-                  aria-label="停止生成"
-                  title="停止生成"
-                  onClick={call.stop}
+                  className="composer-stop-task"
+                  disabled={Boolean(stopWaiting)}
+                  aria-label={
+                    activeTurn?.stopState === "already_terminal"
+                      ? "任务已结束，正在等待原结果流"
+                      : stopWaiting
+                        ? "正在终止任务"
+                        : stopLabel
+                  }
+                  onClick={() => active.current?.requestStop()}
                 >
-                  <Square size={17} aria-hidden="true" />
+                  <Square size={15} aria-hidden="true" />
+                  {activeTurn?.stopState === "already_terminal"
+                    ? "等待结果流"
+                    : stopWaiting
+                      ? "正在终止"
+                      : stopLabel}
                 </button>
               ) : (
                 <button
@@ -474,7 +399,7 @@ export function AnalysisComposer({ payload }: { payload: PagePayload }) {
               <button
                 className="secondary"
                 key={suggestion}
-                disabled={call.busy}
+                disabled={busy}
                 onClick={() => {
                   setQuestion(suggestion);
                   api.setDirty(true);
@@ -493,24 +418,5 @@ export function AnalysisComposer({ payload }: { payload: PagePayload }) {
         </p>
       </div>
     </section>
-  );
-}
-
-function RoutingDetails({ value }: { value: RoutedCallResponse }) {
-  return (
-    <details className="model-routing-details">
-      <summary>意图分类与响应结构</summary>
-      <dl>
-        <dt>一级分类 / 二级场景</dt>
-        <dd>
-          {value.intent ? `${value.intent.category_id} / ${value.intent.scene_id}` : "未完成分类"}
-        </dd>
-        <dt>本次模型</dt>
-        <dd>{value.routing?.model ?? "未调用推理模型"}</dd>
-      </dl>
-      <pre className="model-routing-json" aria-label="意图分类响应结构">
-        {JSON.stringify(value, null, 2)}
-      </pre>
-    </details>
   );
 }

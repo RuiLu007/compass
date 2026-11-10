@@ -43,6 +43,8 @@ type RuntimeDelta = TextDeltaEvent | ToolDeltaEvent | ReasoningMetaEvent
 
 type DeltaSink = Callable[[RuntimeDelta], Awaitable[None]]
 
+type ToolOutputValidation = Literal["strict", "agent_dispatch"]
+
 
 @dataclass(frozen=True, slots=True)
 class ModelSpec:
@@ -102,6 +104,7 @@ class ExecutionRequest:
     access: ProviderAccess
     input: ModelInput = field(repr=False)
     policy: CallPolicy
+    tool_output_validation: ToolOutputValidation = "strict"
 
 
 @dataclass(frozen=True, slots=True)

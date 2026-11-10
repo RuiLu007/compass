@@ -72,6 +72,12 @@ docker compose -f deploy/compose/compose.yaml --profile web run --rm web-migrate
 
 ## 模型 Runtime 配置
 
-Agent 迁移容器先供应独立 `compass_agent` 库，再迁移至 `0003` 并写入幂等工程样本；运行容器仅持有 `compass_agent_runtime` 凭据。既有旧版 `compass` 演示库保留，接管步骤见 [agent/main](../apps/agent/db/main/README.md)。自定义已存在角色时可通过 `COMPASS_AGENT_RUNTIME_URL` / `COMPASS_AGENT_MIGRATOR_URL` 提供原凭据，供应不会覆盖密码。
+Agent 迁移容器先供应独立 `compass_agent` 库，再迁移至 `0004` 并写入幂等工程样本；运行容器仅持有 `compass_agent_runtime` 凭据。既有旧版 `compass` 演示库保留，接管步骤见 [agent/main](../apps/agent/db/main/README.md)。自定义已存在角色时可通过 `COMPASS_AGENT_RUNTIME_URL` / `COMPASS_AGENT_MIGRATOR_URL` 提供原凭据，供应不会覆盖密码。
 
 `pnpm run deploy` 不读取根 `.env`。启用模型能力时从受控进程环境传入 `COMPASS_AGENT_SERVICE_TOKEN`、`COMPASS_MODEL_ENCRYPTION_KEY`、`COMPASS_MODEL_ALLOWED_ORIGINS`；前两项默认空，模型入口会明确不可用。模型 Key 经平台页面录入；数据库备份与加密密钥分别保存。完整接入见 [Agent 说明](../apps/agent/README.md#模型接入)。
+
+## Agent Run 的 Retail 绑定
+
+第 15 课的固定 Retail 工具使用应用库之外的已发布零售库。向 Agent 运行容器成对注入 `COMPASS_RETAIL_RUN_SCOPE` 和 `COMPASS_RETAIL_RUN_READONLY_DSN`；Compose 已登记透传，但默认均为空。前者只包含课堂 Web tenant/workspace、release、内容摘要、角色、Retail tenant 和 schema；后者是发布工具生成的受限只读账号，作为私密环境变量管理，不写入 Compose 文件或镜像。
+
+部署前按发布侧活动清单核对绑定，并验证 `session_user = current_user = <发布清单中的 a_east 实际角色名>`、事务只读及 `core.channel_product_daily` RLS。当前 Run 注册表在进程内，取消路由必须命中原进程，因此启用 Agent Run 的课堂部署保持一个 Agent 副本。切换发布样本前先 Drain 活动 Run，再同时更新绑定与 DSN。完整示例和验收步骤见 [课堂复现](../docs/lesson-15-agent-run.md)。

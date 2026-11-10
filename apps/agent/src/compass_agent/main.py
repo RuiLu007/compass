@@ -16,6 +16,8 @@ from compass_agent.models.entities import ModelCall, ModelChange, Provider
 from compass_agent.models.errors import ModelError
 from compass_agent.models.lifecycle import ExecutionTasks
 from compass_agent.observability.observer import Observer
+from compass_agent.run_api import router as run_router
+from compass_agent.runtime.control import RunRegistry
 from compass_agent.schemas import DemoOverview, Health
 from compass_agent.settings import get_settings
 
@@ -27,11 +29,13 @@ async def lifespan(app):
         settings.compass_model_max_concurrency, settings.compass_model_max_inflight
     )
     app.state.model_tasks = ExecutionTasks()
+    app.state.run_registry = RunRegistry()
     app.state.observation = Observer(settings)
     app.state.showcase_running = False
     try:
         yield
     finally:
+        await app.state.run_registry.close()
         await app.state.model_tasks.close()
         await asyncio.to_thread(app.state.observation.shutdown)
 
@@ -96,6 +100,7 @@ def demo_overview(
 
 app.add_middleware(ModelBoundaryMiddleware)
 app.include_router(model_router)
+app.include_router(run_router)
 
 
 @app.exception_handler(ModelError)
@@ -105,7 +110,7 @@ async def model_error_handler(request, error):
 
 @app.exception_handler(RequestValidationError)
 async def request_validation_handler(request, error):
-    if request.url.path.startswith("/v1/models"):
+    if request.url.path.startswith(("/v1/models", "/v1/analysis")):
         return error_response(ModelError("validation_failed"))
     from fastapi.exception_handlers import request_validation_exception_handler
 

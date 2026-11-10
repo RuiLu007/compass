@@ -257,4 +257,6 @@ out/
 /.cursor/skills/my-create-memory/references/sdd-integration.md
 /.cursor/skills/my-create-memory/references/storage.md
 /.cursor/skills/my-create-memory/scripts/my-ai-infra.mjs
+/.codex/hooks.json
+/.cursor/hooks.json
 # <!-- my-ai-infra:end -->

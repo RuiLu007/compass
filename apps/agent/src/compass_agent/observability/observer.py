@@ -37,10 +37,26 @@ def remote_context(carrier):
 
 
 class Observation:
-    def __init__(self, owner, name, attributes=None, parent=None, context=None):
+    def __init__(
+        self,
+        owner,
+        name,
+        attributes=None,
+        parent=None,
+        context=None,
+        *,
+        capture_content=None,
+    ):
         self.owner, self.name, self.parent = owner, name, parent
         self.metadata = {**(parent.metadata if parent else {}), **(attributes or {})}
         self.root = parent.root if parent else self
+        self.content_enabled = (
+            parent.content_enabled
+            if parent
+            else True
+            if capture_content is None
+            else capture_content
+        )
         self.started_ns = monotonic_ns()
         self.ended = self.authoritative = False
         self.first_ns = None
@@ -127,7 +143,12 @@ class Observation:
                 self.cost = float(value)
 
     def capture_input(self, request):
-        if not self.owner.content.enabled or not self.span or not self.span.is_recording():
+        if (
+            not self.content_enabled
+            or not self.owner.content.enabled
+            or not self.span
+            or not self.span.is_recording()
+        ):
             return
         try:
             self._content_secrets = (request.access.api_key.get_secret_value(),)
@@ -140,7 +161,12 @@ class Observation:
             self.owner.instrumentation_errors += 1
 
     def capture_output(self, result):
-        if not self.owner.content.enabled or not self.span or not self.span.is_recording():
+        if (
+            not self.content_enabled
+            or not self.owner.content.enabled
+            or not self.span
+            or not self.span.is_recording()
+        ):
             return
         try:
             value = output_snapshot(getattr(result, "output", None))
@@ -274,7 +300,7 @@ class Observer:
             )
             self.tracer = self.provider.get_tracer("compass.observability")
 
-    def root(self, call_id, context, carrier=None):
+    def root(self, call_id, context, carrier=None, *, capture_content=True):
         attrs = {
             "call_id": str(call_id),
             "purpose": context.purpose,
@@ -283,7 +309,13 @@ class Observer:
         for key in ("tenant_id", "workspace_id"):
             if value := getattr(context.scope, key, None):
                 attrs[key] = str(value)
-        scope = Observation(self, "compass.request", attrs, context=remote_context(carrier or {}))
+        scope = Observation(
+            self,
+            "compass.request",
+            attrs,
+            context=remote_context(carrier or {}),
+            capture_content=capture_content,
+        )
         if scope.span:
             scope.span.set_attribute("langfuse.trace.metadata.call_id", str(call_id))
         return scope

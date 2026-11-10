@@ -16,6 +16,7 @@ from compass_agent.llm.contracts import (
     GenerationOutput,
     ProviderAccess,
     RuntimeCancelled,
+    ToolOutputValidation,
 )
 from compass_agent.llm.executor import ReliableExecutor
 from compass_agent.llm.litellm_chat import LiteLLMChatAdapter
@@ -30,6 +31,14 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from compass_agent.observability.observer import Observation
+
+
+class ModelInvocationCanceled(asyncio.CancelledError):
+    """Cancellation visible to existing callers plus a trusted cleanup receipt for Runs."""
+
+    def __init__(self, *, cleanup_confirmed: bool):
+        self.cleanup_confirmed = cleanup_confirmed
+        super().__init__("model invocation canceled")
 
 
 def create_runtime(secrets, transport_factory=None):
@@ -104,7 +113,17 @@ class ModelService:
         self.observations: dict[UUID, Observation] = {}
         self.stage = "test"
 
-    async def prepare(self, call_id, provider_id, request, context, *, deadline=None, grant=None):
+    async def prepare(
+        self,
+        call_id,
+        provider_id,
+        request,
+        context,
+        *,
+        deadline=None,
+        grant=None,
+        expected_binding_version=None,
+    ):
         observation = (
             self.root_observation.child(
                 "compass.logical",
@@ -120,7 +139,13 @@ class ModelService:
             self.observations[call_id] = observation
         try:
             prepared = await self._prepare(
-                call_id, provider_id, request, context, deadline=deadline, grant=grant
+                call_id,
+                provider_id,
+                request,
+                context,
+                deadline=deadline,
+                grant=grant,
+                expected_binding_version=expected_binding_version,
             )
             if observation:
                 observation.set(
@@ -144,7 +169,17 @@ class ModelService:
                     )
             raise
 
-    async def _prepare(self, call_id, provider_id, request, context, *, deadline=None, grant=None):
+    async def _prepare(
+        self,
+        call_id,
+        provider_id,
+        request,
+        context,
+        *,
+        deadline=None,
+        grant=None,
+        expected_binding_version=None,
+    ):
         started = asyncio.get_running_loop().time()
         if deadline is not None and deadline <= started:
             raise ModelError("model_timeout", 503)
@@ -160,7 +195,8 @@ class ModelService:
                 context.model_copy(deep=True),
                 policy,
                 datetime.now(UTC),
-                *([grant] if grant is not None else []),
+                grant,
+                expected_binding_version,
             )
         )
         try:
@@ -169,6 +205,7 @@ class ModelService:
         except (asyncio.CancelledError, TimeoutError) as exc:
             canceled = isinstance(exc, asyncio.CancelledError)
             canceled = await settle(task, 2) or canceled
+            cleanup_confirmed = task.done() and not task.cancelled()
             if task.done() and not task.cancelled() and task.exception() is None:
                 prepared = task.result()
                 result = self._initial(prepared, request)
@@ -178,10 +215,11 @@ class ModelService:
                     0, int((asyncio.get_running_loop().time() - started) * 1000)
                 )
                 canceled = await self._finish(result, False) or canceled
+                cleanup_confirmed = result.error_code != "record_write_failed"
             else:
                 task.add_done_callback(consume)
             if canceled:
-                raise asyncio.CancelledError() from None
+                raise ModelInvocationCanceled(cleanup_confirmed=cleanup_confirmed) from None
             if isinstance(exc, TimeoutError):
                 raise ModelError("model_timeout", 503) from None
             raise
@@ -206,11 +244,13 @@ class ModelService:
         disconnect=None,
         *,
         logical_policy: LogicalPolicy | None = None,
+        tool_output_validation: ToolOutputValidation = "strict",
     ):
         result = self._initial(prepared, request)
         task = watcher = None
         canceled = False
         sent = False
+        cleanup_confirmed = True
         try:
             key, params = self.repository.secrets.open_connection(
                 prepared.spec.provider_id, prepared.ciphertext
@@ -220,6 +260,7 @@ class ModelService:
                 ProviderAccess(prepared.spec, SecretStr(key), params),
                 request.model_copy(deep=True),
                 prepared.policy,
+                tool_output_validation,
             )
             task = asyncio.create_task(
                 ReliableExecutor(self.runtime, self.gate).execute(
@@ -264,13 +305,17 @@ class ModelService:
                         outcome = task.result()
                         result = to_response(outcome)
                         sent = outcome.upstream_sent
+                        cleanup_confirmed = outcome.cleanup_confirmed
                     except RuntimeCancelled as exc:
                         result = to_response(exc.result)
                         sent = exc.result.upstream_sent
+                        cleanup_confirmed = exc.result.cleanup_confirmed
                     except (Exception, asyncio.CancelledError):
                         sent = True
+                        cleanup_confirmed = False
                 else:
                     sent = True
+                    cleanup_confirmed = False
                     task.cancel()
                     task.add_done_callback(consume)
                 result.status = "canceled"
@@ -300,8 +345,9 @@ class ModelService:
             if result.status != "completed":
                 result.continuation_token = None
             canceled = await self._finish(result, sent) or canceled
+            cleanup_confirmed &= result.error_code != "record_write_failed"
         if canceled:
-            raise asyncio.CancelledError()
+            raise ModelInvocationCanceled(cleanup_confirmed=cleanup_confirmed)
         return result
 
     async def _finish(self, result, sent):

@@ -493,13 +493,14 @@ def error_response(error):
 
 
 class ModelBoundaryMiddleware:
-    """Bound request bodies before FastAPI parsing and sanitize all model API failures."""
+    """Bound request bodies and sanitize failures on private Agent APIs."""
 
     def __init__(self, app):
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or not scope.get("path", "").startswith("/v1/models"):
+        private = scope.get("path", "").startswith(("/v1/models", "/v1/analysis"))
+        if scope["type"] != "http" or not private:
             return await self.app(scope, receive, send)
         limit = (
             2 * 1048576

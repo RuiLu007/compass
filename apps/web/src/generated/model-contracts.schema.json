@@ -1,5 +1,233 @@
 {
   "$defs": {
+    "AnalysisCancelAccepted": {
+      "additionalProperties": false,
+      "properties": {
+        "runId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Runid",
+          "type": "string"
+        },
+        "status": {
+          "const": "accepted",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runId",
+        "status"
+      ],
+      "title": "AnalysisCancelAccepted",
+      "type": "object"
+    },
+    "AnalysisCancelAck": {
+      "discriminator": {
+        "mapping": {
+          "accepted": "#/$defs/AnalysisCancelAccepted",
+          "already_terminal": "#/$defs/AnalysisCancelAlreadyTerminal"
+        },
+        "propertyName": "status"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/AnalysisCancelAccepted"
+        },
+        {
+          "$ref": "#/$defs/AnalysisCancelAlreadyTerminal"
+        }
+      ],
+      "title": "AnalysisCancelAck"
+    },
+    "AnalysisCancelAlreadyTerminal": {
+      "additionalProperties": false,
+      "properties": {
+        "runId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Runid",
+          "type": "string"
+        },
+        "status": {
+          "const": "already_terminal",
+          "title": "Status",
+          "type": "string"
+        },
+        "terminalStatus": {
+          "enum": [
+            "completed",
+            "failed",
+            "canceled",
+            "cleanup_unconfirmed"
+          ],
+          "title": "Terminalstatus",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runId",
+        "status",
+        "terminalStatus"
+      ],
+      "title": "AnalysisCancelAlreadyTerminal",
+      "type": "object"
+    },
+    "AnalysisFileNone": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "const": "none",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "AnalysisFileNone",
+      "type": "object"
+    },
+    "AnalysisFileReady": {
+      "additionalProperties": false,
+      "properties": {
+        "byteLength": {
+          "maximum": 131072,
+          "minimum": 1,
+          "title": "Bytelength",
+          "type": "integer"
+        },
+        "contentBase64": {
+          "maxLength": 174764,
+          "minLength": 4,
+          "title": "Contentbase64",
+          "type": "string"
+        },
+        "filename": {
+          "pattern": "^retail-products-[a-f0-9-]{36}\\.csv$",
+          "title": "Filename",
+          "type": "string"
+        },
+        "mediaType": {
+          "const": "text/csv; charset=utf-8",
+          "title": "Mediatype",
+          "type": "string"
+        },
+        "rowCount": {
+          "maximum": 200,
+          "minimum": 1,
+          "title": "Rowcount",
+          "type": "integer"
+        },
+        "status": {
+          "const": "ready",
+          "title": "Status",
+          "type": "string"
+        },
+        "stepId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Stepid",
+          "type": "string"
+        },
+        "toolCallId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Toolcallid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "stepId",
+        "toolCallId",
+        "filename",
+        "mediaType",
+        "rowCount",
+        "byteLength",
+        "contentBase64"
+      ],
+      "title": "AnalysisFileReady",
+      "type": "object"
+    },
+    "AnalysisFileUnavailable": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "file_limit",
+            "file_generation_failed"
+          ],
+          "title": "Code",
+          "type": "string"
+        },
+        "status": {
+          "const": "unavailable",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "code"
+      ],
+      "title": "AnalysisFileUnavailable",
+      "type": "object"
+    },
+    "AnalysisHistoryTurn": {
+      "additionalProperties": false,
+      "properties": {
+        "answer": {
+          "maxLength": 32768,
+          "minLength": 1,
+          "title": "Answer",
+          "type": "string"
+        },
+        "question": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "title": "Question",
+          "type": "string"
+        }
+      },
+      "required": [
+        "question",
+        "answer"
+      ],
+      "title": "AnalysisHistoryTurn",
+      "type": "object"
+    },
+    "AnalysisRunInput": {
+      "additionalProperties": false,
+      "properties": {
+        "history": {
+          "items": {
+            "$ref": "#/$defs/AnalysisHistoryTurn"
+          },
+          "maxItems": 12,
+          "title": "History",
+          "type": "array"
+        },
+        "question": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "title": "Question",
+          "type": "string"
+        },
+        "requestId": {
+          "format": "uuid",
+          "title": "Requestid",
+          "type": "string"
+        },
+        "selection": {
+          "$ref": "#/$defs/MainModelSelection"
+        }
+      },
+      "required": [
+        "requestId",
+        "question",
+        "selection"
+      ],
+      "title": "AnalysisRunInput",
+      "type": "object"
+    },
     "AttemptSummary": {
       "additionalProperties": false,
       "properties": {
@@ -715,6 +943,36 @@
         "sdk_version"
       ],
       "title": "CatalogPage",
+      "type": "object"
+    },
+    "ChannelRunParams": {
+      "additionalProperties": false,
+      "properties": {
+        "compareTo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunPeriod"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dimension": {
+          "const": "channel",
+          "title": "Dimension",
+          "type": "string"
+        },
+        "period": {
+          "$ref": "#/$defs/RunPeriod"
+        }
+      },
+      "required": [
+        "dimension",
+        "period",
+        "compareTo"
+      ],
+      "title": "ChannelRunParams",
       "type": "object"
     },
     "ChatCallInput": {
@@ -1541,6 +1799,7 @@
       "title": "Intent",
       "type": "object"
     },
+    "JsonValue": {},
     "MainModelSelection": {
       "additionalProperties": false,
       "properties": {
@@ -2232,6 +2491,42 @@
         "kind"
       ],
       "title": "PlatformScope",
+      "type": "object"
+    },
+    "ProductRunParams": {
+      "additionalProperties": false,
+      "properties": {
+        "channelCode": {
+          "pattern": "^[A-Z0-9_]{1,24}$",
+          "title": "Channelcode",
+          "type": "string"
+        },
+        "compareTo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunPeriod"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dimension": {
+          "const": "product",
+          "title": "Dimension",
+          "type": "string"
+        },
+        "period": {
+          "$ref": "#/$defs/RunPeriod"
+        }
+      },
+      "required": [
+        "dimension",
+        "period",
+        "compareTo",
+        "channelCode"
+      ],
+      "title": "ProductRunParams",
       "type": "object"
     },
     "ProviderCreate": {
@@ -2993,6 +3288,422 @@
       "title": "RoutingStartEvent",
       "type": "object"
     },
+    "RunCanceled": {
+      "additionalProperties": false,
+      "properties": {
+        "cleanup": {
+          "const": "confirmed",
+          "title": "Cleanup",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "user",
+            "disconnected",
+            "shutdown"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "status": {
+          "const": "canceled",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "reason",
+        "cleanup"
+      ],
+      "title": "RunCanceled",
+      "type": "object"
+    },
+    "RunCleanupUnconfirmed": {
+      "additionalProperties": false,
+      "properties": {
+        "cleanup": {
+          "const": "unconfirmed",
+          "title": "Cleanup",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "user",
+                "disconnected",
+                "shutdown"
+              ],
+              "type": "string"
+            },
+            {
+              "enum": [
+                "deadline",
+                "execution_error"
+              ],
+              "type": "string"
+            }
+          ],
+          "title": "Reason"
+        },
+        "status": {
+          "const": "cleanup_unconfirmed",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "reason",
+        "cleanup"
+      ],
+      "title": "RunCleanupUnconfirmed",
+      "type": "object"
+    },
+    "RunCompleted": {
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "discriminator": {
+            "mapping": {
+              "none": "#/$defs/AnalysisFileNone",
+              "ready": "#/$defs/AnalysisFileReady",
+              "unavailable": "#/$defs/AnalysisFileUnavailable"
+            },
+            "propertyName": "status"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/AnalysisFileNone"
+            },
+            {
+              "$ref": "#/$defs/AnalysisFileUnavailable"
+            },
+            {
+              "$ref": "#/$defs/AnalysisFileReady"
+            }
+          ],
+          "title": "File"
+        },
+        "finalAnswer": {
+          "maxLength": 32768,
+          "minLength": 1,
+          "title": "Finalanswer",
+          "type": "string"
+        },
+        "status": {
+          "const": "completed",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "finalAnswer",
+        "file"
+      ],
+      "title": "RunCompleted",
+      "type": "object"
+    },
+    "RunContractModel": {
+      "additionalProperties": false,
+      "properties": {},
+      "title": "RunContractModel",
+      "type": "object"
+    },
+    "RunEmpty": {
+      "additionalProperties": false,
+      "properties": {},
+      "title": "RunEmpty",
+      "type": "object"
+    },
+    "RunExtensionPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "data": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Data",
+          "type": "object"
+        },
+        "name": {
+          "maxLength": 96,
+          "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "required": {
+          "title": "Required",
+          "type": "boolean"
+        },
+        "version": {
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "required",
+        "data"
+      ],
+      "title": "RunExtensionPayload",
+      "type": "object"
+    },
+    "RunFailed": {
+      "additionalProperties": false,
+      "properties": {
+        "errorCode": {
+          "enum": [
+            "model_failed",
+            "model_incomplete",
+            "model_unavailable",
+            "run_timeout",
+            "context_limit",
+            "step_limit",
+            "internal_error"
+          ],
+          "title": "Errorcode",
+          "type": "string"
+        },
+        "status": {
+          "const": "failed",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "errorCode"
+      ],
+      "title": "RunFailed",
+      "type": "object"
+    },
+    "RunFinished": {
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "discriminator": {
+            "mapping": {
+              "canceled": "#/$defs/RunCanceled",
+              "cleanup_unconfirmed": "#/$defs/RunCleanupUnconfirmed",
+              "completed": "#/$defs/RunCompleted",
+              "failed": "#/$defs/RunFailed"
+            },
+            "propertyName": "status"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/RunCompleted"
+            },
+            {
+              "$ref": "#/$defs/RunFailed"
+            },
+            {
+              "$ref": "#/$defs/RunCanceled"
+            },
+            {
+              "$ref": "#/$defs/RunCleanupUnconfirmed"
+            }
+          ],
+          "title": "Payload"
+        },
+        "type": {
+          "const": "run.finished",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ],
+      "title": "RunFinished",
+      "type": "object"
+    },
+    "RunPacket": {
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "discriminator": {
+            "mapping": {
+              "run.finished": "#/$defs/RunFinished",
+              "run.routed": "#/$defs/RunRouted",
+              "run.started": "#/$defs/RunStarted",
+              "step.finished": "#/$defs/StepFinished",
+              "step.started": "#/$defs/StepStarted",
+              "stream.batch": "#/$defs/StreamBatch",
+              "stream.extension": "#/$defs/StreamExtension",
+              "tool.finished": "#/$defs/ToolFinished",
+              "tool.started": "#/$defs/ToolStarted"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/RunStarted"
+            },
+            {
+              "$ref": "#/$defs/RunRouted"
+            },
+            {
+              "$ref": "#/$defs/StepStarted"
+            },
+            {
+              "$ref": "#/$defs/ToolStarted"
+            },
+            {
+              "$ref": "#/$defs/ToolFinished"
+            },
+            {
+              "$ref": "#/$defs/StepFinished"
+            },
+            {
+              "$ref": "#/$defs/StreamExtension"
+            },
+            {
+              "$ref": "#/$defs/StreamBatch"
+            },
+            {
+              "$ref": "#/$defs/RunFinished"
+            }
+          ],
+          "title": "Event"
+        },
+        "protocol": {
+          "const": "compass.run",
+          "title": "Protocol",
+          "type": "string"
+        },
+        "requestId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Requestid",
+          "type": "string"
+        },
+        "runId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Runid",
+          "type": "string"
+        },
+        "seq": {
+          "maximum": 96,
+          "minimum": 1,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "version": {
+          "const": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "protocol",
+        "version",
+        "requestId",
+        "runId",
+        "seq",
+        "event"
+      ],
+      "title": "RunPacket",
+      "type": "object"
+    },
+    "RunPeriod": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "title": "End",
+          "type": "string"
+        },
+        "start": {
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "title": "Start",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "RunPeriod",
+      "type": "object"
+    },
+    "RunRouted": {
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/RunRoutedPayload"
+        },
+        "type": {
+          "const": "run.routed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ],
+      "title": "RunRouted",
+      "type": "object"
+    },
+    "RunRoutedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "modelLabel": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Modellabel",
+          "type": "string"
+        },
+        "providerId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Providerid",
+          "type": "string"
+        },
+        "sceneId": {
+          "pattern": "^SC-[0-9]{2}$",
+          "title": "Sceneid",
+          "type": "string"
+        },
+        "toolsEnabled": {
+          "title": "Toolsenabled",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "providerId",
+        "modelLabel",
+        "sceneId",
+        "toolsEnabled"
+      ],
+      "title": "RunRoutedPayload",
+      "type": "object"
+    },
+    "RunStarted": {
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/RunEmpty"
+        },
+        "type": {
+          "const": "run.started",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ],
+      "title": "RunStarted",
+      "type": "object"
+    },
     "SavedProvider": {
       "additionalProperties": false,
       "properties": {
@@ -3344,6 +4055,171 @@
       "title": "StartEvent",
       "type": "object"
     },
+    "StepFinished": {
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/StepFinishedPayload"
+        },
+        "type": {
+          "const": "step.finished",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ],
+      "title": "StepFinished",
+      "type": "object"
+    },
+    "StepFinishedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "completed",
+            "failed",
+            "canceled"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "stepId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Stepid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stepId",
+        "status"
+      ],
+      "title": "StepFinishedPayload",
+      "type": "object"
+    },
+    "StepStarted": {
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/StepStartedPayload"
+        },
+        "type": {
+          "const": "step.started",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ],
+      "title": "StepStarted",
+      "type": "object"
+    },
+    "StepStartedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "modelCallId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Modelcallid",
+          "type": "string"
+        },
+        "stepId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Stepid",
+          "type": "string"
+        },
+        "stepIndex": {
+          "maximum": 6,
+          "minimum": 1,
+          "title": "Stepindex",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "stepId",
+        "stepIndex",
+        "modelCallId"
+      ],
+      "title": "StepStartedPayload",
+      "type": "object"
+    },
+    "StreamBatch": {
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "run.routed": "#/$defs/RunRouted",
+                "step.finished": "#/$defs/StepFinished",
+                "step.started": "#/$defs/StepStarted",
+                "stream.extension": "#/$defs/StreamExtension",
+                "tool.finished": "#/$defs/ToolFinished",
+                "tool.started": "#/$defs/ToolStarted"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/RunRouted"
+              },
+              {
+                "$ref": "#/$defs/StepStarted"
+              },
+              {
+                "$ref": "#/$defs/ToolStarted"
+              },
+              {
+                "$ref": "#/$defs/ToolFinished"
+              },
+              {
+                "$ref": "#/$defs/StepFinished"
+              },
+              {
+                "$ref": "#/$defs/StreamExtension"
+              }
+            ]
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Payload",
+          "type": "array"
+        },
+        "type": {
+          "const": "stream.batch",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ],
+      "title": "StreamBatch",
+      "type": "object"
+    },
+    "StreamExtension": {
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/RunExtensionPayload"
+        },
+        "type": {
+          "const": "stream.extension",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ],
+      "title": "StreamExtension",
+      "type": "object"
+    },
     "TenantScope": {
       "additionalProperties": false,
       "properties": {
@@ -3594,6 +4470,162 @@
       "title": "ToolDeltaEvent",
       "type": "object"
     },
+    "ToolEmptyPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "rowCount": {
+          "const": 0,
+          "title": "Rowcount",
+          "type": "integer"
+        },
+        "status": {
+          "const": "empty",
+          "title": "Status",
+          "type": "string"
+        },
+        "stepId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Stepid",
+          "type": "string"
+        },
+        "toolCallId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Toolcallid",
+          "type": "string"
+        },
+        "toolIndex": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Toolindex",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "stepId",
+        "toolCallId",
+        "toolIndex",
+        "status",
+        "rowCount"
+      ],
+      "title": "ToolEmptyPayload",
+      "type": "object"
+    },
+    "ToolEventKey": {
+      "additionalProperties": false,
+      "properties": {
+        "stepId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Stepid",
+          "type": "string"
+        },
+        "toolCallId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Toolcallid",
+          "type": "string"
+        },
+        "toolIndex": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Toolindex",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "stepId",
+        "toolCallId",
+        "toolIndex"
+      ],
+      "title": "ToolEventKey",
+      "type": "object"
+    },
+    "ToolFailedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "errorCode": {
+          "enum": [
+            "unknown_tool",
+            "invalid_parameters",
+            "retail_unavailable",
+            "retail_query_failed",
+            "retail_query_timeout",
+            "result_limit"
+          ],
+          "title": "Errorcode",
+          "type": "string"
+        },
+        "status": {
+          "const": "error",
+          "title": "Status",
+          "type": "string"
+        },
+        "stepId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Stepid",
+          "type": "string"
+        },
+        "toolCallId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Toolcallid",
+          "type": "string"
+        },
+        "toolIndex": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Toolindex",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "stepId",
+        "toolCallId",
+        "toolIndex",
+        "status",
+        "errorCode"
+      ],
+      "title": "ToolFailedPayload",
+      "type": "object"
+    },
+    "ToolFinished": {
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "discriminator": {
+            "mapping": {
+              "empty": "#/$defs/ToolEmptyPayload",
+              "error": "#/$defs/ToolFailedPayload",
+              "ok": "#/$defs/ToolSucceededPayload"
+            },
+            "propertyName": "status"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ToolSucceededPayload"
+            },
+            {
+              "$ref": "#/$defs/ToolEmptyPayload"
+            },
+            {
+              "$ref": "#/$defs/ToolFailedPayload"
+            }
+          ],
+          "title": "Payload"
+        },
+        "type": {
+          "const": "tool.finished",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ],
+      "title": "ToolFinished",
+      "type": "object"
+    },
     "ToolFunction": {
       "additionalProperties": false,
       "properties": {
@@ -3618,6 +4650,131 @@
         "name"
       ],
       "title": "ToolFunction",
+      "type": "object"
+    },
+    "ToolStarted": {
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/ToolStartedPayload"
+        },
+        "type": {
+          "const": "tool.started",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ],
+      "title": "ToolStarted",
+      "type": "object"
+    },
+    "ToolStartedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "params": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "channel": "#/$defs/ChannelRunParams",
+                  "product": "#/$defs/ProductRunParams"
+                },
+                "propertyName": "dimension"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ChannelRunParams"
+                },
+                {
+                  "$ref": "#/$defs/ProductRunParams"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Params"
+        },
+        "stepId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Stepid",
+          "type": "string"
+        },
+        "toolCallId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Toolcallid",
+          "type": "string"
+        },
+        "toolIndex": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Toolindex",
+          "type": "integer"
+        },
+        "toolKind": {
+          "enum": [
+            "retail_sales",
+            "unavailable"
+          ],
+          "title": "Toolkind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stepId",
+        "toolCallId",
+        "toolIndex",
+        "toolKind",
+        "params"
+      ],
+      "title": "ToolStartedPayload",
+      "type": "object"
+    },
+    "ToolSucceededPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "rowCount": {
+          "maximum": 200,
+          "minimum": 1,
+          "title": "Rowcount",
+          "type": "integer"
+        },
+        "status": {
+          "const": "ok",
+          "title": "Status",
+          "type": "string"
+        },
+        "stepId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Stepid",
+          "type": "string"
+        },
+        "toolCallId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Toolcallid",
+          "type": "string"
+        },
+        "toolIndex": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Toolindex",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "stepId",
+        "toolCallId",
+        "toolIndex",
+        "status",
+        "rowCount"
+      ],
+      "title": "ToolSucceededPayload",
       "type": "object"
     },
     "TrustedContext": {

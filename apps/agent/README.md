@@ -5,10 +5,10 @@
 从工程根运行 `pnpm dev -F agent`，统一加载根 `.env`。本目录 `turbo.json` 为构建和静态检查声明 Python 工具链缓存指纹；开发、迁移及 seed 不缓存。
 
 - `/healthz`：进程存活，无数据库依赖。
-- `/readyz`：数据库连接、演示表与模型配置表可用性，未迁移至 0003 时返回 503。
+- `/readyz`：数据库连接、演示表与模型配置表可用性，未迁移至 0004 时返回 503。
 - `/v1/demo/overview`：固定合成数据聚合；默认关闭，启用后仍只读。空数据或数据库故障返回 503。
 
-Feature 993 增加进程内 LLM Runtime、平台模型 Provider 配置、能力测试和 Chat 调用。`models/` 拥有配置与元记录，`llm/` 统一参数、适配器、结果和错误；`model_api.py` 提供内部 HTTP 入口。账户、租户与权限由 Web / BFF 拥有，每次调用先完成短事务鉴权，再携服务令牌及可信上下文调用 Agent。Agent 校验上下文与 Provider 状态，不访问 Web 业务表。工具执行、Run / Step / Event、执行预算及分析编排留在后续课程范围。
+Feature 993 增加进程内 LLM Runtime、平台模型 Provider 配置、能力测试和 Chat 调用。`models/` 拥有配置与元记录，`llm/` 统一参数、适配器、结果和错误；`model_api.py` 提供内部 HTTP 入口。账户、租户与权限由 Web / BFF 拥有，每次调用先完成短事务鉴权，再携服务令牌及可信上下文调用 Agent。Agent 校验上下文与 Provider 状态，不访问 Web 业务表。Feature 989 在此基础上增加进程内 Run / Step、顺序 ReAct、固定 Retail 查询、SSE 进度、CSV 与在途终止；计划预算、并行工具、Sandbox 和持久恢复仍属于后续课程。
 
 数据库迁移唯一源为 `migrations/`，受管入口和 SQL 交付见 [agent/main](db/main/README.md)。首次运行 `pnpm db:provision -F agent`，再执行 `pnpm db:migrate -F agent`。供应、迁移与运行凭据分离；`pnpm db:seed -F agent` 使用运行账号幂等写入三天虚构数据。
 
@@ -32,9 +32,17 @@ V2 按 [Runtime 目录说明](src/compass_agent/llm/README.md)和[模型应用�
 
 完整零售业务数据由独立的 [tools/data-seed](../../tools/data-seed/README.md) 生成、校验和发布，使用 `pnpm data:seed`。工具及其零售迁移、测试已移出 Agent；Agent 包和运行镜像只携带自身代码。
 
-普通分析 Runner、Dispatcher、Sandbox 控制与 Memory Tools 按后续切片接入。`AGENT_API_URL` 为 Web 的内部 HTTP 接口地址配置，Compose 内服务地址为 `http://agent:8102`。
+`AGENT_API_URL` 为 Web 的内部 HTTP 接口地址配置，Compose 内服务地址为 `http://agent:8102`。统一 Dispatcher、Sandbox 控制与 Memory Tools 按后续切片接入。
 
-上层 Agent 的工作流、调度与恢复目录随实现创建，当前不保留空的 `src/compass_agent/runtime/`。已交付的单次模型调用位于 `src/compass_agent/llm/runtime.py`；模块职责和目录扩展规则见 [LLM Runtime 说明](src/compass_agent/llm/README.md#目录演进)。
+本期顺序执行内核位于 `src/compass_agent/runtime/`；已交付的单次模型调用仍位于 `src/compass_agent/llm/runtime.py`。工作流、调度与持久恢复按后续切片扩展；模块职责和目录规则见 [LLM Runtime 说明](src/compass_agent/llm/README.md#目录演进)。
+
+## 第 15 课 Agent Run
+
+`POST /v1/analysis/runs` 返回 `compass.run` v1 SSE，首包在任何外部派发前提供 Run ID；`POST /v1/analysis/runs/{run_id}/cancel` 受理同一所有者的停止请求。执行内核位于 `src/compass_agent/runtime/`，最多 6 个模型 Step、每步 4 条顺序工具调用，Run 总期限 180 秒。原模型管理、诊断和单次 Chat API 保持原契约。
+
+固定 `retail_sales` 工具只接受日期、`channel | product` 维度及商品维度的渠道编码，不接受 SQL 或连接信息。启用工具时成对配置 `COMPASS_RETAIL_RUN_SCOPE` 与 `COMPASS_RETAIL_RUN_READONLY_DSN`；前者绑定唯一 Web tenant/workspace、发布版本、摘要、角色和 Retail tenant，后者只使用发布工具生成的受限只读账号。全空时正常保留零工具 Chat，部分配置或 libpq 取消能力不满足时禁用 Retail。
+
+开发配置、课堂问题、对照数字、终止与真实 PostgreSQL 验收见 [课堂复现](../../docs/lesson-15-agent-run.md)。执行内核选择与后续边界见 [ADR 0002](../../docs/adr/0002-agent-execution-kernel.md)。
 
 ## 供应商协议与连接配置
 

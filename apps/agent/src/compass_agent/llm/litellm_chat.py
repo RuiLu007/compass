@@ -16,6 +16,7 @@ from compass_agent.llm.contracts import (
     ContinuationCodec,
     ExecutionRequest,
     ModelOutput,
+    ToolOutputValidation,
 )
 from compass_agent.llm.errors import RuntimeFailure, error_code, recovery_for
 from compass_agent.llm.sdk import sdk
@@ -54,7 +55,12 @@ def enforce_output_budget(result, reasoning, tools, limits):
         raise RuntimeFailure("response_too_large")
 
 
-def complete_output(request, result, normal_eof):
+def complete_output(
+    request,
+    result,
+    normal_eof,
+    tool_output_validation: ToolOutputValidation = "strict",
+):
     if not normal_eof or result.finish_reason is None:
         raise RuntimeFailure("stream_interrupted")
     if result.finish_reason == "length":
@@ -63,10 +69,22 @@ def complete_output(request, result, normal_eof):
         raise RuntimeFailure("model_refused")
     if result.finish_reason not in {"stop", "tool_calls"}:
         raise RuntimeFailure("provider_protocol_error")
-    definitions = {tool.function.name: tool.function.parameters for tool in request.tools}
+    if tool_output_validation == "agent_dispatch" and bool(result.tool_calls) != (
+        result.finish_reason == "tool_calls"
+    ):
+        raise RuntimeFailure("provider_protocol_error")
     if len({tool.id for tool in result.tool_calls}) != len(result.tool_calls):
         raise RuntimeFailure("invalid_tool_arguments")
+    if result.tool_calls and not request.tools:
+        raise RuntimeFailure("invalid_tool_arguments")
+    if tool_output_validation == "agent_dispatch" and any(
+        not tool.id or not tool.function.name for tool in result.tool_calls
+    ):
+        raise RuntimeFailure("provider_protocol_error")
+    definitions = {tool.function.name: tool.function.parameters for tool in request.tools}
     for tool in result.tool_calls:
+        if tool_output_validation == "agent_dispatch":
+            continue
         if tool.function.name not in definitions:
             raise RuntimeFailure("invalid_tool_arguments")
         try:
@@ -145,6 +163,8 @@ class LiteLLMChatAdapter:
 
         def public_tool_id(value):
             # SDKs can embed private provider state in tool IDs; keep native IDs sealed.
+            if not isinstance(value, str) or not value:
+                raise RuntimeFailure("provider_protocol_error")
             return (
                 value if wire_guard else "call_" + hashlib.sha256(value.encode()).hexdigest()[:32]
             )
@@ -304,10 +324,15 @@ class LiteLLMChatAdapter:
                                 arguments=args,
                             )
                         )
-            result.tool_calls = tuple(
-                ToolCall.model_validate({**parts[i], "id": public_tool_id(parts[i]["id"])})
-                for i in sorted(parts)
-            )
+            normalized = []
+            for i in sorted(parts):
+                part = parts[i]
+                if not part["function"]["name"]:
+                    raise RuntimeFailure("provider_protocol_error")
+                normalized.append(
+                    ToolCall.model_validate({**part, "id": public_tool_id(part["id"])})
+                )
+            result.tool_calls = tuple(normalized)
             if result.tool_calls:
                 assembled = litellm.stream_chunk_builder(chunks=chunks, messages=messages)
                 if assembled is not None:
@@ -368,7 +393,12 @@ class LiteLLMChatAdapter:
                 estimate(session.observation, litellm, priced, access.spec.sdk_model)
             except Exception:
                 pass
-        complete_output(request, result, normal_eof)
+        complete_output(
+            request,
+            result,
+            normal_eof,
+            invocation.tool_output_validation,
+        )
         result.continuation_token = seal(
             invocation.context.continuation_binding,
             request,

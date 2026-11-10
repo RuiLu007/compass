@@ -110,7 +110,8 @@ pnpm deploy:down       # 停止整个 Compose 项目，保留数据卷与镜像
 - 示例接口显式启用 `COMPASS_DEMO_ENABLED=true` 后才开放，数据全部为固定合成数据。接口不接受租户、SQL 或自由代码输入；尚未接入真实经营数据。
 - 本地登录、数据库会话、租户与成员、个人权限、CSRF、设置、通知和审计已接入；企业 OIDC、运行编排、Sandbox、EvalOps 留待后续 Feature。模型 Runtime 的管理、测试和 Chat 调用见 [993](mai-specs/993-lesson-11-llm-runtime/BRIEF.md)。共享部署需配置 HTTPS、私有凭据及备份策略。
 - Python 应用已创建：`agent`（原 agent-api）、`memory`、`worker`。memory 当前仅有服务健康检查，worker 仅有进程生命周期；普通分析 Runner、记忆业务、Temporal / Outbox 与共享执行包仍按 [实施任务](mai-specs/999-compass-product-course-landing-app/design/scaffold-design.md#8-部署收敛实施任务)推进。
-- 当前 Web 已搭齐原型框架；分析 Chat 已接入本页对话、两级意图分类、字典特征和静态/自动选模；闲聊通过专用 Flash prompt 引导回业务数据任务，响应结构可在回答下方展开，模型接入提供平台管理与租户只读摘要；数据查询、文件上传、报告、看板及其余 Agent/Memory 业务继续保持待接入状态。实现及验收见 [995](mai-specs/995-web-management-foundation/README.md)。
+- 当前 Web 已搭齐原型框架；分析 Chat 已接入本页对话、两级意图分类、字典特征和静态/自动选模；闲聊通过专用 Flash prompt 引导回业务数据任务，响应结构可在回答下方展开，模型接入提供平台管理与租户只读摘要；除第 15 课固定 Retail 工具外，通用数据查询、文件上传、报告、看板及其余 Agent/Memory 业务继续保持待接入状态。实现及验收见 [995](mai-specs/995-web-management-foundation/README.md)。
+- 第 15 课已将分析 Chat 接入进程内 Agent Run：一次发送可顺序完成多轮固定 Retail 只读查询、展示工具过程、提交最终回答与有界 CSV，并能按 Run ID 终止在途模型或数据库查询。该能力采用单 Agent 进程、单副本和内存态；课堂配置及复现见 [Agent Run 说明](docs/lesson-15-agent-run.md)。
 - 本工程没有授予开源许可证；依赖许可证由各上游项目提供。
 
 ## 独立产品官网
@@ -141,3 +142,7 @@ Feature 991 为主生成增加有界恢复、共享并发容量和安全尝试�
 Feature 990 增加 OTel 请求链路、Logical Call / Attempt、调用编号复制、平台观测状态与固定模型对比。默认关闭；本地后台采用 Docker Langfuse，使用 `pnpm observability init`、`pnpm observability up` 初始化并启动，页面在 <http://127.0.0.1:8104>。部署、账号配置、数据格式/存储和多实例传播见 [Langfuse 运行说明](deploy/observability/README.md)。本期无业务库迁移，Agent 仍为 0004；观测故障隔离、敏感正文排除和实际验收见 [990 实施记录](mai-specs/990-lesson-14-model-observability/IMPLEMENTATION.md)。
 
 [第 14 课学习资料包](mai-specs/990-lesson-14-model-observability/lesson-14-learning-materials.zip)包含 PRD、Markdown 技术方案与离线 HTML。
+
+## Agent 执行内核
+
+Feature 989 在既有模型路由与可靠执行上增加同步 ReAct 循环、Run / Step 控制、`compass.run` v1 进度流、固定 Retail 工具、CSV 和全链路终止。Web 仍负责会话、工作区与双权限校验；Agent 根据可信范围和部署绑定使用独立只读身份。架构取舍见 [ADR 0002](docs/adr/0002-agent-execution-kernel.md)，配置、对照数据、正常与故障演示见 [课堂复现](docs/lesson-15-agent-run.md)。

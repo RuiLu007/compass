@@ -12,6 +12,14 @@ export class ApiError extends Error {
   }
 }
 export type DocumentPhase = "boot" | "active" | "retired";
+export type StreamRequestOptions<T> = {
+  signal: AbortSignal;
+  consume: (body: ReadableStream<Uint8Array>, signal: AbortSignal) => Promise<T>;
+  timeoutMs?: number;
+  inputLimitBytes?: number;
+  retainOnNotFound?: boolean;
+  unavailableMessage?: string;
+};
 const locationKey = () =>
   location.pathname + (location.search ? `?${new URLSearchParams(location.search)}` : "");
 export class DocumentSession {
@@ -298,13 +306,16 @@ export class DocumentSession {
     path: string,
     method = "GET",
     body?: unknown,
-    options?: { retainOnNotFound?: boolean },
+    options?: { retainOnNotFound?: boolean; signal?: AbortSignal; timeoutMs?: number },
   ): Promise<T> {
     const generation = this.generation;
     this.assertCurrent(generation);
     const controller = new AbortController();
+    const abort = () => controller.abort(options?.signal?.reason);
+    options?.signal?.addEventListener("abort", abort, { once: true });
+    if (options?.signal?.aborted) abort();
     this.controllers.add(controller);
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), options?.timeoutMs ?? 15000);
     try {
       const response = await fetch(`/api/web/v1/${path}`, {
         method,
@@ -342,6 +353,70 @@ export class DocumentSession {
       return value as T;
     } finally {
       clearTimeout(timeout);
+      options?.signal?.removeEventListener("abort", abort);
+      this.controllers.delete(controller);
+    }
+  }
+  async streamRequest<T>(
+    path: string,
+    body: Record<string, unknown>,
+    options: StreamRequestOptions<T>,
+  ): Promise<T> {
+    const generation = this.generation;
+    this.assertCurrent(generation);
+    const serialized = JSON.stringify(body);
+    if (new TextEncoder().encode(serialized).byteLength > (options.inputLimitBytes ?? 64 * 1024))
+      throw new ApiError(422, "本次输入过大，请减少历史消息后重试。");
+    const controller = new AbortController();
+    const abort = () => controller.abort(options.signal.reason);
+    options.signal.addEventListener("abort", abort, { once: true });
+    if (options.signal.aborted) abort();
+    this.controllers.add(controller);
+    let expired = false;
+    const timeout = setTimeout(() => {
+      expired = true;
+      controller.abort(new DOMException("Timed out", "TimeoutError"));
+    }, options.timeoutMs ?? 200000);
+    try {
+      const response = await fetch(`/api/web/v1/${path}`, {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": this.csrf },
+        body: serialized,
+      });
+      this.assertCurrent(generation);
+      if (controller.signal.aborted) throw new DOMException("运行读取已停止。", "AbortError");
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        this.assertCurrent(generation);
+        if (response.status === 401) this.retire("登录已失效。", "/login");
+        if (response.status === 403 || (response.status === 404 && !options.retainOnNotFound))
+          this.retire("访问范围已变化，请重新加载。", locationKey());
+        throw new ApiError(
+          response.status,
+          error?.error?.message ?? options.unavailableMessage ?? "运行任务启动失败，请重试。",
+          error?.error?.code,
+        );
+      }
+      if (response.headers.get("X-Compass-View-Revision") !== this.payload.session.viewRevision) {
+        this.retire("权限配置已更新，正在重新加载。", locationKey());
+        throw new ApiError(409, "页面正在重新加载。");
+      }
+      if (!response.body)
+        throw new ApiError(503, options.unavailableMessage ?? "运行任务未返回结果。");
+      const result = await options.consume(response.body, controller.signal);
+      this.assertCurrent(generation);
+      if (controller.signal.aborted) throw new DOMException("运行读取已停止。", "AbortError");
+      return result;
+    } catch (error) {
+      if (expired) throw new ApiError(503, "本次运行已超时，请稍后手动重试。");
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+      controller.abort();
+      options.signal.removeEventListener("abort", abort);
       this.controllers.delete(controller);
     }
   }
@@ -451,18 +526,21 @@ export class DocumentSession {
       this.controllers.delete(controller);
     }
   }
-  download(blob: Blob) {
+  download(blob: Blob, filename = "compass-audit.csv") {
     this.assertCurrent(this.generation);
     const url = URL.createObjectURL(blob);
     this.urls.add(url);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "compass-audit.csv";
+    a.download = filename;
     a.click();
     setTimeout(() => {
-      URL.revokeObjectURL(url);
-      this.urls.delete(url);
+      if (this.urls.delete(url)) URL.revokeObjectURL(url);
     }, 1000);
+  }
+  releaseDownloads() {
+    for (const url of this.urls) URL.revokeObjectURL(url);
+    this.urls.clear();
   }
   async logout() {
     const csrf = this.csrf;
