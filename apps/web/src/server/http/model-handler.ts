@@ -108,26 +108,6 @@ export async function handleModelRequest(request: Request, token: string): Promi
       access = { kind: "tenant", purpose: view === "chat" ? "chat" : "module_read", ...value };
       path = `/available${queryString({ view })}`;
       schema = "AvailableModels";
-    } else if (route === "models/calls" && method === "POST") {
-      empty.parse(query);
-      const value = z
-        .strictObject({
-          tenantId: uuid,
-          workspaceId: uuid,
-          call_id: uuid,
-          provider_id: uuid.optional(),
-          main_model: z.unknown().optional(),
-          input: z.unknown(),
-        })
-        .parse(await readJson(request, 2 * 1024 * 1024));
-      const { tenantId, workspaceId, ...command } = value;
-      input = business("ChatCallInput", command);
-      callId = command.call_id;
-      targetId = command.provider_id;
-      stream = (command.input as { stream?: boolean }).stream === true;
-      access = { kind: "tenant", purpose: "chat", tenantId, workspaceId };
-      path = "/calls";
-      schema = "RoutedCallResponse";
     } else if (
       segments.length === 3 &&
       segments[0] === "models" &&
@@ -199,7 +179,7 @@ export async function handleModelRequest(request: Request, token: string): Promi
       revision,
       signal: request.signal,
       callId,
-      providerId: callId && schema !== "RoutedCallResponse" ? targetId : undefined,
+      providerId: callId ? targetId : undefined,
       stream,
       onStreamFailure: audit,
     });

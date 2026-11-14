@@ -1,9 +1,9 @@
 [project]
 name = "compass-worker"
 version = "0.1.0"
-description = "Compass background worker process scaffold"
+description = "Compass HTTP Run consumer"
 requires-python = ">=3.13,<3.14"
-dependencies = []
+dependencies = ["httpx>=0.28,<0.29"]
 
 [project.scripts]
 compass-worker = "compass_worker.main:main"

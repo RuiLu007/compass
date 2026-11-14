@@ -23,3 +23,7 @@ Feature 初始化仅生成 BRIEF.md、context/_INDEX.md。后续 Skill 默认使
 Feature 默认规格档位记录在 BRIEF 的 Profile，常量位于已安装 my-create-feature 的 references/FEATURE_PROFILES.json，缺字段时用注册表 default（standard）。simple / standard 与阶段选择独立；目录始终 NNN-slug，两档位共用编号池。新 ROADMAP 五列：需求、标题、规格、优先级、说明；旧四列保持，目标行说明前记 `规格：simple；` 或 `规格：standard；`。类型改变不重命名，索引待同步按 BRIEF 恢复。
 
 新 simple PRD/技术方案先用项目 `_templates/simple/PRD.tmpl.md` / `TECH_DESIGN.tmpl.md`，没有时用所属 Skill 的 assets/templates/ 简版模板；显式指定优先，坏覆盖不绕过。已有文档增量保留，单产物覆盖不改 Feature 默认值。两档位共用 artifact 路径。无 PRD 时设计登记充分需求与 AC，后续使用该有效源；后补 PRD 保留 AC ID 并同步引用。
+
+## 逐课工程交付
+
+每课以依赖课次的工程节点为基线，独立提交课次增量。PRD、技术设计、验收记录与学习资料包放在对应 `mai-specs/NNN-lesson-XX-*/`，共用实现留在所属应用的源码目录。共用文件按本课实际需要拆分差异。提交前复核基线到节点的文件与内容，在隔离工作树运行验收，再创建 `compass/LXX-complete`。后续课次从已验收的依赖节点继续。

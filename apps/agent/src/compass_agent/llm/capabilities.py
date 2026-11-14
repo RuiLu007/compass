@@ -14,17 +14,19 @@ def chat_supported(binding) -> bool:
     return binding.kind == "llm" and binding.adapter == "litellm_chat" and bool(binding.sdk_model)
 
 
+def supported_parameters(vendor: str, api_model: str) -> list[str] | None:
+    try:
+        return sdk().get_supported_openai_params(model=api_model, custom_llm_provider=vendor)
+    except Exception:
+        return None
+
+
 def capabilities(kind: str, vendor: str = "", api_model: str = "") -> ModelCapabilities:
     yes = Capability(state="supported", reason="已实现协议；真实接入状态见测试结果")
     no = Capability(state="unsupported", reason="该模型不支持此能力")
     unknown = Capability(state="unknown", reason="能力待核验，可在管理端诊断测试")
     deepseek = vendor == "deepseek" and api_model in {"deepseek-v4-pro", "deepseek-flash"}
-    params = None
-    if kind == "llm":
-        try:
-            params = sdk().get_supported_openai_params(model=api_model, custom_llm_provider=vendor)
-        except Exception:
-            pass
+    params = supported_parameters(vendor, api_model) if kind == "llm" else None
 
     def parameter(name):
         if kind != "llm":

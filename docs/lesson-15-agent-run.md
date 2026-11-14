@@ -1,26 +1,28 @@
 # 第 15 课 Agent Run 课堂复现
 
-本说明对应 [Feature 989](../mai-specs/989-lesson-15-agent-execution-kernel/BRIEF.md)。课堂入口仍是现有分析 Chat；一次发送创建一个 Agent Run，并在页面内展示模型路由、Step、Retail 工具调用、最终回答和最多一份 CSV。
+本说明对应 [Feature 989](../mai-specs/989-lesson-15-agent-execution-kernel/BRIEF.md)。课堂入口仍是现有分析 Chat；一次发送创建一个 Agent Run，并在页面内展示模型路由、Step、通用查询调用、最终回答和可用产物。
 
 ## 前置条件
 
 1. 按根 [README](../README.md)完成 Web、Agent 与两套应用数据库初始化，并创建具备 `module.analysis` 与 `models.invoke` 的课堂账号。
 2. 在平台模型管理中启用一个支持 Tools 的生成模型。自动选模还需要现有路由所需的分类模型。
-3. 使用 Feature 998 发布工具准备独立 Retail PostgreSQL。课堂基线为 release `retail-dev-20261022b`、内容摘要 `7ae26405a71589c98ca8379bec1e1ec1ff77e16232ff2e1bf26b6d4501b8183e`、schema `core`、只读 profile `a_east`（Retail tenant 101 / region 1）。不要使用应用数据库账号、迁移账号或扁平 `retail_course` 导入代替受限身份。
-4. 运行 Agent 的 libpq 必须支持有界 `cancel_safe`；运行时预检不满足时不会开放 Retail 工具。
+3. 使用支持 `compass-retail-1` 的历史发布工具、配套 DDL 与迁移准备独立 Retail PostgreSQL，或复用匹配的已发布库。当前 `compass-retail-3` 发布工具会拒绝本课的旧包。课堂基线为 release `retail-dev-20261022b`、内容摘要 `7ae26405a71589c98ca8379bec1e1ec1ff77e16232ff2e1bf26b6d4501b8183e`、schema `core`、只读 profile `a_east`（Retail tenant 101 / region 1）。不要使用应用数据库账号、迁移账号或扁平 `retail_course` 导入代替受限身份。
+4. 运行 Agent 的 libpq 必须支持有界 `cancel_safe`；运行时预检不满足时不会开放数据库查询工具。
 
 发布、活动清单和受限身份的生成方法见 [业务数据操作说明](data-seeding.md#权限失败与回切)。只读 DSN 属私密部署材料，不写入仓库、日志或浏览器配置。
 
-## 配置课堂绑定
+## 初始化课堂数据连接
 
-在根 `.env`（宿主开发）或 Agent 私有部署环境中成对设置：
+准备好 Retail 发布库和 Web 工作区后，在根 `.env`（宿主开发）或 Compose 初始化环境中成对设置：
 
 ```dotenv
 COMPASS_RETAIL_RUN_SCOPE={"tenantId":"<Web tenant UUID>","workspaceId":"<Web workspace UUID>","release":"retail-dev-20261022b","contentHash":"7ae26405a71589c98ca8379bec1e1ec1ff77e16232ff2e1bf26b6d4501b8183e","role":"<private record accounts.a_east.role>","retailTenantId":101,"schema":"core"}
 COMPASS_RETAIL_RUN_READONLY_DSN=postgresql://<a_east login>:<private password>@<retail host>:<port>/<published database>
 ```
 
-`tenantId` 和 `workspaceId` 必须来自课堂 Web 范围并精确匹配。`role` 填发布私有记录中 `a_east` profile 对应的实际登录角色名；发布工具会为它增加发布前缀，因此通常以 `_a_east` 结尾，不能只填 profile 名。全空配置表示只提供零工具 Chat；只配置其中一项会禁用 Retail 能力并记录配置错误。Compose 部署不读取根 `.env`，需通过受控环境显式注入这两项。
+`tenantId` 和 `workspaceId` 来自课堂 Web 范围，`role` 填发布私有记录中的实际 `a_east` 角色名。Compose 内的 DSN 使用容器可达的主机和端口，同一编排内通常是 `postgres:5432`。其他目标通过 `COMPASS_RETAIL_ALLOWED_ENDPOINTS` 按主机与端口放行。
+
+配置 `COMPASS_MODEL_ENCRYPTION_KEY` 后执行 `pnpm db:migrate -F agent` 与 `pnpm db:seed -F agent`。Compose 部署的初始化服务执行这两步。seed 将默认连接登记到 Agent 库，保留已有配置。两项均空时跳过导入，只填一项会提示初始化错误。Agent 从数据库读取每个工作区的连接；升级完成后可在「数据与语义 → 数据连接」编辑并测试。
 
 启动前用发布侧活动清单核对 release、内容摘要、数据库和 `a_east` 账号。以只读 DSN 连接后至少确认：
 
@@ -39,17 +41,17 @@ SELECT row_security_active('core.channel_product_daily'::regclass);
 pnpm dev -F web -F agent
 ```
 
-登录 Web，进入绑定的工作区分析页，选择支持 Tools 的主模型或“系统优化”，发送：
+登录 Web，进入绑定的工作区分析页。使用教学账号时，本课示例绑定「远山零售 / 经营总部」。输入框默认选择 Auto，也可手动选择支持 Tools 的主模型。发送以下问题。
 
 > 比较 2025-11-17 至 11-23 和 11-24 至 11-30 两周，哪个渠道的实付金额变化最大？变化主要来自哪些商品？
 
 正常路径应满足：
 
-1. 页面先得到 Run ID，再展示第一轮渠道汇总工具卡。
-2. 模型读取第一轮观察后选择 `POS`，第二轮使用相同两个时段查询该渠道商品拆分。
-3. 页面收到完整成功终态后只自动折叠分析过程一次；用户仍可重新展开。
-4. 最终回答独立显示，并出现 `retail-products-<runId>.csv` 下载卡。CSV 使用 UTF-8 BOM、CRLF，最多 200 行 / 128 KiB。
-5. 只有完整成功的问题与 `finalAnswer` 进入下一次追问历史；内部工具消息和文件字节不会回传为可见历史。
+1. 页面先得到 Run ID，再展示模型实际发起的查询和分析过程。
+2. 模型自行发现表和字段，按问题选择渠道及商品汇总；允许不同的查询序列。
+3. 页面收到完整成功终态后自动折叠分析过程一次，用户可重新展开。
+4. 回答按真实查询结果核对金额、差额与缺口；产物按本次工具结果发布。
+5. 完整成功的问题和 finalAnswer 进入下一次追问历史，内部观察和文件字节留在执行侧。
 
 该发布包的课堂对照值为：POS 基准期 1,410,889 分，比较期 543,596 分，变化 −867,293 分；SPU3、SPU1、SPU2 的变化分别为 −511,199、−259,344、−96,750 分。验收必须用当前活动清单对应的真实发布库重新查询，不能只比较文档数字。
 
@@ -111,12 +113,12 @@ ORDER BY ABS(
 ) DESC, ch.channel_code COLLATE "C";
 ```
 
-商品对照使用相同 `latest` CTE，增加 `channel_code = 'POS'` 过滤，并通过同租户 `core.sku → core.spu` 聚合。运行时固定 SQL 和字段顺序位于 `apps/agent/src/compass_agent/runtime/retail_sql.py`，它是课堂对照查询的实现源。
+商品对照使用相同 `latest` CTE，增加 `channel_code = 'POS'` 过滤，并通过同租户 `core.sku → core.spu` 聚合。旧固定 SQL 参考位于 `examples/showcases/retail/reference/tools/business/retail_sales/sql.py`。当前产品通过 database_query 自主生成并执行查询，口径由数据字典与表、字段注释提供。
 
 ## 停止与故障演示
 
 - 模型生成期间点击“停止任务”：页面先显示“正在终止”，原流确认模型退出及容量归还后显示“已终止”。后续模型、工具和重试计数不得增加。
-- Retail 查询期间点击停止：用独立观察账号在 `pg_stat_activity` 确认该查询退出；Run 只在事务回滚、游标和连接清理确认后显示已终止。停止 Run 不发布 CSV。
+- Retail 查询期间点击停止：用独立观察账号在 `pg_stat_activity` 确认该查询退出；Run 只在事务回滚、游标和连接清理确认后显示已终止。停止 Run 不发布未完成产物。
 - 连续点击停止：清理只执行一次，重复请求复用相同结果。
 - 查询失败：工具卡保留原 ToolCall ID 并显示安全错误，模型可以说明资料不足或继续；连接错误文本不进入页面。
 - 断开原进度连接：BFF 中止上游，Agent 沿相同停止路径清理。页面保留已收到的安全工具过程，但不提交回答、历史或文件。

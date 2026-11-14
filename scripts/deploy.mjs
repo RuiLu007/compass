@@ -53,8 +53,12 @@ export function deploymentPlan(selected) {
   ];
   return {
     migrations,
-    services: [...selected, ...migrations],
+    services: [...selected, ...(selected.includes("worker") ? ["worker-2"] : []), ...migrations],
     database: migrations.length > 0,
+    infrastructure: [
+      ...(migrations.length ? ["postgres"] : []),
+      ...(selected.includes("agent") ? ["redis"] : []),
+    ],
   };
 }
 
@@ -137,11 +141,11 @@ export async function deploy(
   docker(["info", "--format", "{{.OSType}}"], capture);
   compose(["version", "--short"], capture);
   if (action === "status") {
-    compose(["ps", "--all", ...plan.services, ...(plan.database ? ["postgres"] : [])]);
+    compose(["ps", "--all", ...plan.services, ...plan.infrastructure]);
     return;
   }
   if (action === "logs") {
-    compose(["logs", "--tail", "100", ...plan.services, ...(plan.database ? ["postgres"] : [])]);
+    compose(["logs", "--tail", "100", ...plan.services, ...plan.infrastructure]);
     return;
   }
   mkdirSync(path.join(workspace, "work"), { recursive: true });
@@ -177,7 +181,11 @@ export async function deploy(
       throw new Error(
         "Existing PostgreSQL container is unhealthy. Inspect Docker/storage health before retrying; existing data is preserved.",
       );
-    for (const service of [...selected, ...(plan.database ? ["postgres"] : [])]) {
+    if (selected.includes("agent") && !env.COMPASS_RUNTIME_STATE_KEY)
+      throw new Error(
+        "Agent deployment requires COMPASS_RUNTIME_STATE_KEY; preserve it with backups.",
+      );
+    for (const service of [...selected, ...plan.infrastructure]) {
       if (!config.services[service]) throw new Error(`Missing Compose service: ${service}`);
       for (const port of config.services[service].ports ?? []) {
         if (port.host_ip !== "127.0.0.1")
@@ -199,8 +207,10 @@ export async function deploy(
       run(process.execPath, ["apps/home/scripts/prepare-assets.mjs"], { env });
     console.log(`Deploying locally: ${selected.join(", ")}`);
     compose(["build", ...plan.services]);
-    if (plan.database) compose(["up", "--detach", "--wait", "--wait-timeout", "120", "postgres"]);
-    compose(["stop", "--timeout", "15", ...selected]);
+    if (plan.infrastructure.length)
+      compose(["up", "--detach", "--wait", "--wait-timeout", "120", ...plan.infrastructure]);
+    const runningServices = [...selected, ...(selected.includes("worker") ? ["worker-2"] : [])];
+    compose(["stop", "--timeout", "15", ...runningServices]);
     for (const migration of plan.migrations) compose(["run", "--rm", "--no-deps", "-T", migration]);
     compose([
       "up",
@@ -211,15 +221,15 @@ export async function deploy(
       "--wait",
       "--wait-timeout",
       "120",
-      ...selected,
+      ...runningServices,
     ]);
     run(process.execPath, ["scripts/smoke.mjs", "--local", "--apps", selected.join(",")], { env });
     if (selected.includes("worker")) {
       const workers = parseContainers(
-        compose(["ps", "--all", "--format", "json", "worker"], capture),
+        compose(["ps", "--all", "--format", "json", "worker", "worker-2"], capture),
       );
-      if (workers.length !== 1 || workers[0].State !== "running")
-        throw new Error("Worker scaffold is not running.");
+      if (workers.length !== 2 || workers.some((worker) => worker.State !== "running"))
+        throw new Error("Both Worker consumers must be running.");
     }
     console.log(`Local deployment passed: ${selected.join(", ")}.`);
   } finally {

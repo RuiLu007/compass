@@ -1,0 +1,95 @@
+.pageActions {
+  flex-shrink: 0;
+}
+
+.cards {
+  --card-gap: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--card-gap);
+  container-type: inline-size;
+}
+
+.card:global(.model-summary) {
+  display: flex;
+  flex: 0 0 calc((100% - var(--card-gap)) / 2);
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 0;
+}
+
+@container (width < 540px) {
+  .card:global(.model-summary) {
+    flex-basis: 100%;
+  }
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.cardIcon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 38px;
+  height: 38px;
+  border-radius: 7px;
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.badges :global(.status-muted) {
+  color: var(--muted);
+}
+
+.card .identity h3 {
+  margin: 0 0 4px;
+  overflow-wrap: anywhere;
+}
+
+.card .identity p {
+  margin: 0;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card .feedback {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.feedback svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.success {
+  color: var(--primary);
+}
+
+.failure {
+  color: var(--danger);
+}
+
+.cardActions {
+  justify-content: flex-end;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}

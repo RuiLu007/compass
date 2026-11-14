@@ -16,6 +16,8 @@ from compass_agent.schemas import (
     RunStreamEvent,
     StreamBatch,
     StreamExtension,
+    ToolFinished,
+    ToolStarted,
 )
 
 
@@ -61,6 +63,16 @@ class RunWriter:
         )
         items = event.payload if isinstance(event, StreamBatch) else [event]
         for item in items:
+            if isinstance(item, ToolStarted) and (
+                len((item.payload.input_preview or "").encode())
+                > RUN_STREAM_LIMITS["toolInputBytes"]
+            ):
+                raise ValueError("oversized tool input preview")
+            if isinstance(item, ToolFinished) and (
+                len((item.payload.result_preview or "").encode())
+                > RUN_STREAM_LIMITS["toolResultBytes"]
+            ):
+                raise ValueError("oversized tool result preview")
             if isinstance(item, StreamExtension) and (
                 item.payload.required
                 or len(json_bytes(item.payload.data)) > RUN_STREAM_LIMITS["extensionBytes"]

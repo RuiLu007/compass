@@ -2,9 +2,9 @@ id: compass
 title: Compass 电商经营分析 Agent
 status: active
 version: 0.0.1
-updated: 2026-11-08
+updated: 2026-11-14
 scope: cross-course-learner-project
-implementation_stage: llm-runtime-implementation
+implementation_stage: lesson-20-production-runtime-implementation
 repository_url: https://github.com/shanggqm/compass
 scaffold_release: v0.0.1
 course_submodule_path: learner-kit/code/compass
@@ -14,15 +14,25 @@ canonical:
   verification: docs/verification.md
   database_migrations: docs/database-migrations.md
   coding_style: docs/coding-style.md
+  local_start: scripts/start.mjs
+  local_stop: scripts/stop.mjs
+  local_restart: scripts/restart.mjs
   local_deployment: deploy/README.md
   model_observability: deploy/observability/README.md
+  tool_catalog: apps/agent/src/compass_agent/tools/README.md
+  showcase_policy: examples/showcases/README.md
+  tool_execution: docs/lesson-18-tool-runtime.md
+  durable_runtime: docs/lesson-19-durable-runtime.md
+  production_runtime: docs/lesson-20-production-runtime.md
   lesson_resources: apps/home/src/lib/lesson-resources.json
   learner_data: data/retail/README.md
   business_data_tool: tools/data-seed/README.md
   business_data_operations: docs/data-seeding.md
   implementation_decision: docs/adr/0001-workspace.md
 depends_on:
+  durable_runtime: mai-specs/985-lesson-19-durable-runtime-hitl/design/TECH_DESIGN.md
   local_deployment: mai-specs/994-local-docker-deploy/design/TECH_DESIGN.md
+  tool_execution: mai-specs/986-lesson-18-tool-execution-sandbox/design/TECH_DESIGN.md
   llm_runtime: mai-specs/993-lesson-11-llm-runtime/design/TECH_DESIGN.md
   model_observability: mai-specs/990-lesson-14-model-observability/design/TECH_DESIGN.md
   web_foundation: mai-specs/995-web-management-foundation/design/TECH_DESIGN.md
@@ -66,6 +76,6 @@ related_apps:
     status: review
   worker:
     path: apps/worker
-    responsibility: optional-python-background-process-scaffold
+    responsibility: http-run-queue-consumer
     port: null
     status: review

@@ -37,6 +37,7 @@ group("plugins", "插件", "workspace", "module.plugins", [
   ["plugins-skills", "Skill", "plugins/skills"],
   ["plugins-prompts", "Prompt", "plugins/prompts"],
   ["plugins-agents", "Agent", "plugins/agents"],
+  ["plugins-workflows", "Workflow", "plugins/workflows", "implemented"],
   ["plugins-templates", "报告模板", "plugins/report-templates"],
   ["plugins-datasets", "数据集", "plugins/datasets"],
 ]);
@@ -54,7 +55,7 @@ group("admin-overview", "控制总览", "tenant", "module.admin.overview", [
   ["admin-overview", "控制总览", "admin/overview", "implemented"],
 ]);
 group("data", "数据与语义", "workspace", "module.admin.data", [
-  ["data-sources", "数据连接", "admin/data/sources"],
+  ["data-sources", "数据连接", "admin/data/sources", "implemented"],
   ["data-catalog", "数据目录", "admin/data/catalog"],
   ["data-metrics", "指标口径", "admin/data/metrics"],
   ["data-queries", "可信查询", "admin/data/queries"],

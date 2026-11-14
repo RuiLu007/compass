@@ -7,13 +7,14 @@ from uuid import uuid4
 import pytest
 from compass_agent.models import RoutingGrant
 from compass_agent.models.errors import ModelError
-from compass_agent.routing.dictionary import catalog, features_for, validate_intent
+from compass_agent.routing.dictionary import catalog, features_for, intent_for_scene
 from compass_agent.routing.prompts import OFF_TOPIC_PROMPT
 from compass_agent.routing.service import RoutingService
 from compass_agent.schemas import ChatCallInput, Intent, MainModelSelection
 from compass_agent.settings import Settings
 from pydantic import ValidationError
 
+from .retail_fixtures import RETAIL_PLAN_PRESET
 from .test_models import CHAT, TEST, create, generate
 from .test_models import system as system
 
@@ -48,15 +49,16 @@ def request(text="比较昨日销售额", provider=None, stream=False):
     )
 
 
-def test_two_field_schema_and_dictionary_are_independent():
+def test_intent_is_derived_from_scene_dictionary():
     assert len(catalog()[1]) == 40
-    value = validate_intent({"category_id": "business_channel", "scene_id": "SC-02"})
+    value = intent_for_scene("SC-02")
     assert set(value.model_dump()) == {"category_id", "scene_id"}
+    assert value.category_id == "business_channel"
     assert features_for(value).difficulty == "L1"
     with pytest.raises(ValidationError):
         Intent.model_validate({**value.model_dump(), "difficulty": "L3"})
     with pytest.raises(ModelError, match="intent_invalid"):
-        validate_intent({"category_id": "input_boundary", "scene_id": "SC-02"})
+        intent_for_scene("SC-999")
 
 
 @pytest.mark.parametrize(
@@ -94,6 +96,14 @@ def test_fixed_main_model_and_off_topic_override(system):
     assert casual.routing.reason == "off_topic_flash"
 
 
+def test_retail_question_uses_normal_classification(system):
+    _, upstream, routing, _, _, _ = configured(system)
+    selected = asyncio.run(routing.select_route(request(RETAIL_PLAN_PRESET), CHAT))
+    assert selected.metrics.classifier_source in {"flash", "jev"}
+    assert upstream.requests
+    assert selected.routing.reason.startswith("difficulty_")
+
+
 def test_flash_baseline_and_duplicate_call_do_not_repeat_inference(system):
     _, upstream, routing, _, _, _ = configured(system)
     routing.settings.compass_routing_mode = "flash_only"
@@ -106,7 +116,7 @@ def test_flash_baseline_and_duplicate_call_do_not_repeat_inference(system):
     assert len(upstream.requests) == 2
 
 
-def test_jev_invalid_pair_falls_back_once(system, monkeypatch):
+def test_jev_without_accepted_scene_falls_back_once(system, monkeypatch):
     _, upstream, routing, _, _, _ = configured(system)
     monkeypatch.setattr("compass_agent.routing.service.from_jev", lambda _: None)
     result = asyncio.run(routing.run(request(), CHAT))
@@ -115,12 +125,24 @@ def test_jev_invalid_pair_falls_back_once(system, monkeypatch):
     assert len(upstream.requests) == 3
 
 
+@pytest.mark.parametrize("mode,source", [("flash_only", "flash"), ("jev_with_flash", "jev")])
+def test_compound_scene_routes_with_its_dictionary_category(system, monkeypatch, mode, source):
+    _, upstream, routing, pro, _, _ = configured(system)
+    routing.settings.compass_routing_mode = mode
+    monkeypatch.setattr(upstream, "routing_scene", lambda _: "SC-40")
+    result = asyncio.run(routing.run(request("比较两周渠道实付金额，再分析主要商品的贡献。"), CHAT))
+    assert result.status == "completed"
+    assert result.intent == Intent(category_id="input_boundary", scene_id="SC-40")
+    assert result.metrics.classifier_source == source
+    assert result.routing.provider_id == pro
+
+
 def test_bad_flash_output_stops_before_inference(system, monkeypatch):
     _, upstream, routing, _, _, _ = configured(system)
     routing.settings.compass_routing_mode = "flash_only"
     monkeypatch.setattr(
         "compass_agent.routing.service.from_flash",
-        lambda _: validate_intent({"category_id": "input_boundary", "scene_id": "SC-02"}),
+        lambda _: intent_for_scene("SC-999"),
     )
     result = asyncio.run(routing.run(request(), CHAT))
     assert result.status == "failed" and result.error_code == "intent_invalid"

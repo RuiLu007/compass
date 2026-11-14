@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  autonomyExtensions,
   encodeRunPacket,
+  projectAutonomyExtension,
   parseAnalysisCancelAck,
   parseRunPacket,
   projectRunBody,
@@ -95,6 +97,124 @@ async function collect<T>(source: AsyncIterable<T>): Promise<T[]> {
 }
 
 describe("analysis Run stream protocol", () => {
+  it("accepts two parallel queries finishing in reverse order and rejects a third active query", async () => {
+    const second: RunEvent = {
+      ...toolStart,
+      payload: { ...toolStart.payload, toolCallId: "second", toolIndex: 2 },
+    };
+    const secondDone: RunEvent = {
+      ...toolDone,
+      payload: { ...toolDone.payload, toolCallId: "second", toolIndex: 2 },
+    };
+    const events = [start, step, toolStart, second, secondDone, toolDone, stepDone, terminal];
+    expect(await collect(readRun(body(frames(events)), options()))).toHaveLength(events.length);
+    const third: RunEvent = {
+      ...toolStart,
+      payload: { ...toolStart.payload, toolCallId: "third", toolIndex: 3 },
+    };
+    await expect(
+      collect(readRun(body(frames([start, step, toolStart, second, third])), options())),
+    ).rejects.toThrow("tool_start_order");
+  });
+
+  it("projects a database query without exposing its SQL or requiring Retail date parameters", async () => {
+    const query: RunEvent = {
+      type: "tool.started",
+      payload: { ...toolKey, toolKind: "database_query", params: null },
+    };
+    const events = [start, step, query, toolDone, stepDone, terminal];
+    const projected = await projectRunBody(body(frames(events)), { ...options(), batch: false });
+    expect((await collect(readRun(projected, options()))).map(({ event }) => event)).toEqual(
+      events,
+    );
+  });
+
+  it("passes only validated autonomy actions and matches the result to the core terminal", async () => {
+    const plan: StreamExtension = {
+      type: "stream.extension",
+      payload: {
+        name: "compass.autonomy.action",
+        version: 1,
+        required: false,
+        data: {
+          stepId,
+          actionIndex: 1,
+          action: "replace",
+          code: "ok",
+          planVersion: 1,
+          selectedTodoId: null,
+          items: [
+            {
+              id: "t1",
+              goal: "channel_summary",
+              status: "pending",
+              dependsOn: [],
+              optional: false,
+              period: { start: "2025-11-17", end: "2025-11-24" },
+              compareTo: { start: "2025-11-24", end: "2025-12-01" },
+            },
+          ],
+        },
+      },
+    };
+    const usage = { limit: 1, used: 1, remaining: 0 };
+    const result: StreamExtension = {
+      type: "stream.extension",
+      payload: {
+        name: "compass.autonomy.result",
+        version: 1,
+        required: false,
+        data: {
+          outcome: "budget_exhausted",
+          reason: "max_tool_calls",
+          planVersion: 1,
+          firstPlanStep: 1,
+          budget: {
+            steps: usage,
+            tools: usage,
+            tokens: usage,
+            costMicrousd: usage,
+            attempts: 1,
+            unknownAttempts: 0,
+          },
+          partial: [],
+        },
+      },
+    };
+    const failed: RunEvent = {
+      type: "run.finished",
+      payload: { status: "failed", errorCode: "internal_error" },
+    };
+    const m2Options = { ...options(), extensions: autonomyExtensions };
+    const projected = await projectRunBody(
+      body(frames([start, step, unknown, plan, stepDone, result, failed])),
+      {
+        ...m2Options,
+        batch: false,
+        publicExtensions: autonomyExtensions,
+        translateExtension: projectAutonomyExtension,
+      },
+    );
+    expect((await collect(readRun(projected, m2Options))).map(({ event }) => event)).toEqual([
+      start,
+      step,
+      plan,
+      stepDone,
+      result,
+      failed,
+    ]);
+    await expect(
+      collect(readRun(body(frames([start, step, plan, stepDone, result, terminal])), m2Options)),
+    ).rejects.toThrow("autonomy_terminal_mismatch");
+    const invalid = {
+      ...plan,
+      payload: { ...plan.payload, data: { ...plan.payload.data, raw: "private" } },
+    };
+    await expect(
+      collect(readRun(body(frames([start, step, invalid, stepDone, failed])), m2Options)),
+    ).rejects.toThrow("extension_shape");
+  });
+
   it("decodes arbitrary UTF-8 cuts, CRLF packets, and keepalive frames", async () => {
     const wire = frames([start, step, stepDone, terminal])
       .map((value) => new TextDecoder().decode(value))

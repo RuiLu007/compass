@@ -2,7 +2,7 @@
 
 第 14 课的独立 `observability` profile 在同一 Compose 网络部署本机 Langfuse，入口为 `pnpm observability`，UI 使用 loopback 8104。主 Agent / Web 可选加载忽略 Git 的观测配置，停止观测栈保留卷且不停止业务应用。镜像、初始化、数据格式、多实例接入与恢复见 [Langfuse 运行说明](observability/README.md)。
 
-`compose/compose.yaml` 默认只启动带 pgvector 的 PostgreSQL 17，镜像以 digest 固定；当前不启用向量扩展或创建向量索引。`app` profile 加入 Agent 迁移与 seed、Web 独立数据库供应/迁移、FastAPI 与 Next.js standalone。`web` profile 只启动 PostgreSQL、Web 迁移和 Web，无 Python 服务依赖。所有宿主机端口绑定 127.0.0.1；演示账号和合成数据仅供本地。
+`compose/compose.yaml` 提供带 pgvector 的 PostgreSQL 17 与持久 Redis，镜像以 digest 固定；当前不启用向量扩展或创建向量索引。`app` profile 加入 Agent 迁移与 seed、Web 独立数据库供应/迁移、FastAPI 与 Next.js standalone。`web` profile 只启动 PostgreSQL、Web 迁移和 Web，无 Python 服务依赖。所有宿主机端口绑定 127.0.0.1；演示账号和合成数据仅供本地。
 
 根目录使用以下统一入口，镜像构建上下文始终为 Compass 根目录：
 
@@ -26,7 +26,7 @@ pnpm deploy:down         # 整个项目停止，保留数据卷和镜像
 2. 获取 `work/local-deploy.lock`，检查所需端口、已有数据库健康；不结束开发进程。运行中的同项目同服务端口允许复用。
 3. Web 执行 `pnpm contracts:check`；有漂移时先运行 `pnpm contracts`。home 从规范源准备素材。构建所选应用及迁移镜像，复用 Docker 构建缓存；构建失败时旧应用继续运行。
 4. 等待 PostgreSQL 健康（仅 Web / Agent 需要），停止所选应用。每次显式运行所属迁移容器：Agent 执行 Alembic 与幂等 seed；Web 执行已有供应和迁移，不自动写教学账号。
-5. 重建所选应用并等待健康检查（最多 120 秒），执行固定本机地址的 smoke；Worker 额外检查容器处于 running。Worker 当前只保证进程存活。
+5. 重建所选应用并等待健康检查（最多 120 秒），执行固定本机地址的 smoke；Worker 额外检查两个消费容器处于 running；实际队列领取与推进由运行验收覆盖。
 
 任一步失败即退出非零，不启动后续阶段，不自动清卷或回滚数据库；迁移失败后所选应用保持停止，修复原因后重跑。跨应用迁移不具备原子性，恢复遵循各所有者数据库规范。部署脚本只创建部署锁等临时文件，不记录凭据；异常终止遗留锁时先核对 `owner.json` 的 PID，再删除过期锁。
 
@@ -39,13 +39,13 @@ CI 复用同一 `pnpm run deploy` 入口，之前执行 `pnpm check` 和 `pnpm b
 - `containers/home.Dockerfile`：消费部署入口生成的 public 素材，使用 standalone 构建；复制 static/public，非 root 运行。直接调用 Compose 构建 home 前，先执行 `node apps/home/scripts/prepare-assets.mjs`。
 - `containers/agent.Dockerfile`：uv 冻结安装当前 API 所需生产依赖；独立非 root 用户。
 - `containers/web.Dockerfile`：BuildKit 缓存依赖下载，pnpm 冻结安装，构建 Next.js standalone，运行时只复制追踪产物与 static，非 root 用户。
-- `containers/memory.Dockerfile` / `worker.Dockerfile`：分别安装当前 app 的 Python 生产依赖；两者尚未接入记忆存储与持久队列。
+- `containers/memory.Dockerfile` / `worker.Dockerfile`：分别安装当前 app 的 Python 生产依赖；Memory 提供健康检查，Worker 通过专用 HTTP 身份消费 Agent 持久队列。
 - Python 迁移文件随 API 镜像交付；迁移任务先成功，API 再启动。生产部署需分离数据库迁移凭据。
 - Web 镜像消费已生成且通过 CI 校验的契约；本地修改 DTO 后先运行 `pnpm contracts`。
 
 停止所有服务：`pnpm deploy:down`。该入口保留数据卷，不接受 `--volumes`；数据重置需另行明确处理。
 
-已提供独立 `memory` 与 `worker` profiles：`--profile app --profile memory --profile worker up --build -d --wait` 启动所有后端脚手架与 Web；`pnpm smoke --memory` 校验 Web → agent → 数据库及 memory 健康检查。memory 使用 8103 端口，worker 无 HTTP 端口、尚无队列消费者，启动 / 停止日志可通过 `logs worker` 查看。两者无需 agent、数据库或 Temporal 即可单独启动。durable / identity / observability profiles 随对应业务能力实施。
+已提供独立 `memory` 与 `worker` profiles：`--profile app --profile memory --profile worker up --build -d --wait` 启动后端应用与 Web；`pnpm smoke --memory` 校验 Web → agent → 数据库及 memory 健康检查。memory 使用 8103 端口，可独立启动；worker 无 HTTP 端口，`worker` / `worker-2` 分别持有专用令牌，通过 Agent 领取和推进任务。启动 / 停止日志可通过 `logs worker worker-2` 查看。Worker 无业务数据库凭据，Agent 需要 PostgreSQL、Redis 及 Runtime 加密配置；Redis 由 Agent 的 depends_on 启动。云端隔离留待后续实施。
 
 网络受限时，可在 Web 镜像构建时指定可访问的 npm 镜像，锁文件 integrity 校验仍然生效，默认使用官方 registry：
 
@@ -72,12 +72,20 @@ docker compose -f deploy/compose/compose.yaml --profile web run --rm web-migrate
 
 ## 模型 Runtime 配置
 
-Agent 迁移容器先供应独立 `compass_agent` 库，再迁移至 `0004` 并写入幂等工程样本；运行容器仅持有 `compass_agent_runtime` 凭据。既有旧版 `compass` 演示库保留，接管步骤见 [agent/main](../apps/agent/db/main/README.md)。自定义已存在角色时可通过 `COMPASS_AGENT_RUNTIME_URL` / `COMPASS_AGENT_MIGRATOR_URL` 提供原凭据，供应不会覆盖密码。
+Agent 迁移容器先供应独立 `compass_agent` 库，再迁移至 `0014` 并写入幂等工程样本；运行容器仅持有 `compass_agent_runtime` 凭据。既有旧版 `compass` 演示库保留，接管步骤见 [agent/main](../apps/agent/db/main/README.md)。自定义已存在角色时可通过 `COMPASS_AGENT_RUNTIME_URL` / `COMPASS_AGENT_MIGRATOR_URL` 提供原凭据，供应不会覆盖密码。
 
 `pnpm run deploy` 不读取根 `.env`。启用模型能力时从受控进程环境传入 `COMPASS_AGENT_SERVICE_TOKEN`、`COMPASS_MODEL_ENCRYPTION_KEY`、`COMPASS_MODEL_ALLOWED_ORIGINS`；前两项默认空，模型入口会明确不可用。模型 Key 经平台页面录入；数据库备份与加密密钥分别保存。完整接入见 [Agent 说明](../apps/agent/README.md#模型接入)。
 
 ## Agent Run 的 Retail 绑定
 
-第 15 课的固定 Retail 工具使用应用库之外的已发布零售库。向 Agent 运行容器成对注入 `COMPASS_RETAIL_RUN_SCOPE` 和 `COMPASS_RETAIL_RUN_READONLY_DSN`；Compose 已登记透传，但默认均为空。前者只包含课堂 Web tenant/workspace、release、内容摘要、角色、Retail tenant 和 schema；后者是发布工具生成的受限只读账号，作为私密环境变量管理，不写入 Compose 文件或镜像。
+第 15 课的固定 Retail 工具连接独立的已发布零售库。要导入默认连接，向部署进程成对提供私有的 `COMPASS_RETAIL_RUN_SCOPE` 与 `COMPASS_RETAIL_RUN_READONLY_DSN`，并提供 `COMPASS_MODEL_ENCRYPTION_KEY`。Compose 将导入参数交给一次性迁移与 seed 服务。DSN 使用 Agent 容器能访问的地址，同一 Compose PostgreSQL 使用 `postgres:5432`。默认 Retail 的允许目标由 `COMPASS_RETAIL_ALLOWED_ENDPOINTS` 指定。通用 PostgreSQL/MySQL 连接可通过 `COMPASS_DATA_ALLOWED_ENDPOINTS` 放行额外的主机和端口。
 
-部署前按发布侧活动清单核对绑定，并验证 `session_user = current_user = <发布清单中的 a_east 实际角色名>`、事务只读及 `core.channel_product_daily` RLS。当前 Run 注册表在进程内，取消路由必须命中原进程，因此启用 Agent Run 的课堂部署保持一个 Agent 副本。切换发布样本前先 Drain 活动 Run，再同时更新绑定与 DSN。完整示例和验收步骤见 [课堂复现](../docs/lesson-15-agent-run.md)。
+导入完成后，在对应工作区的「数据连接」页测试和编辑。平台管理员保存的修改用于后续 Run，进行中的 Run 使用已读取的配置。课堂部署保持一个 Agent 副本，使取消路由命中原进程。配置与验证步骤见 [课堂复现](../docs/lesson-15-agent-run.md)。
+
+第 18 课独立计算与 NAS 使用 `deploy/compose/sandbox.yaml`，入口 `pnpm sandbox up`，配置和执行边界见 [工具执行说明](../docs/lesson-18-tool-runtime.md)。
+
+## 持久 Runtime 配置
+
+Agent 部署需显式提供独立 Fernet `COMPASS_RUNTIME_STATE_KEY`，同时保留 Web/Agent 服务令牌、模型密钥。缺失 Runtime 密钥时 readyz 返回 503。部署入口继续只消费进程环境；可用 `node --env-file=.env scripts/deploy.mjs up` 加载私有根环境。Redis 配置见 `redis/redis.conf`，固定 AOF always/noeviction，卷 `redis-data` 在停止后保留，默认 loopback 56379。服务令牌用于当前权限复查，独立 `COMPASS_RUNTIME_EVENT_TOKEN` 用于可信工作流事件。Agent 容器为 SSE 设 5 秒 HTTP 关闭宽限，随后 lifespan 收口任务，超时的外部执行保持待核对状态。恢复与迁移顺序见 [第 19 课](../docs/lesson-19-durable-runtime.md)。
+
+第 20 课队列、两个独立 Worker、0010 迁移与恢复入口见 [运行说明](../docs/lesson-20-production-runtime.md)。

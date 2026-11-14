@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from compass_agent.llm.admission import ExecutionGate, RuntimeOverloaded
 from compass_agent.llm.contracts import (
+    AttemptBudget,
     DecisionOutput,
     GenerationOutput,
     RuntimeCancelled,
@@ -131,7 +132,16 @@ class ReliableExecutor:
         self.jitter = jitter or random.uniform
         self.sleep = sleep
 
-    async def execute(self, request, logical_policy: LogicalPolicy, emit=None, *, observation=None):
+    async def execute(
+        self,
+        request,
+        logical_policy: LogicalPolicy,
+        emit=None,
+        *,
+        observation=None,
+        attempt_budget: AttemptBudget | None = None,
+        recorder=None,
+    ):
         request = deepcopy(request)
         run = LogicalRun(request, logical_policy)
         loop = asyncio.get_running_loop()
@@ -190,6 +200,13 @@ class ReliableExecutor:
                         ),
                     )
                     attempt_id, started_at = uuid4(), datetime.now(UTC)
+                    if attempt_budget is not None and not attempt_budget.reserve(
+                        invocation, attempt_id
+                    ):
+                        return run.finish("non_retryable", "autonomy_admission_denied")
+                    if recorder is not None:
+                        await recorder.prepare(attempt_id, number, invocation)
+                        await recorder.dispatched(attempt_id)
                     cleanup_confirmed = False
                     active_observation = (
                         observation.child(
@@ -213,12 +230,26 @@ class ReliableExecutor:
                             **({"observation": active_observation} if active_observation else {}),
                         )
                     except RuntimeCancelled as exc:
+                        if recorder is not None:
+                            await recorder.finish(attempt_id, exc.result)
                         cleanup_confirmed = exc.result.cleanup_confirmed
+                        if attempt_budget is not None:
+                            attempt_budget.settle(attempt_id, exc.result)
                         run.observe(attempt_id, exc.result, started_at)
                         if active_observation:
                             active_observation.finish_attempt(exc.result)
                         raise
+                    except BaseException:
+                        if recorder is not None:
+                            await recorder.finish(attempt_id, None)
+                        if attempt_budget is not None:
+                            attempt_budget.settle(attempt_id, None)
+                        raise
+                    if recorder is not None:
+                        await recorder.finish(attempt_id, result)
                     cleanup_confirmed = result.cleanup_confirmed
+                    if attempt_budget is not None:
+                        attempt_budget.settle(attempt_id, result)
                     run.observe(attempt_id, result, started_at)
                     if active_observation:
                         active_observation.finish_attempt(result)
@@ -233,6 +264,8 @@ class ReliableExecutor:
                         "Model execution slot quarantined; call_id=%s", request.context.call_id
                     )
                     return run.finish("cleanup_unconfirmed", "resource_cleanup_failed")
+                if attempt_budget is not None and attempt_budget.reason is not None:
+                    return run.finish("non_retryable", "autonomy_admission_denied")
                 if result.status == "completed":
                     return run.finish("completed")
                 if (

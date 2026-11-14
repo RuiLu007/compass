@@ -1,7 +1,12 @@
 from alembic import context
+from compass_agent.data_connections.entities import DataConnection  # noqa: F401
 from compass_agent.database import Base
 from compass_agent.models import entities  # noqa: F401
+from compass_agent.runtime import entities as runtime_entities  # noqa: F401
 from compass_agent.settings import get_settings
+from compass_agent.tools.mcp.entities import McpConnection  # noqa: F401
+from compass_agent.tools.sandbox.entities import SandboxAllocation  # noqa: F401
+from compass_agent.workflows.assets import WorkflowAsset  # noqa: F401
 from sqlalchemy import create_engine
 
 config = context.config

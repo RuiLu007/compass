@@ -8,13 +8,13 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from compass_agent.api.models import get_model_service
 from compass_agent.database import Base
 from compass_agent.llm.admission import ExecutionGate
 from compass_agent.llm.capabilities import validate_schema
 from compass_agent.llm.continuation import restore
 from compass_agent.llm.errors import RuntimeFailure
 from compass_agent.main import app
-from compass_agent.model_api import get_model_service
 from compass_agent.models.entities import ModelCall, ModelChange, Provider
 from compass_agent.models.errors import ModelError
 from compass_agent.models.repository import ModelRepository, now
@@ -174,7 +174,7 @@ def test_http_authorization_validation_and_no_store(system):
     settings = Settings(compass_agent_service_token="unit-service-token")
     try:
         with (
-            patch("compass_agent.model_api.get_settings", return_value=settings),
+            patch("compass_agent.api.models.get_settings", return_value=settings),
             TestClient(app) as client,
         ):
             assert client.get("/v1/models/providers").status_code == 401
@@ -196,6 +196,20 @@ def test_http_authorization_validation_and_no_store(system):
             )
             assert response.status_code == 200, response.text
             assert response.json()["status"] == "completed", response.text
+            path = f"/v1/models/providers/{saved.provider_id}"
+            change = {
+                "operation_id": str(uuid4()),
+                "expected_version": 1,
+                "generation_profile": {
+                    "limits": {"max_input_tokens": None, "max_output_tokens": 256},
+                    "defaults": {"max_tokens": 128},
+                },
+            }
+            assert client.patch(path, json=change, headers=headers(CHAT)).status_code == 403
+            assert client.patch(path, json=change, headers=headers()).status_code == 200
+            view = client.get(path, headers=headers()).json()["generation_profile"]
+            assert view["limits"] == {"max_input_tokens": None, "max_output_tokens": 256}
+            assert view["effective_limits"]["max_output_tokens"] == 256
     finally:
         app.dependency_overrides.clear()
 
@@ -350,3 +364,161 @@ def test_cancel_closes_response_and_persists_canceled(system):
     assert provider.streams[0].closed
     assert repo.call(call_id, TEST).status == "canceled"
     assert repo.call(call_id, TEST).upstream_outcome_unknown
+
+
+def test_generation_profile_management_and_default_resolution(system):
+    repo, upstream, service = system
+    _, saved = create(
+        repo,
+        catalog_id="deepseek/deepseek-chat",
+        api_model="deepseek-chat",
+        generation_profile={
+            "import_catalog": True,
+            "limits": {
+                "context_window_tokens": 100,
+                "max_input_tokens": None,
+                "max_output_tokens": 20,
+            },
+            "defaults": {"max_tokens": 10, "temperature": 0},
+        },
+    )
+    provider_id = saved.provider_id
+    profile = repo.get(provider_id).generation_profile
+    assert profile is not None and profile.catalog_snapshot is not None
+    assert profile.catalog_snapshot.limits.max_input_tokens == 131072
+    assert profile.effective_limits.max_input_tokens is None
+    assert profile.limit_sources["max_input_tokens"] == "override"
+    available = repo.available().items[0].generation
+    assert available is not None and available.default_max_tokens == 10
+    assert available.limits.max_output_tokens == 20
+
+    defaulted = asyncio.run(invoke(service, provider_id, generate()))
+    explicit = asyncio.run(
+        invoke(
+            service,
+            provider_id,
+            generate("较长的问题" * 200, max_tokens=4096, temperature=0.3, top_p=0.5),
+        )
+    )
+    assert defaulted.status == explicit.status == "completed"
+    first, second = [json.loads(request.content) for request in upstream.requests]
+    assert first["max_tokens"] == 10 and first["temperature"] == 0
+    assert second["max_tokens"] == 4096 and second["temperature"] == 0.3
+    assert second["top_p"] == 0.5
+
+    with pytest.raises(ModelError, match="generation_profile_review_required"):
+        repo.save(
+            ProviderPatch(operation_id=uuid4(), expected_version=1, api_model="deepseek-v4-pro"),
+            MANAGE,
+            provider_id,
+        )
+    command = ProviderPatch(operation_id=uuid4(), expected_version=1, generation_profile=None)
+    assert repo.save(command, MANAGE, provider_id) == repo.save(command, MANAGE, provider_id)
+    assert repo.get(provider_id).generation_profile is None
+    assert repo.get(provider_id).binding_version == 2
+    assert asyncio.run(invoke(service, provider_id, generate())).status == "completed"
+    fallback = json.loads(upstream.requests[-1].content)
+    assert fallback["max_tokens"] == 8192 and "temperature" not in fallback
+
+
+@pytest.mark.parametrize(
+    ("stream", "vendor", "provider_code", "expected"),
+    [
+        (False, "deepseek", "context_length_exceeded", "input_token_limit_exceeded"),
+        (True, "deepseek", "max_output_tokens_exceeded", "output_token_limit_exceeded"),
+        (False, "openai", "invalid_parameter", "invalid_model_input"),
+        (True, "openai", "context_length_exceeded", "input_token_limit_exceeded"),
+    ],
+)
+def test_upstream_input_rejection_reaches_agent_without_retry(
+    system, stream, vendor, provider_code, expected
+):
+    import httpx
+    from compass_agent.harness.contracts import RunFailure
+    from compass_agent.harness.executor import AgentExecutor
+    from compass_agent.llm.policy import LogicalPolicy
+
+    repo, _, _ = system
+    model = "gpt-4o" if vendor == "openai" else "deepseek-chat"
+    _, provider = create(repo, catalog_id=f"{vendor}/{model}", api_model=model)
+    received = []
+
+    def reject(request):
+        received.append(json.loads(request.content))
+        return httpx.Response(
+            400, json={"error": {"code": provider_code, "message": "private upstream diagnostic"}}
+        )
+
+    service = ModelService(
+        repo,
+        create_runtime(repo.secrets, lambda: httpx.MockTransport(reject)),
+        gate=ExecutionGate(),
+    )
+
+    async def call():
+        request = generate(stream=stream, max_tokens=200)
+        prepared = await service.prepare(uuid4(), provider.provider_id, request, CHAT)
+        return await service.run(
+            prepared,
+            request,
+            logical_policy=LogicalPolicy(max_attempts=2),
+            tool_output_validation="agent_dispatch",
+        )
+
+    result = asyncio.run(call())
+    assert result.status == "failed" and result.error_code == expected
+    assert len(received) == 1
+    assert "private upstream diagnostic" not in result.model_dump_json()
+    with pytest.raises(RunFailure) as caught:
+        AgentExecutor._require_complete(result)
+    assert caught.value.code == expected
+
+
+def test_stream_error_after_partial_output_preserves_upstream_category(system):
+    import httpx
+    from compass_agent.llm.policy import LogicalPolicy
+
+    from .provider_fixture import FixtureStream
+
+    repo, _, _ = system
+    _, provider = create(repo)
+    chunk = {
+        "id": "fixture",
+        "object": "chat.completion.chunk",
+        "created": 1,
+        "model": "deepseek-v4-pro",
+        "choices": [{"index": 0, "delta": {"content": "partial"}, "finish_reason": None}],
+    }
+    done = {"error": {"code": "context_length_exceeded", "message": "private stream diagnostic"}}
+    sent = []
+    events = []
+
+    async def emit(event):
+        events.append(event)
+
+    def upstream(request):
+        sent.append(request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            stream=FixtureStream(
+                [f"data: {json.dumps(value)}\n\n".encode() for value in (chunk, done)]
+            ),
+        )
+
+    runtime = create_runtime(repo.secrets, lambda: httpx.MockTransport(upstream))
+    service = ModelService(repo, runtime, gate=ExecutionGate())
+
+    async def run():
+        request = generate(stream=True)
+        prepared = await service.prepare(uuid4(), provider.provider_id, request, CHAT)
+        return await service.run(
+            prepared, request, emit=emit, logical_policy=LogicalPolicy(max_attempts=2)
+        )
+
+    result = asyncio.run(run())
+    assert result.status == "incomplete"
+    assert result.error_code == "input_token_limit_exceeded"
+    assert len(sent) == 1
+    assert any(getattr(event, "text", None) == "partial" for event in events)
+    assert "private stream diagnostic" not in result.model_dump_json()

@@ -6,7 +6,10 @@ from typing import Literal
 import httpx
 from pydantic import ValidationError
 
+from compass_agent.schemas import ModelInputError
+
 type RuntimeErrorCode = Literal[
+    ModelInputError,
     "validation_failed",
     "capability_not_supported",
     "model_authentication_failed",
@@ -47,6 +50,36 @@ class RuntimeFailure(Exception):
         super().__init__(code)
 
 
+def model_input_error(body: object) -> ModelInputError | None:
+    """Classify stable provider error fields without reusing response messages."""
+    if not isinstance(body, dict):
+        return None
+    details = body.get("error", body)
+    if not isinstance(details, dict):
+        return None
+    code = details.get("code")
+    parameter = details.get("param")
+    if code in ("context_length_exceeded", "context_window_exceeded", "input_token_limit_exceeded"):
+        return "input_token_limit_exceeded"
+    if code in ("max_tokens_exceeded", "max_output_tokens_exceeded", "output_token_limit_exceeded"):
+        return "output_token_limit_exceeded"
+    if code in ("invalid_value", "value_above_maximum") and parameter in (
+        "max_tokens",
+        "max_completion_tokens",
+        "max_output_tokens",
+    ):
+        return (
+            "output_token_limit_exceeded"
+            if code == "value_above_maximum"
+            else "invalid_model_input"
+        )
+    if code in ("invalid_value", "invalid_parameter", "unsupported_parameter", "invalid_type") or (
+        details.get("type") in ("invalid_request_error", "invalid_argument")
+    ):
+        return "invalid_model_input"
+    return None
+
+
 def error_code(error: Exception) -> RuntimeErrorCode:
     if isinstance(error, RuntimeFailure):
         return error.error.code
@@ -60,6 +93,12 @@ def error_code(error: Exception) -> RuntimeErrorCode:
     if type(error).__name__ == "UnsupportedParamsError":
         return "capability_not_supported"
     status = getattr(error, "status_code", None)
+    if type(error).__name__ == "ContextWindowExceededError":
+        return "input_token_limit_exceeded"
+    if status in {400, 422}:
+        classified = model_input_error(getattr(error, "body", None))
+        if classified is not None:
+            return classified
     if status in {401, 403}:
         return "model_authentication_failed"
     if status == 429:

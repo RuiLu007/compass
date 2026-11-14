@@ -14,10 +14,12 @@ from compass_agent.llm.errors import RuntimeErrorInfo
 from compass_agent.llm.policy import CallPolicy as CallPolicy
 from compass_agent.llm.transport import CallResources
 from compass_agent.schemas import (
+    CallResponse,
     DecisionAnswer,
     DecisionInput,
     ExecutionSummary,
     GenerateInput,
+    GenerationProfile,
     ModelUsage,
     OutputValidation,
     PlatformScope,
@@ -57,6 +59,7 @@ class ModelSpec:
     api_model: str
     sdk_model: str | None
     api_base: str
+    generation_profile: GenerationProfile | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +116,13 @@ class GenerationOutput:
     text: str = field(default="", repr=False)
     tool_calls: tuple[ToolCall, ...] = field(default=(), repr=False)
     continuation_token: str | None = field(default=None, repr=False)
+    analysis_thinking: str = field(default="", repr=False)
+
+
+class AgentCallResponse(CallResponse):
+    """Internal Run receipt persisted with the model checkpoint."""
+
+    analysis_thinking: str = Field(default="", repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,3 +219,11 @@ class RuntimeCancelled(asyncio.CancelledError):
     def __init__(self, result: RuntimeResult):
         self.result = result
         super().__init__("model call canceled")
+
+
+class AttemptBudget(Protocol):
+    reason: str | None
+
+    def reserve(self, request: ExecutionRequest, attempt_id: UUID) -> bool: ...
+
+    def settle(self, attempt_id: UUID, result: RuntimeResult | None) -> None: ...

@@ -15,9 +15,14 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
+from compass_agent.data_connections.entities import DataConnection, RetailConnection
 from compass_agent.models import entities
+from compass_agent.runtime.entities import RUNTIME_TABLES, SCHEDULER_TABLES
+from compass_agent.tools.mcp.entities import McpConnection
+from compass_agent.tools.sandbox.entities import SandboxAllocation
+from compass_agent.workflows.assets import UNIQUE_SCRIPT, WorkflowAsset
 from psycopg import sql
-from sqlalchemy import CheckConstraint, MetaData, create_engine, inspect, text
+from sqlalchemy import CheckConstraint, MetaData, UniqueConstraint, create_engine, inspect, text
 
 APP = Path(__file__).resolve().parents[1]
 SQL_ROOT = APP / "db/main/sql"
@@ -26,8 +31,18 @@ REVISIONS = {
     "0002": "0002_llm_runtime.py",
     "0003": "0003_systemone_decision.py",
     "0004": "0004_reliable_execution.py",
+    "0005": "0005_retail_connection.py",
+    "0006": "0006_data_connections.py",
+    "0007": "0007_workflow_assets.py",
+    "0008": "0008_tool_runtime.py",
+    "0009": "0009_durable_runs.py",
+    "0010": "0010_run_scheduler.py",
+    "0011": "0011_session_management.py",
+    "0012": "0012_dynamic_workflow.py",
+    "0013": "0013_model_generation_profile.py",
+    "0014": "0014_workflow_asset_deletion.py",
 }
-TARGET = "0004"
+TARGET = "0014"
 MARKER = "compass:agent/main"
 OWNER = "compass_agent_owner"
 MIGRATOR = "compass_agent_migrator"
@@ -109,8 +124,20 @@ def inspect_version(connection, *, legacy: bool = False) -> str:
         raise DatabaseError("Unknown Agent revision")
     revision = revisions[0]
     expected = {"alembic_version", "demo_daily_sales"}
-    if revision in {"0002", "0003", "0004"}:
+    if revision >= "0002":
         expected |= {"model_provider", "model_change", "model_call"}
+    if revision == "0005":
+        expected.add(RetailConnection.__tablename__)
+    if revision >= "0006":
+        expected.add(DataConnection.__tablename__)
+    if revision >= "0007":
+        expected.add("workflow_asset")
+    if revision >= "0008":
+        expected |= {"mcp_connection", "sandbox_allocation"}
+    if revision >= "0009":
+        expected |= RUNTIME_TABLES
+    if revision >= "0010":
+        expected |= SCHEDULER_TABLES
     if tables != expected:
         raise DatabaseError("Unknown database tables; refusing migration")
     actual = connection.execute(
@@ -145,16 +172,75 @@ def inspect_version(connection, *, legacy: bool = False) -> str:
             ("demo_daily_sales_pkey", "PRIMARY KEY (day)"),
         ]:
             raise DatabaseError("Legacy Agent constraints do not match revision 0001")
-    elif revision in {"0002", "0003", "0004"}:
+    elif revision >= "0002":
         # 0002 and 0003 share columns, indexes and keys. Their adapter CHECK differs;
         # verify its version-specific definition separately below.
         metadata = entities.Base.metadata
-        if revision in {"0002", "0003"}:
+        if revision < TARGET:
             metadata = MetaData()
             for table in entities.Base.metadata.sorted_tables:
+                if (revision < "0010" and table.name in SCHEDULER_TABLES) or (
+                    revision < "0009" and table.name in RUNTIME_TABLES
+                ):
+                    continue
+                if revision < "0008" and table.name in {
+                    McpConnection.__tablename__,
+                    SandboxAllocation.__tablename__,
+                }:
+                    continue
+                if (revision < "0007" and table.name == WorkflowAsset.__tablename__) or (
+                    revision < "0006" and table.name == DataConnection.__tablename__
+                ):
+                    continue
                 copied = table.to_metadata(metadata)
-                if table.name == "model_call":
+                if table.name == "model_provider" and revision < "0013":
+                    copied._columns.remove(copied.c.generation_profile)
+                if table.name == "workflow_asset" and revision < "0014":
+                    index = next(i for i in copied.indexes if i.name == UNIQUE_SCRIPT)
+                    copied.append_constraint(UniqueConstraint(*index.columns, name=UNIQUE_SCRIPT))
+                    copied.indexes.remove(index)
+                    copied._columns.remove(copied.c.deleted_at)
+                if table.name == "workflow_asset" and revision < "0012":
+                    for constraint in list(copied.constraints):
+                        if constraint.name == "ck_workflow_asset_tool_definition":
+                            copied.constraints.remove(constraint)
+                    for name in ("description", "parameters"):
+                        copied._columns.remove(copied.c[name])
+                if table.name == "agent_session" and revision < "0011":
+                    for constraint in list(copied.constraints):
+                        if constraint.name in {
+                            "ck_agent_session_title_status",
+                            "ck_agent_session_title_job",
+                        }:
+                            copied.constraints.remove(constraint)
+                    for index in list(copied.indexes):
+                        if index.name == "ix_agent_session_title_ready":
+                            copied.indexes.remove(index)
+                    for name in ("title_status", "title_attempts", "title_next_at", "deleted_at"):
+                        copied._columns.remove(copied.c[name])
+                if table.name == "model_call" and revision < "0009":
+                    for constraint in list(copied.constraints):
+                        if constraint.name in {"fk_model_call_agent_attempt", "ck_model_call_run"}:
+                            copied.constraints.remove(constraint)
+                            for foreign_key in getattr(constraint, "elements", ()):
+                                copied.foreign_keys.discard(foreign_key)
+                                foreign_key.parent.foreign_keys.discard(foreign_key)
+                    for index in list(copied.indexes):
+                        if index.name == "ix_model_call_run":
+                            copied.indexes.remove(index)
+                    for name in (
+                        "run_id",
+                        "agent_attempt_id",
+                        "input_message_refs",
+                        "request_content",
+                        "output_content",
+                        "content_status",
+                    ):
+                        copied._columns.remove(copied.c[name])
+                if table.name == "model_call" and revision < "0004":
                     copied._columns.remove(copied.c.execution)
+            if revision == "0005":
+                RetailConnection.__table__.to_metadata(metadata)
         context = MigrationContext.configure(
             connection, opts={"compare_type": True, "compare_server_default": True}
         )
@@ -196,12 +282,38 @@ def inspect_version(connection, *, legacy: bool = False) -> str:
     return revision
 
 
-def role_grants() -> str:
-    return f"""REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC;
+def role_grants(target: str) -> str:
+    grants = f"""REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC;
 GRANT SELECT, INSERT, UPDATE ON demo_daily_sales TO {RUNTIME};
 GRANT SELECT ON alembic_version TO {RUNTIME};
 GRANT SELECT, INSERT, UPDATE ON model_provider, model_call TO {RUNTIME};
 GRANT SELECT, INSERT ON model_change TO {RUNTIME};"""
+    if target >= "0005":
+        table = "data_connection" if target >= "0006" else "retail_connection"
+        grants += f"\nGRANT SELECT, INSERT, UPDATE ON {table} TO {RUNTIME};"
+    if target >= "0007":
+        deletion_column = ", deleted_at" if target >= "0014" else ""
+        grants += (
+            f"\nGRANT SELECT, INSERT ON workflow_asset TO {RUNTIME};"
+            f"\nGRANT UPDATE (name, status, metadata_revision, updated_at{deletion_column}) "
+            f"ON workflow_asset TO {RUNTIME};"
+        )
+    if target >= "0008":
+        grants += f"\nGRANT SELECT, INSERT, UPDATE, DELETE ON mcp_connection TO {RUNTIME};"
+        grants += f"\nGRANT SELECT, INSERT, UPDATE ON sandbox_allocation TO {RUNTIME};"
+    if target >= "0009":
+        grants += (
+            "\nGRANT SELECT, INSERT, UPDATE ON "
+            + ", ".join(sorted(RUNTIME_TABLES))
+            + f" TO {RUNTIME};"
+        )
+    if target >= "0010":
+        grants += (
+            "\nGRANT SELECT, INSERT, UPDATE ON "
+            + ", ".join(sorted(SCHEDULER_TABLES))
+            + f" TO {RUNTIME};"
+        )
+    return grants
 
 
 def sql_delivery(start: str, target: str = TARGET) -> str:
@@ -214,13 +326,29 @@ def sql_delivery(start: str, target: str = TARGET) -> str:
         # Normalize new deliveries while preserving immutable historical SQL bytes.
         generated = "\n".join(line.rstrip() for line in generated.splitlines())
     comment = ledger_comment(target).replace("'", "''")
+    feature = {
+        "0002": "993",
+        "0003": "993",
+        "0004": "991",
+        "0005": "982",
+        "0006": "982",
+        "0007": "987",
+        "0008": "986",
+        "0009": "985",
+        "0010": "984",
+        "0011": "981",
+        "0012": "977",
+        "0013": "976",
+        "0014": "977",
+    }[target]
+    change = "transactional Retail copy" if target == "0006" else "additive schema"
     return (
         f"-- Generated from Agent Alembic migrations; do not edit.\n"
-        f"-- owner=agent/main; feature={'991' if target >= '0004' else '993'}; "
+        f"-- owner=agent/main; feature={feature}; "
         f"PostgreSQL 17; from={start}; to={target}\n"
         "-- Apply through db:apply-sql after provision and ownership/version/checksum checks.\n"
-        "-- Single transaction; additive schema; restore verified backup to a new owned database.\n"
-        "BEGIN;\n" + generated + "\n" + role_grants() + "\n"
+        f"-- Single transaction; {change}; restore verified backup to a new owned database.\n"
+        "BEGIN;\n" + generated + "\n" + role_grants(target) + "\n"
         f"COMMENT ON TABLE alembic_version IS '{comment}';\nCOMMIT;\n"
     )
 
@@ -231,14 +359,22 @@ def write_sql(*, check: bool = False) -> None:
         "upgrades/0001__0002.sql": sql_delivery("0001", "0002"),
         "upgrades/0001__0003.sql": sql_delivery("0001", "0003"),
         "upgrades/0002__0003.sql": sql_delivery("0002", "0003"),
-        "upgrades/0001__0004.sql": sql_delivery("0001"),
-        "upgrades/0002__0004.sql": sql_delivery("0002"),
-        "upgrades/0003__0004.sql": sql_delivery("0003"),
+        "upgrades/0001__0004.sql": sql_delivery("0001", "0004"),
+        "upgrades/0002__0004.sql": sql_delivery("0002", "0004"),
+        "upgrades/0003__0004.sql": sql_delivery("0003", "0004"),
     }
+    for start in ("0001", "0002", "0003", "0004"):
+        files[f"upgrades/{start}__0005.sql"] = sql_delivery(start, "0005")
+    for start in ("0001", "0002", "0003", "0004", "0005"):
+        files[f"upgrades/{start}__0006.sql"] = sql_delivery(start, "0006")
+    for target in ("0007", "0008", "0010", "0011", "0012", "0013", TARGET):
+        for start in REVISIONS:
+            if start < target:
+                files[f"upgrades/{start}__{target}.sql"] = sql_delivery(start, target)
     manifest = {
         "owner": "agent",
         "databaseKey": "main",
-        "feature": "991",
+        "feature": "977",
         "from": "empty",
         "to": TARGET,
         "engine": "PostgreSQL 17",
@@ -255,7 +391,12 @@ def write_sql(*, check: bool = False) -> None:
         "prerequisites": "Provisioned Agent-owned database; expected start and source checksums",
         "dataImpact": (
             "Adds model configuration and metadata; renames decision adapter; "
-            "adds nullable execution summary; preserves keys and rows"
+            "adds execution summaries and multi-engine workspace connections; "
+            "adds durable runs, checkpoints, HITL and immutable artifacts; "
+            "adds asynchronous session titles, session deletion metadata "
+            "and workflow tool contracts and soft deletion; "
+            "backfills historical model attempt metadata without raw content; "
+            "preserves existing Retail configuration, credentials and revisions"
         ),
         "recovery": "Restore verified backup to new owned database with original encryption key",
     }
@@ -313,8 +454,8 @@ def migrate(*, mode: str = "native", start: str | None = None, target: str = TAR
             else:
                 command.upgrade(config(connection), target)
                 grants = (
-                    role_grants()
-                    if target in {"0002", "0003", "0004"}
+                    role_grants(target)
+                    if target >= "0002"
                     else (
                         f"GRANT SELECT, INSERT, UPDATE ON demo_daily_sales TO {RUNTIME};"
                         f"GRANT SELECT ON alembic_version TO {RUNTIME};"

@@ -23,3 +23,5 @@
 供应商连接参数与 API Key 一起保存在已有 `api_key_ciphertext` 的 Fernet envelope。旧 envelope 缺少 `connection_params` 时按空参数读取；保存按字段是否提交保留/替换，参数变更更新 binding_version。没有新增 DDL 或 SQL 版本。运行时快照包括整份加密 envelope，避免配置更新影响进行中的调用。
 
 `ModelService` 接收 lifespan 的共享 Gate，由 ReliableExecutor 汇总调用；终态与 execution 在同一条件更新事务保存。`lifecycle.py` 登记 Chat、诊断及演示的 HTTP 根 runner，shutdown 沿原所有权链取消子执行。历史 execution=null 保持可读；失败响应清除工具续接 token。
+
+`generation_profile` 随 0013 保存在 Provider 行。模型目录提供可选的输入和输出 token 上限候选。管理员可通过已有 Provider POST/PATCH 接口提交 `generation_profile`，包含 `limits`、`defaults` 和可选的 `import_catalog`；PATCH 传 null 可清空整个配置。省略单项上限沿用当前目录快照，显式 null 将该项设为未知。修改型号或端点时一并提交新配置或清除旧配置。可见模型接口返回已解析上限和默认输出 token，私有连接参数仍随凭据加密保存。

@@ -1,1 +1,1 @@
-"""Lesson 15 in-process Agent Runtime."""
+"""Agent Run orchestration, durable state, scheduling and recovery."""

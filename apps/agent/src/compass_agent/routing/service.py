@@ -11,6 +11,7 @@ from starlette.concurrency import run_in_threadpool
 from compass_agent.llm.policy import LogicalPolicy
 from compass_agent.models import RoutingGrant
 from compass_agent.models.errors import ModelError
+from compass_agent.models.service import ModelInvocationCanceled
 from compass_agent.routing.config import POLICY
 from compass_agent.routing.dictionary import catalog, features_for
 from compass_agent.routing.intent import decision_input, flash_input, from_flash, from_jev
@@ -64,6 +65,7 @@ class RoutingService:
         emit=None,
         check=None,
         expected_binding_version=None,
+        attempt_budget=None,
     ):
         if check:
             check()
@@ -87,10 +89,16 @@ class RoutingService:
             prepared,
             value,
             emit=emit if role == "inference" else None,
+            **({"attempt_budget": attempt_budget} if attempt_budget is not None else {}),
             logical_policy=LogicalPolicy(
                 max_attempts=2 if role == "inference" and value.kind == "generate" else 1
             ),
         )
+        if attempt_budget is not None:
+            if result.error_code == "resource_cleanup_failed":
+                raise ModelInvocationCanceled(cleanup_confirmed=False)
+            if result.error_code == "model_timeout":
+                attempt_budget.reason = "execution_timeout"
         if kind == "classifier":
             metrics.classification_calls.append(
                 CallOutcome.model_validate(result.model_dump(include=set(CallOutcome.model_fields)))
@@ -108,6 +116,8 @@ class RoutingService:
         emit=None,
         check=None,
         metrics=None,
+        attempt_budget=None,
+        intent_hint: Intent | None = None,
     ) -> SelectedRoute:
         loop = asyncio.get_running_loop()
         started = loop.time()
@@ -115,7 +125,15 @@ class RoutingService:
         metrics = metrics or RoutingMetrics()
         classification_deadline = min(deadline - 1, started + POLICY.classification_seconds)
         intent = None
-        if self.settings.compass_routing_mode == "jev_with_flash":
+        # M2 uses the Flash stage with a declared token and cost bound.
+        routing_mode = (
+            "flash_only" if attempt_budget is not None else self.settings.compass_routing_mode
+        )
+        if intent_hint is not None:
+            # Deterministic task routing provides an already validated intent.
+            features_for(intent_hint)
+            intent = intent_hint
+        elif routing_mode == "jev_with_flash":
             metrics.fallback_reason = "jev_unavailable"
             try:
                 if check:
@@ -145,7 +163,7 @@ class RoutingService:
                     "model_unavailable",
                 }:
                     raise
-        elif self.settings.compass_routing_mode != "flash_only":
+        elif routing_mode != "flash_only":
             raise ModelError("route_binding_missing", 503)
         if intent is None:
             if check:
@@ -163,10 +181,11 @@ class RoutingService:
                 "classifier",
                 metrics,
                 check=check,
+                attempt_budget=attempt_budget,
             )
             intent = from_flash(prediction)
             metrics.classifier_source = "flash"
-        else:
+        elif intent_hint is None:
             metrics.classifier_source = "jev"
             metrics.fallback_reason = None
         features = features_for(intent)
@@ -188,7 +207,9 @@ class RoutingService:
             else:
                 role = "pro" if features.difficulty in {"L2", "L3"} else "flash"
                 provider_id, _ = await self.provider(role)
-                reason = "difficulty_" + features.difficulty
+                reason = (
+                    "task_route" if intent_hint is not None else "difficulty_" + features.difficulty
+                )
             if check:
                 check()
             view = await run_in_threadpool(self.models.repository.get, provider_id)

@@ -22,7 +22,7 @@ Compass 的开发源码维护在 `https://github.com/shanggqm/compass`。课程�
 | `apps/web/`           | 产品 Web / BFF；`src/server/modules/` 身份/权限/审计/通知，`db/main/` 独立迁移；`src/generated/` 保留 Agent 演示契约。 |
 | `apps/agent/`         | 推理与 Runtime 后台；`src/compass_agent/` 演示 API 与运行状态，`migrations/` 管理应用库，`seed.py` 初始化三天样本。    |
 | `apps/memory/`        | `src/compass_memory/` 独立记忆服务脚手架，目前提供健康检查。                                                           |
-| `apps/worker/`        | `src/compass_worker/` 后台进程脚手架，目前提供 asyncio 生命周期和信号退出。                                            |
+| `apps/worker/`        | `src/compass_worker/` HTTP 队列消费进程，领取、独立心跳和逐 Checkpoint 推进。                                          |
 | `packages/`           | 共享包准入说明；达到复用条件后再提取代码。                                                                             |
 | `contracts/`          | 从 Agent DTO 和路由生成的 OpenAPI / JSON Schema。                                                                      |
 | `deploy/`             | `compose/` 本地服务编排、`containers/` 应用镜像、零售部署配置模板。                                                    |
@@ -46,6 +46,8 @@ Compass 的开发源码维护在 `https://github.com/shanggqm/compass`。课程�
 | 环境诊断       | `pnpm doctor`                                                                               | 检查 Node、pnpm、uv、Docker Compose 与 daemon。                                                                     |
 | 启动数据库     | `pnpm db:up`                                                                                | 启动本地 PostgreSQL，宿主机端口 55432。                                                                             |
 | 初始化应用数据 | `pnpm db:migrate`；`pnpm db:seed`                                                           | 首次先执行 `pnpm db:provision -F web`；迁移 Web/Agent，默认 seed 只写 Agent 三天样本；按 `-F` 选择应用。            |
+| 停止与重启     | `pnpm stop`；`pnpm restart [-- --langfuse]`                                                 | 停止受管应用和依赖容器，保留数据卷；重启默认不启 Langfuse。                                                         |
+| 一键启动       | `pnpm start`；`pnpm start --langfuse`                                                       | 前者启动应用与所需本地依赖，后者追加 Langfuse；要求已完成首次初始化。                                               |
 | 开发           | `pnpm dev`；`pnpm dev -F home`                                                              | 前者启动全部五个应用；`-F` 可选 `home`、`web`、`agent`、`memory`、`worker`，支持重复筛选。                          |
 | 应用检查       | `pnpm lint -F <短名>`；`pnpm typecheck -F <短名>`；`pnpm test -F <短名>`                    | 使用对应 app 的 ESLint / Ruff、TypeScript / Pyright、Node test / Vitest / pytest。                                  |
 | 综合检查       | `pnpm check`                                                                                | 工具测试、格式、脚本 lint、契约漂移、依赖边界及应用 lint / 类型 / 测试。                                            |
@@ -70,7 +72,7 @@ Compass 的开发源码维护在 `https://github.com/shanggqm/compass`。课程�
 - 演示接口只返回固定合成数据，需显式设置 `COMPASS_DEMO_ENABLED=true`；关闭时返回 404，不接收租户、SQL 或自由代码输入。
 - `db:seed` 必须保持幂等；空数据、数据库不可用或缺少迁移时不得报告查询成功。`/healthz` 只检查进程，Agent `/readyz` 检查数据库与初始表。
 - BFF 对上游数据做 JSON Schema 运行时校验；成功和失败响应均 `no-store`，上游失败或契约不兼容统一返回 503，隐藏内部错误详情。
-- 本地登录、数据库会话、租户与个人权限、设置、Web 通知/审计、模型 Provider 管理、能力测试和 LiteLLM 生成调用已接入；生成模型的接入与 Chat 按 SDK 协议能力、平台配置和权限开放；OIDC、Run / SSE、Sandbox 与 EvalOps 尚未交付；Memory 健康检查和 Worker 存活只代表脚手架入口可用，不能表述为记忆业务或任务消费已就绪。
+- 本地登录、数据库会话、租户与个人权限、设置、Web 通知/审计、模型 Provider 管理、能力测试和 LiteLLM 生成调用已接入；生成模型的接入与 Chat 按 SDK 协议能力、平台配置和权限开放；持久 Session / Run / SSE、恢复与人工确认、统一工具调度、个人 MCP 和 OpenSandbox + NFS 本地环境已接入；OIDC、云端隔离部署与 EvalOps 尚未交付；Memory 健康检查仅代表脚手架入口可用；Worker 已接入 Agent 同库队列，消费就绪需验证实际领取与推进。
 - 涉及零售数据时遵守 [数据操作说明](../docs/data-seeding.md)：保持可复现摘要与私有运行记录分离，保留旧库和旧活动清单；合成结果不用于宣称真实市场因果关系。
 
 ### 架构边界
@@ -86,6 +88,9 @@ Compass 的开发源码维护在 `https://github.com/shanggqm/compass`。课程�
 
 ### 工程约定
 
+- 新增、修改或评审 Compass 的页面、组件、代码展示及交互状态前，必须阅读并遵循 [Compass UI 样式规范](ui-style-guide.md)。优先复用应用的设计变量与通用组件。新增通用样式或组件变体时同步更新规范与演示，交付前检查桌面、窄屏、键盘和相关状态。
+- Agent 工具遵循 [工具目录与注册规范](../apps/agent/src/compass_agent/tools/README.md)：通用工具放入 `tools/builtin/<tool_name>/`，业务工具放入 `tools/business/<tool_name>/`，目录名与工具名完全一致；定义、参数、执行适配及专属校验集中在该目录。每个静态工具导出 `SPEC: ToolSpec` 并登记到 `tools/catalog.py`，模型声明、预检与执行注册共用启用条件；Runtime 通过清单装配工具。MCP 按用户配置动态注册到统一 Registry；当前历史工作流资产保留管理与导出。通用工具独立于业务数据源，业务工具通过显式 Agent 配置接入；共享连接、沙箱后端和工作流引擎按职责维护。新增或修改工具须更新相关说明，并运行 Agent 检查、目录与注册一致性测试及相关行为用例。
+- 后续所有 Showcase 的新增、修改与迁移，必须遵循 [临时演示规范](../examples/showcases/README.md)，涵盖课程案例、演示及临时验证案例中的工具、Skill 和工作流。案例默认由普通问题、数据样本、数据字典与验收点组成，使用授权数据库查询、代码执行等通用能力完成。确需增加案例专属能力时，全部放入 `examples/showcases/<case_id>/`，登记目标、负责人、依赖、必要性与退出条件，由独立入口显式装配，并遵循统一工具目录与注册规范。生产 Runtime、Harness、默认清单、公开 Run 请求和组合根禁止导入演示实现，演示代码不得进入生产 wheel 或镜像；禁止增加演示 case ID、固定日期或问题关键词的执行分支、预定工具序列和业务答案。演示结束或被通用能力覆盖时退出；转正需按正式 Feature 评审通用接口并通过跨场景验收。修改相关边界须运行默认清单、导入与 wheel 隔离测试；停用已有执行能力前检查活动 Run，保留用户连接、历史、产物与资产。
 - 新应用使用 `apps/<短名>` 与 `@compass/<短名>`，短名与目录名相同且 workspace 内唯一；提供独立 `dev`、`lint`、`typecheck`、`test` 入口，禁止靠手工别名表或专用根脚本完成注册。
 - 编码规则以根 EditorConfig、Prettier、Ruff 配置和应用 ESLint / TypeScript 配置为准；前端 `strict`、ESLint 零 warning，Python Pyright `standard`。Python 子项目自定义 Ruff 时须通过 `extend` 继承根配置。
 - 保持运行任务与缓存任务分离：开发、迁移、seed、契约生成和网络 smoke 不缓存；缓存检查 / 构建使用实际工具链指纹，Python 指纹不应阻断 home 独立运行。
@@ -136,4 +141,5 @@ ADR 的日期条目保留当时的实施背景；当前五应用结构见应用 
 - 修改 Next.js 应用前先读 [web 局部规则](../apps/web/AGENTS.md) 或 [home 局部规则](../apps/home/AGENTS.md)，按其要求查阅该 app 安装的 Next.js 文档，保留受管区块；home 的视觉与交互细则留在其 README。
 - 命令、目录、应用职责或交付边界变化时，同步相关 README、规范入口和受影响的 `manifest.yml`；生成契约随源一起更新。保留无关未提交修改，不用本次初始化顺带清理历史资产。
 - 需求和任务材料放入 `mai-specs/NNN-<slug>/`，依 [SDD 工作区说明](../mai-specs/README.md) 使用 Feature 初始化入口与有效路径契约；当前任务进度不写入长期记忆。所有承诺条件有当前通过证据后才结项。
+- Feature 文件访问严格限定于当前正在开发的 Feature。对于非当前开发、已完成或已归档的 Feature，禁止尝试读取或更新其中的任何文件，包括通过搜索、批量扫描、工具或子代理间接访问；仅当用户明确强制要求访问这些 Feature 时，才可按其指定范围操作。检索前必须限定当前 Feature 路径，禁止为补充上下文或参考历史实现而扩大访问范围。
 - `.agents/`、`.claude/`、`.codex/` 和 `.vscode/` 由本地维护。Skill 行为变化需同步相应 Eval；工具生成目录不作为唯一编辑源。

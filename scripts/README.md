@@ -1,10 +1,18 @@
 # 工程脚本
 
+- `stop.mjs` / `restart.mjs` / `local-control.mjs`：`pnpm stop` 通过仓库专属控制 socket 结束应用，再按精确 Compose project 标签停止 Compass / Sandbox 容器；保留容器和数据卷。`pnpm restart [-- --langfuse]` 使用 pnpm 内置 stop → restart → start 生命周期（中间脚本仅校验参数），默认关闭观测。`local-control.mjs` 管理本机控制 socket，`local-control.test.mjs` 验证重复停止、已有实例保护和退出确认。
+
+- `docker-ready.mjs`：启动前检查 Docker API；打开 Desktop 后以有超时的探测轮询引擎就绪，支持取消，120 秒未就绪时明确报错。
+
+- `start.mjs`：`pnpm start` 一键启动本地完整环境；`pnpm start --langfuse` 追加 Langfuse。启动 PostgreSQL / Redis / Sandbox、执行 Web / Agent 迁移，等待 Web / Agent / Home / Memory 就绪后启动两个独立 Worker。要求已安装依赖、配置根 `.env` 并初始化数据库和账号；端口占用时退出，Ctrl+C 终止本次应用进程并保留依赖容器及数据。`start.test.mjs` 与 `tasks.test.mjs` 覆盖参数、Worker 令牌分配及 Turbo 环境透传。
+
 - `observability.mjs`：`pnpm observability <init|up|status|logs|down>` 创建私有配置、启停同项目的六个 Langfuse 服务；固定本机 Docker、独立持久卷和无覆盖初始化。`observability.test.mjs` 验证权限、凭据分配与命令范围；运行参数及存储见 [观测说明](../deploy/observability/README.md)。
 
 - `deploy.mjs`：`pnpm run deploy [app]` 本机 Docker 部署入口，省略 app 部署全部五个应用。固定本地 socket、Compose 文件和项目名；预检端口与已有数据库健康，构建后停止所选应用，显式执行所属迁移，再启动并验证。使用 `work/local-deploy.lock` 互斥，失败保留现场和卷。`deploy:status` / `deploy:logs` 支持 app，`deploy:down` 停止整个项目并保留卷。参数和执行顺序由 `deploy.test.mjs` 验证，详见 [部署说明](../deploy/README.md)。
 
 - `format-hook.test.mjs`：本地 Claude Code 和 Codex 编辑 Hook 的验收。只有本地 Hook 和两个客户端入口齐备时，`pnpm test:tooling` 才执行这组测试。
+
+- `lesson-17-start.py`：旧课堂专用启动器仅返回退出说明，原实现归档至 `examples/showcases/retail/reference/`。普通 Agent 使用统一开发入口；独立教学脚本从 `examples/showcases/retail/runner.py` 显式运行。
 
 - `tasks.mjs`：透传任务和筛选参数至 Turbo；运行时任务加载根 `.env` 并跳过版本探测，构建和检查不加载本地密钥。缓存使用 Node / pnpm 指纹及独立的 Python 指纹；缺少 Python 工具时记录 `unavailable`，由实际 Python 任务报告缺失，home 可独立运行。
 - `workspace-filters.mjs`：将 `-F home` 等简单短名解析为完整包名；通过 `pnpm --recursive list --depth -1 --json` 自动发现成员，遵循 workspace 的 glob 与排除规则，无需维护 app 列表。完整包名、目录、复合 Turbo 选择器及 `--` 后的应用参数保持原样；未知短名和重名均明确报错。
@@ -23,6 +31,10 @@
 
 - `prepare-data.mjs`：`pnpm data:prepare` 使用 Node.js 标准库校验 `data/retail/` 的 Git LFS 压缩包，流式解压并校验后生成忽略 Git 的 SQL；重复执行校验现有文件，拒绝覆盖内容不符的文件。只准备数据，不访问数据库。`prepare-data.test.mjs` 覆盖解压、重复执行、LFS 指针、缺失文件、两层校验失败和解压失败清理，由 `pnpm test:tooling` 自动执行。
 
+Agent 的 `pnpm db:seed -F agent` 加载默认 Retail 导入参数和应用加密密钥。导入后的运行时使用 Agent 库内配置；Agent 的 `dev` 接收 Retail 及通用数据连接端点允许列表，Web 启动和 seed 不接收 Retail 导入凭据。
+
 Web 数据库任务通过相同短名发现机制转发，入口在 [apps/web/scripts](../apps/web/README.md)：`db:provision`、`db:migrate`、`db:apply-sql`、`db:manage`、`seed` 及专用 `test:setup` / `test:integration` / `test:e2e` 为非缓存运行任务；`db:sql` / `db:sql:check` 不加载本地凭据。
 
 显式声明 `interactive: true` 的一次性任务要求单个 workspace filter，由根入口直接透传 stdin 给 pnpm 子进程；不经 Turbo 的终端 UI。这使受管密码的隐藏 TTY/管道输入可用，仍加载根环境、复用 workspace 发现并且不缓存。
+
+- `sandbox.mjs`：`pnpm sandbox <init|up|status|logs|down>` 管理课堂 OpenSandbox/NFS；私有密钥写入忽略目录，停止保留数据卷。

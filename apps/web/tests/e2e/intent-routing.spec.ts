@@ -1,4 +1,6 @@
-import { test, expect, type BrowserContext } from "@playwright/test";
+import { test, expect, type BrowserContext, type Page } from "@playwright/test";
+import type { RunEvent } from "../../src/contracts/analysis-run";
+import { agentResponse, type AgentResponse } from "../../src/contracts/agent-response";
 
 const tenantId = "99500000-0000-4000-8000-000000000010";
 const workspaceId = "99500000-0000-4000-8000-000000000020";
@@ -43,30 +45,68 @@ async function configure(context: BrowserContext) {
   return providers;
 }
 
-test("business questions expose two-level intent, dictionary features and auto model inference", async ({
+async function send(page: Page, question: string) {
+  const response = page.waitForResponse(
+    (r) => r.url().endsWith("/analysis/sessions/submit") && r.request().method() === "POST",
+  );
+  await page.getByLabel("分析问题").fill(question);
+  await page.getByRole("button", { name: "发送消息", exact: true }).click();
+  const submitted = await response;
+  expect(submitted.status(), await submitted.text()).toBe(202);
+  const accepted = await submitted.json();
+  let snapshot: AgentResponse | undefined;
+  await expect
+    .poll(async () => {
+      const result = await page.request.get(
+        `/api/web/v1/analysis/sessions/${accepted.sessionId}/messages`,
+        {
+          params: { tenantId, workspaceId },
+        },
+      );
+      expect(result.status(), await result.text()).toBe(200);
+      snapshot = agentResponse(await result.json());
+      return snapshot.packets.find(
+        (packet) => packet.runId === accepted.runId && packet.event.type === "run.upsert",
+      )?.event;
+    })
+    .toMatchObject({ type: "run.upsert", payload: { status: "completed" } });
+  const events = snapshot!.packets.flatMap<RunEvent>((packet) =>
+    packet.runId === accepted.runId &&
+    packet.event.type === "view.upsert" &&
+    packet.event.payload.kind === "timeline"
+      ? [packet.event.payload.value.event as RunEvent]
+      : [],
+  );
+  const route = events.find((event) => event.type === "run.routed");
+  const step = events.find((event) => event.type === "step.started");
+  expect(step).toBeDefined();
+  const record = await page.request.get(`/api/web/v1/models/calls/${step!.payload.modelCallId}`, {
+    params: { tenantId, workspaceId },
+  });
+  expect(record.status(), await record.text()).toBe(200);
+  return { route: route?.payload, record: await record.json() };
+}
+
+test("business questions resolve the scene and model through the analysis run", async ({
   page,
   context,
 }) => {
-  await configure(context);
+  const providers = await configure(context);
   await login(context, "admin");
   await page.goto(analysisPath);
-  await page.getByLabel("选择 Chat 主模型").selectOption("auto");
-  const request = page.waitForResponse(
-    (r) => r.url().endsWith("/models/calls") && r.request().method() === "POST",
-  );
-  await page.getByLabel("分析问题").fill("根据昨日销售100元、前日80元，比较销售额并简述。");
-  await page.getByRole("button", { name: "发送消息", exact: true }).click();
-  expect((await request).status()).toBe(200);
-  await expect(page.locator(".model-chat-answer")).toContainText("这是模型测试回复。");
-  await page.getByText("意图分类与响应结构", { exact: true }).click();
-  const value = JSON.parse(await page.getByLabel("意图分类响应结构").innerText());
-  expect(Object.keys(value.intent).sort()).toEqual(["category_id", "scene_id"]);
-  expect(value.intent).toEqual({ category_id: "business_channel", scene_id: "SC-02" });
-  expect(value.features.difficulty).toBe("L1");
-  expect(value.routing.model).toBe("deepseek-flash");
-  expect(value.metrics.classifier_source).toBe("jev");
-  expect(value.result.status).toBe("completed");
-  expect(value.metrics.classification_calls).toHaveLength(1);
+  await expect(page.getByLabel("选择 Chat 主模型")).toHaveValue("auto");
+  const result = await send(page, "根据昨日销售100元、前日80元，比较销售额并简述。");
+  await expect(page.getByRole("region", { name: "最终回答" })).toContainText("这是模型测试回复。");
+  expect(result.route).toMatchObject({
+    sceneId: "SC-02",
+    providerId: providers.flash,
+    modelLabel: expect.stringMatching(/^Routing flash /),
+  });
+  expect(result.record).toMatchObject({
+    provider_id: providers.flash,
+    requested_model: "deepseek-flash",
+    status: "completed",
+  });
   await page.screenshot({ path: "../../work/992/business-routing.png", fullPage: true });
 });
 
@@ -78,18 +118,21 @@ test("unrelated chat uses Flash refusal prompt even when Pro is selected", async
   await login(context, "admin");
   await page.goto(analysisPath);
   await page.getByLabel("选择 Chat 主模型").selectOption(providers.pro);
-  await page.getByLabel("分析问题").fill("你好呀，讲个笑话");
-  await page.getByRole("button", { name: "发送消息", exact: true }).click();
-  await expect(page.locator(".model-chat-answer")).toContainText(
+  const result = await send(page, "你好呀，讲个笑话");
+  await expect(page.getByRole("region", { name: "最终回答" })).toContainText(
     "你有没有想分析的销售、库存或其他业务数据任务？",
   );
-  await page.getByText("意图分类与响应结构", { exact: true }).click();
-  const value = JSON.parse(await page.getByLabel("意图分类响应结构").innerText());
-  expect(value.intent).toEqual({ category_id: "input_boundary", scene_id: "SC-39" });
-  expect(value.features.response_mode).toBe("refuse");
-  expect(value.routing.reason).toBe("off_topic_flash");
-  expect(value.routing.provider_id).toBe(providers.flash);
-  expect(value.result.requested_model).toBe("deepseek-flash");
+  expect(result.route).toMatchObject({
+    sceneId: "SC-39",
+    providerId: providers.flash,
+    modelLabel: expect.stringMatching(/^Routing flash /),
+    toolsEnabled: false,
+  });
+  expect(result.record).toMatchObject({
+    provider_id: providers.flash,
+    requested_model: "deepseek-flash",
+    status: "completed",
+  });
   for (const width of [1440, 768, 375]) {
     await page.setViewportSize({ width, height: 1000 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(

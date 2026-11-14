@@ -328,7 +328,7 @@ Query Gateway 先确认指标与权限，再做 AST 校验、允许的表列函�
 
 Sandbox 仅接收授权数据快照和最小任务参数，无平台库连接、模型密钥或容器控制口。agent / worker 内的 Sandbox 控制适配器负责创建、限额、取消、回收、产物校验；执行器无默认外网，文件只读输入 / 单独输出目录，非 root、最小 capability、CPU / RAM / PID / wall time / 输出字节上限。报告与生成 HTML 视为不可信内容，下载或安全渲染，不能直接以应用同源脚本执行。
 
-本地 Docker 只用于受控 Fixture 实验；云端候选 gVisor 或受管 Sandbox 需额外验证兼容性、网络隔离与资源限制。macOS 本地容器体验不代表已验证 Linux 云端隔离。[gVisor 官方说明](https://gvisor.dev/docs/)
+第 18 课课堂使用 OpenSandbox + NFS-Ganesha，在本地 Docker 演示独立分配、工作卷保留与重挂载；云端默认使用 OpenSandbox + 专用 Linux VM 的 gVisor + 托管 NAS。云端启用前需验证实际镜像、网络隔离、资源限制和终止回执。见 [Sandbox 选型 ADR](../../../docs/adr/0003-tool-sandbox.md)。
 
 pgvector 负责候选召回，关系数据控制 ACL、时效与删除。先做结构化过滤与精确检索，近似索引由数据量和 Recall / 延迟评测触发。外部 embedding 与 reranker 通过适配器接入，记录模型版本、维度、切片策略及数据出境配置，重建索引不覆盖权威文档版本。向量相近不授予权限。[pgvector 过滤](https://github.com/pgvector/pgvector#filtering)
 

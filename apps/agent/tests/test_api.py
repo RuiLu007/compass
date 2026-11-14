@@ -7,6 +7,7 @@ from compass_agent.main import app
 from compass_agent.seed import seed
 from compass_agent.settings import Settings
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
@@ -83,7 +84,7 @@ def readiness_engine():
     Base.metadata.create_all(engine)
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32))"))
-        connection.execute(text("INSERT INTO alembic_version VALUES ('0004')"))
+        connection.execute(text("INSERT INTO alembic_version VALUES ('0014')"))
     yield engine
     engine.dispose()
 
@@ -91,9 +92,13 @@ def readiness_engine():
 def test_readiness_accepts_current_empty_schema_without_model_key(readiness_engine):
     with (
         patch("compass_agent.main.get_engine", return_value=readiness_engine),
-        patch("compass_agent.main.get_settings", return_value=Settings()),
+        patch(
+            "compass_agent.main.get_settings",
+            return_value=Settings(compass_runtime_state_key=SecretStr("")),
+        ),
         TestClient(app) as client,
     ):
+        app.state.durable_runtime.store.ready = True
         assert client.get("/readyz").status_code == 200
 
 
@@ -102,11 +107,14 @@ def test_readiness_accepts_current_empty_schema_without_model_key(readiness_engi
     [
         "UPDATE alembic_version SET version_num='0001'",
         "UPDATE alembic_version SET version_num='0002'",
+        "UPDATE alembic_version SET version_num='0004'",
+        "UPDATE alembic_version SET version_num='0005'",
         "DELETE FROM alembic_version",
         "DROP TABLE alembic_version",
         "ALTER TABLE model_provider DROP COLUMN api_key_ciphertext",
         "ALTER TABLE model_call DROP COLUMN usage",
         "ALTER TABLE model_change DROP COLUMN request_mac",
+        "ALTER TABLE data_connection DROP COLUMN password_ciphertext",
     ],
 )
 def test_readiness_rejects_old_revision_or_missing_required_columns(readiness_engine, change):
@@ -119,3 +127,10 @@ def test_readiness_rejects_old_revision_or_missing_required_columns(readiness_en
         response = client.get("/readyz")
         assert response.status_code == 503
         assert response.json() == {"detail": "Database or migration unavailable"}
+
+
+def test_production_runtime_read_routes_are_registered():
+    paths = app.openapi()["paths"]
+    assert "get" in paths["/v1/analysis/runtime/usage"]
+    assert "get" in paths["/v1/analysis/runs/{run_id}/timeline"]
+    assert "post" in paths["/internal/runtime/jobs/advance"]

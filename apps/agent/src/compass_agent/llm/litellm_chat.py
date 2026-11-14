@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 from copy import deepcopy
+from dataclasses import replace
 from itertools import islice
 from typing import Any
 
@@ -15,6 +16,7 @@ from compass_agent.llm.contracts import (
     CallSession,
     ContinuationCodec,
     ExecutionRequest,
+    GenerationOutput,
     ModelOutput,
     ToolOutputValidation,
 )
@@ -175,6 +177,7 @@ class LiteLLMChatAdapter:
                 resources,
                 self.transport_factory() if self.transport_factory else None,
                 observe_openai=wire_guard,
+                classify_model_input=True,
             )
             timeout = httpx.Timeout(
                 max(
@@ -214,6 +217,10 @@ class LiteLLMChatAdapter:
             ),
             "caching": False,
         }
+        if request.temperature is not None:
+            params["temperature"] = request.temperature
+        if request.top_p is not None:
+            params["top_p"] = request.top_p
         if sdk_client is not None:
             params["client"] = sdk_client
         if request.thinking and access.spec.vendor != "deepseek":
@@ -414,4 +421,17 @@ class LiteLLMChatAdapter:
             > invocation.policy.limits.continuation_bytes
         ):
             raise RuntimeFailure("continuation_too_large")
+        if (
+            invocation.tool_output_validation == "agent_dispatch"
+            and access.spec.vendor == "deepseek"
+            and request.thinking
+            and reasoning
+        ):
+            from compass_agent.observability.content import redact
+
+            assert isinstance(result.output, GenerationOutput)
+            return replace(
+                result.output,
+                analysis_thinking=redact(reasoning, (access.api_key.get_secret_value(),)),
+            )
         return result.output

@@ -15,24 +15,24 @@ function fixture(
   const ports = [];
   const config = {
     services: Object.fromEntries(
-      [...apps, "postgres"].map((app) => [
+      [...apps, "worker-2", "postgres", "redis"].map((app) => [
         app,
         {
-          ports:
-            app === "worker"
-              ? []
-              : [
-                  {
-                    host_ip: "127.0.0.1",
-                    published: {
-                      home: 8101,
-                      web: 8100,
-                      agent: 8102,
-                      memory: 8103,
-                      postgres: 55432,
-                    }[app],
-                  },
-                ],
+          ports: app.startsWith("worker")
+            ? []
+            : [
+                {
+                  host_ip: "127.0.0.1",
+                  published: {
+                    home: 8101,
+                    web: 8100,
+                    agent: 8102,
+                    memory: 8103,
+                    postgres: 55432,
+                    redis: 56379,
+                  }[app],
+                },
+              ],
         },
       ]),
     ),
@@ -44,7 +44,7 @@ function fixture(
     invoke: (args) =>
       deploy(args, {
         workspace,
-        sourceEnv,
+        sourceEnv: { COMPASS_RUNTIME_STATE_KEY: "test-only-configured-key", ...sourceEnv },
         checkPort: async (port) => {
           ports.push(port);
           if (portFailure) throw new Error("port occupied");
@@ -58,7 +58,9 @@ function fixture(
           if (args.includes("config")) return JSON.stringify(config);
           if (args.includes("ps") && args.includes("json"))
             return JSON.stringify(
-              args.at(-1) === "worker" ? [{ Service: "worker", State: workerState }] : containers,
+              args.at(-1) === "worker-2"
+                ? ["worker", "worker-2"].map((Service) => ({ Service, State: workerState }))
+                : containers,
             );
           return "";
         },
@@ -111,6 +113,11 @@ test("full deploy checks contracts, builds first, migrates on every run and veri
   const index = (word) => f.calls.findIndex((call) => call.args.includes(word));
   assert.ok(index("contracts:check") < index("build"));
   assert.ok(index("build") < index("stop"));
+  const infrastructure = f.calls.find(
+    (call) => call.args.includes("up") && call.args.includes("redis"),
+  );
+  assert.deepEqual(infrastructure.args.slice(-2), ["postgres", "redis"]);
+  assert.ok(f.calls.indexOf(infrastructure) < index("run"));
   assert.ok(index("stop") < index("run"));
   assert.ok(index("run") < index("--force-recreate"));
   assert.ok(index("--force-recreate") < index("scripts/smoke.mjs"));
@@ -133,9 +140,15 @@ for (const app of apps)
     const f = fixture(t);
     await f.invoke(["up", app]);
     const stop = f.calls.find((call) => call.args.includes("stop"));
-    assert.deepEqual(stop.args.slice(stop.args.indexOf("stop")), ["stop", "--timeout", "15", app]);
+    assert.deepEqual(stop.args.slice(stop.args.indexOf("stop")), [
+      "stop",
+      "--timeout",
+      "15",
+      app,
+      ...(app === "worker" ? ["worker-2"] : []),
+    ]);
     const start = f.calls.find((call) => call.args.includes("--force-recreate"));
-    assert.equal(start.args.at(-1), app);
+    assert.equal(start.args.at(-1), app === "worker" ? "worker-2" : app);
     assert.ok(start.args.includes("--no-deps"));
     const migrations = f.calls.filter(
       (call) => call.args.includes("run") && call.args.includes("--rm"),
@@ -197,7 +210,7 @@ test("re-deploy allows ports already published by the selected running container
 
 test("worker exiting after startup prevents success", async (t) => {
   const f = fixture(t, { workerState: "exited" });
-  await assert.rejects(f.invoke(["up", "worker"]), /Worker scaffold/);
+  await assert.rejects(f.invoke(["up", "worker"]), /Both Worker consumers/);
 });
 
 test("down preserves data and concurrent deploy is rejected", async (t) => {

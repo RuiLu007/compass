@@ -16,3 +16,5 @@ data/
 .agents/
 .cursor/
 mai-specs/
+
+**/.next-e2e-*/

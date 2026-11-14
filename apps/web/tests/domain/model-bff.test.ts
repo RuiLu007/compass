@@ -19,31 +19,12 @@ const token = "a".repeat(43),
 const id = (n: number) => `99300000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const command = {
   call_id: id(1),
-  provider_id: id(2),
   input: { kind: "generate", messages: [{ role: "user", content: "hello" }] },
 };
 const scope = { tenantId: id(3), workspaceId: id(4) };
-const start = { type: "start", call_id: id(1) };
-const routeSelected = {
-  type: "route_selected",
-  call_id: id(1),
-  intent: { category_id: "business_channel", scene_id: "SC-02" },
-  features: {
-    task_type: "对比拆解",
-    difficulty: "L1",
-    response_mode: "answer",
-    required_capabilities: [],
-  },
-  routing: {
-    mode: "fixed",
-    provider_id: id(2),
-    model: "deepseek-v4-pro",
-    reason: "user_fixed_main_model",
-    dictionary_version: "test",
-    routing_version: "test",
-  },
-};
-const legacyFinal = {
+const providerTest = `platform/models/${id(2)}/tests`;
+const start = { type: "start", call_id: id(1), provider_id: id(2), config_version: 1 };
+const final = {
   type: "final",
   call_id: id(1),
   provider_id: id(2),
@@ -51,16 +32,6 @@ const legacyFinal = {
   status: "completed",
   duration_ms: 2,
   requested_model: "deepseek-v4-pro",
-};
-const final = {
-  type: "final",
-  call_id: id(1),
-  status: "completed",
-  intent: routeSelected.intent,
-  features: routeSelected.features,
-  routing: routeSelected.routing,
-  metrics: {},
-  result: { ...legacyFinal, type: undefined, kind: "generate" },
 };
 
 function request(
@@ -161,25 +132,29 @@ describe("model BFF", () => {
     expect(result.headers.get("x-compass-view-revision")).toBe("a".repeat(64));
     expect(mocks.fetch).toHaveBeenCalledTimes(1);
   });
-  it("rejects trusted fields, decision Chat input, duplicate queries, and invalid origin before forwarding", async () => {
+  it("rejects trusted fields, invalid diagnostic input, duplicate queries, and invalid origin before forwarding", async () => {
     for (const body of [
-      { ...scope, ...command, context: {} },
-      { ...scope, ...command, input: { kind: "decision", state: "x", questions: {} } },
+      { ...command, context: {} },
+      { ...command, input: { kind: "unknown" } },
     ])
-      expect((await request("models/calls", "POST", body)).status).toBe(422);
+      expect((await request(providerTest, "POST", body)).status).toBe(422);
     expect((await request("platform/models?page=1&page=2")).status).toBe(422);
     expect(
-      (
-        await request(
-          "models/calls",
-          "POST",
-          { ...scope, ...command },
-          { origin: "https://foreign.test" },
-        )
-      ).status,
+      (await request(providerTest, "POST", { ...command }, { origin: "https://foreign.test" }))
+        .status,
     ).toBe(403);
     expect(mocks.fetch).not.toHaveBeenCalled();
     expect(mocks.audit).toHaveBeenCalledTimes(4);
+  });
+  it("retires the old product inference route before contacting Agent", async () => {
+    const result = await request("models/calls", "POST", {
+      ...scope,
+      ...command,
+      provider_id: id(2),
+    });
+    expect(result.status).toBe(404);
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
   });
   it("keeps authentication failures to one existing failure audit", async () => {
     mocks.execute.mockRejectedValue(new ApplicationError("forbidden", "无权访问。"));
@@ -224,15 +199,14 @@ describe("model BFF", () => {
     mocks.fetch.mockResolvedValueOnce(
       Response.json({ ...final, type: undefined, kind: "generate", call_id: id(9) }),
     );
-    expect((await request("models/calls", "POST", { ...scope, ...command })).status).toBe(503);
+    expect((await request(providerTest, "POST", { ...command })).status).toBe(503);
     expect(mocks.fetch).toHaveBeenCalledTimes(2);
   });
   it("relays a validated stream and refuses mismatched, missing, repeated, or post-final events", async () => {
     mocks.fetch.mockResolvedValueOnce(
-      events([start, routeSelected, { type: "text_delta", call_id: id(1), text: "ok" }, final]),
+      events([start, { type: "text_delta", call_id: id(1), text: "ok" }, final]),
     );
-    const valid = await request("models/calls", "POST", {
-      ...scope,
+    const valid = await request(providerTest, "POST", {
       ...command,
       input: { ...command.input, stream: true },
     });
@@ -240,8 +214,8 @@ describe("model BFF", () => {
     for (const items of [
       [start],
       [start, { ...final, call_id: id(9) }],
-      [start, routeSelected, { ...final, result: { ...final.result, provider_id: id(9) } }],
-      [start, { ...routeSelected, call_id: id(9) }, final],
+      [start, { ...final, provider_id: id(9) }],
+      [start, { ...final, config_version: 2 }],
       [
         { ...start, provider_id: id(9) },
         { ...final, provider_id: id(9) },
@@ -252,8 +226,7 @@ describe("model BFF", () => {
       [{ type: "text_delta", call_id: id(1), text: "early" }, final],
     ]) {
       mocks.fetch.mockResolvedValueOnce(events(items));
-      const result = await request("models/calls", "POST", {
-        ...scope,
+      const result = await request(providerTest, "POST", {
         ...command,
         input: { ...command.input, stream: true },
       });
@@ -275,8 +248,7 @@ describe("model BFF", () => {
         { headers: { "content-type": "text/event-stream" } },
       );
     });
-    const result = await request("models/calls", "POST", {
-      ...scope,
+    const result = await request(providerTest, "POST", {
       ...command,
       input: { ...command.input, stream: true },
     });
@@ -306,9 +278,9 @@ describe("model BFF", () => {
       );
     });
     const response = await request(
-      "models/calls",
+      providerTest,
       "POST",
-      { ...scope, ...command, input: { ...command.input, stream: true } },
+      { ...command, input: { ...command.input, stream: true } },
       {},
       browser.signal,
     );
@@ -321,29 +293,28 @@ describe("model BFF", () => {
   });
   it("rejects calls without a session or service credential before contacting Agent", async () => {
     const anonymous = await handleModelRequest(
-      new Request(`${origin}/api/web/v1/models/calls`, {
+      new Request(`${origin}/api/web/v1/${providerTest}`, {
         method: "POST",
         headers: { origin, "content-type": "application/json" },
-        body: JSON.stringify({ ...scope, ...command }),
+        body: JSON.stringify({ ...command }),
       }),
       "",
     );
     expect(anonymous.status).toBe(401);
     expect(mocks.execute).not.toHaveBeenCalled();
     vi.stubEnv("COMPASS_AGENT_SERVICE_TOKEN", "");
-    const unconfigured = await request("models/calls", "POST", { ...scope, ...command });
+    const unconfigured = await request(providerTest, "POST", { ...command });
     expect(unconfigured.status).toBe(503);
     expect(await unconfigured.json()).toMatchObject({ error: { code: "unavailable" } });
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
   it("accepts the bounded continuation request size while keeping ordinary CRUD limits", async () => {
-    mocks.fetch.mockResolvedValue(Response.json({ ...final, type: undefined }));
+    mocks.fetch.mockResolvedValue(Response.json({ ...final, type: undefined, kind: "generate" }));
     const body = {
-      ...scope,
       ...command,
       input: { ...command.input, continuation_token: "x".repeat(70_000) },
     };
-    expect((await request("models/calls", "POST", body)).status).toBe(200);
+    expect((await request(providerTest, "POST", body)).status).toBe(200);
     expect((await request("platform/models", "POST", { junk: "x".repeat(70_000) })).status).toBe(
       422,
     );
@@ -359,7 +330,7 @@ describe("model BFF", () => {
             });
           }),
       );
-      const pending = request("models/calls", "POST", { ...scope, ...command });
+      const pending = request(providerTest, "POST", { ...command });
       await vi.advanceTimersByTimeAsync(190_000);
       const result = await pending;
       expect(result.status).toBe(503);
@@ -419,7 +390,7 @@ it("preserves safe trace correlation on upstream failures and discards malformed
         { status: 503, headers: { "X-Compass-Trace-Id": trace, "X-Compass-Trace-Sampled": "0" } },
       ),
     );
-    const response = await request("models/calls", "POST", { ...scope, ...command });
+    const response = await request(providerTest, "POST", { ...command });
     expect(response.status).toBe(503);
     expect(response.headers.get("X-Compass-Trace-Id")).toBe(trace.includes(" ") ? null : trace);
     expect(await response.text()).not.toContain("private upstream detail");
@@ -461,7 +432,7 @@ it("retains a received trace when the nonstream body stalls until the BFF deadli
           },
         ),
     );
-    const pending = request("models/calls", "POST", { ...scope, ...command });
+    const pending = request(providerTest, "POST", { ...command });
     await vi.advanceTimersByTimeAsync(190_000);
     const response = await pending;
     expect(response.headers.get("X-Compass-Trace-Id")).toBe(trace);

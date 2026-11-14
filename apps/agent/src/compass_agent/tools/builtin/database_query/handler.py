@@ -1,0 +1,160 @@
+"""Per-Run database registration and authorized query-result inputs."""
+
+import json
+from collections.abc import Awaitable, Callable
+from typing import cast
+
+from compass_agent.data_connections.transport import AuthorizedDatabaseBinding
+from compass_agent.schemas import (
+    RunToolError,
+    ToolCall,
+    ToolCallFunction,
+    ToolEmptyPayload,
+    ToolFailedPayload,
+    ToolFinished,
+    ToolStarted,
+    ToolStartedPayload,
+    ToolSucceededPayload,
+)
+from compass_agent.tools.builtin.database_query import (
+    DATABASE_ACTION,
+    DatabaseResult,
+    ListConnections,
+    definition,
+    query_database,
+)
+from compass_agent.tools.contracts import (
+    AuthorizedInput,
+    ExecutionReceipt,
+    InProcessBinding,
+    RegisteredTool,
+    ToolPolicy,
+    ToolRejected,
+    json_bytes,
+)
+from compass_agent.tools.registry import bounded_payload, parse_arguments
+
+
+def registration(
+    bindings: tuple[AuthorizedDatabaseBinding, ...],
+    *,
+    emit=lambda event: None,
+    query=None,
+    current: Callable[[], Awaitable[tuple[AuthorizedDatabaseBinding, ...]]] | None = None,
+) -> RegisteredTool:
+    indices: dict[object, int] = {}
+
+    def authorize(args, context):
+        DATABASE_ACTION.validate_python(args)
+        if any(
+            (binding.tenant_id, binding.workspace_id) != context.owner[:2] for binding in bindings
+        ):
+            raise ToolRejected("tool_scope_denied")
+
+    async def execute(args, context):
+        action = DATABASE_ACTION.validate_python(args)
+        if isinstance(action, ListConnections):
+            return ExecutionReceipt(
+                context.call_id,
+                "ok",
+                "confirmed",
+                {
+                    "connections": [
+                        {
+                            "id": str(item.connection_id or item.workspace_id),
+                            "name": item.name,
+                            "engine": "postgresql",
+                        }
+                        for item in bindings
+                    ]
+                },
+            )
+        available = {str(item.connection_id or item.workspace_id): item for item in bindings}
+        binding = (
+            available.get(action.connection_id)
+            if action.connection_id
+            else (
+                available.get(str(context.owner[1]))
+                or (bindings[0] if len(bindings) == 1 else None)
+            )
+        )
+        if binding is None:
+            return ExecutionReceipt(
+                context.call_id,
+                "error",
+                "confirmed",
+                {
+                    "status": "error",
+                    "code": "connection_required" if bindings else "database_unavailable",
+                },
+            )
+
+        async def revalidate():
+            return current is None or binding in await current()
+
+        if not await revalidate():
+            raise ToolRejected("database_source_stale")
+        call = ToolCall(
+            id=context.call_id,
+            function=ToolCallFunction(
+                name="database_query",
+                arguments=json_bytes(args).decode(),
+            ),
+        )
+        index = indices.get(context.step_id, 0) + 1
+        indices[context.step_id] = index
+        common = {"stepId": str(context.step_id), "toolCallId": context.call_id, "toolIndex": index}
+        emit(
+            ToolStarted(
+                type="tool.started",
+                payload=ToolStartedPayload(
+                    **common,
+                    toolKind="database_query",
+                    params=None,
+                    inputPreview=call.function.arguments,
+                ),
+            )
+        )
+        result = await context.control.perform(
+            lambda: (query or query_database)(call, binding, context.control), timeout_s=8
+        )
+        if not isinstance(result, DatabaseResult):
+            emit(
+                ToolFinished(
+                    type="tool.finished",
+                    payload=ToolFailedPayload(
+                        **common,
+                        status="error",
+                        errorCode=cast(RunToolError, result),
+                        resultPreview=json_bytes({"status": "error", "code": result}).decode(),
+                    ),
+                )
+            )
+            return ExecutionReceipt(
+                context.call_id, "error", "confirmed", {"status": "error", "code": result}
+            )
+        payload = json.loads(result.observation())
+        context.sources[result.id] = AuthorizedInput(
+            context.run_id, context.owner, payload, revalidate
+        )
+        preview = result.observation(include_result_id=False)
+        payload_event = (
+            ToolSucceededPayload(
+                **common, status="ok", rowCount=len(result.rows), resultPreview=preview
+            )
+            if result.rows
+            else ToolEmptyPayload(**common, status="empty", rowCount=0, resultPreview=preview)
+        )
+        emit(ToolFinished(type="tool.finished", payload=payload_event))
+        return ExecutionReceipt(context.call_id, "ok", "confirmed", payload)
+
+    return RegisteredTool(
+        "database_query",
+        definition(),
+        ToolPolicy(),
+        InProcessBinding(execute),
+        parse_arguments,
+        authorize,
+        bounded_payload,
+        parallel_safe=True,
+    )

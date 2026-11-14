@@ -8,7 +8,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -24,11 +24,26 @@ jobs:
           version: 0.13.0
       - run: pnpm install --frozen-lockfile
       - run: uv sync --locked --all-packages
+      - run: npm ci --prefix apps/agent/workflow-runner --ignore-scripts
       - name: Verify learner data from Git LFS
         run: |
           git lfs install --local
           git lfs pull --include="data/retail/compass-retail.sql.gz" --exclude=""
           pnpm data:prepare
+      - name: Initialize isolated runtime secrets
+        run: |
+          uv run python - <<'PYTHON'
+          import json, os, secrets
+          from cryptography.fernet import Fernet
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              for name in ('COMPASS_RUNTIME_STATE_KEY', 'COMPASS_MODEL_ENCRYPTION_KEY'):
+                  output.write(name + '=' + Fernet.generate_key().decode() + '\n')
+              output.write('COMPASS_AGENT_SERVICE_TOKEN=' + secrets.token_urlsafe(32) + '\n')
+              credentials = {name: secrets.token_urlsafe(32) for name in ('worker-1', 'worker-2')}
+              output.write('COMPASS_WORKER_CREDENTIALS=' + json.dumps(credentials) + '\n')
+              output.write('COMPASS_WORKER_1_TOKEN=' + credentials['worker-1'] + '\n')
+              output.write('COMPASS_WORKER_2_TOKEN=' + credentials['worker-2'] + '\n')
+          PYTHON
       - run: pnpm check
       - run: pnpm build
       - run: pnpm run deploy
@@ -55,23 +70,68 @@ jobs:
           AGENT_TEST_ADMIN_URL: postgresql://compass:compass_local_only@127.0.0.1:55432/compass
           AGENT_TEST_PG_CONTAINER: compass-postgres-1
           COMPASS_AGENT_SERVICE_TOKEN: feature-993-controlled-provider-test-only
-          COMPASS_MODEL_ALLOWED_ORIGINS: https://api.deepseek.com,https://fixture.cn-beijing.maas.aliyuncs.com
+          COMPASS_MODEL_ALLOWED_ORIGINS: https://api.deepseek.com,https://api.typesafe.ai,https://fixture.cn-beijing.maas.aliyuncs.com
           LITELLM_LOCAL_MODEL_COST_MAP: "True"
           AGENT_API_URL: http://127.0.0.1:8013
+          WEB_TEST_WORKFLOW: "true"
+          COMPASS_WEB_AUTHZ_URL: http://127.0.0.1:8110/api/internal/analysis/authorize
+          COMPASS_REDIS_URL: redis://127.0.0.1:56379/0
+          COMPASS_REDIS_PASSWORD: compass_redis_local_only
+          COMPASS_SANDBOX_FAULT_TESTS: "true"
+          COMPASS_MCP_LOCAL_FIXTURE_ORIGINS: http://127.0.0.1:8129
+          COMPASS_HYBRID_WORKFLOW_ENABLED: "true"
+          COMPASS_CONTROLLED_AUTONOMY_ENABLED: "true"
+          COMPASS_WORKFLOW_E2E_RETAIL_DSN: postgresql://compass_workflow_retail:test-only-workflow@127.0.0.1:55432/compass_retail_test_workflow
         run: |
-          export COMPASS_MODEL_ENCRYPTION_KEY="$(uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
           pnpm db:provision -F agent
           pnpm db:migrate -F agent
           pnpm db:sql:check -F agent
+          uv run --locked python -m apps.agent.tests.workflow_e2e_app
+          pnpm sandbox up
+          set -a
+          . work/sandbox/local.env
+          set +a
+          export COMPASS_DURABLE_MATRIX_OUTPUT_DIR="$PWD/work/lesson-19"
           pnpm test:integration -F agent
           mkdir -p work/993
-          PYTHONPATH=apps/agent/tests uv run uvicorn e2e_app:app --host 127.0.0.1 --port 8013 > work/993/agent-browser.log 2>&1 &
-          agent_test_pid=$!
-          trap 'kill "$agent_test_pid" 2>/dev/null || true' EXIT
-          node --input-type=module -e 'for(let i=0;i<40;i++){try{const r=await fetch("http://127.0.0.1:8013/readyz");if(r.ok)process.exit(0)}catch{}await new Promise(r=>setTimeout(r,500))}process.exit(1)'
           pnpm test:setup -F web -- --fixture teaching
           pnpm --filter @compass/web exec playwright install --with-deps chromium
-          pnpm test:e2e -F web
+          DURABLE_MATRIX_FILE="$PWD/work/lesson-19/durable-matrix.json" pnpm test:e2e -F web -- durable-history.spec.ts
+          start_agent() {
+            PYTHONPATH=apps/agent/tests uv run --locked uvicorn "$1" --host 127.0.0.1 --port 8013 --timeout-graceful-shutdown 3 >> work/993/agent-browser.log 2>&1 &
+            agent_test_pid=$!
+            node --input-type=module -e 'for(let i=0;i<60;i++){try{const r=await fetch("http://127.0.0.1:8013/readyz");if(r.ok)process.exit(0)}catch{}await new Promise(r=>setTimeout(r,500))}process.exit(1)'
+          }
+          trap 'kill "${worker_one_pid:-}" "${worker_two_pid:-}" "${agent_test_pid:-}" "${mcp_test_pid:-}" 2>/dev/null || true' EXIT
+          COMPASS_WORKER_ID=worker-1 COMPASS_WORKER_TOKEN="$COMPASS_WORKER_1_TOKEN" uv run --locked --package compass-worker python -m compass_worker > work/993/worker-1.log 2>&1 &
+          worker_one_pid=$!
+          COMPASS_WORKER_ID=worker-2 COMPASS_WORKER_TOKEN="$COMPASS_WORKER_2_TOKEN" uv run --locked --package compass-worker python -m compass_worker > work/993/worker-2.log 2>&1 &
+          worker_two_pid=$!
+          start_agent apps.agent.tests.workflow_e2e_app:app
+          pnpm test:e2e -F web -- production-runtime.spec.ts production-runtime-live.spec.ts
+          pnpm test:e2e -F web -- hybrid-workflow.spec.ts
+          kill "$agent_test_pid"
+          wait "$agent_test_pid" || true
+          PYTHONPATH=apps/agent/tests uv run --locked uvicorn apps.agent.tests.tool_mcp_fixture:app --host 127.0.0.1 --port 8129 > work/993/mcp-browser.log 2>&1 &
+          mcp_test_pid=$!
+          start_agent apps.agent.tests.tool_e2e_app:app
+          WEB_TEST_TOOL_RUNTIME=true pnpm test:e2e -F web -- tool-runtime.spec.ts
+          kill "$agent_test_pid"
+          wait "$agent_test_pid" || true
+          export COMPASS_WORKFLOW_E2E_RETAIL_DSN=""
+          export COMPASS_CONTROLLED_AUTONOMY_ENABLED=false
+          export COMPASS_HYBRID_WORKFLOW_ENABLED=false
+          pnpm observability init
+          pnpm observability up
+          set -a
+          . work/observability/agent.env
+          . work/observability/web.env
+          set +a
+          export COMPASS_LANGFUSE_BASE_URL=http://127.0.0.1:8104
+          export COMPASS_OBSERVABILITY_ENVIRONMENT=test
+          export COMPASS_OBSERVABILITY_INSTANCE_ID=browser-990
+          start_agent e2e_app:app
+          pnpm test:e2e -F web -- analysis-composer.spec.ts execution-process.spec.ts foundation.spec.ts intent-routing.spec.ts models.spec.ts observability.spec.ts reliability.spec.ts
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -79,8 +139,18 @@ jobs:
           path: |
             work/995-playwright*
             work/993/*.png
+            work/993/*.log
+            work/lesson-19/*.json
+            work/lesson-20/process-acceptance.json
+            work/lesson-20/agent-restart-acceptance.json
+            work/lesson-20/limits-acceptance.json
+            work/lesson-20/process-*.log
           if-no-files-found: ignore
       - if: failure()
         run: pnpm deploy:logs
+      - if: always()
+        run: pnpm sandbox down
+      - if: always()
+        run: pnpm observability down
       - if: always()
         run: pnpm deploy:down

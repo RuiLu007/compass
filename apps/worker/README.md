@@ -1,6 +1,6 @@
 # Worker
 
-独立 Python 后台进程脚手架，分发包 `compass-worker`、导入包 `compass_worker`。从 Compass 根目录执行：
+独立 HTTP 消费进程，分发包 `compass-worker`、导入包 `compass_worker`。通过 Agent 内部接口领取一个执行槽、续租并逐 Checkpoint 推进；模型、工具、队列和数据库事务由 Agent 持有。Worker 不监听 HTTP，不读取数据库配置，不跨 app 导入源码。
 
 ```bash
 pnpm dev -F worker
@@ -10,12 +10,12 @@ pnpm test -F worker
 pnpm build -F worker
 ```
 
-当前进程启动后输出 `Worker scaffold ready; no task consumers configured`，等待 SIGINT / SIGTERM 并正常退出。使用 Python 标准库 asyncio 管理生命周期，不监听 HTTP 端口、不连接数据库或 Temporal。`pnpm dev -F worker -- --version` 可查看版本；开发时修改源码后重新启动。
+完整本地环境使用根目录 `pnpm start`，默认启动两个 Worker；`pnpm start --langfuse` 同时启用观测。Worker 的 Turbo 开发任务显式透传身份、令牌和租约配置。
 
-本次提供 `src/compass_worker`、真实子进程信号测试、独立 Python 构建、Turbo 任务及容器入口。队列消费者、定时任务、Temporal Workflow / Activity、重试与恢复尚未实现；当前进程不领取业务任务。后续按 [持久执行设计](../../mai-specs/999-compass-product-course-landing-app/design/TECH_DESIGN.md#61-api执行与-ui-三条链) 接入，不跨 app 导入 agent / memory 源码。
+根 `.env` 配置 `AGENT_API_URL`、`COMPASS_WORKER_ID`、`COMPASS_WORKER_TOKEN`。Agent 的 `COMPASS_WORKER_CREDENTIALS` 是 worker ID 到独立令牌的 JSON 映射；每次启动生成新的 bootId。第二个本地进程用 `COMPASS_WORKER_ID=worker-2 COMPASS_WORKER_TOKEN=<第二份令牌> pnpm dev -F worker` 启动。运行环境为 macOS / Linux，Windows 使用 WSL2。
 
-业务数据所有权不随执行位置改变。Worker 默认通过 Web / Agent / Memory 的 owner API 提交状态，禁止直连其他 app 的业务表；出现独立持久化需求时按 [全项目数据库规范](../../docs/database-migrations.md)登记自有逻辑库、迁移和 SQL 交付。
+课堂默认两个独立进程，每个进程一个槽。租约 TTL 15 秒，独立心跳间隔 3 秒，空队列轮询最长 1 秒；网络重试保留原 grant 和 expectedCheckpoint。续租未在本地保守截止前确认即停止推进。SIGINT / SIGTERM 后停止领取，有界等待当前边界并请求释放；Agent 确认资源释放后重新调度。
 
-运行容器：`docker compose -f deploy/compose/compose.yaml --profile worker up --build -d worker`。容器使用 init 转发信号、非 root 用户运行；`logs worker` 可查看生命周期，`stop worker` 验证正常停止。进程存活只代表脚手架已启动，不能作为任务消费就绪的证据。
+`pnpm run deploy worker` 构建并启动 Compose 的 `worker`、`worker-2` 两个服务。依赖已运行的 Agent；完整环境使用 `pnpm run deploy`。容器只注入 Agent URL、独立 Worker 令牌与租约配置，不注入数据库凭据。依赖未就绪时记录安全错误并重试；日志中的 `queue idle` 表示已完成一次成功领取请求。
 
-运行环境为 macOS / Linux；Windows 使用 WSL2。根 `.env` 由统一任务入口加载，当前没有任务队列配置项。
+配置、恢复边界与验收入口见 [第 20 课运行说明](../../docs/lesson-20-production-runtime.md)。业务数据所有权遵守 [数据库规范](../../docs/database-migrations.md)。

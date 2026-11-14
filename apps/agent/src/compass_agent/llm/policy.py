@@ -4,16 +4,18 @@ import math
 from dataclasses import dataclass, field, fields
 from typing import Literal
 
+from compass_agent.schemas import RUN_CONTEXT_MESSAGES
+
 
 @dataclass(frozen=True, slots=True)
 class OutputLimits:
-    visible_input_bytes: int = 65_536
+    visible_input_bytes: int = 192 * 1024
     schema_bytes: int = 16_384
     visible_output_bytes: int = 1_048_576
     private_reasoning_bytes: int = 1_048_576
     continuation_bytes: int = 1_048_576
     wire_response_bytes: int = 2_097_152
-    messages: int = 64
+    messages: int = RUN_CONTEXT_MESSAGES
     tools: int = 16
 
     def __post_init__(self):

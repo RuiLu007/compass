@@ -1,346 +1,579 @@
 # 第 15 课 · Agent 执行内核技术方案
 
-> Feature 989 · Profile `standard` · 基线 `main@ce2e4bc` · 2026-11-10 · 待评审
+[需求简报](../BRIEF.md) · [PRD](../spec/PRD.md) · [HTML 阅读版](TECH_DESIGN.html)
 
-[需求简报](../BRIEF.md) · [有效 PRD](../spec/PRD.md) · [标准模板](../../_templates/TECH_DESIGN.tmpl.md) · [代码设计](CODE_DESIGN.md) · [流式数据包协议](STREAM_PROTOCOL.md)
+一次 Chat 提交创建一个 Run，也就是从开始执行到产生终态的一次任务。Agent Runtime 负责调模型、执行只读查询、将结果交回模型，最后用 SSE（服务端发送事件）向 Chat 交付回答。用户可以停止正在进行的模型调用或查询。
 
 ## 需求依据与验收
 
-以 PRD 的 FR-01～FR-12、BR-01～BR-12 和 AC-01～AC-15 为准。交付路径是现有分析 Chat。一次发送经 BFF 建立一条 HTTP 进度流，Agent 在同一进程、同一次请求内顺序推进 ReAct，最终返回回答和最多一份 CSV。课堂主路径从两个时段的渠道汇总继续查指定渠道的商品拆分。停止任务使用单独的 HTTP 请求，原流负责报告清理后的终态。
+- 课堂验收覆盖查数后继续回答、在模型或查询期间停止、以及浏览器收到完整回答后结束流。沿用现有登录与工作区权限、模型接入和 Retail 只读身份。
+- 最小工具示例使用通用只读 `database_query`，以 Retail 为示例数据库。通用查询交付 Markdown 结果表，`file.status` 为 `none`。原需求文档中固定渠道与商品查询、CSV 交付的验收对应保留的 `retail_sales` 路径。
+- 本课讲解一次 HTTP 请求内的执行生命周期和交付。完整工具体系、工作流、计划执行和持久会话恢复由后续课程展开。
 
-| 交付面                                 | 设计落点           | PRD 验收     |
-| -------------------------------------- | ------------------ | ------------ |
-| 真实 Retail 多轮、同轮多调用、失败观察 | §2.2、§2.3         | AC-01～AC-04 |
-| 运行隔离、模型兼容、课堂走读           | §2.1、§2.2、§3、§5 | AC-05～AC-07 |
-| 授权、进度、回答与文件                 | §2.3、§2.4、§2.6   | AC-08～AC-11 |
-| 终止、资源清理、权限与完成竞态         | §2.5、§2.6         | AC-11～AC-15 |
+## 1. 整体执行链路
 
-## 1. 方案概述
-
-### 1.1 整体架构
-
-```mermaid
-flowchart TD
-    W["分析 Chat"] -->|"发送任务 / 终止请求"| B["Web BFF · 会话与工作区授权"]
-    B -->|"可信主体 + 私有 HTTP"| A["Agent Run API"]
-    A --> R["进程内 Run 控制与 AgentExecutor"]
-    R -->|"按 Step 调用"| M["ModelService · LLM Runtime"]
-    M --> P["模型供应商"]
-    R -->|"固定工具 · 参数校验"| Q["Retail 查询 / CSV"]
-    Q -->|"只读登录 · RLS"| D["Retail PostgreSQL"]
-    R -->|"安全事件与唯一终态"| A
-    A -->|"当前请求 SSE"| B
-    B -->|"校验后转发 SSE"| W
+```mermaid 分析 Chat 到 Agent Runtime
+flowchart LR
+    accTitle: 分析 Chat 到 Agent Runtime
+    W["分析 Chat"] -->|"问题、可见历史、模型选择"| B["Web BFF<br/>会话与工作区鉴权"]
+    B -->|"私有 HTTP · 可信上下文"| A["Agent Run API"]
+    A --> R["Agent Runtime<br/>RunService + RunControl + ReAct"]
+    R <--> M["LLM Runtime<br/>模型接入与可靠调用"]
+    R <--> T["database_query<br/>受限 Retail PostgreSQL"]
+    R -.->|"进度与唯一终态"| A
+    A -.->|"SSE"| B
+    B -.->|"校验、重编序号后转发"| W
 ```
 
-复用 [现有 Chat](../../../apps/web/src/components/analysis-composer.tsx)、[模型鉴权](../../../apps/web/src/server/modules/models/application/authorize.ts)、[模型私有 API](../../../apps/agent/src/compass_agent/model_api.py)、[路由服务](../../../apps/agent/src/compass_agent/routing/service.py) 和 [LLM Runtime](../../../apps/agent/src/compass_agent/llm/README.md)。现有模型 API、平台管理、诊断、演示数据 API 保持各自契约。新编排在 `apps/agent` 内，Web 与 Agent 通过 HTTP 和生成契约协作。
+| 层 | 职责 |
+| --- | --- |
+| Chat | 发送问题，消费进度和最终回答。一个 Run 在 Chat 中显示为一轮对话（Turn）。 |
+| Web BFF（服务于前端的 Web 后端） | 校验登录、工作区、分析和模型调用权限，防止跨站请求伪造。授权事务结束后把可信身份传给 Agent，将进度转换为浏览器使用的 SSE 事件。 |
+| Agent Run API | 分配 Run ID，打开流、受理停止、把进度和终态编码成包。 |
+| Agent Runtime | 维护 Run 生命周期与模型上下文，推进 ReAct（调用模型 → 执行工具 → 回填结果 → 继续调用或结束），提交唯一终态。 |
+| LLM Runtime（模型调用层） | 调用选定的模型供应商配置，管理调用期限、取消和重试。模型路由和底层重试各有自己的调用记录。 |
 
-### 1.2 关键决策与评审入口
+入口对应 `POST /api/web/v1/analysis/runs` 和私有 `POST /v1/analysis/runs`。本课走请求内执行分支，整个 Run 在创建请求的生命周期内推进。现行 Agent 还支持持久执行，同一个 v1 入口可以接到该分支。
 
-| 决策        | 选择与维护成本                                                                                                                                                       | 评审入口                                                 |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| 执行内核    | Python async 顺序循环，一轮一次逻辑模型调用；复用第四篇的队列、重试与 Trace。Agent SDK 或图引擎会引入第二套执行和资源所有权，留待有图执行或持久恢复需求时比较。      | [循环与模型接缝](CODE_DESIGN.md#2-模型接缝与-react-循环) |
-| 控制与进度  | 一个活动 Run 注册表，原请求使用 SSE，停止走独立 POST。Run ID 由 Agent 分配，唯一终态由同一事件循环裁决。单 Agent 进程是启用前提，维护 SSE 顺序与两条请求的生命周期。 | [控制器和流](CODE_DESIGN.md#1-run-所有权与终态裁决)      |
-| Retail 接入 | 一个课堂工作区绑定一个发布源的 `a_east` 登录。Agent 每次查询建立独占 psycopg 异步连接，源端 RLS 生效，连接可按调用回收。额外开连接的成本换取明确的取消与隔离边界。   | [查询与资源清理](CODE_DESIGN.md#3-retail-查询与清理)     |
-| 文件交付    | 一份有界 CSV 随成功终态传输，当前页面 Blob 下载。只维护当前页文件引用和体积限制。第 18 课接入受控 Artifact 时再演进交付路径。                                        | [响应和页面状态](CODE_DESIGN.md#4-bff-与页面提交)        |
+## 2. Agent Runtime 类型设计
 
-本课使用进程内 Run、当前页可见历史和代码内提示词。[第 16 课](../../988-lesson-16-controlled-autonomy/spec/PRD.md)沿用同一 ReAct 循环，通过 Todo 动作加入模型自主规划、验证、预算与停止规则。Workflow、并行工具、Sandbox、持久 Run、Worker 接管和断线续流由后续课次承接。
+### 2.1 Agent Runtime 总体 UML
 
-## 2. 详细设计
+**黄色是本课实现的模块和类型，浅绿色是沿用的类型。** 图中按 Run 生命周期、通用 ReAct 循环、模型调用、进度与 SSE 交付组织。`api/runs.py` 展示请求入口如何注册 Run、受理停止和打开流。`AgentExecutor.execute_tools()` 通过 `prepare`、`accept` 和 `dispatch` 三个回调接入任务，底层 `execute()` 推进模型循环。`ToolControl` 提供运行控制，`ModelRoute` 提供已选的模型配置，`TraceSink` 记录进度。
 
-### 2.1 Agent Runtime 类型设计
-
-#### 执行组件
-
-```mermaid
+```mermaid Agent Runtime 总体 UML
 classDiagram
-    direction LR
-    class AgentDefinition {
-        <<frozen>>
-        system_prompt: str
-        tool_definition() ToolDefinition
-    }
-    class AgentExecutor {
-        <<service>>
-        run(command, context, control, emit) RunResult
-        invoke_model(step, input, route, control) CallResponse
-    }
-    class RunControl {
-        <<per-run>>
-        id: UUID
-        owner: OwnerKey
-        deadline_at: float
-        request_stop(reason) AnalysisCancelAck
-        perform(operation) T
-        commit(candidate) RunResult
-    }
-    class RunRegistry {
-        <<process>>
-        register(owner) RunControl
-        lookup(run_id) RunLookup
-        finish(run_id, owner, status)
-    }
-    class ContextProvider {
-        <<module>>
-        initial_messages(definition, command, route) list~ChatMessage~
-        generate_input(definition, state, route) GenerateInput
-    }
-    class ModelService {
-        <<existing>>
-        prepare(call_id, provider_id, request, context)
-        run(prepared, request) CallResponse
-    }
-    class Retail {
-        <<module>>
-        prepare_retail_call(call, binding) PreparedRetailCall
-        query(prepared, control) RetailQueryResult
-    }
-    AgentExecutor --> AgentDefinition : 读取定义
-    AgentExecutor ..> ContextProvider : 组装消息
-    AgentExecutor ..> ModelService : 调用模型
-    AgentExecutor ..> Retail : 固定工具分发
-    AgentExecutor ..> RunControl : 执行阶段与提交
-    RunRegistry "1" o-- "0..8" RunControl : 索引活动运行
-```
-
-`AgentDefinition` 是 `context.py` 的代码常量，包含系统指令和固定工具定义入口。每次构造模型输入时取得独立的 `ToolDefinition`。 `AgentExecutor` 按请求装配，复用现有 `RoutingService`、`ModelService` 和共享容量门。运行时一次解析 `RunRoute`，固定 Provider ID、绑定版本、生成能力与可选 Retail 绑定。 `ContextProvider` 是纯函数模块，按定义、路由和当前状态组装已有 `GenerateInput`，跨供应商续接仍由模型层处理。
-
-`RunControl` 管理生命周期和活动阶段句柄。 `RunRegistry` 是进程级内存索引，持有活动项和轻量终态摘要，终态摘要只保留 `runId + OwnerKey + status`，最多 128 条，5 分钟过期。控制请求只能访问控制器和摘要。一次 Run 由控制器和运行内容共同组成。Run ID 统一归控制器，运行主协程拥有 `AgentState` 的写入权。
-
-#### 一次 Run 的数据关系
-
-```mermaid
-classDiagram
+    accTitle: Agent Runtime 总体 UML
+    accDescr: 黄色是本课实现的类型，浅绿色是沿用的类型。图中展示 Run 控制、通用 ReAct 循环、模型调用和流式交付。
     direction TB
+    namespace `Run 生命周期` {
+        class RunApi["api/runs.py"] {
+            <<module>>
+            +start_run()
+            +cancel_run()
+        }
+        class RunRegistry {
+            +register(owner) RunControl
+            +lookup(run_id)
+            +finish(control, status)
+        }
+        class OwnerKey {
+            +actor_user_id
+            +tenant_id
+            +workspace_id
+        }
+        class TerminalRunSummary {
+            +run_id
+            +status
+            +expires_at
+        }
+        class RunControl {
+            +deadline_at
+            +perform(operation)
+            +request_stop(reason)
+            +commit(candidate) RunResult
+        }
+    }
+    namespace `通用 ReAct 循环` {
+        class AgentExecutor {
+            +execute_tools(..., prepare, accept, dispatch) RunResult
+            +execute(..., prepare, handle) RunResult
+        }
+        class AgentDefinition {
+            +system_prompt
+            +tools
+            +builtin_tools
+        }
+        class HarnessContext["harness/context.py"] {
+            <<module>>
+            +build_messages()
+            +model_input()
+        }
+        class AgentState {
+            +messages
+            +steps
+            +continuation_token
+            +record_tool_result(step, result)
+        }
+        class Step {
+            +index
+            +model_call_id
+            +status
+        }
+        class ToolResult {
+            +tool_call_id
+            +status
+            +observation_json
+        }
+        class ToolControl {
+            <<protocol>>
+            +require_running()
+            +perform(operation)
+            +mark_cleanup_unconfirmed()
+        }
+        class ModelRoute {
+            <<protocol>>
+            +provider_id
+            +binding_version
+        }
+        class TraceSink {
+            <<protocol>>
+            +model_content(step_id, response)
+        }
+    }
+    namespace `模型调用层` {
+        class ModelService {
+            +prepare()
+            +run()
+        }
+        class ReliableExecutor {
+            +execute()
+        }
+        class Runtime {
+            +invoke(request, emit) RuntimeResult
+        }
+        class ChatMessage
+        class ToolCall
+    }
+    namespace `进度与 SSE 交付` {
+        class ExecutionTrace {
+            +emit(event)
+            +model_content(step_id, response)
+        }
+        class RunStreamResponse
+        class RunWriter {
+            +write(event) bytes
+            +heartbeat() bytes
+        }
+        class RunPacket {
+            +request_id
+            +run_id
+            +seq
+            +event
+        }
+        class RunStreamEvent {
+            <<union>>
+        }
+        class RunFinished {
+            +payload: RunResult
+        }
+        class RunResult {
+            <<union>>
+            +status
+        }
+    }
+    RunApi ..> RunRegistry : 注册与查询
+    RunApi ..> RunStreamResponse : 创建 SSE 响应
+    RunApi ..> RunWriter : 写入 SSE
+    RunRegistry "1" o-- "0..8" RunControl : 活动 Run
+    RunRegistry "1" *-- "0..128" TerminalRunSummary : 近期终态
+    RunControl --> OwnerKey : Run 所有者
+    TerminalRunSummary --> OwnerKey
+    RunControl ..|> ToolControl : 提供派发与取消能力
+    RunControl "1" o-- "0..1" RunResult : 裁决终态
+    AgentExecutor ..> ToolControl : 运行检查与阶段控制
+    AgentExecutor ..> ModelRoute : 接收模型配置
+    AgentExecutor ..> AgentState : 推进执行
+    AgentExecutor ..> ModelService : 按 Step 调用
+    AgentExecutor ..> RunStreamEvent : 发出进度事件
+    HarnessContext ..> AgentDefinition : 读取提示词与工具定义
+    HarnessContext ..> ChatMessage : 组装模型上下文
+    AgentState "1" *-- "0..20" Step
+    AgentState "1" *-- "*" ChatMessage : 模型上下文
+    AgentState --> TraceSink : 记录模型执行
+    Step "1" o-- "0..4" ToolCall
+    Step "1" *-- "0..4" ToolResult
+    ToolResult ..> ToolCall : 按调用 ID 配对
+    ModelService ..> ReliableExecutor : 管理重试
+    ReliableExecutor ..> Runtime : 调用供应商适配器
+    ExecutionTrace ..|> TraceSink : 记录运行过程
+    ExecutionTrace ..> RunStreamEvent : 发出节点事件
+    RunWriter ..> RunPacket : 事件编码
+    RunPacket --> RunStreamEvent : 事件载荷
+    RunStreamEvent ..> RunFinished : 终态事件
+    RunFinished --> RunResult : 终态载荷
+    style RunApi fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style RunRegistry fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style RunControl fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style OwnerKey fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style TerminalRunSummary fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style AgentExecutor fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style AgentDefinition fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style HarnessContext fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style AgentState fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style Step fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style ToolResult fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style ToolControl fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style ModelRoute fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style TraceSink fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style ExecutionTrace fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style RunStreamResponse fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style RunWriter fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style RunPacket fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style RunStreamEvent fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style RunFinished fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style RunResult fill:#fff1bf,stroke:#9a650c,color:#513308,stroke-width:1.5px
+    style ModelService fill:#e9f2df,stroke:#66885e,color:#20372a
+    style ReliableExecutor fill:#e9f2df,stroke:#66885e,color:#20372a
+    style Runtime fill:#e9f2df,stroke:#66885e,color:#20372a
+    style ChatMessage fill:#e9f2df,stroke:#66885e,color:#20372a
+    style ToolCall fill:#e9f2df,stroke:#66885e,color:#20372a
+```
+
+### 2.2 从 Run 入口到通用执行循环
+
+Compass 自研 Agent Runtime，在 Python 异步循环里直接控制系统提示词、工具结果如何写回模型上下文，以及 Run 何时结束。模型供应商协议、重试和取消复用模型调用层。
+
+```mermaid Agent Runtime 执行组件
+flowchart TD
+    accTitle: Agent Runtime 执行组件
+    API["api/runs.py · start_run()<br/>注册 Run，先发 run.started"] --> Service["RunService.run()<br/>选择模型，组装任务状态和可用工具"]
+    Service --> Turn["RuntimeTurn.execute_turn()<br/>提供 prepare、accept、dispatch"]
+    Turn --> Tools["AgentExecutor.execute_tools()<br/>封装模型结果处理与工具派发"]
+    Tools --> Loop["AgentExecutor.execute()<br/>推进 Step 与模型调用"]
+    Loop -->|"发起逻辑模型调用"| Model["ModelService"]
+    Tools -->|"模型要求调用工具"| Dispatch["HarnessTools.dispatch()<br/>派发工具并按调用 ID 回填"]
+    Loop -->|"返回候选结果给 RunService"| Commit["RunControl.commit()<br/>裁决唯一终态"]
+```
+
+`RunService` 在 `runtime/service.py` 组装授权数据源、路由和初始消息。`RuntimeTurn` 在 `runtime/turn.py` 绑定三个回调。`prepare` 构造模型输入，`accept` 审核模型响应并生成直接回答的候选结果，`dispatch` 将工具调用交给 `runtime/tool_bindings.py` 的 `HarnessTools`。`AgentExecutor` 在 `harness/executor.py` 推进循环。
+
+选模时绑定模型供应商配置，实际调用前重新核对配置版本。系统提示词、用户可见的历史问答和当前问题构成初始上下文。模型要求调用工具时，执行器保留原 assistant 消息及整批 `ToolCall`，按调用 ID 回填 `role=tool` 消息。回填内容可以是结果，也可以是安全错误。下一 Step 带上这些消息及模型返回的续接令牌。
+
+### 2.3 一次 Run 的数据关系
+
+```mermaid 一次 Run 的数据关系
+classDiagram
+    accTitle: 一次 Run 的数据关系
+    direction TB
+    class RunControl {
+        +id
+        +owner
+        +deadline_at
+        +stop_reason
+        +terminal
+    }
+    class RunService
     class AgentState {
-        <<per-run>>
-        messages: list~ChatMessage~
-        steps: list~Step~
-        continuation_token: str
-        export_candidate: ExportCandidate
-        start_step(index) Step
-        record_tool_result(step, result)
+        +messages
+        +steps
+        +continuation_token
+    }
+    class TaskState {
+        +database_results
+        +latest_database_result
+    }
+    class DatabaseResult {
+        +id
+        +columns
+        +rows
     }
     class Step {
-        id: UUID
-        index: int
-        model_call_id: UUID
-        status: StepStatus
-    }
-    class ChatMessage {
-        <<existing>>
-        role: str
-        content: str
-        tool_call_id: str
+        +id
+        +index
+        +model_call_id
+        +status
     }
     class ToolCall {
-        <<existing>>
-        id: str
-        function: ToolCallFunction
+        +id
+        +function
     }
     class ToolResult {
-        tool_call_id: str
-        status: ToolStatus
-        observation_json: str
-        summary: ToolSummary
+        +tool_call_id
+        +status
+        +observation_json
+    }
+    class ChatMessage {
+        +role
+        +content
+        +tool_call_id
     }
     class RunResult {
         <<union>>
-        status: RunTerminalStatus
-        finalAnswer: str
-        file: AnalysisFile
+        +status
     }
-    class RunControl {
-        id: UUID
-        terminal: RunResult
-    }
-    AgentState "1" *-- "0..6" Step : 按轮推进
+    TaskState --|> AgentState
+    RunService ..> TaskState : 创建本次执行状态
+    TaskState "1" o-- "*" DatabaseResult : 按结果 ID 索引
+    RunService ..> RunControl : 检查状态并提交终态
+    AgentState "1" *-- "0..20" Step : ReAct 轮次
     AgentState "1" *-- "*" ChatMessage : 模型上下文
-    Step "1" o-- "0..4" ToolCall : 助手批次
-    Step "1" *-- "0..4" ToolResult : 观察结果
+    Step "1" *-- "0..4" ToolCall : 本步模型输出
+    Step "1" *-- "0..4" ToolResult : 观察
     ToolResult ..> ToolCall : 按原 ID 对应
     RunControl "1" o-- "0..1" RunResult : 唯一终态
 ```
 
-- `AgentState` 保存本轮模型消息、Step、私有续接和最多一个导出候选。 `Step` 一次关联一个逻辑 `model_call_id`，分类调用属于预备阶段。 `ToolCall` 沿用模型 DTO，Step 引用同一批调用。 `record_tool_result` 按原 ID 将结果登记到 Step，并追加相应的 tool 消息。查询全量结果只用于当前调用和导出候选，工具记录保留有界观察与摘要。
-- `RunResult` 复用 `schemas.py` 的终态联合，只有完成分支带 `finalAnswer` 和 `file`。开流时生成的 `runId` 由 `RunControl` 持有，输出事件添加请求 ID、Run ID 与顺序号。安全摘要用于 SSE，模型观察及续接数据由 Run 内部持有。
-- 每次 Run 上限 6 个模型 Step，每批上限 4 条工具调用。单进程最多 8 个活动 Run，超量在开流前返回 429。180 秒总期限从注册起计算，分类、队列、退避、SQL 和导出共用。模型单次调用取既有阶段上限与剩余时间的较小值。
+| 类型 | 边界 |
+| --- | --- |
+| Run | 一次任务生命周期。执行器写入本次上下文并产生候选结果，`RunControl` 裁决终态。 |
+| Step | 一次逻辑模型调用及其触发的零个或多个工具调用。选模型发生在 Step 之前，供应商接口重试归属同一次逻辑调用。 |
+| ToolCall / ToolResult | 同一 Step 内按 `toolCallId` 配对。成功、空结果和可处理错误都可以成为观察。 |
+| `TaskState` | 继承 `AgentState`。按结果 ID 保存本 Run 的数据库结果，`resultId` 只在当前 Run 内引用。 |
+| RunResult | 成功时包含 Markdown 正文及文件状态，其他终态返回安全的错误或停止信息。 |
 
-#### 设计模式
+一次 Run 最多 20 个主模型 Step，每 Step 最多 4 条工具调用。请求内分支默认每进程最多 8 个活动 Run，注册起总期限 180 秒。进程内状态随请求和执行进程生命周期收口。本课无需新增数据库表或迁移。
 
-| 模式               | 应用位置与目的                                                                                                                                           |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 编排器             | `AgentExecutor` 用显式 ReAct 循环组织模型、顺序工具调用和观察回填。上下文组装、模型执行和 SQL 各自维护业务规则，主循环负责推进顺序与失败收口。           |
-| 有限状态机与单写者 | `RunControl` 集中处理运行、停止与唯一终态。取消入口与 Runner 在同一事件循环通过无 `await` 的状态转换裁决先后，活动阶段有独立的取消与清理回执。           |
-| 适配器             | 复用 LLM Runtime 的 `ProviderAdapter` 屏蔽供应商差异。Retail 模块把 `ToolCall` 转成固定 SQL 的类型化参数，将查询结果投影为模型观察、页面摘要与可选 CSV。 |
-| 依赖注入与组合     | 在 `run_api.py` 装配定义、现有模型服务及窄签名 Retail 查询函数。受控测试可替换外部调用。编排类和工具模块均采用直接组合。                                 |
+## 3. 最小工具 · 只读数据库查询
 
-#### 持久化边界
-
-| 数据                      | 本期落点                                                                                                                                       |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Agent 模型调用            | 现有 `model_call` 继续记录分类和每个模型 Step 的调用元数据，`model_provider` 提供模型配置。Run 与这些调用通过 `modelCallId` 和结构化事件串联。 |
-| Run、Step、续接和导出候选 | Agent 进程内存。结束后只保留短期终态摘要，进程重启后不可查询或恢复原 Run。                                                                     |
-| Web 对话和下载            | 现有 Web 数据库继续承载会话和权限。对话、回答和 CSV 引用在当前页面会话中。                                                                     |
-| 经营数据                  | 读取既有 Retail PostgreSQL 表和 RLS，沿用发布工具管理的数据版本。                                                                              |
-
-**新增数据库表 0 张，迁移 0 个。** 当前 Run 与原 HTTP 请求同生命周期，内存状态满足推进、取消和进程内去重。第 19 课交付持久 Run 与 Checkpoint，用于跨请求等待与重启恢复。[数据库规范](../../../docs/database-migrations.md) · [第 19 课 PRD](../../985-lesson-19-durable-runtime-hitl/spec/PRD.md)
-
-日志使用固定事件名和枚举字段，串联 `runId → stepId → modelCallId / toolCallId`，记录耗时、结果码、终止原因与清理状态。查询后端 PID 仅用于服务端诊断。Run 的 Trace 子树关闭内容采集，Chat 事件只包含安全摘要。
-
-### 2.2 模型路由、上下文与工具续接
-
-1. 将 `RoutingService` 的意图分类与主模型选择提取为可直接调用的 `select_route`。现有 `run` 复用该方法并继续原单次推理。Agent Run 开头选择一次，复用「系统优化 / 固定模型 / 闲聊引导」规则和分类授权。首次推理开始时提供模型别名与安全路由摘要。Run 内固定 Provider 和绑定版本。后续每轮 `ModelRepository.begin` 在既有授权与配置读取事务内核对绑定版本和启用状态，变化时收口为模型不可用。
-2. `context.py` 放置代码内系统提示词与 Context Provider。首轮组装系统消息、最多 12 个已完成的可见问答对和当前问题。用户历史与问题总 UTF-8 上限 32 KiB，问题维持 8,000 字符。页面仅发送最近的完整问答对，超过输入限额时提示整理上下文。每轮继续检查既有 64 KiB 可见模型输入及 64 条消息上限。超限以 `context_limit` 结束，保留已完成的工具过程。
-3. 只有工作区匹配 Retail 绑定、模型的 tools 能力已验证、路由允许经营分析时，附上 `retail_sales`。模型调用选择已验证的流式能力，必要时沿用同步生成。Thinking 复用原选择规则与能力检查。闲聊或未开放工具时保留零工具的回答路径。提示词明确数据不可用时说明范围和缺口，模型选择区提供相应提示。
-4. 仅在正常协议终止、结果状态为 `completed` 时解释输出。有调用且 `finish_reason=tool_calls` 时，整批先检查结构、ID 和数量，再按原顺序运行。将原助手 `text + tool_calls` 保留为一条消息，每个调用追加一条观察消息。下一轮在同一绑定下带上该批新密封的 token。保持前缀、调用参数和公开 ID 不变，满足既有续接摘要校验。
-5. 现有适配器在 LLM 层拒绝未知工具和参数 Schema 错误。本期新增服务端内部模式 `agent_dispatch`，仅对该 Run 的生成阶段延后名称和参数语义校验。原模型 API 使用默认 `strict`。协议残缺、空或重复 ID、批次过大、`finish_reason` 与内容矛盾仍终止整轮，工具未执行。未知工具、日期错误、非许可维度、权限或查询错误按原 ID 回填固定错误对象。工具错误可由模型解释或继续推进；连接/执行资源清理未确认时立即收口。
-6. 合法的 `stop` 结束且无工具调用、正文非空时产生候选 `finalAnswer`。中间正文只用于模型续接。最终回答、文件与步骤在终态裁决时一起提交。模型层可靠执行最多两次尝试，继承原有可重试判定。生成侧在内部消费进度信号以保留第四篇的已出内容重试约束，进度文本不上发给浏览器。
-
-提示词固定本期口径。比较任务先取渠道汇总，按实付金额变化绝对值选渠道，再使用同两段时窗查询该渠道 SPU，说明单位、时段、数据缺口和贡献排序。基于最新已发布合成数据回答，金额以分计算后转元展示。商品观察提供合计及排名预览，回答注明可从 CSV 查看其余记录。数据来源和权限由代码和配置确定。
-
-#### 两个运行检查点
-
-```mermaid
+```mermaid 从查表到提交数据库结果
 flowchart TD
-    N["下一次模型调用或工具动作"] --> D{"派发前检查"}
-    D -->|"放行"| X["模型调用或受限工具执行"]
-    D -->|"停止或到期"| T["清理并提交停止终态"]
-    D -->|"工具参数或权限校验失败"| O["按调用 ID 回填观察"]
-    X -->|"模型返回工具调用"| N
-    X -->|"工具结果或可回传错误"| O
-    O --> N
-    X -->|"候选最终结果"| C{"提交前检查"}
-    C -->|"通过"| S["提交唯一成功终态"]
-    C -->|"停止、到期或清理未确认"| T
-    C -->|"候选答案无效"| F["提交失败终态"]
+    accTitle: 从查表到提交数据库结果
+    A["加载工作区的受限 Retail 连接"] --> B["模型发起 database_query"]
+    B --> Dispatch["HarnessTools.dispatch()<br/>校验工具参数，进入只读处理器"]
+    Dispatch --> C{"op"}
+    C -->|"list_tables / describe_table"| D["构造表或字段的元数据查询"]
+    C -->|"query"| E["解析并检查单条只读 SELECT"]
+    E -->|"SQL 不合规"| H
+    D --> F["开启受限只读事务<br/>校验身份与引用表权限，执行查询"]
+    E --> F
+    F -->|"成功"| G["保存有界结果到 TaskState<br/>按原 toolCallId 回填 resultId"]
+    F -->|"可处理错误"| H["按原 toolCallId 回填安全错误"]
+    G --> I["下一次模型调用"]
+    H --> I
+    I -->|"继续查"| B
+    I -->|"submit_database_result(resultId)"| Submit{"找到本 Run 的结果？"}
+    Submit -->|"是"| J["从查询结果生成 Markdown 表"]
+    Submit -->|"否"| H
+    J --> K["生成候选回答，由 RunControl 裁决终态"]
 ```
 
-| 检查点 | M1 位置与职责                                                                                                                                                                                                  | M2 沿同一位置增加的规则                                                                                                                                        |
-| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 派发前 | `RunControl.perform()` 在活动任务登记前检查 Run 状态与绝对期限。`AgentExecutor` 在每条 ToolCall 前检查停止，再校验工具名、参数与可信绑定。路由内各分类调用也在准备前检查；模型层的实际尝试沿用已有期限与取消。 | 下一次模型或工具调用前执行 Run 预算和停止规则。有计划时，校验模型选定 Todo 的依赖及派发条件。                                                                  |
-| 提交前 | `AgentExecutor.run()` 校验模型完整结束、非空最终回答和有界文件，形成候选。`RunControl.commit()` 在同一无 `await` 区间复核截止时间、停止与清理状态，裁决并登记唯一终态。先受理的停止或已到期的 Run 走收尾状态。 | 关键 Todo 完成及最终经营结论由独立 Verifier 检查。`submit_analysis` 校验失败时回填工具观察，模型在允许继续时自行重查或修订计划。通过验证的候选仍走原终态裁决。 |
+| 操作 | 输入 | 返回 |
+| --- | --- | --- |
+| 列表 | `{"op":"list_tables","offset":0}` | 当前身份在 `core`、`ops` 下可读的业务表。 |
+| 描述 | `{"op":"describe_table","schema":"core","table":"spu"}` | 有 SELECT 授权的字段、类型与可空性。 |
+| 查询 | `{"op":"query","sql":"SELECT count(*) FROM core.spu"}` | 列名、行、截断标记和内部结果引用。 |
+| 提交 | `submit_database_result({resultId})` | 从本 Run 已保存的结果确定性生成 Markdown；文件状态为 `none`。 |
 
-M1 在现有 Run 控制和循环内集中这两个检查点。M2 的规划、推进和重规划由同一个模型循环决定。BFF 与 Chat 继续在验证原流终态和干净 EOF 后分别转发及展示。
+- **接入。** 模型需支持工具调用。Agent 根据已授权的租户和工作区选用数据连接。模型只提供操作参数，连接凭据和只读角色由服务端确定。
+- **执行。** `HarnessTools` 分发已注册工具，`RetailActions` 调用只读查询处理器。处理器解析 SQL 语法树，限制为单条只读 SELECT，并提取引用表。只读事务校验登录角色、当前角色、Retail 行级权限和引用表权限。结果最多 50 行、4 KiB，截断状态随结果返回。连接建立限时 3 秒，SQL `statement_timeout` 为 5 秒，数据库调用最多 8 秒，同时受工具及 Run 的剩余时间约束。
+- **引用与展示。** `resultId` 留在模型观察及 Run 状态，公开 `tool.finished.resultPreview` 不包含它。模型用原 ID 请求发布，服务端从保存结果渲染。工具失败可回填安全错误继续执行。
+- **课堂示例。** 「执行 SQL 查询商品记录数」可以直接产生一次查询，再由下一 Step 提交结果。探索未知表可以先列目录和读取字段，随后仍走同一查询及提交路径。
 
-### 2.3 Retail 数据范围、查询与文件
+## 4. 停止与资源清理
 
-**课堂绑定。** 选择已发布的单源样本 `retail-dev-20261022b`，包摘要 `7ae26405a71589c98ca8379bec1e1ec1ff77e16232ff2e1bf26b6d4501b8183e`，规范 schema `core`，身份 `a_east`（Retail 租户 101、区域 1）。部署者从发布工具的私有记录取得该身份，配置课堂 Web 租户与工作区 UUID 的精确匹配。浏览器只传用于 BFF 权限检查的范围选择，Agent 根据可信上下文与唯一部署绑定决定连接。验收前用活动清单核对包摘要和只读角色，不能用课程导入用的扁平 `retail_course` 或通用应用数据库代替受限数据源。 [Retail 发布与权限](../../../docs/data-seeding.md#权限失败与回切)
+Chat 发出独立的 `POST /api/web/v1/analysis/runs/{runId}/cancel`。BFF 重新授权，Agent 按 Run 所有者受理并返回 `202 accepted`。创建 Run 时打开的原 SSE 继续等待最终状态。Run 已结束时，停止接口返回 `200 already_terminal` 和终态状态。
 
-**参数与口径。** `retail_sales` 只接收 `dimension=channel|product`、`period={start,end}`、可选 `compareTo={start,end}` 和 `channelCode`。日期为 `YYYY-MM-DD`，按上海业务日左闭右开，单段 1～31 日，允许区间 `[2023-01-01, 2026-01-01)`。可独立选择比较段，变化始终按比较段减基准段计算。商品维度必须填写渠道编码，渠道维度禁止该字段。编码采用 1～24 位大写 ASCII 字母、数字或下划线，作为绑定值匹配受限 `core.channel.channel_code`。多余字段、重复 JSON 键、无效日期或形状在连接前拒绝。语法正确但无匹配结果的渠道返回 `empty`。
+```mermaid 派发前检查与提交终态前检查
+flowchart TD
+    accTitle: 派发前检查与提交终态前检查
+    CheckDispatch["派发前检查<br/>检查停止原因和 Run 期限"]
+    CheckDispatch -->|"可以继续"| Execute["启动模型调用或工具批次"]
+    Execute -.-> Call["工具批次内：每次调用由 CallControl 管理自己的期限"]
+    CheckDispatch -->|"已停止或到期"| CheckCommit
+    Execute -->|"收到停止请求或 Run 到期"| Cleanup["取消在途调用，等待清理回执"]
+    Execute -->|"Run 得到候选结果"| CheckCommit
+    Cleanup --> CheckCommit["提交终态前检查<br/>清理结果、停止原因与 Run 期限"]
+    CheckCommit --> Publish["提交唯一终态，由原 SSE 发送"]
+    classDef check fill:#e6f2e8,stroke:#2d7352,color:#184331
+    class CheckDispatch,CheckCommit check
+```
 
-固定 SQL 读取 `core.channel_product_daily`，在 `tenant_id, report_date, channel_id, sku_id, region_id` 粒度取最新 `report_version`，然后按日期段汇总 `paid_amount_cent`，商品维度经同租户 `sku → spu` 聚合。保留事实 RLS 与显式租户过滤。提供两个时段时按各自的起止日期聚合并计算变化。同一分组缺少其中一段的实付记为 0，整次查询无实付数据返回 `empty`，数据库错误返回独立错误码。排序为变化绝对值降序、编码升序。单段按实付降序、编码升序。每次在同一只读事务内验证实际登录角色、只读状态及事实表 RLS，再执行绑定日期和编码的固定 SQL。每次最多取 201 行检测超限，查询失败或超限不交付部分结果。金额以整数分保存，模型观察用十进制字符串，最多 4 KiB，含合计、行数和前 12 行；预览过宽时按整行收缩。
+每次启动模型调用或工具批次都走第一个检查。工具批次内的 `CallControl` 同时检查自身期限和 Run 的停止状态。第二个检查只在 Run 结束时执行一次。
 
-| 课堂参数     | 取值                                                                                                                 |
-| ------------ | -------------------------------------------------------------------------------------------------------------------- |
-| 基准 / 比较  | `[2025-11-17, 2025-11-24)` 和 `[2025-11-24, 2025-12-01)`                                                             |
-| 推荐发送内容 | 比较 2025-11-17 至 11-23 和 11-24 至 11-30 两周，哪个渠道的实付金额变化最大？变化主要来自哪些商品？                  |
-| 对照结果     | POS 基准 1,410,889 分，比较 543,596 分，变化 −867,293 分。SPU3、SPU1、SPU2 分别变化 −511,199、−259,344、−96,750 分。 |
-| 本轮文件     | POS 商品拆分，3 条实付商品记录。第一轮查全渠道，第二轮由模型读取首轮观察后选择 POS。                                 |
+| 检查点 | 行为 |
+| --- | --- |
+| 派发前 | `RunControl.perform()` 先查停止及绝对期限，再登记模型或工具批次为活动阶段，子任务启动前再查一次。`ToolDispatcher` 为单次工具调用创建 `CallControl`，调用期限受 Run 剩余时间约束。 |
+| 停止受理 | 保存首个原因，取消在途阶段。停止 POST 只返回回执。浏览器在收到首包前点击停止时先保留意图，取得 Run ID 后发送一次请求。 |
+| SQL 清理 | 已派发命令使用有界 `cancel_safe`，等待原命令退出，再关闭游标、回滚并关闭独占连接。取消报文发出后还要核对原任务结果。 |
+| 模型清理 | 复用 LLM Runtime 的取消、流关闭及容量释放，结果回执传给 RunControl。 |
+| 提交前 | `commit()` 在同一无 `await` 区间复核期限和清理结果，再一次提交。清理未确认优先得到 `cleanup_unconfirmed`。清理已确认时，首个停止原因为超时则得到 `failed/run_timeout`，为用户停止、断开或退出则得到 `canceled`。 |
 
-对照结果已按相同包摘要离线重算，交付时还需在发布库以 `a_east` 对照 SQL 和真实查询重新验证。对照 SQL 与课堂步骤随实现交付，使用独立只读连接。
+浏览器断开、截止时间或服务退出共用停止边界。已发布的合法进度保留，尚未提交的回答及文件候选随失败或终止丢弃。详细分支见[代码附录](CODE_DESIGN.md)。
 
-**CSV。** 取本 Run 中按执行顺序最近一次成功、非空的商品拆分。Agent 从该调用的完整有界结果生成，最多 200 行、128 KiB，UTF-8 BOM、CRLF、Python `csv.writer`，固定字段 `channel_code,spu_code,spu_name,period_start,period_end,compare_start,compare_end,paid_cent,compare_paid_cent,delta_cent`。单段时比较列为空。文本列处理 CSV 引号和公式起始字符，负数金额保留数值。文件名固定为 `retail-products-<runId>.csv`，来源保存 `stepId + toolCallId`。用标准 Base64 通过最终 SSE 帧交付，`file` 是 `none | ready | unavailable`。导出超限或失败标为 `unavailable`，有效回答仍可提交；商品查询结果因行数超限产生 `result_limit` 时，可保留较早成功候选，否则显示超限提示。失败和停止终态清空候选。
+## 5. Agent → BFF → Chat 流式协议
 
-### 2.4 网络契约与信任边界
+### 5.1 两段 SSE 如何交付一条回答
 
-| 目的     | 浏览器到 BFF                                    | BFF 到 Agent                            | 响应                                                                 |
-| -------- | ----------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------- |
-| 启动 Run | `POST /api/web/v1/analysis/runs`                | `POST /v1/analysis/runs`                | 200 `text/event-stream`，首条 `run.started` 先于分类、推理和工具派发 |
-| 停止 Run | `POST /api/web/v1/analysis/runs/{runId}/cancel` | `POST /v1/analysis/runs/{runId}/cancel` | 202 `accepted`、200 `already_terminal` 或 HTTP 拒绝                  |
+Chat 消费 Web 的响应流，Web 同时消费 Agent 的响应流。EOF（流结束）表示 HTTP 响应已经完整关闭，两段各自校验最后一个事件和 EOF。
 
-- 启动请求 BFF 严格校验 `tenantId, workspaceId, requestId, question, history, selection`。其中 `requestId` 为浏览器请求关联 UUID，`history` 为 `{question,answer}[]`，`selection` 复用 `MainModelSelection`。BFF 剥离范围参数，Agent 入参只含后四项。Run ID 由 Agent 生成，单次发送单请求，浏览器、BFF 和代理均不自动重试或重连启动 POST。
-- 终止请求 BFF 请求体只接收 `tenantId, workspaceId`，Agent 请求体为空对象，目标 ID 来自路径。两个端点均走既有同源、CSRF、会话、有效工作区、`module.analysis`、`models.invoke` 检查。事务结束后才 fetch；用既有服务令牌与 `X-Compass-Context` 传 `purpose=chat`、用户与工作区。Agent 两个端点都验证服务令牌和用途。无匹配 Run 和非所有者统一 404。BFF 禁止客户端自带可信头或额外字段。
-- Agent / BFF 所有响应含 `Cache-Control: private, no-store`，SSE 加 `X-Accel-Buffering: no`。复用 Web `X-Compass-View-Revision`、错误结构与安全消息映射。鉴权失败 401/403，校验失败 422，活动数满 429。BFF 在打开下游前验证上游 HTTP 与首包，失败返回 503。开流后遇到非法包、超限或异常 EOF 时中止，页面按失败或待确认收口。
-- Agent → BFF 和 BFF → Chat 共用 **`compass.run` v1**。SSE 包统一为 `protocol, version, requestId, runId, seq, event`。`event` 是 `{type, payload}` 判别联合。BFF 保留请求和 Run ID，为下游按包重新编号。首包及终态单发。进度支持逐条输出、有界批次和已登记可选扩展的转译。
-- 两段都校验包、逻辑事件顺序与文件来源。BFF 在上游干净 EOF 后转发唯一终态，Chat 在下游干净 EOF 后提交回答与文件。旧读端可以跳过有界可选扩展。BFF 出站扩展必须通过公开 Schema，核心事件维持原语义和顺序。
-
-完整信封、枚举、大小限制、版本兼容、批次与转译规则见[流式数据包协议](STREAM_PROTOCOL.md)。可运行参考包括 [Agent DTO 与编码](stream-reference/stream_contract.py)、[BFF 与页面解码、攒包及转译](stream-reference/stream.ts)。实现阶段从 `schemas.py` 和 FastAPI 路由生成 Web Schema、类型及流常量，BFF 与 Chat 共用顺序校验。
-
-`AnalysisCancelAck` 是独立的 JSON 联合。202 返回 `{runId, status: "accepted"}`，200 返回 `{runId, status: "already_terminal", terminalStatus}`，拒绝走安全错误体。
-
-### 2.5 终止裁决与资源清理
-
-```mermaid
+```mermaid Agent、BFF 与 Chat 流式时序
 sequenceDiagram
-    actor U as 分析 Chat
+    accTitle: Agent、BFF 与 Chat 流式时序
+    %%{init: {"sequence": {"actorMargin": 32, "width": 90, "messageFontSize": 14, "noteFontSize": 14, "wrap": true}} }%%
+    participant C as Chat
     participant B as Web BFF
-    participant A as Agent Run
-    participant X as 模型 / Retail
-    A-->>U: 原流先发 run.started
-    A->>X: 派发当前阶段
-    U->>B: POST cancel
-    B->>A: 重验权限，转发主体与 Run ID
-    A-->>B: 202 accepted / 200 already_terminal
-    B-->>U: 返回回执，保留原流
-    A->>X: 已受理时取消在途工作
-    X-->>A: 退出与清理结果
-    A-->>B: 原流唯一终态，关闭上游
-    B-->>U: 校验终态与 EOF 后提交
+    participant A as Agent
+    C->>B: POST 创建 Run
+    B->>A: 私有 POST<br/>传递可信上下文
+    A-->>B: run.started，seq=1
+    B-->>C: run.started，seq=1
+    A-->>B: 路由、Step<br/>分析状态、工具开始
+    B-->>C: stream.batch，seq=2
+    A-->>B: 工具结果、后续 Step
+    B-->>C: stream.batch，seq=3
+    A-->>B: run.finished
+    A-->>B: 干净 EOF
+    B-->>C: run.finished，seq=4<br/>随后关闭响应
+    Note over C,B: 校验下游 EOF 后提交回答
 ```
 
-| 当前状态   | 输入                                 | 转换与副作用                                                                                                       |
-| ---------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| `running`  | 终止、断开、到达期限或进程关闭先发生 | 同步切为 `stopping`，保存首次原因并取消一次活动阶段，禁止启动下一阶段和提交迟到结果。                              |
-| `stopping` | 重复停止或其他停止来源               | 复用原清理，保持首因。有效用户停止请求返回 202。                                                                   |
-| `running`  | 正常完成或运行失败先提交             | 原子写唯一终态，移除活动条目并保存轻量摘要。随后停止回 200 `already_terminal`，只返回已提交状态。                  |
-| `stopping` | 清理完成                             | 用户终止、断流、关闭收口为 `canceled`；内部期限收口为 `failed/run_timeout`。确认失败时统一 `cleanup_unconfirmed`。 |
+图中的下游序号对应旁边这次抓包。进度批次数量由事件节奏、攒包时间和大小决定。
 
-Run 的阶段启动与注册、终止受理、终态写入都在无 `await` 的事件循环片段内完成。清理最多 8 秒，BFF 启动流总等待 195 秒，浏览器 200 秒；取消 POST 上游单独限时 5 秒。原流终态由 Run 主任务拥有，终止接口只回执。出站阻塞使用独立断流监听，进度队列受总事件数和每条进度的大小限制，入队无需等待。停止后保留已提交的合法进度。终态通过独立结果槽交付，无需排队抢空间。活跃进程关闭时停止接收新 Run，统一请求终止并等待清理上限。
+### 5.2 一次完整的浏览器侧 SSE
 
-- **模型阶段。** 取消当前分类或生成任务，沿 `ModelService → ReliableExecutor → Runtime` 退出队列、退避和调用。基线模型服务会将取消重新抛为裸 `CancelledError`。本次把底层尝试的清理结果通过服务内类型化取消回传给 Run，并核对模型记录收尾。未知资源沿用 `ExecutionGate` 的隔离，不归还对应槽位；迟到任务只允许收尾。
-- **Retail 阶段。** 每次调用独占连接，登录即设置只读事务默认、`statement_timeout=5s`、`idle_in_transaction_session_timeout=8s`，连接建立最多 3 秒。SQL 使用显式只读事务，按阶段记录当前命令。终止时对已派发 SQL 使用 `AsyncConnection.cancel_safe(timeout=1)`，等待原执行返回或出现 PostgreSQL 取消错误，关闭游标并回滚，最后关闭连接。设置 `libpq ≥ 17` 的能力门，避免回落到无取消时限的旧实现。若取消报文发送失败，仍在清理预算内等待源端超时或已完成响应。报文发送完成只记为请求已发，退出判定依据原命令和连接状态。清理不明时丢弃专属连接，关闭本地句柄并记录 `cleanup_unconfirmed`，下一次使用新的连接。 [Psycopg 连接取消](https://www.psycopg.org/psycopg3/docs/api/connections.html#psycopg.AsyncConnection.cancel_safe)
-- **断流传播。** 浏览器关闭读取或权限页退场后，BFF 终止上游 fetch、撤销监听和定时器。Agent 由唯一 ASGI disconnect 监听任务触发同一个 `request_stop`，不受进度发送回压阻塞。若下游断开，Agent 继续执行有界清理并记录终态。BFF 的 SSE 非法和自身超时采用相同的上游中止路径。
+[查看原始 SSE](document/run-example.sse)。这是受控模型和查询结果下生成的完整响应。Agent 走实际 `start_run` 请求内分支，BFF 走实际 `startAnalysisRunAgent` 投影，结果由浏览器共用的 `readRun` 消费到 EOF。示例只替换模型与数据源，未连接真实业务库。
 
-### 2.6 分析 Chat
+| 下游包 | 内容 |
+| --- | --- |
+| `seq=1` | `run.started`。先发布 Run ID，再推进执行。 |
+| `seq=2` | 路由、本次第一个 Step、分析节点、工具参数准备及 `tool.started`。 |
+| `seq=3` | 查询结果、Step 收尾、下一次模型调用及结果发布。 |
+| `seq=4` | `run.finished`。包含最终 Markdown 和文件状态，随后是 EOF。 |
 
-复用现有输入区、模型选择、同页追问、附件仅预览规则和模型诊断入口。在 [现有原型](../spec/visuals/chat-prototype.html) 的助手回复区下增加按 Step 分组的工具卡、回答区和文件卡。样式沿用现有分析页。模型 Trace 链接按各 Step 的 `modelCallId` 生成，Run ID 用于关联本轮。
+`compass.execution.node@1` 的模型节点带有 `running` 或 `completed` 状态，可用来显示正在分析等进度。模型供应商返回的 Thinking 和旁白正文位于内部 `detail`，进入 v1 SSE 前由 `legacy_node()` 剥离。最终正文在 `run.finished.finalAnswer` 交付。
 
-发送时锁定当前轮，输入区显示「停止任务」。提前停止记在当前轮本地，收到 ID 后只发送一次终止 POST。单独保留原流。回执成功只更新「正在终止」，晚到回执按 Run ID 与本轮令牌丢弃。终止请求失败且原流还活跃时提示「终止请求未确认」并允许手动重试；原流仍决定最终结果。连接中断且没有终态时，显示失败或「终止结果待确认」，结束加载并保留已收到的工具过程，运行中的卡片按原因收口。
+### 5.3 包信封与提交规则
 
-分析过程运行时展开。第一次收到经完整性验证的成功终态时自动折叠一次，同时提交回答与文件卡。过程文本只作为显示数据。标题采用原生 button 和 `aria-expanded`，支持 Enter、空格；焦点位于隐藏区时移回标题。零工具直接展示回答。失败、已终止与清理待确认继续展示已收到的过程。
+| 部位 | 约定 |
+| --- | --- |
+| 传输 | `text/event-stream`，每帧一行 `data: <JSON>` 加空行。HTTP 分块可以拆在任意字节位置。注释心跳不分配序号。 |
+| 信封 | `protocol=compass.run`、`version=1`、`requestId`、`runId`、`seq`、`event={type,payload}`。两段各自从 1 连续编号，业务 ID 保持一致。 |
+| 批次 | `stream.batch` 内按数组顺序消费，最多 16 项、32 KiB、24 ms。首包与终态独立。收到 `tool.started` 或达到边界时刷新进度窗口。 |
+| 扩展 | 按 `name@version` 校验并转换。可跳过未知可选扩展，遇到未知且标记为 `required` 的扩展则结束响应并报协议错误。 |
+| 上限 | 单帧 256 KiB，整流 4 MiB，逻辑事件 1024 个，扩展数据 4 KiB，回答 JSON 32 KiB。 |
+| 终态 | BFF 等上游 EOF 再发送下游终态，Chat 等下游 EOF 再提交回答、文件与问答历史。截断、重复终态或终态之后还有包都按协议失败收口。 |
 
-当前页仅将成功问题与 `finalAnswer` 加入可见历史，重用 `DocumentSession` 的代际、权限版本和退场清理。文件只在成功状态下解码为 Blob，下载时创建短寿命对象 URL。重置、新建对话、退出、会话失效和范围切换时立即释放文件、URL、临时状态及请求句柄。原型下载名不作为真实文件名来源。
+Chat 展示分析进度和工具卡，成功后折叠过程、渲染 Markdown，可重新展开。内部编号用于协议关联。终态失败或连接中断时保留已接收进度。字段索引、公开预览与失败约束见[流协议附录](STREAM_PROTOCOL.md)。
 
-### 2.7 配置与发布
+## 6. 文件变更清单
 
-| 配置                              | 含义                                                                                                                                                                      |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `COMPASS_RETAIL_RUN_SCOPE`        | Agent 专用课堂绑定 JSON。固定 Web tenant/workspace UUID、预期 release、包摘要和发布清单中的只读角色名，使用本期规定的 `a_east` profile 和 `core` schema。只接受一种绑定。 |
-| `COMPASS_RETAIL_RUN_READONLY_DSN` | Agent-only `SecretStr`，只连接所选发布源。与绑定成对配置。开发走根入口，Compose 通过 Agent 私有环境注入。部署说明提供变量示例及活动清单对照步骤。                         |
+清单以第 14 课交付的模型运行层为基线，按当前目录列出第 15 课涉及的实现、生成契约、测试和课堂配置。`[新增]` 表示为本课引入的能力文件，`[迁移]` 表示初版实现重构后的落点，`[调整]` 表示本课接入涉及的现有文件，`[生成]` 表示由契约脚本派生的文件。共用文件的行注只描述第 15 课涉及的职责。
 
-全空时正常提供无工具 Chat；部分配置或 libpq 能力不满足时禁用 Retail 能力并记录安全配置错误。接入预检用已发布清单核对 release、摘要、库、账号、角色和课堂范围。运行身份无法读取发布控制表，部署绑定及预检负责版本对应，运行连接核对 `session_user` 与 `current_user` 均匹配绑定角色，要求 `transaction_read_only=on` 且 `row_security_active('core.channel_product_daily'::regclass)` 成立。身份检查失败时结束该次工具调用。专用绑定启用前校验不同工作区和不同租户的请求零 Retail 连接。
+### 6.1 Agent 执行内核
 
-发布顺序是 Agent 先部署新增路由，验证原模型路径与课堂绑定，再部署 Web Chat。回退先恢复 Web 到原入口，再停止或替换 Agent。单 Agent 进程及单副本作为本期部署约束，验证启动和取消始终命中同一实例。切换样本使用保留的发布版本，Drain 活动 Run 后更换受限 DSN 和绑定。数据库沿用既有版本。
+```text Agent 执行内核
+apps/agent/src/compass_agent/
+├── main.py                  [调整] 挂载 Run 路由并管理注册表生命周期
+├── api/
+│   └── runs.py              [迁移] 创建与停止 Run，维护请求内 SSE
+├── harness/
+│   ├── context.py           [迁移] 提示词、历史消息和模型输入边界
+│   ├── contracts.py         [迁移] AgentState、Step、ToolResult 与注入接口
+│   └── executor.py          [迁移] ReAct 循环、模型调用与工具回填接缝
+└── runtime/
+    ├── service.py           [迁移] 组装 Run、绑定模型与数据源、提交终态
+    ├── turn.py              [迁移] 组装模型输入、结果检查和工具派发回调
+    ├── context.py           [调整] 将路由指令和可用工具接入模型上下文
+    ├── task_state.py        [迁移] 保存本 Run 的查询结果和任务状态
+    ├── control.py           [新增] Run 注册、期限、取消和唯一终态
+    ├── stream.py            [新增] SSE 编码、序号与体积检查
+    ├── execution_trace.py   [调整] 生成执行节点与分析进度
+    ├── execution_detail.py  [调整] 将执行节点投影到 v1 SSE
+    └── observation.py       [迁移] Run、步骤与停止的结构化日志
+```
 
-## 3. 风险与最小验证
+### 6.2 模型路由与调用接缝
 
-| 风险                           | 设计约束                                                             | 实施验证                                                                                    |
-| ------------------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 适配器提前拒绝未知工具或参数   | 仅 Agent 内部延后语义校验，保留协议校验和原 API 行为。               | 用受控上游对比同一无效调用在原接口与 Run 的表现，验证配对观察及零查询。                     |
-| 模型取消状态被服务层吞掉       | 显式传递清理结果，取消、提前失败和超时分别核对队列、连接、调用记录。 | 用受控模型在生成、队列及退避期间终止，统计源端退出、容量和调用次数。                        |
-| SQL cancel 后游标或事务仍活跃  | 等原命令退出再回滚，超时关闭专属连接并隔离。                         | 在发布库通过测试注入固定慢查询，以单独观察连接检查 PID 的查询和事务退出。普通任务后续成功。 |
-| 流中段断开或到达无效终态       | 两端严格验证，成功必须通过 EOF 后提交，BFF 中止上游。                | 实际浏览器与 Node/FastAPI 流测截断、无效字段、重复终态、最终帧尾随垃圾和无读取回压。        |
-| 模型选择与运行中 Provider 修改 | 首轮一次选模，后续调用内重新授权并校验 binding version。             | 回归固定与自动选模、闲聊、已下架或运行中变更的模型，以及 Thinking 工具续接。                |
+```text 模型路由与调用接缝
+apps/agent/src/compass_agent/
+├── api/
+│   └── models.py        [迁移] 提供模型接入与身份校验，收口旧推理入口
+├── routing/
+│   └── service.py       [调整] 选择模型配置，将分类与生成分开
+├── models/
+│   ├── repository.py    [调整] 读取可用模型与配置版本
+│   └── service.py       [调整] 重验模型绑定，接入调用取消与观测
+├── llm/
+│   ├── contracts.py     [调整] 模型响应、工具续接与清理回执
+│   └── litellm_chat.py  [调整] 接入工具分发模式与续接校验
+└── observability/
+    └── observer.py      [调整] 关联 Run 和模型调用，限制正文采集
+```
 
-## 4. 代码审阅
+### 6.3 只读查询与单次工具控制
 
-[代码附录](CODE_DESIGN.md) 覆盖 Run 状态裁决、模型内部校验模式、工具批次与续接、Retail SQL 与取消、流校验和页面提交。流协议另见[完整类型、常量和参考实现](STREAM_PROTOCOL.md)。评审先检查类型和状态所有权，再核对派发前与提交前两个检查点、停止受理到资源释放，以及终态从 Agent 经 BFF 到页面的提交时机。
+```text 只读查询与单次工具控制
+apps/agent/src/compass_agent/
+├── runtime/
+│   └── tool_bindings.py        [调整] 注册本轮可用工具，按调用 ID 回填结果
+└── tools/
+    ├── contracts.py            [迁移] 工具共用运行控制接口 ToolControl
+    ├── dispatcher.py           [调整] 校验并执行工具，管理单次调用期限
+    └── builtin/
+        ├── database.py         [新增] 列表、字段、只读 SQL 与结果提交契约
+        ├── export.py           [迁移] 固定查询路径的有界 CSV 交付
+        └── retail/
+            ├── actions.py      [迁移] 接入通用查询，按 resultId 提交结果
+            ├── connections.py  [调整] 按工作区解析受限 Retail 连接
+            ├── handler.py      [迁移] 只读事务、身份校验、取消与资源清理
+            └── sql.py          [迁移] 固定查询 SQL 与 Retail 身份校验语句
+```
 
-## 5. 实施任务与验证交接
+### 6.4 Web BFF 与 Chat
 
-下表新增路径为拟交付位置。现有模型、权限、样本和部署入口作为接入基线。
+```text Web BFF 与 Chat
+apps/web/
+├── package.json                         [调整] 接入 React Markdown 和 GFM
+└── src/
+    ├── server/
+    │   ├── http/
+    │   │   ├── handler.ts               [调整] 将 Run 请求分派给专用处理器
+    │   │   └── analysis-run-handler.ts  [新增] 创建与停止入口，完成鉴权
+    │   └── analysis-agent-client.ts     [新增] 请求 Agent，合批并转发 SSE
+    ├── contracts/
+    │   └── analysis-run.ts              [新增] 双侧 SSE 校验与顺序检查
+    ├── client/
+    │   ├── request-scope.ts             [调整] 流请求、中止与页面作用域
+    │   └── analysis-run.ts              [新增] 消费事件、维护对话轮及终态
+    ├── components/
+    │   ├── analysis-composer.tsx        [调整] 接入提问、运行过程和停止操作
+    │   └── analysis-run-turn.tsx        [新增] 渲染运行过程、Markdown 与文件
+    └── app/
+        └── globals.css                  [调整] 分析过程及回答样式
+```
 
-| 任务            | 文件与变更                                                                                                                                                                                          | 依赖      | 完成条件                                                                                                                        |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| T1 · 模型接缝   | 改 `apps/agent/src/compass_agent/routing/service.py`、`models/service.py`、`models/repository.py`、`llm/contracts.py`、`llm/litellm_chat.py` 与 `observability/observer.py`                         | —         | 原模型调用通过回归；内部模式可得到可分发批次，续接绑定与清理结果可测。AC-02、AC-04、AC-06                                       |
-| T2 · Retail     | 新增 `apps/agent/src/compass_agent/runtime/retail.py`、`runtime/retail_sql.py` 与 `runtime/artifact.py`；改 `settings.py`                                                                           | —         | 固定 SQL、参数校验、只读身份、CSV 和有界取消通过受控及 PostgreSQL 验证。AC-01、AC-03、AC-10、AC-13、AC-15                       |
-| T3 · Run 与契约 | 新增 `runtime/executor.py`、`runtime/context.py`、`runtime/control.py`、`run_api.py`；改 Agent `main.py`、`schemas.py`、私有边界及契约导出脚本；生成 `contracts/` 和 `apps/web/src/generated/`      | T1、T2    | 首帧先于派发，派发前检查停止和期限，候选经提交前裁决形成唯一终态。断流统一收口，跨主体不泄露。AC-01～AC-05、AC-08、AC-11～AC-15 |
-| T4 · BFF        | 改 `apps/web/src/server/http/handler.ts`；新增 `server/http/analysis-run-handler.ts`、`server/analysis-agent-client.ts` 和 `contracts/analysis-run.ts`，复用现有私有 HTTP 设施                      | T3        | 启动和取消均完成 BFF 授权，验证首包、批次顺序、EOF 和文件。覆盖逐条、攒包与可选扩展转译，断流取消 fetch。AC-08、AC-11、AC-14    |
-| T5 · Chat       | 改 `apps/web/src/components/analysis-composer.tsx`、`app/globals.css`、`client/request-scope.ts`；新增 `components/analysis-run-turn.tsx` 与 `client/analysis-run.ts`                               | T4        | 工具卡、焦点、回答折叠、文件、追问及终止状态走通。AC-01、AC-09～AC-15                                                           |
-| T6 · 课堂与发布 | 改 `.env.example`、`deploy/compose/compose.yaml`、`apps/agent/README.md`、`apps/web/README.md`、`deploy/README.md`；新增 `docs/adr/0002-agent-execution-kernel.md` 与 `docs/lesson-15-agent-run.md` | T2～T5    | 课堂入口文档含架构、样本、只读接入、对照 SQL、正常和异常步骤，实际环境完成浏览器验收。AC-01、AC-06、AC-07                       |
-| T7 · 验证门禁   | 扩展 `apps/agent/tests/test_runtime.py`、`test_model_lifecycle.py` 与 `apps/web/tests/e2e/analysis-composer.spec.ts`；补 Run 执行/网络、Retail PG 和 Web BFF 契约用例                               | 随 T1～T6 | 覆盖所有 AC 的单元、真实 PostgreSQL 或浏览器路径；跨应用、部署与回归门禁通过。                                                  |
+### 6.5 接口契约与生成入口
 
-现有测试覆盖单次模型调用、模型鉴权、原 Chat 和发布角色权限。新增验收需补真实样本的多轮依赖、文件、两种在途终止、终止竞态及清理失败。受控测试通过固定上游和屏障重放顺序，数据库慢查询从测试装配注入，沿同一只读身份与连接代码执行。测试观察角色单独连接 `pg_stat_activity`，产品路由不接收测试 SQL 或注入开关。
+```text 接口契约与生成入口
+Compass 根目录
+├── apps/agent/src/compass_agent/
+│   └── schemas.py                   [调整] Run、工具事件、终态和停止回执
+├── scripts/
+│   ├── export-contracts.py          [调整] 从 Agent 导出 Schema 与流限制
+│   └── contracts.mjs                [调整] 刷新并校验契约副本
+├── contracts/
+│   ├── openapi.json                 [生成] Agent HTTP 接口与类型
+│   ├── model-contracts.schema.json  [生成] 模型与 Run 相关类型
+│   ├── run-stream.schema.json       [生成] SSE 包与事件 Schema
+│   └── run-stream-limits.ts         [生成] SSE 计数与大小边界
+└── apps/web/src/generated/
+    ├── api.ts                       [生成] Web 使用的 Agent API 类型
+    ├── model-contracts.schema.json  [生成] Web 模型 Schema 副本
+    ├── run-stream.schema.json       [生成] Web SSE Schema 副本
+    └── run-stream-limits.ts         [生成] Web SSE 边界副本
+```
 
-实施后从仓库根执行 `pnpm contracts`、`pnpm contracts:check`、`pnpm check`、`pnpm build`。浏览器入口为现有 `pnpm test:e2e -F web`；真实 Retail 专项在 T7 登记实际入口及必要配置。部署按现有 Compose 入口及 `pnpm smoke` 执行，课堂路径另用真实受限源和已配置的工具模型验收。设计阶段完成了发布包对照复算，并在临时 PostgreSQL 17 实例用课堂样本切片验证商品 SQL 的单段、对比和 RLS 隔离；同一环境验证 `cancel_safe`、回滚、关闭和后续查询。实际课堂发布库的接入、浏览器端到端和课程演示在实现后验收。
+### 6.6 测试与课堂复现
+
+```text 测试与课堂复现
+Compass 根目录
+├── apps/agent/
+│   ├── src/compass_agent/settings.py       [调整] 定义受限 Retail 连接配置
+│   ├── package.json                        [调整] 接入 Agent 集成测试命令
+│   └── tests/
+│       ├── test_agent_run.py               [新增] Run、SSE、取消与资源清理
+│       └── test_agent_run_integration.py   [新增] 真实查询、SQL 与结果约束、取消
+├── apps/web/tests/
+│   ├── analysis-run-stream.test.ts         [新增] SSE 解析、合批与终态校验
+│   ├── analysis-run-client.test.ts         [新增] 页面状态、停止和断流
+│   ├── document-session.test.ts            [调整] 页面作用域与请求回收
+│   ├── domain/analysis-run-bff.test.ts     [新增] BFF 鉴权与上下游转发
+│   └── e2e/analysis-composer.spec.ts       [调整] 从提问到回答的浏览器流程
+├── .env.example                            [调整] 说明课堂运行与 Retail 配置
+├── deploy/compose/compose.yaml             [调整] 向 Agent 传递运行环境配置
+└── docs/
+    ├── adr/0002-agent-execution-kernel.md  [新增] 记录执行内核选型
+    └── lesson-15-agent-run.md              [新增] 复现查询、终止与验收
+```
+
+## 7. 实施任务与验证
+
+| 任务 | 实现位置 | 完成条件 |
+| --- | --- | --- |
+| 运行内核与模型接缝 | Agent 的 `api/runs.py`、`runtime/{service,turn,context,task_state,control}.py`、`harness/{context,executor,contracts}.py` | 首包先发，逻辑模型调用和工具观察按 Step 推进，终态只提交一次。 |
+| 最小查询能力 | Agent 的 `runtime/tool_bindings.py`、`tools/builtin/database.py` 和 `tools/builtin/retail/{actions,connections,handler}.py` | 受限连接、表和字段授权、SQL 校验、有界结果和 `resultId` 提交成立。 |
+| 停止与清理 | Agent 的 `runtime/control.py`、`tools/dispatcher.py`、模型执行层和 Retail 连接 | 在途模型或 SQL 退出，已清理和未确认状态分别有明确终态。 |
+| 协议和页面 | Agent 的 `schemas.py`、`runtime/{stream,execution_trace,execution_detail}.py`；Web 的 `server/http/analysis-run-handler.ts`、`server/analysis-agent-client.ts`、`contracts/analysis-run.ts`、`client/analysis-run.ts` | 双端校验相同包规范，正常流及断流收口清晰，最终 Markdown 在完整 EOF 后显示。 |
+
+关键实现见[代码附录](CODE_DESIGN.md)。本次文档更新使用受控请求校验完整 SSE，真实 Retail 验收继续使用专用 PostgreSQL 入口。

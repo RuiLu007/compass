@@ -1,4 +1,4 @@
-"""Agent-owned model configuration and metadata. No conversation content is stored."""
+"""Agent-owned model configuration, call metadata and encrypted physical request content."""
 
 from datetime import datetime
 from uuid import UUID
@@ -9,13 +9,16 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     Uuid,
     column,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql.functions import FunctionElement
@@ -64,6 +67,9 @@ class Provider(Base):
     adapter: Mapped[str] = mapped_column(String(30))
     base_url: Mapped[str] = mapped_column(String(2048))
     api_key_ciphertext: Mapped[str] = mapped_column(Text)
+    generation_profile: Mapped[dict | None] = mapped_column(
+        JSON(none_as_null=True).with_variant(JSONB(none_as_null=True), "postgresql")
+    )
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     chat_visible: Mapped[bool] = mapped_column(Boolean, default=False)
     version: Mapped[int] = mapped_column(Integer)
@@ -89,6 +95,13 @@ class ModelChange(Base):
 class ModelCall(Base):
     __tablename__ = "model_call"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["run_id", "agent_attempt_id"],
+            ["agent_attempt.run_id", "agent_attempt.id"],
+            name="fk_model_call_agent_attempt",
+        ),
+        CheckConstraint("(run_id IS NULL) = (agent_attempt_id IS NULL)", name="ck_model_call_run"),
+        Index("ix_model_call_run", "run_id", "started_at"),
         CheckConstraint("purpose IN ('test','chat')", name="ck_model_call_purpose"),
         CheckConstraint(
             "status IN ('running','completed','failed','canceled','incomplete')",
@@ -102,6 +115,12 @@ class ModelCall(Base):
         Index("ix_model_call_provider_time", "provider_id", "purpose", "started_at"),
         Index("ix_model_call_actor_time", "tenant_id", "actor_user_id", "started_at"),
     )
+    run_id: Mapped[UUID | None] = mapped_column(Uuid)
+    agent_attempt_id: Mapped[UUID | None] = mapped_column(Uuid)
+    input_message_refs: Mapped[list | None] = mapped_column(JSON)
+    request_content: Mapped[bytes | None] = mapped_column(LargeBinary)
+    output_content: Mapped[bytes | None] = mapped_column(LargeBinary)
+    content_status: Mapped[str] = mapped_column(String(20), server_default="not_captured")
     call_id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     provider_id: Mapped[UUID] = mapped_column(ForeignKey("model_provider.id"))
     config_version: Mapped[int] = mapped_column(Integer)
@@ -123,3 +142,7 @@ class ModelCall(Base):
     error_code: Mapped[str | None] = mapped_column(String(80))
     upstream_request_id: Mapped[str | None] = mapped_column(String(200))
     upstream_outcome_unknown: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+# Register referenced durable tables for standalone model tests and metadata inspection.
+from compass_agent.runtime import entities as runtime_entities  # noqa: E402,F401

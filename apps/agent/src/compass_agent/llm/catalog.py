@@ -6,7 +6,7 @@ from importlib.metadata import version
 from compass_agent.llm.capabilities import capabilities
 from compass_agent.llm.errors import RuntimeFailure
 from compass_agent.llm.sdk import resolve_model, sdk
-from compass_agent.schemas import CatalogItem, CatalogPage
+from compass_agent.schemas import CatalogItem, CatalogPage, CatalogTokenLimits, ModelTokenLimits
 
 PRESETS = [
     CatalogItem(
@@ -54,6 +54,31 @@ PRESETS = [
 ]
 
 
+@lru_cache(maxsize=4096)
+def catalog_token_limits(vendor: str, api_model: str) -> CatalogTokenLimits | None:
+    for key in (f"{vendor}/{api_model}", api_model):
+        row = sdk().model_cost.get(key)
+        if (
+            not isinstance(row, dict)
+            or row.get("litellm_provider") != vendor
+            or row.get("mode") not in {"chat", "responses", "completion"}
+        ):
+            continue
+        limits = {
+            name: value
+            for name in ("max_input_tokens", "max_output_tokens")
+            if type(value := row.get(name)) is int and 0 < value <= 9007199254740991
+        }
+        if limits:
+            return CatalogTokenLimits(
+                catalog_key=key,
+                sdk_version=version("litellm-core"),
+                limits=ModelTokenLimits.model_validate(limits),
+            )
+        return None
+    return None
+
+
 @lru_cache
 def catalog_items() -> dict[str, CatalogItem]:
     rows = {}
@@ -87,8 +112,18 @@ def catalog_items() -> dict[str, CatalogItem]:
             source="litellm",
             base_url=base,
             capabilities=capabilities("llm", vendor, api_model),
+            token_limits=catalog_token_limits(vendor, api_model),
         )
-    rows.update({item.id: item for item in PRESETS})
+    rows.update(
+        {
+            item.id: item.model_copy(
+                update={"token_limits": catalog_token_limits(item.vendor, item.api_model)}
+            )
+            if item.kind == "llm"
+            else item
+            for item in PRESETS
+        }
+    )
     return rows
 
 

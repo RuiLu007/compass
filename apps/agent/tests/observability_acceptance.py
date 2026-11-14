@@ -339,27 +339,23 @@ def test_real_chat_retry_stream_ttft_and_preparation_failure(settings, agent_hos
             assert value.status_code == 201, value.text
             models.append(value.json()["provider_id"])
         command = {
-            "call_id": str(uuid4()),
-            "main_model": {"mode": "fixed", "provider_id": models[1]},
-            "input": {
-                "kind": "generate",
-                "stream": True,
-                "thinking": True,
-                "messages": [
-                    {"role": "user", "content": "比较销售额 E2E_RETRY_429_ONCE " + uuid4().hex}
-                ],
-            },
+            "requestId": str(uuid4()),
+            "question": "比较销售额 E2E_RETRY_429_ONCE " + uuid4().hex,
+            "selection": {"mode": "fixed", "provider_id": models[1]},
         }
         response = client.post(
-            "/v1/models/calls",
+            "/v1/analysis/runs",
             json=command,
             headers={**headers(CHAT), "Authorization": auth["Authorization"], **parent.carrier()},
         )
         assert response.status_code == 200, response.text
         events = [
-            json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")
+            json.loads(line[6:])["event"]
+            for line in response.text.splitlines()
+            if line.startswith("data: ")
         ]
-        assert events[-1]["type"] == "final" and events[-1]["status"] == "completed", events[-1]
+        assert events[-1]["type"] == "run.finished"
+        assert events[-1]["payload"]["status"] == "completed", events[-1]
         trace_id = parent.headers()["X-Compass-Trace-Id"]
         records = wait_for(lambda: r if len(r := observations(settings, trace_id)) >= 13 else None)
         logical = [r for r in records if r["name"] == "compass.logical"]

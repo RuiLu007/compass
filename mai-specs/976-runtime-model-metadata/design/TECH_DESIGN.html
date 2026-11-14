@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="zh-CN" data-generated-by="my-render-design-html">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Runtime 模型元数据与默认生成参数</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&amp;icon_names=account_tree,code,database,folder,route&amp;display=block"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.11.1/styles/github.min.css"
+      media="(prefers-color-scheme: light)"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.11.1/styles/github-dark.min.css"
+      media="(prefers-color-scheme: dark)"
+    />
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.11.1/highlight.min.js"
+    ></script>
+    <!-- 下方样式和首屏 SVG 是示例，可按方案主题调整配色、字体与构图。 -->
+    <style>
+      :root {
+        color-scheme: light dark;
+        --system-accent: #315db6;
+        --accent: var(--project-accent, var(--system-accent));
+        --page: #f7f8fa;
+        --panel: #fff;
+        --soft: #eff1f5;
+        --ink: #172132;
+        --muted: #515d6d;
+        --line: #d9dee7;
+        font-family: system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: var(--page);
+        color: var(--ink);
+      }
+      @supports (color: AccentColor) {
+        :root {
+          --system-accent: AccentColor;
+        }
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --page: #12161e;
+          --panel: #1a202b;
+          --soft: #222a38;
+          --ink: #edf0f5;
+          --muted: #b1bdd0;
+          --line: #384353;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        max-width: 76rem;
+        margin: 0 auto;
+        padding: 0 clamp(1rem, 4vw, 3.5rem);
+        line-height: 1.7;
+        accent-color: var(--accent);
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      a {
+        color: inherit;
+        text-decoration-color: var(--accent);
+        text-underline-offset: 0.25em;
+      }
+      p,
+      ul {
+        margin: 0.6rem 0 0;
+      }
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        line-height: 1.25;
+      }
+      h1 {
+        font-size: clamp(2.35rem, 4.4vw, 3.75rem);
+        letter-spacing: -0.045em;
+        text-wrap: balance;
+      }
+      h2 {
+        font-size: clamp(1.45rem, 3vw, 2rem);
+      }
+      h3 {
+        font-size: 1.12rem;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+        gap: clamp(1.25rem, 4vw, 3rem);
+        align-items: center;
+        padding-block: clamp(2.5rem, 8vw, 6rem) clamp(1.75rem, 5vw, 3.5rem);
+        border-top: 4px solid var(--accent);
+      }
+      .eyebrow {
+        margin: 0 0 0.8rem;
+        color: var(--muted);
+        font-size: 0.85rem;
+        font-weight: 650;
+      }
+      .lead {
+        max-width: 32em;
+        margin-top: 1rem;
+        color: var(--muted);
+        font-size: 1.1rem;
+      }
+      .hero-graphic,
+      .diagram,
+      .table-scroll {
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 1rem;
+        background: var(--panel);
+      }
+      .hero-graphic {
+        margin: 0;
+        padding: clamp(0.6rem, 1.6vw, 1.15rem);
+      }
+      .hero-graphic svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        color: var(--ink);
+      }
+      .hero-graphic .track {
+        fill: none;
+        stroke: var(--line);
+      }
+      .hero-graphic .route {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 2.5;
+      }
+      .hero-graphic .arrow {
+        fill: var(--accent);
+      }
+      .hero-graphic .node {
+        fill: var(--panel);
+        stroke: var(--line);
+        stroke-width: 1.5;
+      }
+      .hero-graphic .node-primary {
+        fill: var(--soft);
+        stroke: var(--accent);
+        stroke-width: 2;
+      }
+      .hero-graphic .node-kind {
+        fill: var(--muted);
+        font-size: 15px;
+      }
+      .hero-graphic .node-label {
+        fill: currentColor;
+        font-size: 21px;
+        font-weight: 650;
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem 1.25rem;
+        padding-block: 0.8rem;
+        border-block: 1px solid var(--line);
+        font-size: 0.92rem;
+      }
+      main {
+        padding-bottom: 4rem;
+      }
+      section {
+        padding-block: clamp(1.55rem, 4vw, 2.75rem);
+        border-bottom: 1px solid var(--line);
+      }
+      section > p,
+      section > ul {
+        max-width: 58em;
+      }
+      section > h3 {
+        margin-top: 1.4rem;
+      }
+      figure {
+        margin: 1rem 0 0;
+      }
+      .diagram,
+      .table-scroll {
+        padding: clamp(0.75rem, 2vw, 1.25rem);
+      }
+      .diagram-output,
+      .table-scroll,
+      pre {
+        overflow-x: auto;
+      }
+      .diagram-output > svg {
+        display: block;
+        width: clamp(calc(var(--diagram-width) * 0.85), 100%, var(--diagram-width));
+        max-width: none !important;
+        height: auto;
+        margin-inline: auto;
+      }
+      figcaption,
+      summary {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      .diagram-output:not([hidden]) + figcaption {
+        margin-top: 0.8rem;
+      }
+      summary {
+        cursor: pointer;
+        margin-top: 0.45rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+      }
+      th,
+      td {
+        padding: 0.5rem 0.7rem;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      pre,
+      code {
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      }
+      pre {
+        margin: 0.7rem 0 0;
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--line);
+        border-radius: 0.65rem;
+        background: var(--soft);
+        font-size: 0.88rem;
+        line-height: 1.6;
+        tab-size: 2;
+      }
+      pre > code.hljs {
+        padding: 0;
+        background: transparent;
+      }
+      :not(pre) > code {
+        overflow-wrap: anywhere;
+      }
+      .material-symbols-outlined {
+        display: none;
+      }
+      .symbols-ready .material-symbols-outlined {
+        display: inline-block;
+        margin-inline-end: 0.4rem;
+        vertical-align: -0.12em;
+        color: var(--muted);
+        font: normal 1.25rem/1 "Material Symbols Outlined";
+        font-feature-settings: "liga";
+        white-space: nowrap;
+      }
+      @media (max-width: 46rem) {
+        .hero {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="hero">
+      <div>
+        <p class="eyebrow">技术方案 · 开发者审阅</p>
+        <h1>Runtime 模型元数据与默认生成参数</h1>
+        <p class="lead">
+          按 Provider 部署管理模型限额与默认生成参数，让模型调用、上下文预算和输入框读取同一配置。
+        </p>
+      </div>
+      <figure class="hero-graphic">
+        <svg viewBox="0 0 530 230" role="img" aria-labelledby="hero-title hero-desc">
+          <title id="hero-title">模型配置的三个消费入口</title>
+          <desc id="hero-desc">
+            LiteLLM 候选值进入 Agent 数据库，随后用于模型调用、会话上下文和 Web 输入提示。
+          </desc>
+          <defs>
+            <marker
+              id="hero-arrow"
+              markerWidth="8"
+              markerHeight="8"
+              refX="7"
+              refY="4"
+              orient="auto"
+            >
+              <path class="arrow" d="M0 0 L8 4 L0 8 Z"></path>
+            </marker>
+          </defs>
+          <path class="track" d="M18 43H512 M18 187H512 M265 16V214" stroke-dasharray="4 5"></path>
+          <path class="route" d="M145 116H186" marker-end="url(#hero-arrow)"></path>
+          <path class="route" d="M342 116H382" marker-end="url(#hero-arrow)"></path>
+          <rect class="node" x="14" y="81" width="130" height="70" rx="10"></rect>
+          <rect class="node-primary" x="187" y="69" width="155" height="94" rx="12"></rect>
+          <rect class="node" x="384" y="81" width="132" height="70" rx="10"></rect>
+          <g text-anchor="middle">
+            <text class="node-kind" x="79" y="105">候选值</text>
+            <text class="node-label" x="79" y="131">LiteLLM 目录</text>
+            <text class="node-kind" x="265" y="105">权威配置</text>
+            <text class="node-label" x="265" y="131">Agent 数据库</text>
+            <text class="node-kind" x="450" y="105">消费方</text>
+            <text class="node-label" x="450" y="131">调用与输入框</text>
+          </g>
+        </svg>
+        <figcaption>
+          先在模型调用层应用部署配置，为后续 Agent Runtime 与 Web 提供元数据。
+        </figcaption>
+      </figure>
+    </header>
+    <nav aria-label="页内目录">
+      <a href="#sources">模型目录与配置</a><a href="#storage">部署配置与版本</a
+      ><a href="#call">模型调用与错误回传</a><a href="#context">后续上下文工程与输入框</a
+      ><a href="#files">交付顺序</a>
+    </nav>
+    <main>
+      <section id="sources">
+        <h2>模型目录与配置</h2>
+        <figure class="diagram" data-diagram>
+          <div class="diagram-output" tabindex="0" hidden></div>
+          <figcaption>目录提供候选值，部署配置在 Agent 库生效。</figcaption>
+          <details>
+            <summary>查看图源</summary>
+            <pre data-mermaid>
+flowchart LR
+  SDK[&quot;LiteLLM 本地目录&quot;] --&gt; Catalog[&quot;候选值及来源&quot;]
+  Catalog --&gt; Manage[&quot;Provider 配置 API&quot;]
+  Manage --&gt; DB[(&quot;agent/main · model_provider&quot;)]
+  DB --&gt; LM[&quot;ModelService · 默认参数与调用&quot;]
+  LM --&gt; SDKCall[&quot;LiteLLM · 生成调用&quot;]
+  LM --&gt; Harness[&quot;Agent Runtime · 上下文预算&quot;]
+  LM --&gt; API[&quot;BFF · 模型信息&quot;]
+  Harness --&gt; API
+  API --&gt; Web[&quot;Web · 管理与输入提示&quot;]
+</pre>
+          </details>
+        </figure>
+        <p>
+          复用精确目录条目的输入与输出上限。共享总窗口、temperature 和 top_p
+          由管理员核实并配置。未知值保留为空。
+        </p>
+      </section>
+      <section id="storage">
+        <h2>部署配置与版本</h2>
+        <figure class="diagram" data-diagram>
+          <div class="diagram-output" tabindex="0" hidden></div>
+          <figcaption>在现有 Provider 行保存可空配置，同事务登记变更。</figcaption>
+          <details>
+            <summary>查看图源</summary>
+            <pre data-mermaid>
+erDiagram
+    MODEL_PROVIDER {
+      uuid id PK &quot;Provider 标识&quot;
+      int version &quot;配置版本&quot;
+      int binding_version &quot;执行绑定版本&quot;
+      jsonb generation_profile &quot;上限覆盖 默认值 目录快照&quot;
+    }</pre>
+          </details>
+        </figure>
+        <p>
+          保存沿用平台权限、操作幂等与预期版本。导入快照固定目录键和 SDK
+          版本，显式刷新后生效。配置变化推进绑定版本。
+        </p>
+      </section>
+      <section id="call">
+        <h2>模型调用与错误回传</h2>
+        <figure class="diagram" data-diagram>
+          <div class="diagram-output" tabindex="0" hidden></div>
+          <figcaption>显式值优先，按解析后的参数发起调用。</figcaption>
+          <details>
+            <summary>查看图源</summary>
+            <pre data-mermaid>
+sequenceDiagram
+    participant H as 调用方
+    participant M as ModelService
+    participant A as LiteLLM 适配器
+    participant P as 供应商
+    H-&gt;&gt;M: 显式请求与绑定版本
+    M-&gt;&gt;M: 读取配置快照并解析上限
+    M-&gt;&gt;A: 已解析生成参数
+    A-&gt;&gt;P: 发起生成调用
+    alt 上游拒绝输入或 token 参数
+        P--&gt;&gt;A: 返回上游异常
+        A--&gt;&gt;H: 回传结构化错误
+    else 调用成功
+        P--&gt;&gt;A: 返回模型响应
+    end
+</pre>
+          </details>
+        </figure>
+        <p>拟议代码</p>
+        <pre
+          tabindex="0"
+        ><code class="language-python">def resolve_max_tokens(requested, deployment_default, fallback):
+    if requested is not None:
+        return requested
+    if deployment_default is not None:
+        return deployment_default
+    return fallback
+</code></pre>
+      </section>
+      <section id="context">
+        <h2>后续上下文工程与输入框</h2>
+        <ul>
+          <li>按实际路由模型计算预算，每次工具回填后重新估算，以完整历史轮次为单位裁剪。</li>
+          <li>重放沿用原账本，新调用核验绑定版本。Agent Runtime 可根据上游超限错误重建请求。</li>
+          <li>
+            Web 读取可见模型的有效限额，通过会话预算接口估算草稿长度。切换模型刷新额度，Agent
+            Runtime 提交时重新评估上下文预算。
+          </li>
+        </ul>
+      </section>
+      <section id="files">
+        <h2>交付顺序</h2>
+        <pre
+          tabindex="0"
+        ><code class="language-diff">+ apps/agent/migrations/versions/0013_model_generation_profile.py  部署配置
+! apps/agent/src/compass_agent/models/  配置解析与默认参数
+! apps/agent/src/compass_agent/llm/  目录读取与错误回传
+! apps/agent/src/compass_agent/harness/  上下文选取
+! apps/web/src/components/analysis-composer.tsx  估计输入额度</code></pre>
+        <p>
+          本期发布数据库和 LM Runtime。后续接入 Agent Runtime 上下文预算及
+          Web。完整字段、接口和恢复顺序见 <a href="TECH_DESIGN.md">Markdown 技术方案</a>。
+        </p>
+      </section>
+    </main>
+    <script type="module">
+      window.hljs?.highlightAll();
+      document.fonts
+        .load('20px "Material Symbols Outlined"')
+        .then((fonts) => {
+          if (fonts.length) document.documentElement.classList.add("symbols-ready");
+        })
+        .catch(() => {});
+
+      const diagrams = [...document.querySelectorAll("[data-diagram]")];
+      if (diagrams.length) {
+        try {
+          const { default: mermaid } =
+            await import("https://cdn.jsdelivr.net/npm/mermaid@11.16.0/dist/mermaid.esm.min.mjs");
+          const colorScheme = matchMedia("(prefers-color-scheme: dark)");
+          let pending = Promise.resolve();
+          let renderedTheme;
+
+          async function renderDiagrams() {
+            const theme = colorScheme.matches ? "dark" : "neutral";
+            if (theme === renderedTheme) return;
+            mermaid.initialize({
+              startOnLoad: false,
+              securityLevel: "strict",
+              suppressErrorRendering: true,
+              htmlLabels: false,
+              theme,
+              fontFamily: getComputedStyle(document.body).fontFamily,
+            });
+            for (const [index, figure] of diagrams.entries()) {
+              const output = figure.querySelector(".diagram-output");
+              const source = figure.querySelector("[data-mermaid]");
+              try {
+                const { svg } = await mermaid.render(
+                  `review-${theme}-${index + 1}`,
+                  source.textContent.trim(),
+                );
+                output.innerHTML = svg;
+                const drawing = output.querySelector("svg");
+                drawing.style.setProperty("--diagram-width", `${drawing.viewBox.baseVal.width}px`);
+                output.hidden = false;
+                source.closest("details").hidden = true;
+              } catch (error) {
+                output.hidden = true;
+                source.closest("details").hidden = false;
+                console.warn("图表未能绘制", error);
+              }
+            }
+            renderedTheme = theme;
+          }
+
+          function scheduleRender() {
+            pending = pending.then(renderDiagrams);
+          }
+
+          colorScheme.addEventListener("change", scheduleRender);
+          scheduleRender();
+        } catch (error) {
+          console.warn("图表组件未能加载", error);
+        }
+      }
+    </script>
+  </body>
+</html>

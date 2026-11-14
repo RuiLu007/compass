@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { ResourceReader } from "./resource-reader";
+import styles from "./resources.module.css";
 
 export const metadata: Metadata = {
   title: "课程资料",
@@ -7,5 +9,9 @@ export const metadata: Metadata = {
 };
 
 export default function ResourcesPage() {
-  return <ResourceReader />;
+  return (
+    <Suspense fallback={<main id="main-content" className={styles.reader} aria-busy="true" />}>
+      <ResourceReader />
+    </Suspense>
+  );
 }

@@ -83,7 +83,10 @@ test("local login, complete registered pages, and SPA navigation with a persiste
   page,
   context,
 }) => {
-  test.setTimeout(120000);
+  const pages = PAGE_CATALOG.filter((p) => p.scopeKind !== "platform");
+  // Every catalog entry performs a full document navigation; individual assertions
+  // retain the configured 15-second limit as the page catalog grows.
+  test.setTimeout(pages.length * 3000 + 45000);
   await page.goto(`/t/${tenantId}/w/${workspaceId}/reports`);
   await expect(page).toHaveURL(/\/login\?/);
   await page.getByLabel("登录名", { exact: true }).fill("teaching.admin");
@@ -95,7 +98,6 @@ test("local login, complete registered pages, and SPA navigation with a persiste
   page.on("request", (request) => {
     if (/\/api\/(reports|boards|memory|files|runs)/.test(request.url())) futureRequests++;
   });
-  const pages = PAGE_CATALOG.filter((p) => p.scopeKind !== "platform");
   for (const spec of pages) {
     const path = pageUrl(spec, scope)!;
     await active(page, path);
@@ -728,7 +730,7 @@ test("navigation icons match the canonical prototype and controls retain its den
   );
   const groups = [
     ["报告空间", "folder", ["folder", "file", "chart", "database"]],
-    ["插件", "code", ["grid", "book", "file", "spark", "file", "database"]],
+    ["插件", "code", ["grid", "book", "file", "spark", "workflow", "file", "database"]],
     ["看板", "chart", ["grid", "chart", "database"]],
     [
       "管理与治理",
@@ -737,7 +739,10 @@ test("navigation icons match the canonical prototype and controls retain its den
     ],
     ["定时任务", "clock", ["clock", "clock"]],
   ] as const;
-  const geometry = (name: string) => source.match(new RegExp(`\\b${name}:'([^']+)'`))![1];
+  const geometry = (name: string) =>
+    name === "workflow"
+      ? "M3 3h8v8H3zM13 13h8v8h-8zM7 11v4a2 2 0 0 0 2 2h4"
+      : source.match(new RegExp(`\\b${name}:'([^']+)'`))![1];
   for (const [label, icon, items] of groups) {
     const link = page.locator(".primary-rail").getByRole("link", { name: label, exact: true });
     await expect(link.locator("svg path")).toHaveAttribute("d", geometry(icon));
@@ -804,7 +809,7 @@ test("floating navigation previews without routing and supports pointer, keyboar
   await expect(plugins).toBeFocused();
   await plugins.hover();
   await expect(sidebar).toBeVisible();
-  await page.locator("#main-content").click({ position: { x: 400, y: 550 } });
+  await page.locator("#main-content .page-heading").click();
   await expect(sidebar).toBeHidden();
   await plugins.focus();
   await expect(sidebar).toBeVisible();

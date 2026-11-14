@@ -200,7 +200,13 @@ def native_response(vendor, streaming):
 def test_actual_sdk_native_protocol_sync_stream_and_chat(system, vendor, model, base, streaming):
     repo, _, service = system
     repo.allowed_origins += "," + base
-    _, saved = create(repo, catalog_id=vendor + "/" + model, api_model=model, base_url=base)
+    _, saved = create(
+        repo,
+        catalog_id=vendor + "/" + model,
+        api_model=model,
+        base_url=base,
+        generation_profile={"defaults": {"max_tokens": 123, "temperature": 0}},
+    )
     requests = []
 
     def handle(request):
@@ -216,11 +222,14 @@ def test_actual_sdk_native_protocol_sync_stream_and_chat(system, vendor, model, 
         assert requests[0].url.path == "/v1/messages"
         assert requests[0].headers["x-api-key"] == "unit-key-never-return"
         assert body["messages"][0]["role"] == "user"
+        assert body["max_tokens"] == 123 and body["temperature"] == 0
     else:
         assert "generateContent" in str(requests[0].url) or "streamGenerateContent" in str(
             requests[0].url
         )
         assert "contents" in body and "messages" not in body
+        assert body["generationConfig"]["max_output_tokens"] == 123
+        assert body["generationConfig"]["temperature"] == 0
 
 
 def test_native_sdk_connection_options_are_forwarded_without_execution_override(system):

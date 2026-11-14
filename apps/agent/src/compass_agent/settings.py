@@ -3,29 +3,49 @@ from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    ValidationError,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class RetailRunScopeConfig(BaseModel):
-    """One deployment-owned Web scope mapped to the Lesson 15 read-only source."""
+    """Legacy deployment input accepted by the one-time seed importer."""
 
     model_config = ConfigDict(extra="forbid", strict=True, populate_by_name=True, frozen=True)
 
     tenant_id: UUID = Field(alias="tenantId")
     workspace_id: UUID = Field(alias="workspaceId")
-    release: Literal["retail-dev-20261022b"]
+    release: str = Field(min_length=1, max_length=120)
     content_hash: str = Field(
         alias="contentHash",
-        pattern=r"^7ae26405a71589c98ca8379bec1e1ec1ff77e16232ff2e1bf26b6d4501b8183e$",
+        pattern=r"^[0-9a-f]{64}$",
     )
     role: str = Field(
         min_length=8,
         max_length=63,
         pattern=r"^[a-z_][a-z0-9_]{0,55}_a_east$",
     )
-    retail_tenant_id: Literal[101] = Field(alias="retailTenantId")
+    retail_tenant_id: int = Field(alias="retailTenantId", ge=1, le=9007199254740991)
     schema_name: Literal["core"] = Field(alias="schema")
+
+
+class AutonomyModelProfile(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    provider_id: UUID
+    binding_version: int = Field(ge=1)
+    sdk_model: str = Field(min_length=1, max_length=200)
+    api_base: str = Field(max_length=2048)
+    input_tokens: int = Field(ge=1, le=1_050_000)
+    output_tokens: int = Field(ge=1, le=32768)
+    input_microusd: int = Field(ge=0, le=100_000)
+    output_microusd: int = Field(ge=0, le=100_000)
 
 
 class Settings(BaseSettings):
@@ -35,6 +55,12 @@ class Settings(BaseSettings):
     compass_routing_flash_provider_id: UUID | None = None
     compass_routing_pro_provider_id: UUID | None = None
     compass_routing_mode: str = "jev_with_flash"
+    compass_controlled_autonomy_enabled: bool = False
+    compass_autonomy_model_profiles: list[AutonomyModelProfile] = Field(
+        default_factory=list, max_length=32
+    )
+    compass_autonomy_token_budget: int = Field(default=10_000_000, ge=1, le=10_000_000)
+    compass_autonomy_cost_budget_microusd: int = Field(default=10_000_000, ge=1, le=10_000_000)
     compass_model_max_concurrency: int = Field(default=8, ge=1, le=64)
     compass_model_max_inflight: int = Field(default=32, ge=1, le=256)
     compass_observability_enabled: bool = False
@@ -50,17 +76,44 @@ class Settings(BaseSettings):
     compass_langfuse_base_url: str = ""
     compass_langfuse_public_key: str = ""
     compass_langfuse_secret_key: SecretStr = SecretStr("")
+    compass_redis_url: str = "redis://127.0.0.1:56379/0"
+    compass_redis_password: SecretStr = SecretStr("")
+    compass_runtime_state_key: SecretStr = SecretStr("")
+    compass_runtime_event_token: SecretStr = SecretStr("")
+    compass_worker_credentials: SecretStr = SecretStr("{}")
+    compass_runtime_max_active: int = Field(default=2, ge=1, le=64)
+    compass_runtime_max_backlog: int = Field(default=12, ge=1, le=10000)
+    compass_runtime_tenant_active: int = Field(default=1, ge=1, le=64)
+    compass_runtime_tenant_backlog: int = Field(default=4, ge=1, le=10000)
+    compass_runtime_tenant_overrides: str = "{}"
+    compass_runtime_lease_seconds: int = Field(default=15, ge=3, le=300)
+    compass_web_authz_url: str = "http://127.0.0.1:8100/api/internal/analysis/authorize"
     compass_demo_enabled: bool = False
     compass_agent_service_token: str = ""
     compass_model_encryption_key: str = ""
     compass_model_allowed_origins: str = "https://api.deepseek.com"
+    compass_retail_allowed_endpoints: str = "127.0.0.1:55432,localhost:55432,postgres:5432"
+    compass_data_allowed_endpoints: str = (
+        "127.0.0.1:5432,localhost:5432,127.0.0.1:3306,localhost:3306,mysql:3306"
+    )
+    compass_sandbox_enabled: bool = False
+    compass_sandbox_domain: str = "127.0.0.1:8112"
+    compass_sandbox_api_key: SecretStr = SecretStr("")
+    compass_sandbox_image: str = "compass-sandbox-python:lesson18"
+    compass_sandbox_host_id: str = "lesson18-local"
+    compass_sandbox_volume_prefix: str = "compass-sandbox-slot"
+    compass_sandbox_slots: int = Field(default=16, ge=1, le=256)
+    compass_mcp_allowed_origins: str = ""
+    compass_mcp_local_fixture_origins: str = ""
+    compass_tool_batch_mode: Literal["serial", "parallel"] = "serial"
+    compass_tool_failure_mode: Literal["stop", "continue"] = "stop"
     compass_retail_run_scope: str = ""
     compass_retail_run_readonly_dsn: SecretStr = SecretStr("")
 
     def retail_run_configuration(
         self,
     ) -> tuple[RetailRunScopeConfig | None, SecretStr | None, str | None]:
-        """Parse the optional pair without making an unrelated Agent startup fail closed."""
+        """Parse the optional default connection used during seed."""
 
         raw_scope = self.compass_retail_run_scope.strip()
         raw_dsn = self.compass_retail_run_readonly_dsn.get_secret_value().strip()

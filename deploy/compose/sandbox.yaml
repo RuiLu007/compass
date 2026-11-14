@@ -1,0 +1,56 @@
+name: compass-sandbox
+services:
+  opensandbox:
+    image: sandbox-registry.cn-zhangjiakou.cr.aliyuncs.com/opensandbox/server:release-1.2.0@sha256:25bebdcf1cf7724eb923faecbdbbf82d4038c6ab35c736151574726d14006f30
+    ports:
+      - "127.0.0.1:8112:8112"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../sandbox/server.toml:/etc/opensandbox/config.toml:ro
+    environment:
+      SANDBOX_CONFIG_PATH: /etc/opensandbox/config.toml
+      OPENSANDBOX_SERVER_API_KEY: ${COMPASS_SANDBOX_API_KEY:?Set a local control-plane API key}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      control:
+        ipv4_address: 172.29.18.3
+    depends_on:
+      nas:
+        condition: service_healthy
+  nas:
+    build:
+      context: ../sandbox
+      dockerfile: Dockerfile.ganesha
+    image: compass-nas:lesson18
+    privileged: true
+    volumes:
+      - nas-data:/data
+    networks:
+      control:
+        ipv4_address: 172.29.18.2
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; socket.create_connection(('127.0.0.1',2049),2).close()",
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  python-image:
+    build:
+      context: ../sandbox
+      dockerfile: Dockerfile.python
+    image: compass-sandbox-python:lesson18
+    profiles: [build]
+    network_mode: none
+networks:
+  control:
+    ipam:
+      config:
+        - subnet: 172.29.18.0/24
+volumes:
+  nas-data:

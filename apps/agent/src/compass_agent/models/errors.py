@@ -1,6 +1,8 @@
 """Stable public failures. Upstream bodies and exceptions never become messages."""
 
 MESSAGES = {
+    "runtime_backpressure": "当前任务已满，请稍后重试。",
+    "lease_lost": "本次执行权已失效。",
     "runtime_overloaded": "当前模型调用较多，请稍后重试。",
     "resource_cleanup_failed": "本次模型连接未能正常结束，请稍后重试。",
     "intent_invalid": "意图分类结果不符合场景字典。",
@@ -10,6 +12,7 @@ MESSAGES = {
     "unauthenticated": "服务认证失败。",
     "forbidden": "无权进行此操作。",
     "not_found": "模型或记录不存在。",
+    "invalid_session_title": "请输入有效的会话标题。",
     "version_conflict": "配置已变化，请重新加载。",
     "operation_conflict": "操作标识已被其他请求使用。",
     "alias_conflict": "模型别称已存在。",
@@ -24,6 +27,12 @@ MESSAGES = {
     "model_unavailable_upstream": "模型服务暂不可用。",
     "provider_protocol_error": "模型响应格式异常。",
     "stream_interrupted": "输出中断，当前结果不完整。",
+    "catalog_token_limits_unavailable": "当前模型目录没有可导入的 token 上限。",
+    "invalid_generation_defaults": "默认输出 token 超过配置允许的范围。",
+    "generation_profile_review_required": "更换型号或端点时，请重新提交或清空生成配置。",
+    "input_token_limit_exceeded": "模型拒绝了超出输入或上下文窗口限制的请求。",
+    "output_token_limit_exceeded": "模型拒绝了请求的输出 token 上限。",
+    "invalid_model_input": "模型拒绝了本次请求的输入或生成参数。",
     "output_truncated": "输出达到长度限制，当前结果不完整。",
     "model_refused": "模型拒绝了本次请求。",
     "empty_output": "模型未返回有效内容。",

@@ -73,6 +73,17 @@ describe("model authorization boundary", () => {
     missing.workspace.mockRejectedValue({ code: "not_found" });
     await expect(missing.authorize("token", chat)).rejects.toMatchObject({ code: "not_found" });
   });
+  it("allows personal MCP configuration with analysis access and keeps invocation permissions separate", async () => {
+    const personal = setup({ permissions: ["module.analysis"] });
+    expect(await personal.authorize("token", { ...chat, purpose: "mcp_manage" })).toMatchObject({
+      purpose: "mcp_manage",
+      actor_user_id: "actor",
+    });
+    await expect(
+      setup().authorize("token", { ...chat, purpose: "mcp_manage" }),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    await expect(personal.authorize("token", chat)).rejects.toMatchObject({ code: "forbidden" });
+  });
   it("keeps module read and chat invocation grants separate", async () => {
     const moduleAccess = setup({ permissions: ["module.admin.capabilities"] });
     expect(

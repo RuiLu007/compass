@@ -30,7 +30,7 @@ Chat 的 180 秒预算从路由开始计算，诊断从应用准备开始计算�
 - `runtime.py` 负责单次执行；`executor.py` 协调逻辑调用，`admission.py` 管理共享容量；契约、策略和错误分别由 `contracts.py`、`policy.py`、`errors.py` 管理。
 - 两个协议适配器继续使用 `litellm_chat.py` 与 `systemone_decision.py`。当适配器需要各自的辅助模块或新增独立协议实现时，再提取 `adapters/`，同步导入和测试。模型供应商配置仍归相邻 `models/` 管理。
 - 路由选择、配额治理等能力随对应 Feature 确定归属和边界；当前无需 `execution/`、`governance/`、`providers/`、`routing/` 空目录。
-- 上层 Agent 的多步工作流、调度与恢复在实现时组织。`compass_agent/runtime/` 属于这类运行编排的规划位置，和本目录 `runtime.py` 的单次模型调用职责分开；当前无需预建其 `workflow/`、`scheduling/`、`recovery/` 子目录。
+- 上层 Agent 的多步工作流、调度与恢复在实现时组织。`compass_agent/runtime/` 已管理多步 Run 的持久化、调度、恢复与人工确认；`compass_agent/harness/` 管理模型与工具循环。本目录 `runtime.py` 继续负责单次模型调用。各包随实际职责拆分，无需预建空子目录。
 
 `sdk.py` 提供锁定 SDK 的加载与模型标识解析。目录查询只读取 SDK 本地元数据与 Provider 注册表，不触发供应商登录。`catalog.py` 不限制供应商或型号；`chat_supported` 按生成输入类型准入。`capabilities.py` 使用 SDK 参数/能力元数据，具体参数差异交 SDK 原生转换处理。请求私有的 `ProviderAccess.connection_params` 只在调用期间解密，不写日志或公开事件。
 
@@ -39,3 +39,5 @@ Chat 的 180 秒预算从路由开始计算，诊断从应用准备开始计算�
 ## 有界逻辑执行
 
 `executor.py` 在单次 Runtime 外统一重试、排队、退避、Deadline 及安全摘要；`admission.py` 提供 lifespan 共享 Gate。主生成显式使用两次预算，分类/诊断/决策为一次。已展示片段、已发送超时、未知结果、Schema 错误均停止；清理失败隔离容量。普通调用使用 COMPASS_MODEL_MAX_CONCURRENCY=8、COMPASS_MODEL_MAX_INFLIGHT=32，按进程计数。
+
+Provider 生成配置随绑定快照读入。显式请求值优先于部署默认值，省略的输出 token 回退到应用默认值。窗口及模型 token 上限作为元数据供调用方读取。适配器按解析后的值送出调用，并将明确的上游容量或输入拒绝转换为稳定的错误码。同步、流式终态及 Agent Runtime 使用同一错误类别。明确拒绝不重发同一载荷。

@@ -10,7 +10,19 @@
 
 需要 Node.js 24（验收版本见 `.node-version`）、pnpm 11.3.0、uv 0.13.0，以及运行中的 Docker Desktop。uv 根据 `.python-version` 获取 Python。Windows 使用 WSL2。
 
-从本目录执行：
+已有 `.env`、依赖、数据库和账号后，日常启动只需一条命令：
+
+```bash
+pnpm start             # Web、Agent、Home、Memory、两个 Worker，以及 PostgreSQL、Redis、沙箱
+pnpm start --langfuse  # 同时启动 Langfuse 并启用观测
+pnpm stop              # 停止应用和依赖容器，保留全部数据卷
+pnpm restart           # 一键停止并重新启动，默认不启 Langfuse
+pnpm restart -- --langfuse # 重启并启用 Langfuse
+```
+
+Docker API 不可用时会尝试启动 Docker Desktop，并轮询等待引擎就绪（最多 120 秒）；桌面应用已打开时也会等待。启动会加载根 `.env`、沙箱配置并执行 Web / Agent 迁移；两个 Worker 使用 `COMPASS_WORKER_CREDENTIALS` 中各自的令牌。默认关闭应用观测，不启动 Langfuse；已单独运行的 Langfuse 保持原状。应用端口被占用时提示先停旧进程。Ctrl+C 停止本次应用进程，依赖容器继续运行并保留数据。`pnpm stop` 通过当前仓库专属控制 socket 停止由 `start` / `restart` 管理的应用，再停止 `compass` 和 `compass-sandbox` 项目的容器（包括已启动的 Langfuse），保留容器和全部数据卷；重复停止安全。单独用 `pnpm dev` 启动的进程请在原终端停止。
+
+首次安装从本目录执行：
 
 ```bash
 cp .env.example .env
@@ -23,7 +35,7 @@ pnpm db:provision -F agent
 pnpm db:migrate
 pnpm db:seed
 pnpm db:manage -F web -- create-user --login-name local.admin --display-name 本地管理员 --platform-admin true
-pnpm dev
+pnpm start
 ```
 
 打开 <http://127.0.0.1:8100/login> 使用刚创建的账号登录；受管工具会提示隐藏输入密码。原链路演示位于 <http://127.0.0.1:8100/demo>。API 文档位于 <http://127.0.0.1:8102/docs>。在另一个终端执行 `pnpm smoke` 验证整个链路。停止开发服务使用 Ctrl+C；`pnpm db:down` 停止数据库并保留数据卷。
@@ -37,7 +49,7 @@ pnpm dev -F home       # 只启动官网，端口 8101；只需 Node.js 与 pnpm
 pnpm dev -F web        # 只启动 Web / BFF，仍加载根 .env
 pnpm dev -F agent      # 推理后台，需要 uv 与 Python 环境
 pnpm dev -F memory     # 记忆服务脚手架，端口 8103
-pnpm dev -F worker     # Python 后台进程脚手架，无 HTTP 端口
+pnpm dev -F worker     # HTTP 队列消费者，无 HTTP 监听端口
 pnpm build -F home     # 只构建官网，使用 Turbo 缓存
 pnpm typecheck -F home
 ```
@@ -90,7 +102,7 @@ pnpm deploy:down       # 停止整个 Compose 项目，保留数据卷与镜像
 | [apps/web](apps/web/README.md)       | Next.js App Router、页面、BFF、生成类型与网络响应校验                       |
 | [apps/agent](apps/agent/README.md)   | FastAPI、运行相关数据、应用迁移及三天演示样本                               |
 | [apps/memory](apps/memory/README.md) | FastAPI 记忆服务脚手架，独立健康检查与构建                                  |
-| [apps/worker](apps/worker/README.md) | Python 后台进程脚手架，信号退出与独立构建                                   |
+| [apps/worker](apps/worker/README.md) | HTTP 队列消费者，独立心跳、信号退出与构建                                   |
 | [packages](packages/README.md)       | 共享包准入规则；达到两个 app 消费时才提取                                   |
 | [contracts](contracts/README.md)     | 从 API DTO 生成的版本化网络契约                                             |
 | [data](data/README.md)               | 已验收学员数据、Git LFS 压缩包与初始化说明                                  |
@@ -108,10 +120,10 @@ pnpm deploy:down       # 停止整个 Compose 项目，保留数据卷与镜像
 ## 当前能力边界
 
 - 示例接口显式启用 `COMPASS_DEMO_ENABLED=true` 后才开放，数据全部为固定合成数据。接口不接受租户、SQL 或自由代码输入；尚未接入真实经营数据。
-- 本地登录、数据库会话、租户与成员、个人权限、CSRF、设置、通知和审计已接入；企业 OIDC、运行编排、Sandbox、EvalOps 留待后续 Feature。模型 Runtime 的管理、测试和 Chat 调用见 [993](mai-specs/993-lesson-11-llm-runtime/BRIEF.md)。共享部署需配置 HTTPS、私有凭据及备份策略。
-- Python 应用已创建：`agent`（原 agent-api）、`memory`、`worker`。memory 当前仅有服务健康检查，worker 仅有进程生命周期；普通分析 Runner、记忆业务、Temporal / Outbox 与共享执行包仍按 [实施任务](mai-specs/999-compass-product-course-landing-app/design/scaffold-design.md#8-部署收敛实施任务)推进。
+- 本地登录、数据库会话、租户与成员、个人权限、CSRF、设置、通知和审计已接入；第 15～18 课已接入进程内运行编排、Workflow、统一工具、MCP 和本地 Sandbox/NFS；第 19 课接入持久会话、恢复与人工确认；企业 OIDC、云端部署验收与 EvalOps 留待后续 Feature。模型 Runtime 的管理、测试和 Chat 调用见 [993](mai-specs/993-lesson-11-llm-runtime/BRIEF.md)。第 18 课启动及验收见 [工具执行指南](docs/lesson-18-tool-runtime.md)。第 19 课配置、恢复及审批见 [持久运行指南](docs/lesson-19-durable-runtime.md)。共享部署需配置 HTTPS、私有凭据及备份策略。
+- Python 应用已创建：`agent`（原 agent-api）、`memory`、`worker`。memory 当前提供服务健康检查；worker 已接入 Agent 同库队列、租约和逐 Checkpoint 推进。第 20 课的单 Agent 与双 Worker 拓扑见 [运行说明](docs/lesson-20-production-runtime.md)。
 - 当前 Web 已搭齐原型框架；分析 Chat 已接入本页对话、两级意图分类、字典特征和静态/自动选模；闲聊通过专用 Flash prompt 引导回业务数据任务，响应结构可在回答下方展开，模型接入提供平台管理与租户只读摘要；除第 15 课固定 Retail 工具外，通用数据查询、文件上传、报告、看板及其余 Agent/Memory 业务继续保持待接入状态。实现及验收见 [995](mai-specs/995-web-management-foundation/README.md)。
-- 第 15 课已将分析 Chat 接入进程内 Agent Run：一次发送可顺序完成多轮固定 Retail 只读查询、展示工具过程、提交最终回答与有界 CSV，并能按 Run ID 终止在途模型或数据库查询。该能力采用单 Agent 进程、单副本和内存态；课堂配置及复现见 [Agent Run 说明](docs/lesson-15-agent-run.md)。
+- 第 15 课已将分析 Chat 接入进程内 Agent Run：一次发送可顺序完成多轮固定 Retail 只读查询、展示工具过程、提交最终回答与有界 CSV，并能按 Run ID 终止在途模型或数据库查询。当前采用单 Agent owner，运行状态及产物已由第 19 课持久化；课堂配置及复现见 [Agent Run 说明](docs/lesson-15-agent-run.md)。
 - 本工程没有授予开源许可证；依赖许可证由各上游项目提供。
 
 ## 独立产品官网
@@ -145,4 +157,6 @@ Feature 990 增加 OTel 请求链路、Logical Call / Attempt、调用编号复�
 
 ## Agent 执行内核
 
-Feature 989 在既有模型路由与可靠执行上增加同步 ReAct 循环、Run / Step 控制、`compass.run` v1 进度流、固定 Retail 工具、CSV 和全链路终止。Web 仍负责会话、工作区与双权限校验；Agent 根据可信范围和部署绑定使用独立只读身份。架构取舍见 [ADR 0002](docs/adr/0002-agent-execution-kernel.md)，配置、对照数据、正常与故障演示见 [课堂复现](docs/lesson-15-agent-run.md)。
+Feature 989 在既有模型路由与可靠执行上增加同步 ReAct 循环、Run / Step 控制、`compass.run` v1 进度流、固定 Retail 工具、CSV 和全链路终止。Web 仍负责会话、工作区与双权限校验；Agent 根据可信工作区读取库内的连接配置，使用独立只读身份。平台管理员在「数据与语义 → 数据连接」管理多条 PostgreSQL 或 MySQL 连接，本地默认 Retail 连接随 Agent seed 导入。架构取舍见 [ADR 0002](docs/adr/0002-agent-execution-kernel.md)，配置、对照数据、正常与故障演示见 [课堂复现](docs/lesson-15-agent-run.md)。
+
+第 20 课队列、两个独立 Worker、0010 迁移与恢复入口见 [运行说明](docs/lesson-20-production-runtime.md)。

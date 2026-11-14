@@ -1,5 +1,11 @@
 # 脚手架验证记录
 
+## 2026-11-12 · 第 20 课生产运行队列与 Worker
+
+已交付 Agent 同库队列、原子准入与公平调度、租约/心跳、逐 Checkpoint 推进、回收接管、用量/诊断和安全过程展示。当前本地 `pnpm check`、`pnpm build`、573 项应用单测、130 项 Agent 集成、22 项 Web PostgreSQL 集成、12 项浏览器用例及五应用容器 smoke 均通过；工具入口另有 48 通过、13 条条件跳过。双容器 Worker 各完成一条实际队列任务，正常退出码均为 0。
+
+三次真实 Worker SIGKILL 接管最大 18.605460 秒，B 租户首次领取 2.111228 秒；另验证真实 Agent 强杀恢复、在途 SIGTERM、未知效果占用、预算/超时、撤权和观测出口失败。0010 空库/旧库/SQL/权限/恢复验收通过，52 份历史迁移保持。实现边界、夹具范围、首轮问题与最终结果见 [第 20 课验收](../mai-specs/984-lesson-20-production-agent-runtime/test/ACCEPTANCE.md)。CI 配置已更新，本轮未触发远端 CI；本次隔离服务停止后保留测试数据与日志。
+
 ## 2026-10-26 · 独立业务数据准备工具
 
 生成器与零售候选迁移已移入 `tools/data-seed/`，home 脚手架页同步。根 `pnpm check`、`pnpm build` 和实际 CLI 生成 / 校验 / 导出 / 快照重放通过；Docker 存储 I/O 错误阻断容器与真实 PostgreSQL 验证，11 项集成测试因无专用凭据跳过。完整范围、证据与待验项见 [998 本次实施记录](../mai-specs/998-business-data-seeding-tool/IMPLEMENTATION.md#独立数据准备工具迁移2026-10-26)。

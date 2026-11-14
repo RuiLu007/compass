@@ -2,6 +2,7 @@ import { test, expect, type BrowserContext, type Page } from "@playwright/test";
 import pg from "pg";
 import { DEFAULT_TEMPLATES } from "../../src/contracts/authorization";
 import { setVisibility, observePageFlashes, pageFlashes } from "./visibility";
+import { agentResponse, reduceAgentResponse } from "../../src/contracts/agent-response";
 const fid = (n: number) => `99500000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const tenantId = fid(10),
   workspaceId = fid(20);
@@ -231,7 +232,7 @@ test("decision model accepts choice, noul and score questions and remains unavai
   await page.screenshot({ path: "../../work/993/decision-browser.png", fullPage: true });
 });
 
-test("Chat explicitly selects LLMs, preserves local history, stops output and clears content on permission removal", async ({
+test("Chat explicitly selects LLMs, preserves session history, stops output and clears content on permission removal", async ({
   page,
   context,
   browser,
@@ -248,14 +249,14 @@ test("Chat explicitly selects LLMs, preserves local history, stops output and cl
   try {
     await active(chat, `/t/${tenantId}/w/${workspaceId}/analysis`);
     const select = chat.getByLabel("选择 Chat 主模型");
-    await expect(select).toHaveValue("");
+    await expect(select).toHaveValue("auto");
     await expect(chat.getByRole("button", { name: "发送消息", exact: true })).toBeDisabled();
     await expect(select.locator("option").filter({ hasText: "Decision" })).toHaveCount(0);
     await select.selectOption({ label: `${prefix} Pro` });
     await chat.getByLabel("分析问题").fill("你好");
     await chat.getByRole("button", { name: "发送消息", exact: true }).click();
     await expect(chat.locator(".model-chat-history")).toContainText("这是模型测试回复。");
-    await expect(chat.getByRole("button", { name: "停止生成", exact: true })).toHaveCount(0);
+    await expect(chat.getByRole("button", { name: "停止任务", exact: true })).toHaveCount(0);
     for (const width of [1440, 375]) {
       await chat.setViewportSize({ width, height: 1000 });
       await chat.screenshot({ path: `../../work/993/model-chat-${width}.png`, fullPage: true });
@@ -263,6 +264,8 @@ test("Chat explicitly selects LLMs, preserves local history, stops output and cl
     await chat.setViewportSize({ width: 1440, height: 1000 });
     chat.once("dialog", (dialog) => dialog.accept());
     await select.selectOption({ label: `${prefix} Flash` });
+    // Changing a model persists a context-reset before React applies the selection.
+    await expect(select).toHaveValue(flashId);
     await expect(chat.locator(".model-chat-history")).toContainText("这是模型测试回复。");
     const disabled = await context.request.patch(`/api/web/v1/platform/models/${flashId}`, {
       headers: { origin, "X-CSRF-Token": await csrf(context) },
@@ -271,25 +274,30 @@ test("Chat explicitly selects LLMs, preserves local history, stops output and cl
     expect(disabled.ok(), await disabled.text()).toBe(true);
     await chat.getByLabel("分析问题").fill("模型失效时保留输入");
     await chat.getByRole("button", { name: "发送消息", exact: true }).click();
-    await expect(select).toHaveValue("");
+    await expect(select).toHaveValue("auto");
     await expect(chat.getByLabel("分析问题")).toHaveValue("模型失效时保留输入");
+    await expect(chat.getByText("所选模型已不可用，请重新选择后发送。")).toBeVisible();
     await expect(select.locator("option").filter({ hasText: `${prefix} Flash` })).toHaveCount(0);
     await select.selectOption({ label: `${prefix} Pro` });
     for (const [prompt, message] of [
-      ["E2E_AUTH_FAIL", "模型认证失败，请检查接入配置。"],
-      ["E2E_TRUNCATED", "输出中断，当前结果不完整。"],
+      ["E2E_AUTH_FAIL", "模型调用失败，本轮分析未完成。"],
+      ["E2E_TRUNCATED", "模型返回结果不完整，本轮分析未完成。"],
     ]) {
       await chat.getByLabel("分析问题").fill(prompt);
       await chat.getByRole("button", { name: "发送消息", exact: true }).click();
       await expect(chat.locator(".model-chat-turn").last()).toContainText(message);
-      await expect(chat.getByRole("button", { name: "停止生成", exact: true })).toHaveCount(0);
+      await expect(chat.getByRole("button", { name: "停止任务", exact: true })).toHaveCount(0);
     }
     expect(await chat.locator("body").textContent()).not.toContain("private upstream body");
     await chat.getByLabel("分析问题").fill("E2E_SLOW");
     await chat.getByRole("button", { name: "发送消息", exact: true }).click();
-    await expect(chat.getByRole("button", { name: "停止生成", exact: true })).toBeVisible();
-    await chat.getByRole("button", { name: "停止生成", exact: true }).click();
-    await expect(chat.locator(".model-chat-history")).toContainText("已停止");
+    await expect(chat.locator(".model-chat-turn").last()).toContainText(
+      /正在理解问题|正在分析问题|执行中|正在输出回答/,
+    );
+    const stop = chat.getByRole("button", { name: "停止任务", exact: true });
+    await expect(stop).toBeVisible();
+    await stop.click();
+    await expect(chat.locator(".model-chat-turn").last()).toContainText("已终止");
     await chat.getByLabel("分析问题").fill("E2E_SLOW 私密测试内容");
     await chat.getByRole("button", { name: "发送消息", exact: true }).click();
     await owner.query(
@@ -491,7 +499,7 @@ test("JEV System One preset accepts custom models and preserves credentials when
 });
 
 for (const completeInBackground of [false, true]) {
-  test(`app switching preserves chat and ${completeInBackground ? "background completion" : "streaming generation"} without a document reload`, async ({
+  test(`app switching preserves chat and ${completeInBackground ? "background completion" : "an active analysis run"} without a document reload`, async ({
     page,
     context,
   }) => {
@@ -500,44 +508,66 @@ for (const completeInBackground of [false, true]) {
     await add(context, "pro", alias);
     await active(page, "/t/yuanshan/w/zongbu/analysis");
     await page.getByLabel("选择 Chat 主模型").selectOption({ label: alias });
-    const calls: { input: { messages: { role: string; content: string }[] } }[] = [];
+    const calls: { question: string; sessionId: string | null; history?: unknown }[] = [];
+    const accepted: { sessionId: string; runId: string }[] = [];
     let documents = 0;
     page.on("request", (request) => {
       if (request.isNavigationRequest()) documents++;
-      if (request.method() === "POST" && request.url().endsWith("/models/calls"))
+      if (request.method() === "POST" && request.url().endsWith("/analysis/sessions/submit"))
         calls.push(request.postDataJSON());
     });
     const send = async (question: string) => {
+      const submitted = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          response.url().endsWith("/analysis/sessions/submit"),
+      );
       await page.getByLabel("分析问题").fill(question);
       await page.getByRole("button", { name: "发送消息", exact: true }).click();
+      const response = await submitted;
+      expect(response.status(), await response.text()).toBe(202);
+      accepted.push(await response.json());
+      await expect(page.locator(".model-chat-turn").last()).toHaveAttribute(
+        "data-run-id",
+        accepted.at(-1)!.runId,
+      );
     };
+    const stop = page.getByRole("button", { name: "停止任务", exact: true });
+    const turns = page.locator(".model-chat-turn");
+    const current = turns.last();
+    const state = current.locator(".analysis-run-header").getByRole("status");
+    const answer = current.getByRole("region", { name: "最终回答" });
     await send("第一轮聊天记录");
-    await expect(page.getByRole("button", { name: "停止生成", exact: true })).toHaveCount(0);
-    await expect(page.locator(".model-chat-history")).toContainText("这是模型测试回复。");
+    await expect(answer).toContainText("这是模型测试回复。");
+    await expect(stop).toHaveCount(0);
+    await send("E2E_SLOW 切换 App 时继续生成");
+    await expect(current).toHaveAttribute("data-run-id", /^[a-f0-9-]{36}$/);
+    const activeRun = await current.getAttribute("data-run-id");
+    await expect(state).toContainText(/正在理解问题|正在分析问题|执行中|正在输出回答/);
+    await expect(answer).toHaveCount(0);
+    // Capture the active session after acceptance/navigation, at the visibility boundary.
     await page.evaluate(() =>
       Reflect.set(window, "retainedChat", document.querySelector(".model-chat-history")),
     );
     await observePageFlashes(page);
-    await send("E2E_SLOW 切换 App 时继续生成");
-    await expect(page.locator(".model-prose").last()).toHaveText(/^这/);
-    const partial = await page.locator(".model-prose").last().textContent();
     await setVisibility(page, "hidden");
     await expect(page.locator("[data-protected-root]")).toBeVisible();
     if (completeInBackground) {
-      await expect(page.locator(".model-chat-label").last()).toContainText("已完成");
-      await expect(page.locator(".model-chat-turn")).toHaveCount(2);
+      await expect(answer).toContainText("这是模型测试回复。");
+      await expect(turns).toHaveCount(2);
     }
     await setVisibility(page, "visible");
     await expect(page.locator("[data-protected-root]")).toBeVisible();
     if (!completeInBackground) {
-      await expect(page.getByRole("button", { name: "停止生成", exact: true })).toBeVisible();
-      await expect(page.locator(".model-prose").last()).toContainText(partial!);
+      await expect(stop).toBeVisible();
+      expect(await current.getAttribute("data-run-id")).toBe(activeRun);
       await setVisibility(page, "hidden");
       await setVisibility(page, "visible");
     }
-    await expect(page.locator(".model-chat-label").last()).toContainText("已完成");
-    await expect(page.getByRole("button", { name: "停止生成", exact: true })).toHaveCount(0);
-    await expect(page.locator(".model-chat-turn")).toHaveCount(2);
+    await expect(answer).toContainText("这是模型测试回复。");
+    await expect(stop).toHaveCount(0);
+    await expect(turns).toHaveCount(2);
+    expect(await current.getAttribute("data-run-id")).toBe(activeRun);
     await expect(page.locator(".model-chat-history")).toContainText("第一轮聊天记录");
     expect(
       await page.evaluate(
@@ -545,16 +575,35 @@ for (const completeInBackground of [false, true]) {
       ),
     ).toBe(true);
     await send("继续第三轮聊天");
-    await expect(page.locator(".model-chat-turn")).toHaveCount(3);
-    await expect(page.getByRole("button", { name: "停止生成", exact: true })).toHaveCount(0);
+    await expect(turns).toHaveCount(3);
+    await expect(answer).toContainText("这是模型测试回复。");
+    await expect(stop).toHaveCount(0);
     expect(calls).toHaveLength(3);
-    expect(calls[2].input.messages.map((message) => message.role)).toEqual([
-      "user",
-      "assistant",
-      "user",
-      "assistant",
-      "user",
-    ]);
+    expect(calls.every((call) => call.history === undefined)).toBe(true);
+    expect(calls[0].sessionId).toBeNull();
+    expect(calls[1].sessionId).toBe(accepted[0].sessionId);
+    expect(calls[2]).toMatchObject({
+      question: "继续第三轮聊天",
+      sessionId: accepted[0].sessionId,
+    });
+    expect(accepted.every((run) => run.sessionId === accepted[0].sessionId)).toBe(true);
+    const messages = await context.request.get(
+      `/api/web/v1/analysis/sessions/${accepted[0].sessionId}/messages`,
+      { params: { tenantId, workspaceId } },
+    );
+    expect(messages.status(), await messages.text()).toBe(200);
+    const persisted = reduceAgentResponse(null, agentResponse(await messages.json()));
+    const history = accepted.map(({ runId }) =>
+      Object.values(persisted.runs[runId].messages)
+        .sort((a, b) => a.ordinal - b.ordinal)
+        .map((message) => ({ role: message.role, text: message.content.text })),
+    );
+    expect(history).toEqual(
+      ["第一轮聊天记录", "E2E_SLOW 切换 App 时继续生成", "继续第三轮聊天"].map((question) => [
+        { role: "user", text: question },
+        { role: "assistant", text: "这是模型测试回复。" },
+      ]),
+    );
     await page.getByLabel("分析问题").fill("保留下一轮草稿");
     await setVisibility(page, "hidden");
     await setVisibility(page, "visible");

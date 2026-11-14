@@ -219,6 +219,34 @@ function clientFor(api: ReturnType<typeof transport>, onChange: (turn: AnalysisT
 }
 
 describe("analysis run browser client", () => {
+  it("keeps the runtime failure diagnostic on the failed turn", async () => {
+    const diagnostic = {
+      stage: "tool_setup",
+      exceptionType: "UndefinedColumn",
+      reasonCode: "database_schema_mismatch",
+    };
+    const result = await clientFor(
+      transport(
+        body([
+          { type: "run.started", payload: {} },
+          {
+            type: "stream.extension",
+            payload: {
+              name: "compass.runtime.failure",
+              version: 1,
+              required: false,
+              data: diagnostic,
+            },
+          },
+          { type: "run.finished", payload: { status: "failed", errorCode: "internal_error" } },
+        ]),
+      ),
+      () => undefined,
+    ).start();
+    expect(result.runtimeFailure).toEqual(diagnostic);
+    expect(result.terminal?.status).toBe("failed");
+  });
+
   it("projects one immutable card per tool and exposes the answer and CSV only after clean EOF", async () => {
     const changes: AnalysisTurnView[] = [];
     const api = transport(body(successfulEvents()));
@@ -291,6 +319,7 @@ describe("analysis run browser client", () => {
     expect(result.terminal).toEqual({
       status: "completed",
       finalAnswer: "这是无需查询工具即可回答的问题。",
+      artifacts: [],
       file: { status: "none" },
     });
   });

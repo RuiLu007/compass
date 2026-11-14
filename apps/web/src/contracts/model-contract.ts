@@ -1,6 +1,6 @@
 import Ajv2020, { type ValidateFunction } from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
-import schema from "../generated/model-contracts.schema.json";
+import schema from "../generated/model-contracts.schema.json" with { type: "json" };
 
 const ajv = new Ajv2020({ allErrors: false, strict: false });
 addFormats(ajv);

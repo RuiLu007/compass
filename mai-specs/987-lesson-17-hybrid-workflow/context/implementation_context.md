@@ -6,19 +6,18 @@
 
 ## 本课要交付的运行能力
 
-- 定义 Workflow、Node、Edge，提供 Sequence、Conditional Routing 与基础 Parallel/Join。节点声明输入输出，汇合按节点结果推进，异常沿明确边界传递。
-- 封装 Agent Node。确定性阶段做任务分类和权限预检，开放分析交给 M2，分析结束回到 Workflow 做结果校验与路由。
-- 只读报告分支可完成。行动建议分支到达 Human Decision Node 时生成可检查的等待结果，本期只提供挂起接口和等待语义。
-- 课程比较 Loop、Subworkflow、Agent-in-Workflow 和 Workflow-as-Tool，实战采用 Workflow Shell + Autonomous Analysis Node。交付 M3、Workflow 控制流与混合架构 ADR。
+- 周期性渠道诊断由 Agent 判断是否生成 JS 或复用。脚本在独立运行环境串并行调度 SubAgent，仅把核验后的汇总交回主 Agent。「我的工作流」管理可执行源码。
+- 固定广告预算提案可由主意图进入，也可由 Agent 在综合分析中作为工具调用。两个入口共用程序节点、证据校验和人工等待。
+- 每周经营复盘 Skill 的 `SKILL.md` 约束自主判断和脚本调用，确定性 SOP 写入已注册脚本。场景和验收以[有效 PRD](../spec/PRD.md)为准。
 
 ## 课次边界
 
-进程内轻量编排。Loop、Subworkflow、Workflow-as-Tool 作为教学中的控制结构和组合模式。持久等待、审批回调和恢复在 M5。
+第 17 课持久化可复用 JS 源码，子任务在父 Run 内执行。第 18 课扩展工具与 Python Sandbox，第 19 课持久化 Run、等待、产物与恢复状态，第 25 课增加持久 Child Run 与授权轨迹下钻，第 30 课继续 Skill 治理。
 
 ## Compass 接入约束
 
-- 沿用 Agent 侧推理所有权与可信身份上下文。权限预检可以走项目已有入口或显式教学夹具，未获许可的输入不可触发 Agent Node。
-- Workflow Node 复用 M2 执行器、工具契约和停止原因。人审等待返回后不得推进后继业务动作。
+- Agent 负责流程定义和执行。Web 复用工作区分析授权，为用户提供资产和过程界面。每次复用使用当前主体、授权及数据绑定。
+- 流程及脚本复用 M2 执行器、工具契约、预算和停止控制。人工等待经 Run 统一收口。
 
 ## 跨课契约
 

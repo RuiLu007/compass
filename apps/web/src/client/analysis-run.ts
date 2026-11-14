@@ -1,17 +1,35 @@
 import type { components } from "../generated/api";
 import {
+  autonomyAction,
+  autonomyExtensions,
+  autonomyResult,
+  executionNode,
   parseAnalysisCancelAck,
   ProtocolError,
   readRun,
+  runtimeFailure,
+  toolPreparation,
+  workflowProgress,
   type AnalysisCancelAck,
+  type RunAutonomyAction,
+  type RunAutonomyResult,
   type RunEvent,
   type RunFinished,
+  type RunWorkflowProgress,
 } from "../contracts/analysis-run";
+import { traceInfo, type TraceInfo } from "../contracts/trace-context";
 import { ApiError, type StreamRequestOptions } from "./request-scope";
+import type { ExecutionNode } from "../contracts/execution-node";
 
 type MainModelSelection = components["schemas"]["MainModelSelection"];
 type ToolStarted = Extract<RunEvent, { type: "tool.started" }>;
 type ToolFinished = Extract<RunEvent, { type: "tool.finished" }>;
+export type WorkflowAssetRef = components["schemas"]["WorkflowAssetRef"];
+export type RunConstraints = Partial<components["schemas"]["RunConstraints"]>;
+export type AnalysisRunEntry = {
+  workflowAssetRef?: WorkflowAssetRef;
+  constraints?: RunConstraints;
+};
 type RawTerminal = RunFinished["payload"];
 type AcknowledgedTerminalStatus = Extract<
   AnalysisCancelAck,
@@ -32,6 +50,8 @@ export type AnalysisToolView = {
   status: AnalysisToolStatus;
   rowCount?: number;
   errorCode?: string;
+  inputPreview?: string | null;
+  resultPreview?: string | null;
 };
 
 export type AnalysisStepView = {
@@ -40,6 +60,7 @@ export type AnalysisStepView = {
   modelCallId: string;
   status: "running" | "completed" | "failed" | "canceled" | "incomplete";
   tools: AnalysisToolView[];
+  preparingTools?: number[];
 };
 
 export type AnalysisFileView =
@@ -57,13 +78,18 @@ export type AnalysisFileView =
     };
 
 export type AnalysisTurnTerminal =
-  | { status: "completed"; finalAnswer: string; file: AnalysisFileView }
-  | Extract<RawTerminal, { status: "failed" | "canceled" | "cleanup_unconfirmed" }>;
+  | {
+      status: "completed";
+      finalAnswer: string;
+      file: AnalysisFileView;
+      artifacts?: components["schemas"]["RunArtifact"][];
+    }
+  | Extract<RawTerminal, { status: "waiting" | "failed" | "canceled" | "cleanup_unconfirmed" }>;
 
 export type AnalysisStopState =
   "idle" | "waiting_for_run" | "requesting" | "accepted" | "already_terminal" | "unconfirmed";
 
-export type AnalysisTurnView = {
+export type AnalysisTurnView = TraceInfo & {
   id: string;
   requestId: string;
   runId?: string;
@@ -78,6 +104,17 @@ export type AnalysisTurnView = {
   acknowledgedTerminalStatus?: AcknowledgedTerminalStatus;
   terminal?: AnalysisTurnTerminal;
   errorMessage?: string;
+  runtimeFailure?: ReturnType<typeof runtimeFailure>;
+  plan?: RunAutonomyAction;
+  workflow?: RunWorkflowProgress[];
+  workflowDraft?: components["schemas"]["PublicWorkflow"];
+  execution?: ExecutionNode[];
+  latestExecutionId?: string;
+  runStatus?: components["schemas"]["RunPublicSnapshot"]["status"];
+  autonomy?: RunAutonomyResult;
+  startedAtMs?: number;
+  submittedAtMs?: number;
+  durationMs?: number;
 };
 
 export type AnalysisRunScope = { tenantId: string; workspaceId: string };
@@ -103,6 +140,7 @@ type AnalysisRunClientOptions = {
   question: string;
   history: AnalysisHistoryItem[];
   selection: MainModelSelection;
+  entry?: AnalysisRunEntry;
   modelLabel: string;
   onChange: (turn: AnalysisTurnView) => void;
   onSettled?: (client: AnalysisRunClient) => void;
@@ -181,6 +219,7 @@ function terminalView(payload: RawTerminal): AnalysisTurnTerminal {
     status: "completed",
     finalAnswer: payload.finalAnswer,
     file: decodeFile(payload.file),
+    artifacts: payload.artifacts ?? [],
   };
 }
 
@@ -194,7 +233,7 @@ function closeInterruptedSteps(turn: AnalysisTurnView): AnalysisStepView[] {
   }));
 }
 
-function confirmCanceledSteps(steps: readonly AnalysisStepView[]): AnalysisStepView[] {
+export function confirmCanceledSteps(steps: readonly AnalysisStepView[]): AnalysisStepView[] {
   return steps.map((step) => ({
     ...step,
     status: step.status === "running" || step.status === "incomplete" ? "canceled" : step.status,
@@ -212,8 +251,15 @@ export function interruptAnalysisTurn(turn: AnalysisTurnView, message: string): 
     phase: "interrupted",
     terminal: undefined,
     steps: closeInterruptedSteps(turn),
+    durationMs: elapsed(turn),
     errorMessage: message,
   };
+}
+
+function elapsed(turn: AnalysisTurnView): number | undefined {
+  return turn.startedAtMs === undefined
+    ? undefined
+    : Math.max(0, performance.now() - turn.startedAtMs);
 }
 
 /** Apply already protocol-validated logical events to the browser-facing turn. */
@@ -240,6 +286,7 @@ export function applyAnalysisRunEvent(
       return {
         ...turn,
         runId,
+        latestExecutionId: event.payload.stepId,
         steps: [
           ...turn.steps,
           {
@@ -263,7 +310,12 @@ export function applyAnalysisRunEvent(
           },
         ],
       };
-      return { ...turn, runId, steps };
+      return {
+        ...turn,
+        runId,
+        steps,
+        latestExecutionId: `${step.stepId}:${event.payload.toolIndex}`,
+      };
     }
     case "tool.finished": {
       const stepIndex = findStep(turn, event.payload.stepId);
@@ -276,7 +328,12 @@ export function applyAnalysisRunEvent(
       tools[toolIndex] = { ...tools[toolIndex], ...event.payload };
       const steps = [...turn.steps];
       steps[stepIndex] = { ...step, tools };
-      return { ...turn, runId, steps };
+      return {
+        ...turn,
+        runId,
+        steps,
+        latestExecutionId: `${step.stepId}:${event.payload.toolIndex}`,
+      };
     }
     case "step.finished": {
       const stepIndex = findStep(turn, event.payload.stepId);
@@ -289,10 +346,63 @@ export function applyAnalysisRunEvent(
           tool.status === "running" ? { ...tool, status: "incomplete" } : tool,
         ),
       };
-      return { ...turn, runId, steps };
+      return { ...turn, runId, steps, latestExecutionId: step.stepId };
     }
-    case "stream.extension":
-      return turn;
+    case "stream.extension": {
+      const failure = runtimeFailure(event);
+      if (failure) return { ...turn, runtimeFailure: failure };
+      const node = executionNode(event);
+      if (node) {
+        const nodes = turn.execution ?? [];
+        const exists = nodes.some((item) => item.id === node.id);
+        return {
+          ...turn,
+          runId,
+          latestExecutionId: node.id,
+          execution: exists
+            ? nodes.map((item) => (item.id === node.id ? node : item))
+            : [...nodes, node],
+        };
+      }
+      const preparation = toolPreparation(event);
+      if (preparation) {
+        const stepIndex = findStep(turn, preparation.stepId);
+        const steps = [...turn.steps];
+        const step = steps[stepIndex];
+        const indices = new Set(step.preparingTools);
+        if (preparation.status === "preparing") indices.add(preparation.toolIndex);
+        else indices.delete(preparation.toolIndex);
+        steps[stepIndex] = { ...step, preparingTools: [...indices] };
+        return {
+          ...turn,
+          runId,
+          steps,
+          latestExecutionId:
+            preparation.status === "preparing"
+              ? `${step.stepId}:${preparation.toolIndex}`
+              : step.stepId,
+        };
+      }
+      const progress = workflowProgress(event);
+      if (progress) {
+        const nodes = turn.workflow ?? [];
+        const index = nodes.findIndex(
+          (node) => node.source === progress.source && node.key === progress.key,
+        );
+        return {
+          ...turn,
+          latestExecutionId: `${progress.source}:${progress.key}`,
+          workflow:
+            index < 0
+              ? [...nodes, progress]
+              : nodes.map((node, position) => (position === index ? progress : node)),
+        };
+      }
+      const plan = autonomyAction(event);
+      if (plan) return { ...turn, plan };
+      const autonomy = autonomyResult(event);
+      return autonomy ? { ...turn, autonomy } : turn;
+    }
     case "stream.batch":
       return event.payload.reduce(
         (current, item) => applyAnalysisRunEvent(current, runId, item),
@@ -304,6 +414,7 @@ export function applyAnalysisRunEvent(
         runId,
         steps: event.payload.status === "canceled" ? confirmCanceledSteps(turn.steps) : turn.steps,
         phase: "finished",
+        durationMs: event.durationMs ?? elapsed(turn),
         terminal: terminalView(event.payload),
         errorMessage: undefined,
       };
@@ -312,6 +423,7 @@ export function applyAnalysisRunEvent(
 
 const terminalStatusLabels: Record<AcknowledgedTerminalStatus, string> = {
   completed: "完成",
+  waiting: "等待人工决策",
   failed: "失败",
   canceled: "终止",
   cleanup_unconfirmed: "清理待确认",
@@ -330,6 +442,7 @@ export class AnalysisRunClient {
   private readonly scope: AnalysisRunScope;
   private readonly history: AnalysisHistoryItem[];
   private readonly selection: MainModelSelection;
+  private readonly entry?: AnalysisRunEntry;
   private readonly onChange: (turn: AnalysisTurnView) => void;
   private readonly onSettled?: (client: AnalysisRunClient) => void;
   private readonly streamController = new AbortController();
@@ -337,6 +450,7 @@ export class AnalysisRunClient {
   private cancelPromise: Promise<void> | null = null;
   private started = false;
   private disposed = false;
+  private publishFrame: number | undefined;
   private turn: AnalysisTurnView;
 
   constructor(options: AnalysisRunClientOptions) {
@@ -345,6 +459,7 @@ export class AnalysisRunClient {
     this.scope = options.scope;
     this.history = selectAnalysisHistory(options.history, options.question);
     this.selection = options.selection;
+    this.entry = options.entry;
     this.onChange = options.onChange;
     this.onSettled = options.onSettled;
     this.turn = {
@@ -365,6 +480,7 @@ export class AnalysisRunClient {
   async start() {
     if (this.started) throw new Error("Analysis run already started");
     this.started = true;
+    this.turn = { ...this.turn, startedAtMs: performance.now() };
     this.publish();
     try {
       await this.api.streamRequest(
@@ -375,22 +491,27 @@ export class AnalysisRunClient {
           question: this.turn.question,
           history: this.history,
           selection: this.selection,
+          ...this.entry,
         },
         {
           signal: this.streamController.signal,
           timeoutMs: 200000,
           inputLimitBytes: 64 * 1024,
           unavailableMessage: "Agent 运行服务暂时不可用，请稍后重试。",
+          onHeaders: (headers) => {
+            this.turn = { ...this.turn, ...traceInfo(headers) };
+          },
           consume: async (body, signal) => {
             for await (const { runId, event } of readRun(body, {
               requestId: this.turn.requestId,
               signal,
+              extensions: autonomyExtensions,
             })) {
               if (this.disposed) throw new DOMException("页面已清理。", "AbortError");
               if (
                 event.type === "run.finished" &&
                 this.turn.stopState === "accepted" &&
-                event.payload.status === "completed"
+                ["completed", "waiting"].includes(event.payload.status)
               )
                 throw new ProtocolError("cancel_accepted_completed");
               if (
@@ -400,7 +521,7 @@ export class AnalysisRunClient {
               )
                 throw new ProtocolError("cancel_terminal_status_mismatch");
               this.turn = applyAnalysisRunEvent(this.turn, runId, event);
-              this.publish();
+              this.publish(event.type === "run.finished");
               if (event.type === "run.finished")
                 this.cancelController?.abort(new DOMException("运行已返回终态。", "AbortError"));
               if (event.type === "run.started" && this.turn.stopState === "waiting_for_run")
@@ -443,11 +564,24 @@ export class AnalysisRunClient {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    if (this.publishFrame !== undefined) cancelAnimationFrame(this.publishFrame);
     this.streamController.abort(new DOMException("页面已清理。", "AbortError"));
     this.cancelController?.abort(new DOMException("页面已清理。", "AbortError"));
   }
 
-  private publish() {
+  private publish(immediate = true) {
+    if (this.disposed || !this.api.retainsContent) return;
+    if (!immediate && typeof requestAnimationFrame === "function") {
+      this.publishFrame ??= requestAnimationFrame(() => {
+        this.publishFrame = undefined;
+        this.publish();
+      });
+      return;
+    }
+    if (this.publishFrame !== undefined) {
+      cancelAnimationFrame(this.publishFrame);
+      this.publishFrame = undefined;
+    }
     if (!this.disposed && this.api.retainsContent) this.onChange(this.turn);
   }
 

@@ -1,5 +1,144 @@
 {
   "$defs": {
+    "AgentPacket": {
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "discriminator": {
+            "mapping": {
+              "message.delta": "#/$defs/MessageDelta",
+              "message.upsert": "#/$defs/MessageUpsert",
+              "run.upsert": "#/$defs/RunUpsert",
+              "view.upsert": "#/$defs/ViewUpsert"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/MessageUpsert"
+            },
+            {
+              "$ref": "#/$defs/MessageDelta"
+            },
+            {
+              "$ref": "#/$defs/RunUpsert"
+            },
+            {
+              "$ref": "#/$defs/ViewUpsert"
+            }
+          ],
+          "title": "Event"
+        },
+        "occurredAt": {
+          "maxLength": 40,
+          "title": "Occurredat",
+          "type": "string"
+        },
+        "packetId": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Packetid",
+          "type": "string"
+        },
+        "requestId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Requestid",
+          "type": "string"
+        },
+        "runId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Runid",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "pattern": "^(0|[1-9][0-9]{0,19})-(0|[1-9][0-9]{0,19})$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Seq"
+        }
+      },
+      "required": [
+        "packetId",
+        "runId",
+        "seq",
+        "requestId",
+        "occurredAt",
+        "event"
+      ],
+      "title": "AgentPacket",
+      "type": "object"
+    },
+    "AgentResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "cursors": {
+          "items": {
+            "$ref": "#/$defs/RunCursor"
+          },
+          "maxItems": 50,
+          "title": "Cursors",
+          "type": "array"
+        },
+        "mode": {
+          "enum": [
+            "snapshot",
+            "delta"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "packets": {
+          "items": {
+            "$ref": "#/$defs/AgentPacket"
+          },
+          "maxItems": 8192,
+          "title": "Packets",
+          "type": "array"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MessagePage"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "protocol": {
+          "const": "compass.run",
+          "default": "compass.run",
+          "title": "Protocol",
+          "type": "string"
+        },
+        "sessionId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "version": {
+          "const": 2,
+          "default": 2,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sessionId",
+        "mode",
+        "packets",
+        "cursors",
+        "page"
+      ],
+      "title": "AgentResponse",
+      "type": "object"
+    },
     "AnalysisCancelAccepted": {
       "additionalProperties": false,
       "properties": {
@@ -55,6 +194,7 @@
         "terminalStatus": {
           "enum": [
             "completed",
+            "waiting",
             "failed",
             "canceled",
             "cleanup_unconfirmed"
@@ -197,6 +337,17 @@
     "AnalysisRunInput": {
       "additionalProperties": false,
       "properties": {
+        "constraints": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunConstraints"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "history": {
           "items": {
             "$ref": "#/$defs/AnalysisHistoryTurn"
@@ -218,6 +369,17 @@
         },
         "selection": {
           "$ref": "#/$defs/MainModelSelection"
+        },
+        "workflowAssetRef": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkflowAssetRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -226,6 +388,70 @@
         "selection"
       ],
       "title": "AnalysisRunInput",
+      "type": "object"
+    },
+    "ApprovalView": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "approval",
+          "default": "approval",
+          "title": "Kind",
+          "type": "string"
+        },
+        "objectId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Objectid",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "value": {
+          "$ref": "#/$defs/PublicApproval"
+        }
+      },
+      "required": [
+        "objectId",
+        "revision",
+        "value"
+      ],
+      "title": "ApprovalView",
+      "type": "object"
+    },
+    "ArtifactView": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "artifact",
+          "default": "artifact",
+          "title": "Kind",
+          "type": "string"
+        },
+        "objectId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Objectid",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "value": {
+          "$ref": "#/$defs/PublicArtifact"
+        }
+      },
+      "required": [
+        "objectId",
+        "revision",
+        "value"
+      ],
+      "title": "ArtifactView",
       "type": "object"
     },
     "AttemptSummary": {
@@ -335,6 +561,49 @@
       "title": "AttemptSummary",
       "type": "object"
     },
+    "AvailableGeneration": {
+      "additionalProperties": false,
+      "properties": {
+        "application_max_output_tokens": {
+          "default": 32768,
+          "title": "Application Max Output Tokens",
+          "type": "integer"
+        },
+        "binding_version": {
+          "title": "Binding Version",
+          "type": "integer"
+        },
+        "default_max_tokens": {
+          "title": "Default Max Tokens",
+          "type": "integer"
+        },
+        "limits": {
+          "$ref": "#/$defs/ModelTokenLimits"
+        },
+        "supported_parameters": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supported Parameters"
+        }
+      },
+      "required": [
+        "binding_version",
+        "limits",
+        "default_max_tokens"
+      ],
+      "title": "AvailableGeneration",
+      "type": "object"
+    },
     "AvailableModel": {
       "additionalProperties": false,
       "properties": {
@@ -348,6 +617,17 @@
         },
         "capabilities": {
           "$ref": "#/$defs/ModelCapabilities"
+        },
+        "generation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AvailableGeneration"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "id": {
           "format": "uuid",
@@ -385,6 +665,69 @@
         "items"
       ],
       "title": "AvailableModels",
+      "type": "object"
+    },
+    "BudgetProposal": {
+      "additionalProperties": false,
+      "properties": {
+        "campaignKey": {
+          "const": "classroom-retail",
+          "title": "Campaignkey",
+          "type": "string"
+        },
+        "deltaCent": {
+          "pattern": "^(?:0|-?[1-9][0-9]{0,19})$",
+          "title": "Deltacent",
+          "type": "string"
+        },
+        "evidenceRefs": {
+          "items": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 1,
+          "title": "Evidencerefs",
+          "type": "array"
+        },
+        "proposalId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Proposalid",
+          "type": "string"
+        },
+        "revision": {
+          "const": 1,
+          "default": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "summary": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        },
+        "tenantId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Tenantid",
+          "type": "string"
+        },
+        "workspaceId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Workspaceid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "proposalId",
+        "campaignKey",
+        "tenantId",
+        "workspaceId",
+        "deltaCent",
+        "summary",
+        "evidenceRefs"
+      ],
+      "title": "BudgetProposal",
       "type": "object"
     },
     "CallOutcome": {
@@ -891,6 +1234,17 @@
           "title": "Source",
           "type": "string"
         },
+        "token_limits": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CatalogTokenLimits"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "vendor": {
           "title": "Vendor",
           "type": "string"
@@ -943,6 +1297,29 @@
         "sdk_version"
       ],
       "title": "CatalogPage",
+      "type": "object"
+    },
+    "CatalogTokenLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog_key": {
+          "title": "Catalog Key",
+          "type": "string"
+        },
+        "limits": {
+          "$ref": "#/$defs/ModelTokenLimits"
+        },
+        "sdk_version": {
+          "title": "Sdk Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "catalog_key",
+        "sdk_version",
+        "limits"
+      ],
+      "title": "CatalogTokenLimits",
       "type": "object"
     },
     "ChannelRunParams": {
@@ -1107,6 +1484,381 @@
       "title": "ClassificationEvent",
       "type": "object"
     },
+    "ControlCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedVersion": {
+          "minimum": 1,
+          "title": "Expectedversion",
+          "type": "integer"
+        },
+        "requestId": {
+          "format": "uuid",
+          "title": "Requestid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "requestId",
+        "expectedVersion"
+      ],
+      "title": "ControlCommand",
+      "type": "object"
+    },
+    "ControlReceipt": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code"
+        },
+        "runId": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Runid"
+        },
+        "sessionId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "status": {
+          "maxLength": 32,
+          "title": "Status",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "runId",
+        "sessionId",
+        "version",
+        "status"
+      ],
+      "title": "ControlReceipt",
+      "type": "object"
+    },
+    "DataConnectionFields": {
+      "additionalProperties": false,
+      "properties": {
+        "database_name": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+          "title": "Database Name",
+          "type": "string"
+        },
+        "engine": {
+          "enum": [
+            "postgresql",
+            "mysql"
+          ],
+          "title": "Engine",
+          "type": "string"
+        },
+        "host": {
+          "maxLength": 253,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9.-]*$",
+          "title": "Host",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "port": {
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Port",
+          "type": "integer"
+        },
+        "retail_tenant_id": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retail Tenant Id"
+        },
+        "role": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+          "title": "Role",
+          "type": "string"
+        },
+        "sslmode": {
+          "enum": [
+            "disable",
+            "prefer",
+            "require",
+            "verify-full"
+          ],
+          "title": "Sslmode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "engine",
+        "host",
+        "port",
+        "database_name",
+        "role",
+        "sslmode"
+      ],
+      "title": "DataConnectionFields",
+      "type": "object"
+    },
+    "DataConnectionList": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/DataConnectionView"
+          },
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "title": "DataConnectionList",
+      "type": "object"
+    },
+    "DataConnectionSave": {
+      "additionalProperties": false,
+      "properties": {
+        "database_name": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+          "title": "Database Name",
+          "type": "string"
+        },
+        "engine": {
+          "enum": [
+            "postgresql",
+            "mysql"
+          ],
+          "title": "Engine",
+          "type": "string"
+        },
+        "host": {
+          "maxLength": 253,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9.-]*$",
+          "title": "Host",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "password": {
+          "anyOf": [
+            {
+              "format": "password",
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Password"
+        },
+        "port": {
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Port",
+          "type": "integer"
+        },
+        "retail_tenant_id": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retail Tenant Id"
+        },
+        "revision": {
+          "exclusiveMaximum": 2147483647,
+          "minimum": 0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "role": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+          "title": "Role",
+          "type": "string"
+        },
+        "sslmode": {
+          "enum": [
+            "disable",
+            "prefer",
+            "require",
+            "verify-full"
+          ],
+          "title": "Sslmode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "engine",
+        "host",
+        "port",
+        "database_name",
+        "role",
+        "sslmode",
+        "revision"
+      ],
+      "title": "DataConnectionSave",
+      "type": "object"
+    },
+    "DataConnectionView": {
+      "additionalProperties": false,
+      "properties": {
+        "database_name": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+          "title": "Database Name",
+          "type": "string"
+        },
+        "engine": {
+          "enum": [
+            "postgresql",
+            "mysql"
+          ],
+          "title": "Engine",
+          "type": "string"
+        },
+        "host": {
+          "maxLength": 253,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9.-]*$",
+          "title": "Host",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "password_configured": {
+          "const": true,
+          "default": true,
+          "title": "Password Configured",
+          "type": "boolean"
+        },
+        "port": {
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Port",
+          "type": "integer"
+        },
+        "retail_tenant_id": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retail Tenant Id"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "role": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[^\\x00-\\x1f\\x7f]+$",
+          "title": "Role",
+          "type": "string"
+        },
+        "sslmode": {
+          "enum": [
+            "disable",
+            "prefer",
+            "require",
+            "verify-full"
+          ],
+          "title": "Sslmode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "engine",
+        "host",
+        "port",
+        "database_name",
+        "role",
+        "sslmode",
+        "id",
+        "revision"
+      ],
+      "title": "DataConnectionView",
+      "type": "object"
+    },
     "DecisionAnswer": {
       "additionalProperties": false,
       "properties": {
@@ -1218,6 +1970,66 @@
         "type"
       ],
       "title": "DecisionAnswer",
+      "type": "object"
+    },
+    "DecisionCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "decision": {
+          "enum": [
+            "approve",
+            "reject"
+          ],
+          "title": "Decision",
+          "type": "string"
+        },
+        "decisionId": {
+          "format": "uuid",
+          "title": "Decisionid",
+          "type": "string"
+        },
+        "expectedVersion": {
+          "minimum": 1,
+          "title": "Expectedversion",
+          "type": "integer"
+        },
+        "proposalDigest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Proposaldigest",
+          "type": "string"
+        },
+        "proposalId": {
+          "format": "uuid",
+          "title": "Proposalid",
+          "type": "string"
+        },
+        "proposalRevision": {
+          "minimum": 1,
+          "title": "Proposalrevision",
+          "type": "integer"
+        },
+        "requestId": {
+          "format": "uuid",
+          "title": "Requestid",
+          "type": "string"
+        },
+        "waitId": {
+          "format": "uuid",
+          "title": "Waitid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "requestId",
+        "expectedVersion",
+        "waitId",
+        "proposalId",
+        "proposalRevision",
+        "proposalDigest",
+        "decisionId",
+        "decision"
+      ],
+      "title": "DecisionCommand",
       "type": "object"
     },
     "DecisionInput": {
@@ -1409,6 +2221,314 @@
       "title": "DemoOverview",
       "type": "object"
     },
+    "ExecutionDetail": {
+      "additionalProperties": false,
+      "properties": {
+        "input": {
+          "anyOf": [
+            {
+              "maxLength": 32768,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Input"
+        },
+        "narration": {
+          "anyOf": [
+            {
+              "maxLength": 32768,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Narration"
+        },
+        "output": {
+          "anyOf": [
+            {
+              "maxLength": 32768,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Output"
+        },
+        "thinking": {
+          "anyOf": [
+            {
+              "maxLength": 32768,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Thinking"
+        }
+      },
+      "title": "ExecutionDetail",
+      "type": "object"
+    },
+    "ExecutionDisplay": {
+      "additionalProperties": false,
+      "properties": {
+        "inputPreview": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Inputpreview"
+        },
+        "language": {
+          "enum": [
+            "text",
+            "json",
+            "sql",
+            "javascript",
+            "python"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "outputPreview": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Outputpreview"
+        },
+        "policy": {
+          "enum": [
+            "summary",
+            "preview"
+          ],
+          "title": "Policy",
+          "type": "string"
+        }
+      },
+      "title": "ExecutionDisplay",
+      "type": "object"
+    },
+    "ExecutionEnvironment": {
+      "additionalProperties": false,
+      "properties": {
+        "environmentId": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Environmentid"
+        },
+        "kind": {
+          "enum": [
+            "service",
+            "quickjs",
+            "sandbox"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "runtime": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Runtime"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "ExecutionEnvironment",
+      "type": "object"
+    },
+    "ExecutionGrant": {
+      "additionalProperties": false,
+      "properties": {
+        "bootId": {
+          "format": "uuid",
+          "title": "Bootid",
+          "type": "string"
+        },
+        "checkpointNo": {
+          "minimum": 0,
+          "title": "Checkpointno",
+          "type": "integer"
+        },
+        "epoch": {
+          "format": "uuid",
+          "title": "Epoch",
+          "type": "string"
+        },
+        "expiresAt": {
+          "format": "date-time",
+          "title": "Expiresat",
+          "type": "string"
+        },
+        "runId": {
+          "format": "uuid",
+          "title": "Runid",
+          "type": "string"
+        },
+        "workerId": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Workerid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runId",
+        "workerId",
+        "bootId",
+        "epoch",
+        "expiresAt",
+        "checkpointNo"
+      ],
+      "title": "ExecutionGrant",
+      "type": "object"
+    },
+    "ExecutionOrigin": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "builtin",
+            "mcp"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "serverId": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Serverid"
+        },
+        "serverName": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Servername"
+        },
+        "toolName": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Toolname"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "ExecutionOrigin",
+      "type": "object"
+    },
+    "ExecutionSkill": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "stage": {
+          "enum": [
+            "load",
+            "script"
+          ],
+          "title": "Stage",
+          "type": "string"
+        },
+        "version": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "stage"
+      ],
+      "title": "ExecutionSkill",
+      "type": "object"
+    },
+    "ExecutionSubAgent": {
+      "additionalProperties": false,
+      "properties": {
+        "childRunId": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Childrunid"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ExecutionSubAgent",
+      "type": "object"
+    },
     "ExecutionSummary": {
       "additionalProperties": false,
       "properties": {
@@ -1459,6 +2579,136 @@
         "stop_reason"
       ],
       "title": "ExecutionSummary",
+      "type": "object"
+    },
+    "ExecutionView": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "execution.node",
+          "default": "execution.node",
+          "title": "Kind",
+          "type": "string"
+        },
+        "objectId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Objectid",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "value": {
+          "$ref": "#/$defs/RunExecutionNode"
+        }
+      },
+      "required": [
+        "objectId",
+        "revision",
+        "value"
+      ],
+      "title": "ExecutionView",
+      "type": "object"
+    },
+    "ExecutionWorkflow": {
+      "additionalProperties": false,
+      "properties": {
+        "assetId": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Assetid"
+        },
+        "mode": {
+          "enum": [
+            "generated",
+            "reused",
+            "fixed"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Name"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Version"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "title": "ExecutionWorkflow",
+      "type": "object"
+    },
+    "ExternalRunEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "correlationKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Correlationkey",
+          "type": "string"
+        },
+        "eventId": {
+          "format": "uuid",
+          "title": "Eventid",
+          "type": "string"
+        },
+        "eventType": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Eventtype",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Payload",
+          "type": "object"
+        },
+        "waitId": {
+          "format": "uuid",
+          "title": "Waitid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "eventId",
+        "waitId",
+        "eventType",
+        "correlationKey",
+        "payload"
+      ],
+      "title": "ExternalRunEvent",
       "type": "object"
     },
     "FinalEvent": {
@@ -1688,7 +2938,7 @@
           "items": {
             "$ref": "#/$defs/ChatMessage"
           },
-          "maxItems": 64,
+          "maxItems": 512,
           "minItems": 1,
           "title": "Messages",
           "type": "array"
@@ -1739,6 +2989,20 @@
           "title": "Stream",
           "type": "boolean"
         },
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        },
         "thinking": {
           "default": false,
           "title": "Thinking",
@@ -1751,12 +3015,160 @@
           "maxItems": 16,
           "title": "Tools",
           "type": "array"
+        },
+        "top_p": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Top P"
         }
       },
       "required": [
         "messages"
       ],
       "title": "GenerateInput",
+      "type": "object"
+    },
+    "GenerationDefaults": {
+      "additionalProperties": false,
+      "properties": {
+        "max_tokens": {
+          "anyOf": [
+            {
+              "maximum": 32768,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tokens"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        },
+        "top_p": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Top P"
+        }
+      },
+      "title": "GenerationDefaults",
+      "type": "object"
+    },
+    "GenerationProfile": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog_snapshot": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CatalogTokenLimits"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "defaults": {
+          "$ref": "#/$defs/GenerationDefaults"
+        },
+        "limits": {
+          "$ref": "#/$defs/ModelTokenLimits"
+        }
+      },
+      "title": "GenerationProfile",
+      "type": "object"
+    },
+    "GenerationProfileInput": {
+      "additionalProperties": false,
+      "properties": {
+        "defaults": {
+          "$ref": "#/$defs/GenerationDefaults"
+        },
+        "import_catalog": {
+          "default": false,
+          "title": "Import Catalog",
+          "type": "boolean"
+        },
+        "limits": {
+          "$ref": "#/$defs/ModelTokenLimits"
+        }
+      },
+      "title": "GenerationProfileInput",
+      "type": "object"
+    },
+    "GenerationProfileView": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog_snapshot": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CatalogTokenLimits"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "defaults": {
+          "$ref": "#/$defs/GenerationDefaults"
+        },
+        "effective_limits": {
+          "$ref": "#/$defs/ModelTokenLimits"
+        },
+        "limit_sources": {
+          "additionalProperties": {
+            "enum": [
+              "override",
+              "litellm",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "title": "Limit Sources",
+          "type": "object"
+        },
+        "limits": {
+          "$ref": "#/$defs/ModelTokenLimits"
+        }
+      },
+      "required": [
+        "effective_limits",
+        "limit_sources"
+      ],
+      "title": "GenerationProfileView",
       "type": "object"
     },
     "Health": {
@@ -1829,6 +3241,454 @@
         "mode"
       ],
       "title": "MainModelSelection",
+      "type": "object"
+    },
+    "McpConnectionDelete": {
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "revision"
+      ],
+      "title": "McpConnectionDelete",
+      "type": "object"
+    },
+    "McpConnectionList": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/McpConnectionView"
+          },
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "title": "McpConnectionList",
+      "type": "object"
+    },
+    "McpConnectionSave": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "endpoint": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Endpoint",
+          "type": "string"
+        },
+        "max_inflight": {
+          "default": 1,
+          "maximum": 2,
+          "minimum": 1,
+          "title": "Max Inflight",
+          "type": "integer"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "revision": {
+          "minimum": 0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "selected_tools": {
+          "anyOf": [
+            {
+              "const": "all",
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ],
+          "default": "all",
+          "title": "Selected Tools"
+        },
+        "token": {
+          "anyOf": [
+            {
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Token"
+        },
+        "tool_policies": {
+          "items": {
+            "$ref": "#/$defs/McpToolSelection"
+          },
+          "maxItems": 256,
+          "title": "Tool Policies",
+          "type": "array"
+        }
+      },
+      "required": [
+        "revision",
+        "name",
+        "endpoint"
+      ],
+      "title": "McpConnectionSave",
+      "type": "object"
+    },
+    "McpConnectionView": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "endpoint": {
+          "title": "Endpoint",
+          "type": "string"
+        },
+        "has_token": {
+          "title": "Has Token",
+          "type": "boolean"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "max_inflight": {
+          "title": "Max Inflight",
+          "type": "integer"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "required": {
+          "title": "Required",
+          "type": "boolean"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "integer"
+        },
+        "selected_tools": {
+          "anyOf": [
+            {
+              "const": "all",
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ],
+          "title": "Selected Tools"
+        },
+        "tool_policies": {
+          "items": {
+            "$ref": "#/$defs/McpToolSelection"
+          },
+          "title": "Tool Policies",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "name",
+        "endpoint",
+        "has_token",
+        "enabled",
+        "required",
+        "max_inflight",
+        "selected_tools",
+        "tool_policies"
+      ],
+      "title": "McpConnectionView",
+      "type": "object"
+    },
+    "McpDiscoveredTool": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "input_schema": {
+          "additionalProperties": true,
+          "title": "Input Schema",
+          "type": "object"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "output_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Schema"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "input_schema"
+      ],
+      "title": "McpDiscoveredTool",
+      "type": "object"
+    },
+    "McpDiscoveryResult": {
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "title": "Revision",
+          "type": "integer"
+        },
+        "tools": {
+          "items": {
+            "$ref": "#/$defs/McpDiscoveredTool"
+          },
+          "title": "Tools",
+          "type": "array"
+        }
+      },
+      "required": [
+        "revision",
+        "tools"
+      ],
+      "title": "McpDiscoveryResult",
+      "type": "object"
+    },
+    "McpToolSelection": {
+      "additionalProperties": false,
+      "properties": {
+        "approval": {
+          "default": "required",
+          "enum": [
+            "none",
+            "required"
+          ],
+          "title": "Approval",
+          "type": "string"
+        },
+        "effect": {
+          "default": "unknown",
+          "enum": [
+            "read_only",
+            "local_artifact",
+            "external_write",
+            "unknown"
+          ],
+          "title": "Effect",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "McpToolSelection",
+      "type": "object"
+    },
+    "MessageContent": {
+      "additionalProperties": false,
+      "properties": {
+        "artifactIds": {
+          "items": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "type": "string"
+          },
+          "maxItems": 40,
+          "title": "Artifactids",
+          "type": "array"
+        },
+        "text": {
+          "maxLength": 32768,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "MessageContent",
+      "type": "object"
+    },
+    "MessageDelta": {
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/MessageDeltaValue"
+        },
+        "type": {
+          "const": "message.delta",
+          "default": "message.delta",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "payload"
+      ],
+      "title": "MessageDelta",
+      "type": "object"
+    },
+    "MessageDeltaValue": {
+      "additionalProperties": false,
+      "properties": {
+        "messageId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Messageid",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 2,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "text": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "messageId",
+        "revision",
+        "text"
+      ],
+      "title": "MessageDeltaValue",
+      "type": "object"
+    },
+    "MessagePage": {
+      "additionalProperties": false,
+      "properties": {
+        "nextCursor": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Nextcursor"
+        }
+      },
+      "required": [
+        "nextCursor"
+      ],
+      "title": "MessagePage",
+      "type": "object"
+    },
+    "MessageSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "$ref": "#/$defs/MessageContent"
+        },
+        "messageId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Messageid",
+          "type": "string"
+        },
+        "ordinal": {
+          "minimum": 1,
+          "title": "Ordinal",
+          "type": "integer"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "role": {
+          "enum": [
+            "user",
+            "assistant"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "streaming",
+            "completed",
+            "incomplete"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "messageId",
+        "ordinal",
+        "role",
+        "revision",
+        "status",
+        "content"
+      ],
+      "title": "MessageSnapshot",
+      "type": "object"
+    },
+    "MessageUpsert": {
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/MessageSnapshot"
+        },
+        "type": {
+          "const": "message.upsert",
+          "default": "message.upsert",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "payload"
+      ],
+      "title": "MessageUpsert",
       "type": "object"
     },
     "ModelCapabilities": {
@@ -2323,6 +4183,55 @@
       "title": "ModelRoute",
       "type": "object"
     },
+    "ModelTokenLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "context_window_tokens": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Context Window Tokens"
+        },
+        "max_input_tokens": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Input Tokens"
+        },
+        "max_output_tokens": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Output Tokens"
+        }
+      },
+      "title": "ModelTokenLimits",
+      "type": "object"
+    },
     "ModelUsage": {
       "additionalProperties": false,
       "properties": {
@@ -2367,6 +4276,38 @@
         }
       },
       "title": "ModelUsage",
+      "type": "object"
+    },
+    "NarrationView": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "narration",
+          "default": "narration",
+          "title": "Kind",
+          "type": "string"
+        },
+        "objectId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Objectid",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "value": {
+          "$ref": "#/$defs/RunRoutedPayload"
+        }
+      },
+      "required": [
+        "objectId",
+        "revision",
+        "value"
+      ],
+      "title": "NarrationView",
       "type": "object"
     },
     "ObservabilityStatus": {
@@ -2478,6 +4419,38 @@
       "title": "OutputValidation",
       "type": "object"
     },
+    "PlanView": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "plan",
+          "default": "plan",
+          "title": "Kind",
+          "type": "string"
+        },
+        "objectId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Objectid",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "value": {
+          "$ref": "#/$defs/RunAutonomyResult"
+        }
+      },
+      "required": [
+        "objectId",
+        "revision",
+        "value"
+      ],
+      "title": "PlanView",
+      "type": "object"
+    },
     "PlatformScope": {
       "additionalProperties": false,
       "properties": {
@@ -2584,6 +4557,17 @@
           "default": false,
           "title": "Enabled",
           "type": "boolean"
+        },
+        "generation_profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GenerationProfileInput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "operation_id": {
           "format": "uuid",
@@ -2746,6 +4730,17 @@
           "title": "Expected Version",
           "type": "integer"
         },
+        "generation_profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GenerationProfileInput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "operation_id": {
           "format": "uuid",
           "title": "Operation Id",
@@ -2801,6 +4796,17 @@
         "enabled": {
           "title": "Enabled",
           "type": "boolean"
+        },
+        "generation_profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GenerationProfileView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "has_api_key": {
           "title": "Has Api Key",
@@ -2870,6 +4876,214 @@
       "title": "ProviderView",
       "type": "object"
     },
+    "PublicApproval": {
+      "additionalProperties": false,
+      "properties": {
+        "actionId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Actionid",
+          "type": "string"
+        },
+        "decisionId": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Decisionid"
+        },
+        "expiresAt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Expiresat"
+        },
+        "kind": {
+          "enum": [
+            "approval",
+            "external_event",
+            "reconciliation"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "proposalDigest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Proposaldigest",
+          "type": "string"
+        },
+        "proposalId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Proposalid",
+          "type": "string"
+        },
+        "proposalRevision": {
+          "minimum": 1,
+          "title": "Proposalrevision",
+          "type": "integer"
+        },
+        "reasonCode": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reasoncode"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "approved",
+            "rejected",
+            "expired",
+            "canceled"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "summary": {
+          "maxLength": 2000,
+          "title": "Summary",
+          "type": "string"
+        },
+        "waitId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Waitid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "waitId",
+        "proposalId",
+        "proposalRevision",
+        "proposalDigest",
+        "actionId",
+        "kind",
+        "status",
+        "summary",
+        "expiresAt",
+        "decisionId",
+        "reasonCode"
+      ],
+      "title": "PublicApproval",
+      "type": "object"
+    },
+    "PublicArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "byteSize": {
+          "maximum": 2097152,
+          "minimum": 1,
+          "title": "Bytesize",
+          "type": "integer"
+        },
+        "id": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "mediaType": {
+          "enum": [
+            "image/png",
+            "text/csv"
+          ],
+          "title": "Mediatype",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "stepId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Stepid",
+          "type": "string"
+        },
+        "toolCallId": {
+          "maxLength": 200,
+          "title": "Toolcallid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "mediaType",
+        "byteSize",
+        "sha256",
+        "stepId",
+        "toolCallId"
+      ],
+      "title": "PublicArtifact",
+      "type": "object"
+    },
+    "PublicWorkflow": {
+      "additionalProperties": false,
+      "properties": {
+        "assetId": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Assetid"
+        },
+        "draft": {
+          "$ref": "#/$defs/WorkflowDraftView"
+        },
+        "draftId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Draftid",
+          "type": "string"
+        },
+        "expiresAt": {
+          "title": "Expiresat",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "offered",
+            "saved",
+            "expired"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "draftId",
+        "draft",
+        "status",
+        "assetId",
+        "expiresAt"
+      ],
+      "title": "PublicWorkflow",
+      "type": "object"
+    },
     "ReasoningMetaEvent": {
       "additionalProperties": false,
       "properties": {
@@ -2908,6 +5122,39 @@
       "title": "ReasoningMetaEvent",
       "type": "object"
     },
+    "ReconcileCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "actionId": {
+          "format": "uuid",
+          "title": "Actionid",
+          "type": "string"
+        },
+        "expectedVersion": {
+          "minimum": 1,
+          "title": "Expectedversion",
+          "type": "integer"
+        },
+        "requestId": {
+          "format": "uuid",
+          "title": "Requestid",
+          "type": "string"
+        },
+        "waitId": {
+          "format": "uuid",
+          "title": "Waitid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "requestId",
+        "expectedVersion",
+        "waitId",
+        "actionId"
+      ],
+      "title": "ReconcileCommand",
+      "type": "object"
+    },
     "ReliabilityScenario": {
       "enum": [
         "success",
@@ -2923,6 +5170,249 @@
         "cleanup_failed"
       ],
       "type": "string"
+    },
+    "RetailConnectionFields": {
+      "additionalProperties": false,
+      "properties": {
+        "database_name": {
+          "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+          "title": "Database Name",
+          "type": "string"
+        },
+        "host": {
+          "maxLength": 253,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9.-]*$",
+          "title": "Host",
+          "type": "string"
+        },
+        "port": {
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Port",
+          "type": "integer"
+        },
+        "retail_tenant_id": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Retail Tenant Id",
+          "type": "integer"
+        },
+        "role": {
+          "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+          "title": "Role",
+          "type": "string"
+        },
+        "sslmode": {
+          "enum": [
+            "disable",
+            "prefer",
+            "require",
+            "verify-full"
+          ],
+          "title": "Sslmode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "host",
+        "port",
+        "database_name",
+        "role",
+        "sslmode",
+        "retail_tenant_id"
+      ],
+      "title": "RetailConnectionFields",
+      "type": "object"
+    },
+    "RetailConnectionSave": {
+      "additionalProperties": false,
+      "properties": {
+        "database_name": {
+          "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+          "title": "Database Name",
+          "type": "string"
+        },
+        "host": {
+          "maxLength": 253,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9.-]*$",
+          "title": "Host",
+          "type": "string"
+        },
+        "password": {
+          "anyOf": [
+            {
+              "format": "password",
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Password"
+        },
+        "port": {
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Port",
+          "type": "integer"
+        },
+        "retail_tenant_id": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Retail Tenant Id",
+          "type": "integer"
+        },
+        "revision": {
+          "exclusiveMaximum": 2147483647,
+          "minimum": 0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "role": {
+          "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+          "title": "Role",
+          "type": "string"
+        },
+        "sslmode": {
+          "enum": [
+            "disable",
+            "prefer",
+            "require",
+            "verify-full"
+          ],
+          "title": "Sslmode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "host",
+        "port",
+        "database_name",
+        "role",
+        "sslmode",
+        "retail_tenant_id",
+        "revision"
+      ],
+      "title": "RetailConnectionSave",
+      "type": "object"
+    },
+    "RetailConnectionStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "connection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RetailConnectionView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "connection"
+      ],
+      "title": "RetailConnectionStatus",
+      "type": "object"
+    },
+    "RetailConnectionTest": {
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "connection_failed",
+            "identity_mismatch",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "revision",
+        "status"
+      ],
+      "title": "RetailConnectionTest",
+      "type": "object"
+    },
+    "RetailConnectionView": {
+      "additionalProperties": false,
+      "properties": {
+        "database_name": {
+          "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+          "title": "Database Name",
+          "type": "string"
+        },
+        "host": {
+          "maxLength": 253,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9.-]*$",
+          "title": "Host",
+          "type": "string"
+        },
+        "password_configured": {
+          "const": true,
+          "default": true,
+          "title": "Password Configured",
+          "type": "boolean"
+        },
+        "port": {
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Port",
+          "type": "integer"
+        },
+        "retail_tenant_id": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Retail Tenant Id",
+          "type": "integer"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "role": {
+          "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+          "title": "Role",
+          "type": "string"
+        },
+        "sslmode": {
+          "enum": [
+            "disable",
+            "prefer",
+            "require",
+            "verify-full"
+          ],
+          "title": "Sslmode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "host",
+        "port",
+        "database_name",
+        "role",
+        "sslmode",
+        "retail_tenant_id",
+        "revision"
+      ],
+      "title": "RetailConnectionView",
+      "type": "object"
     },
     "RouteSelectedEvent": {
       "additionalProperties": false,
@@ -3042,44 +5532,6 @@
       "title": "RoutedCallResponse",
       "type": "object"
     },
-    "RoutedModelEvent": {
-      "discriminator": {
-        "mapping": {
-          "classification_status": "#/$defs/ClassificationEvent",
-          "final": "#/$defs/RoutingFinalEvent",
-          "reasoning_meta": "#/$defs/ReasoningMetaEvent",
-          "route_selected": "#/$defs/RouteSelectedEvent",
-          "start": "#/$defs/RoutingStartEvent",
-          "text_delta": "#/$defs/TextDeltaEvent",
-          "tool_delta": "#/$defs/ToolDeltaEvent"
-        },
-        "propertyName": "type"
-      },
-      "oneOf": [
-        {
-          "$ref": "#/$defs/RoutingStartEvent"
-        },
-        {
-          "$ref": "#/$defs/ClassificationEvent"
-        },
-        {
-          "$ref": "#/$defs/RouteSelectedEvent"
-        },
-        {
-          "$ref": "#/$defs/TextDeltaEvent"
-        },
-        {
-          "$ref": "#/$defs/ToolDeltaEvent"
-        },
-        {
-          "$ref": "#/$defs/ReasoningMetaEvent"
-        },
-        {
-          "$ref": "#/$defs/RoutingFinalEvent"
-        }
-      ],
-      "title": "RoutedModelEvent"
-    },
     "RoutingFeatures": {
       "additionalProperties": false,
       "properties": {
@@ -3121,97 +5573,6 @@
         "response_mode"
       ],
       "title": "RoutingFeatures",
-      "type": "object"
-    },
-    "RoutingFinalEvent": {
-      "additionalProperties": false,
-      "properties": {
-        "call_id": {
-          "format": "uuid",
-          "title": "Call Id",
-          "type": "string"
-        },
-        "error_code": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Error Code"
-        },
-        "features": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/RoutingFeatures"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "intent": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Intent"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "metrics": {
-          "$ref": "#/$defs/RoutingMetrics"
-        },
-        "result": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/CallResponse"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "routing": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ModelRoute"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "status": {
-          "enum": [
-            "completed",
-            "failed",
-            "canceled",
-            "incomplete"
-          ],
-          "title": "Status",
-          "type": "string"
-        },
-        "type": {
-          "const": "final",
-          "default": "final",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "call_id",
-        "status"
-      ],
-      "title": "RoutingFinalEvent",
       "type": "object"
     },
     "RoutingMetrics": {
@@ -3267,25 +5628,296 @@
       "title": "RoutingMetrics",
       "type": "object"
     },
-    "RoutingStartEvent": {
+    "RunArtifact": {
       "additionalProperties": false,
       "properties": {
-        "call_id": {
-          "format": "uuid",
-          "title": "Call Id",
+        "byteSize": {
+          "maximum": 524288,
+          "minimum": 1,
+          "title": "Bytesize",
+          "type": "integer"
+        },
+        "id": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Id",
           "type": "string"
         },
-        "type": {
-          "const": "start",
-          "default": "start",
-          "title": "Type",
+        "mediaType": {
+          "const": "image/png",
+          "title": "Mediatype",
+          "type": "string"
+        },
+        "name": {
+          "const": "chart.png",
+          "title": "Name",
+          "type": "string"
+        },
+        "stepId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Stepid",
+          "type": "string"
+        },
+        "toolCallId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Toolcallid",
           "type": "string"
         }
       },
       "required": [
-        "call_id"
+        "id",
+        "name",
+        "mediaType",
+        "byteSize",
+        "stepId",
+        "toolCallId"
       ],
-      "title": "RoutingStartEvent",
+      "title": "RunArtifact",
+      "type": "object"
+    },
+    "RunAutonomyAction": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "replace",
+            "select",
+            "complete",
+            "skip",
+            "retail",
+            "database",
+            "submit",
+            "unknown"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "actionIndex": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Actionindex",
+          "type": "integer"
+        },
+        "code": {
+          "pattern": "^[a-z][a-z0-9_]{0,79}$",
+          "title": "Code",
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/RunTodoItem"
+          },
+          "maxItems": 6,
+          "title": "Items",
+          "type": "array"
+        },
+        "layer": {
+          "anyOf": [
+            {
+              "enum": [
+                "rule",
+                "schema",
+                "tool_result"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Layer"
+        },
+        "level": {
+          "anyOf": [
+            {
+              "enum": [
+                "step",
+                "run"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Level"
+        },
+        "planVersion": {
+          "maximum": 400,
+          "minimum": 0,
+          "title": "Planversion",
+          "type": "integer"
+        },
+        "selectedTodoId": {
+          "anyOf": [
+            {
+              "pattern": "^t[1-9][0-9]{0,2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Selectedtodoid"
+        },
+        "stepId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Stepid",
+          "type": "string"
+        },
+        "todoId": {
+          "anyOf": [
+            {
+              "pattern": "^t[1-9][0-9]{0,2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Todoid"
+        }
+      },
+      "required": [
+        "stepId",
+        "actionIndex",
+        "action",
+        "code",
+        "planVersion",
+        "selectedTodoId",
+        "items"
+      ],
+      "title": "RunAutonomyAction",
+      "type": "object"
+    },
+    "RunAutonomyBudget": {
+      "additionalProperties": false,
+      "properties": {
+        "attempts": {
+          "minimum": 0,
+          "title": "Attempts",
+          "type": "integer"
+        },
+        "costMicrousd": {
+          "$ref": "#/$defs/RunAutonomyUsage"
+        },
+        "steps": {
+          "$ref": "#/$defs/RunAutonomyUsage"
+        },
+        "tokens": {
+          "$ref": "#/$defs/RunAutonomyUsage"
+        },
+        "tools": {
+          "$ref": "#/$defs/RunAutonomyUsage"
+        },
+        "unknownAttempts": {
+          "minimum": 0,
+          "title": "Unknownattempts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "steps",
+        "tools",
+        "tokens",
+        "costMicrousd",
+        "attempts",
+        "unknownAttempts"
+      ],
+      "title": "RunAutonomyBudget",
+      "type": "object"
+    },
+    "RunAutonomyResult": {
+      "additionalProperties": false,
+      "properties": {
+        "budget": {
+          "$ref": "#/$defs/RunAutonomyBudget"
+        },
+        "firstPlanStep": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Firstplanstep"
+        },
+        "outcome": {
+          "enum": [
+            "completed",
+            "waiting",
+            "failed",
+            "budget_exhausted",
+            "human_required",
+            "canceled",
+            "cleanup_unconfirmed"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "partial": {
+          "items": {
+            "$ref": "#/$defs/RunVerifiedSummary"
+          },
+          "maxItems": 2,
+          "title": "Partial",
+          "type": "array"
+        },
+        "planVersion": {
+          "maximum": 400,
+          "minimum": 0,
+          "title": "Planversion",
+          "type": "integer"
+        },
+        "reason": {
+          "pattern": "^[a-z][a-z0-9_]{0,79}$",
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "outcome",
+        "reason",
+        "planVersion",
+        "firstPlanStep",
+        "budget",
+        "partial"
+      ],
+      "title": "RunAutonomyResult",
+      "type": "object"
+    },
+    "RunAutonomyUsage": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "minimum": 0,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "remaining": {
+          "minimum": 0,
+          "title": "Remaining",
+          "type": "integer"
+        },
+        "used": {
+          "minimum": 0,
+          "title": "Used",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "limit",
+        "used",
+        "remaining"
+      ],
+      "title": "RunAutonomyUsage",
       "type": "object"
     },
     "RunCanceled": {
@@ -3364,6 +5996,14 @@
     "RunCompleted": {
       "additionalProperties": false,
       "properties": {
+        "artifacts": {
+          "items": {
+            "$ref": "#/$defs/RunArtifact"
+          },
+          "maxItems": 40,
+          "title": "Artifacts",
+          "type": "array"
+        },
         "file": {
           "discriminator": {
             "mapping": {
@@ -3406,16 +6046,310 @@
       "title": "RunCompleted",
       "type": "object"
     },
+    "RunConstraints": {
+      "additionalProperties": false,
+      "properties": {
+        "maxSteps": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Maxsteps"
+        },
+        "plan": {
+          "anyOf": [
+            {
+              "const": "required",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Plan"
+        },
+        "timeoutSeconds": {
+          "anyOf": [
+            {
+              "maximum": 600,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timeoutseconds"
+        }
+      },
+      "title": "RunConstraints",
+      "type": "object"
+    },
     "RunContractModel": {
       "additionalProperties": false,
       "properties": {},
       "title": "RunContractModel",
       "type": "object"
     },
+    "RunCursor": {
+      "additionalProperties": false,
+      "properties": {
+        "runId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Runid",
+          "type": "string"
+        },
+        "seq": {
+          "pattern": "^(0|[1-9][0-9]{0,19})-(0|[1-9][0-9]{0,19})$",
+          "title": "Seq",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runId",
+        "seq"
+      ],
+      "title": "RunCursor",
+      "type": "object"
+    },
     "RunEmpty": {
       "additionalProperties": false,
       "properties": {},
       "title": "RunEmpty",
+      "type": "object"
+    },
+    "RunExecutionNode": {
+      "additionalProperties": false,
+      "description": "Execution snapshot with optional detail for currently authorized viewers.",
+      "properties": {
+        "dependsOn": {
+          "items": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Dependson",
+          "type": "array"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecutionDetail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "display": {
+          "$ref": "#/$defs/ExecutionDisplay"
+        },
+        "endedAtMs": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Endedatms"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecutionEnvironment"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "model",
+            "narration",
+            "tool",
+            "workflow",
+            "skill",
+            "subagent",
+            "group"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "modelCallId": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Modelcallid"
+        },
+        "origin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecutionOrigin"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "parentId": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parentid"
+        },
+        "revision": {
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "scheduling": {
+          "anyOf": [
+            {
+              "enum": [
+                "sequential",
+                "parallel"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Scheduling"
+        },
+        "skill": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecutionSkill"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "startedAtMs": {
+          "minimum": 0,
+          "title": "Startedatms",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "preparing",
+            "running",
+            "completed",
+            "empty",
+            "failed",
+            "canceled",
+            "waiting",
+            "incomplete"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "stepId": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Stepid"
+        },
+        "subagent": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecutionSubAgent"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Summary"
+        },
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "toolCallId": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Toolcallid"
+        },
+        "workflow": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecutionWorkflow"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "kind",
+        "status",
+        "title",
+        "startedAtMs"
+      ],
+      "title": "RunExecutionNode",
       "type": "object"
     },
     "RunExtensionPayload": {
@@ -3459,11 +6393,18 @@
       "properties": {
         "errorCode": {
           "enum": [
+            "input_token_limit_exceeded",
+            "output_token_limit_exceeded",
+            "invalid_model_input",
             "model_failed",
             "model_incomplete",
             "model_unavailable",
             "run_timeout",
             "context_limit",
+            "workflow_unavailable",
+            "workflow_failed",
+            "tool_catalog_limit",
+            "tool_setup_failed",
             "step_limit",
             "internal_error"
           ],
@@ -3486,19 +6427,35 @@
     "RunFinished": {
       "additionalProperties": false,
       "properties": {
+        "durationMs": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Durationms"
+        },
         "payload": {
           "discriminator": {
             "mapping": {
               "canceled": "#/$defs/RunCanceled",
               "cleanup_unconfirmed": "#/$defs/RunCleanupUnconfirmed",
               "completed": "#/$defs/RunCompleted",
-              "failed": "#/$defs/RunFailed"
+              "failed": "#/$defs/RunFailed",
+              "waiting": "#/$defs/RunWaiting"
             },
             "propertyName": "status"
           },
           "oneOf": [
             {
               "$ref": "#/$defs/RunCompleted"
+            },
+            {
+              "$ref": "#/$defs/RunWaiting"
             },
             {
               "$ref": "#/$defs/RunFailed"
@@ -3590,7 +6547,7 @@
           "type": "string"
         },
         "seq": {
-          "maximum": 96,
+          "maximum": 4096,
           "minimum": 1,
           "title": "Seq",
           "type": "integer"
@@ -3631,6 +6588,76 @@
         "end"
       ],
       "title": "RunPeriod",
+      "type": "object"
+    },
+    "RunPublicSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "cleanupStatus": {
+          "enum": [
+            "none",
+            "pending",
+            "confirmed",
+            "unconfirmed"
+          ],
+          "title": "Cleanupstatus",
+          "type": "string"
+        },
+        "ordinal": {
+          "minimum": 1,
+          "title": "Ordinal",
+          "type": "integer"
+        },
+        "reasonCode": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reasoncode"
+        },
+        "recoveryStatus": {
+          "enum": [
+            "ready",
+            "required",
+            "blocked"
+          ],
+          "title": "Recoverystatus",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "created",
+            "running",
+            "waiting",
+            "paused",
+            "cancelling",
+            "completed",
+            "failed",
+            "canceled"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ordinal",
+        "version",
+        "status",
+        "reasonCode",
+        "recoveryStatus",
+        "cleanupStatus"
+      ],
+      "title": "RunPublicSnapshot",
       "type": "object"
     },
     "RunRouted": {
@@ -3704,6 +6731,669 @@
       "title": "RunStarted",
       "type": "object"
     },
+    "RunTodoItem": {
+      "additionalProperties": false,
+      "properties": {
+        "channelCode": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z0-9_]{1,24}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Channelcode"
+        },
+        "compareTo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunPeriod"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "dependsOn": {
+          "items": {
+            "pattern": "^t[1-9][0-9]{0,2}$",
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Dependson",
+          "type": "array"
+        },
+        "goal": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Goal",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^t[1-9][0-9]{0,2}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "optional": {
+          "title": "Optional",
+          "type": "boolean"
+        },
+        "period": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunPeriod"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "out_of_scope",
+                "duplicate_optional"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "failed",
+            "verified",
+            "skipped"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "goal",
+        "status",
+        "dependsOn",
+        "optional"
+      ],
+      "title": "RunTodoItem",
+      "type": "object"
+    },
+    "RunToolPreparation": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "preparing",
+            "prepared"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "stepId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Stepid",
+          "type": "string"
+        },
+        "toolIndex": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Toolindex",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "stepId",
+        "toolIndex",
+        "status"
+      ],
+      "title": "RunToolPreparation",
+      "type": "object"
+    },
+    "RunUpsert": {
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "$ref": "#/$defs/RunPublicSnapshot"
+        },
+        "type": {
+          "const": "run.upsert",
+          "default": "run.upsert",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "payload"
+      ],
+      "title": "RunUpsert",
+      "type": "object"
+    },
+    "RunVerifiedSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "channelCode": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z0-9_]{1,24}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Channelcode"
+        },
+        "comparePaidCent": {
+          "anyOf": [
+            {
+              "pattern": "^(?:0|-?[1-9][0-9]{0,19})$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Comparepaidcent"
+        },
+        "compareTo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunPeriod"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dimension": {
+          "enum": [
+            "channel",
+            "product"
+          ],
+          "title": "Dimension",
+          "type": "string"
+        },
+        "paidCent": {
+          "pattern": "^(?:0|-?[1-9][0-9]{0,19})$",
+          "title": "Paidcent",
+          "type": "string"
+        },
+        "period": {
+          "$ref": "#/$defs/RunPeriod"
+        },
+        "queryId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Queryid",
+          "type": "string"
+        },
+        "rowCount": {
+          "maximum": 200,
+          "minimum": 1,
+          "title": "Rowcount",
+          "type": "integer"
+        },
+        "stepId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Stepid",
+          "type": "string"
+        },
+        "toolCallId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Toolcallid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "queryId",
+        "stepId",
+        "toolCallId",
+        "dimension",
+        "period",
+        "compareTo",
+        "channelCode",
+        "rowCount",
+        "paidCent",
+        "comparePaidCent"
+      ],
+      "title": "RunVerifiedSummary",
+      "type": "object"
+    },
+    "RunWaiting": {
+      "additionalProperties": false,
+      "properties": {
+        "continuation": {
+          "const": "execute_tool",
+          "default": "execute_tool",
+          "title": "Continuation",
+          "type": "string"
+        },
+        "nodeKey": {
+          "const": "tool_approval",
+          "default": "tool_approval",
+          "title": "Nodekey",
+          "type": "string"
+        },
+        "proposal": {
+          "$ref": "#/$defs/ToolApprovalProposal"
+        },
+        "runId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Runid",
+          "type": "string"
+        },
+        "status": {
+          "const": "waiting",
+          "title": "Status",
+          "type": "string"
+        },
+        "waitId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Waitid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "runId",
+        "waitId",
+        "proposal"
+      ],
+      "title": "RunWaiting",
+      "type": "object"
+    },
+    "RunWorkflowAsset": {
+      "additionalProperties": false,
+      "properties": {
+        "assetId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Assetid",
+          "type": "string"
+        },
+        "definitionVersion": {
+          "const": 1,
+          "title": "Definitionversion",
+          "type": "integer"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "assetId",
+        "name",
+        "definitionVersion"
+      ],
+      "title": "RunWorkflowAsset",
+      "type": "object"
+    },
+    "RunWorkflowProgress": {
+      "additionalProperties": false,
+      "properties": {
+        "asset": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunWorkflowAsset"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9_-]{1,80}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "key": {
+          "pattern": "^[a-z0-9_:@-]{1,72}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "dynamic",
+            "fixed",
+            "skill"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "running",
+            "completed",
+            "failed",
+            "canceled",
+            "waiting"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "key",
+        "status"
+      ],
+      "title": "RunWorkflowProgress",
+      "type": "object"
+    },
+    "RuntimeTimeline": {
+      "additionalProperties": false,
+      "properties": {
+        "entries": {
+          "items": {
+            "$ref": "#/$defs/RuntimeTimelineEntry"
+          },
+          "maxItems": 4096,
+          "title": "Entries",
+          "type": "array"
+        },
+        "runId": {
+          "format": "uuid",
+          "title": "Runid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runId",
+        "entries"
+      ],
+      "title": "RuntimeTimeline",
+      "type": "object"
+    },
+    "RuntimeTimelineEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "attemptId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attemptid"
+        },
+        "epoch": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Epoch"
+        },
+        "id": {
+          "maxLength": 200,
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "scheduling",
+            "step",
+            "attempt",
+            "model",
+            "command"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "modelCallId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Modelcallid"
+        },
+        "occurredAt": {
+          "format": "date-time",
+          "title": "Occurredat",
+          "type": "string"
+        },
+        "reasonCode": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reasoncode"
+        },
+        "status": {
+          "maxLength": 80,
+          "title": "Status",
+          "type": "string"
+        },
+        "stepId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stepid"
+        },
+        "workerId": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Workerid"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "status",
+        "occurredAt"
+      ],
+      "title": "RuntimeTimelineEntry",
+      "type": "object"
+    },
+    "RuntimeUsage": {
+      "additionalProperties": false,
+      "properties": {
+        "backlog": {
+          "minimum": 0,
+          "title": "Backlog",
+          "type": "integer"
+        },
+        "jobs": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Jobs",
+          "type": "object"
+        },
+        "limits": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Limits",
+          "type": "object"
+        },
+        "occupied": {
+          "minimum": 0,
+          "title": "Occupied",
+          "type": "integer"
+        },
+        "reservedCostMicrousd": {
+          "minimum": 0,
+          "title": "Reservedcostmicrousd",
+          "type": "integer"
+        },
+        "reservedTokens": {
+          "minimum": 0,
+          "title": "Reservedtokens",
+          "type": "integer"
+        },
+        "settledCostMicrousd": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Settledcostmicrousd"
+        },
+        "settledTokens": {
+          "minimum": 0,
+          "title": "Settledtokens",
+          "type": "integer"
+        },
+        "tenantId": {
+          "format": "uuid",
+          "title": "Tenantid",
+          "type": "string"
+        },
+        "unknownAttempts": {
+          "minimum": 0,
+          "title": "Unknownattempts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "tenantId",
+        "limits",
+        "jobs",
+        "backlog",
+        "occupied",
+        "settledTokens",
+        "settledCostMicrousd",
+        "unknownAttempts",
+        "reservedTokens",
+        "reservedCostMicrousd"
+      ],
+      "title": "RuntimeUsage",
+      "type": "object"
+    },
+    "SandboxInspection": {
+      "additionalProperties": false,
+      "properties": {
+        "allocationId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Allocationid",
+          "type": "string"
+        },
+        "chartSha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chartsha256"
+        },
+        "cleanup": {
+          "enum": [
+            "confirmed",
+            "unconfirmed"
+          ],
+          "title": "Cleanup",
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/JsonValue",
+          "default": null
+        },
+        "runId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Runid",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "error",
+            "unknown"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "stepId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Stepid",
+          "type": "string"
+        },
+        "toolCallId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Toolcallid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "allocationId",
+        "runId",
+        "stepId",
+        "toolCallId",
+        "status",
+        "cleanup"
+      ],
+      "title": "SandboxInspection",
+      "type": "object"
+    },
     "SavedProvider": {
       "additionalProperties": false,
       "properties": {
@@ -3728,6 +7418,332 @@
         "operation_id"
       ],
       "title": "SavedProvider",
+      "type": "object"
+    },
+    "SchedulingPublic": {
+      "additionalProperties": false,
+      "properties": {
+        "claimCount": {
+          "minimum": 0,
+          "title": "Claimcount",
+          "type": "integer"
+        },
+        "occurredAt": {
+          "format": "date-time",
+          "title": "Occurredat",
+          "type": "string"
+        },
+        "phase": {
+          "const": "scheduling",
+          "default": "scheduling",
+          "title": "Phase",
+          "type": "string"
+        },
+        "reasonCode": {
+          "maxLength": 80,
+          "title": "Reasoncode",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "leased",
+            "reclaiming",
+            "parked",
+            "done"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "summary": {
+          "maxLength": 200,
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "reasonCode",
+        "claimCount",
+        "occurredAt",
+        "summary"
+      ],
+      "title": "SchedulingPublic",
+      "type": "object"
+    },
+    "SessionAccepted": {
+      "additionalProperties": false,
+      "properties": {
+        "runId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Runid",
+          "type": "string"
+        },
+        "session": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SessionListItem"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sessionId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "streamUrl": {
+          "title": "Streamurl",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId",
+        "runId",
+        "streamUrl"
+      ],
+      "title": "SessionAccepted",
+      "type": "object"
+    },
+    "SessionDeleted": {
+      "additionalProperties": false,
+      "properties": {
+        "sessionId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Sessionid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "SessionDeleted",
+      "type": "object"
+    },
+    "SessionList": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/SessionListItem"
+          },
+          "maxItems": 50,
+          "title": "Items",
+          "type": "array"
+        },
+        "nextCursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Nextcursor"
+        }
+      },
+      "required": [
+        "items",
+        "nextCursor"
+      ],
+      "title": "SessionList",
+      "type": "object"
+    },
+    "SessionListItem": {
+      "additionalProperties": false,
+      "properties": {
+        "executionStatus": {
+          "anyOf": [
+            {
+              "enum": [
+                "created",
+                "running",
+                "waiting",
+                "paused",
+                "cancelling",
+                "completed",
+                "failed",
+                "canceled"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Executionstatus"
+        },
+        "iconKey": {
+          "enum": [
+            "chat",
+            "workflow"
+          ],
+          "title": "Iconkey",
+          "type": "string"
+        },
+        "latestRunId": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Latestrunid"
+        },
+        "sessionId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Sessionid",
+          "type": "string"
+        },
+        "sessionType": {
+          "enum": [
+            "chat",
+            "workflow"
+          ],
+          "title": "Sessiontype",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "titleStatus": {
+          "default": "fallback",
+          "enum": [
+            "fallback",
+            "pending",
+            "generated",
+            "manual"
+          ],
+          "title": "Titlestatus",
+          "type": "string"
+        },
+        "updatedAt": {
+          "title": "Updatedat",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sessionId",
+        "title",
+        "sessionType",
+        "iconKey",
+        "version",
+        "updatedAt",
+        "latestRunId",
+        "executionStatus"
+      ],
+      "title": "SessionListItem",
+      "type": "object"
+    },
+    "SessionMutation": {
+      "additionalProperties": false,
+      "properties": {
+        "requestId": {
+          "format": "uuid",
+          "title": "Requestid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "requestId"
+      ],
+      "title": "SessionMutation",
+      "type": "object"
+    },
+    "SessionRename": {
+      "additionalProperties": false,
+      "properties": {
+        "requestId": {
+          "format": "uuid",
+          "title": "Requestid",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "requestId",
+        "title"
+      ],
+      "title": "SessionRename",
+      "type": "object"
+    },
+    "SessionSubmit": {
+      "additionalProperties": false,
+      "properties": {
+        "constraints": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunConstraints"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "question": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "title": "Question",
+          "type": "string"
+        },
+        "requestId": {
+          "format": "uuid",
+          "title": "Requestid",
+          "type": "string"
+        },
+        "selection": {
+          "$ref": "#/$defs/MainModelSelection"
+        },
+        "sessionId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sessionid"
+        },
+        "workflowAssetRef": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkflowAssetRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "requestId",
+        "question",
+        "selection"
+      ],
+      "title": "SessionSubmit",
       "type": "object"
     },
     "ShowcaseCall": {
@@ -4132,7 +8148,7 @@
           "type": "string"
         },
         "stepIndex": {
-          "maximum": 6,
+          "maximum": 100,
           "minimum": 1,
           "title": "Stepindex",
           "type": "integer"
@@ -4351,6 +8367,169 @@
       "title": "TextDeltaEvent",
       "type": "object"
     },
+    "TimelineValue": {
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "discriminator": {
+            "mapping": {
+              "run.routed": "#/$defs/RunRouted",
+              "step.finished": "#/$defs/StepFinished",
+              "step.started": "#/$defs/StepStarted",
+              "stream.extension": "#/$defs/StreamExtension",
+              "tool.finished": "#/$defs/ToolFinished",
+              "tool.started": "#/$defs/ToolStarted"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/RunRouted"
+            },
+            {
+              "$ref": "#/$defs/StepStarted"
+            },
+            {
+              "$ref": "#/$defs/ToolStarted"
+            },
+            {
+              "$ref": "#/$defs/ToolFinished"
+            },
+            {
+              "$ref": "#/$defs/StepFinished"
+            },
+            {
+              "$ref": "#/$defs/StreamExtension"
+            }
+          ],
+          "title": "Event"
+        },
+        "ordinal": {
+          "minimum": 1,
+          "title": "Ordinal",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ordinal",
+        "event"
+      ],
+      "title": "TimelineValue",
+      "type": "object"
+    },
+    "TimelineView": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "timeline",
+          "default": "timeline",
+          "title": "Kind",
+          "type": "string"
+        },
+        "objectId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Objectid",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "value": {
+          "$ref": "#/$defs/TimelineValue"
+        }
+      },
+      "required": [
+        "objectId",
+        "revision",
+        "value"
+      ],
+      "title": "TimelineView",
+      "type": "object"
+    },
+    "ToolApprovalProposal": {
+      "additionalProperties": false,
+      "properties": {
+        "argumentsDigest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Argumentsdigest",
+          "type": "string"
+        },
+        "connectionId": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Connectionid"
+        },
+        "connectionRevision": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Connectionrevision"
+        },
+        "proposalId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Proposalid",
+          "type": "string"
+        },
+        "schemaHash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schemahash"
+        },
+        "summary": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        },
+        "toolCallId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Toolcallid",
+          "type": "string"
+        },
+        "toolName": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Toolname",
+          "type": "string"
+        }
+      },
+      "required": [
+        "proposalId",
+        "toolName",
+        "toolCallId",
+        "argumentsDigest",
+        "summary"
+      ],
+      "title": "ToolApprovalProposal",
+      "type": "object"
+    },
     "ToolCall": {
       "additionalProperties": false,
       "properties": {
@@ -4473,6 +8652,18 @@
     "ToolEmptyPayload": {
       "additionalProperties": false,
       "properties": {
+        "resultPreview": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Resultpreview"
+        },
         "rowCount": {
           "const": 0,
           "title": "Rowcount",
@@ -4550,10 +8741,25 @@
             "retail_unavailable",
             "retail_query_failed",
             "retail_query_timeout",
+            "database_query_failed",
+            "database_unavailable",
+            "database_query_timeout",
             "result_limit"
           ],
           "title": "Errorcode",
           "type": "string"
+        },
+        "resultPreview": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Resultpreview"
         },
         "status": {
           "const": "error",
@@ -4626,6 +8832,47 @@
       "title": "ToolFinished",
       "type": "object"
     },
+    "ToolFinishedKey": {
+      "additionalProperties": false,
+      "properties": {
+        "resultPreview": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Resultpreview"
+        },
+        "stepId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Stepid",
+          "type": "string"
+        },
+        "toolCallId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Toolcallid",
+          "type": "string"
+        },
+        "toolIndex": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Toolindex",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "stepId",
+        "toolCallId",
+        "toolIndex"
+      ],
+      "title": "ToolFinishedKey",
+      "type": "object"
+    },
     "ToolFunction": {
       "additionalProperties": false,
       "properties": {
@@ -4674,6 +8921,18 @@
     "ToolStartedPayload": {
       "additionalProperties": false,
       "properties": {
+        "inputPreview": {
+          "anyOf": [
+            {
+              "maxLength": 8192,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Inputpreview"
+        },
         "params": {
           "anyOf": [
             {
@@ -4719,6 +8978,7 @@
         "toolKind": {
           "enum": [
             "retail_sales",
+            "database_query",
             "unavailable"
           ],
           "title": "Toolkind",
@@ -4738,6 +8998,18 @@
     "ToolSucceededPayload": {
       "additionalProperties": false,
       "properties": {
+        "resultPreview": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Resultpreview"
+        },
         "rowCount": {
           "maximum": 200,
           "minimum": 1,
@@ -4790,7 +9062,11 @@
             "manage",
             "test",
             "chat",
-            "module_read"
+            "module_read",
+            "data_manage",
+            "mcp_manage",
+            "runtime_diagnostics",
+            "runtime_usage"
           ],
           "title": "Purpose",
           "type": "string"
@@ -4820,6 +9096,634 @@
         "purpose"
       ],
       "title": "TrustedContext",
+      "type": "object"
+    },
+    "ViewObject": {
+      "additionalProperties": false,
+      "properties": {
+        "objectId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Objectid",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "objectId",
+        "revision"
+      ],
+      "title": "ViewObject",
+      "type": "object"
+    },
+    "ViewUpsert": {
+      "additionalProperties": false,
+      "properties": {
+        "payload": {
+          "discriminator": {
+            "mapping": {
+              "approval": "#/$defs/ApprovalView",
+              "artifact": "#/$defs/ArtifactView",
+              "execution.node": "#/$defs/ExecutionView",
+              "narration": "#/$defs/NarrationView",
+              "plan": "#/$defs/PlanView",
+              "timeline": "#/$defs/TimelineView",
+              "workflow": "#/$defs/WorkflowView"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ExecutionView"
+            },
+            {
+              "$ref": "#/$defs/TimelineView"
+            },
+            {
+              "$ref": "#/$defs/PlanView"
+            },
+            {
+              "$ref": "#/$defs/NarrationView"
+            },
+            {
+              "$ref": "#/$defs/WorkflowView"
+            },
+            {
+              "$ref": "#/$defs/ApprovalView"
+            },
+            {
+              "$ref": "#/$defs/ArtifactView"
+            }
+          ],
+          "title": "Payload"
+        },
+        "type": {
+          "const": "view.upsert",
+          "default": "view.upsert",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "payload"
+      ],
+      "title": "ViewUpsert",
+      "type": "object"
+    },
+    "WaitView": {
+      "additionalProperties": false,
+      "properties": {
+        "actionId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Actionid",
+          "type": "string"
+        },
+        "allowedActions": {
+          "items": {
+            "enum": [
+              "approve",
+              "reject",
+              "reconcile"
+            ],
+            "type": "string"
+          },
+          "title": "Allowedactions",
+          "type": "array"
+        },
+        "decisionId": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Decisionid"
+        },
+        "expiresAt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Expiresat"
+        },
+        "kind": {
+          "enum": [
+            "approval",
+            "external_event",
+            "reconciliation"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "proposalDigest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Proposaldigest",
+          "type": "string"
+        },
+        "proposalId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Proposalid",
+          "type": "string"
+        },
+        "proposalRevision": {
+          "minimum": 1,
+          "title": "Proposalrevision",
+          "type": "integer"
+        },
+        "reasonCode": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reasoncode"
+        },
+        "runVersion": {
+          "minimum": 1,
+          "title": "Runversion",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "approved",
+            "rejected",
+            "expired",
+            "canceled"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "summary": {
+          "maxLength": 2000,
+          "title": "Summary",
+          "type": "string"
+        },
+        "waitId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Waitid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "waitId",
+        "proposalId",
+        "proposalRevision",
+        "proposalDigest",
+        "actionId",
+        "kind",
+        "status",
+        "summary",
+        "expiresAt",
+        "decisionId",
+        "reasonCode",
+        "runVersion",
+        "allowedActions"
+      ],
+      "title": "WaitView",
+      "type": "object"
+    },
+    "WorkerAdvanceAck": {
+      "additionalProperties": false,
+      "properties": {
+        "checkpointNo": {
+          "minimum": 0,
+          "title": "Checkpointno",
+          "type": "integer"
+        },
+        "commandId": {
+          "format": "uuid",
+          "title": "Commandid",
+          "type": "string"
+        },
+        "reasonCode": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reasoncode"
+        },
+        "status": {
+          "enum": [
+            "running",
+            "continue",
+            "parked",
+            "done",
+            "interrupted"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "commandId",
+        "status",
+        "checkpointNo",
+        "reasonCode"
+      ],
+      "title": "WorkerAdvanceAck",
+      "type": "object"
+    },
+    "WorkerAdvanceCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedCheckpoint": {
+          "minimum": 0,
+          "title": "Expectedcheckpoint",
+          "type": "integer"
+        },
+        "grant": {
+          "$ref": "#/$defs/ExecutionGrant"
+        }
+      },
+      "required": [
+        "grant",
+        "expectedCheckpoint"
+      ],
+      "title": "WorkerAdvanceCommand",
+      "type": "object"
+    },
+    "WorkerBoot": {
+      "additionalProperties": false,
+      "properties": {
+        "bootId": {
+          "format": "uuid",
+          "title": "Bootid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "bootId"
+      ],
+      "title": "WorkerBoot",
+      "type": "object"
+    },
+    "WorkerLeaseCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "grant": {
+          "$ref": "#/$defs/ExecutionGrant"
+        }
+      },
+      "required": [
+        "grant"
+      ],
+      "title": "WorkerLeaseCommand",
+      "type": "object"
+    },
+    "WorkflowAssetDelete": {
+      "additionalProperties": false,
+      "properties": {
+        "metadataRevision": {
+          "exclusiveMaximum": 2147483647,
+          "minimum": 1,
+          "title": "Metadatarevision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "metadataRevision"
+      ],
+      "title": "WorkflowAssetDelete",
+      "type": "object"
+    },
+    "WorkflowAssetList": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/WorkflowAssetView"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "nextCursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Nextcursor"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "title": "WorkflowAssetList",
+      "type": "object"
+    },
+    "WorkflowAssetPatch": {
+      "additionalProperties": false,
+      "properties": {
+        "metadataRevision": {
+          "exclusiveMaximum": 2147483647,
+          "minimum": 1,
+          "title": "Metadatarevision",
+          "type": "integer"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "active",
+            "disabled"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "metadataRevision",
+        "name",
+        "status"
+      ],
+      "title": "WorkflowAssetPatch",
+      "type": "object"
+    },
+    "WorkflowAssetRef": {
+      "additionalProperties": false,
+      "properties": {
+        "assetId": {
+          "format": "uuid",
+          "title": "Assetid",
+          "type": "string"
+        },
+        "baseline": {
+          "$ref": "#/$defs/RunPeriod"
+        },
+        "current": {
+          "$ref": "#/$defs/RunPeriod"
+        },
+        "definitionVersion": {
+          "const": 1,
+          "title": "Definitionversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "baseline",
+        "current",
+        "assetId",
+        "definitionVersion"
+      ],
+      "title": "WorkflowAssetRef",
+      "type": "object"
+    },
+    "WorkflowAssetView": {
+      "additionalProperties": false,
+      "properties": {
+        "assetId": {
+          "format": "uuid",
+          "title": "Assetid",
+          "type": "string"
+        },
+        "definitionVersion": {
+          "const": 1,
+          "title": "Definitionversion",
+          "type": "integer"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "entryContract": {
+          "$ref": "#/$defs/WorkflowEntryContract"
+        },
+        "metadataRevision": {
+          "minimum": 1,
+          "title": "Metadatarevision",
+          "type": "integer"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "parameters": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parameters"
+        },
+        "scriptSource": {
+          "anyOf": [
+            {
+              "maxLength": 16384,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scriptsource"
+        },
+        "status": {
+          "enum": [
+            "active",
+            "disabled"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "assetId",
+        "name",
+        "status",
+        "definitionVersion",
+        "entryContract",
+        "metadataRevision"
+      ],
+      "title": "WorkflowAssetView",
+      "type": "object"
+    },
+    "WorkflowDraftConfirm": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "WorkflowDraftConfirm",
+      "type": "object"
+    },
+    "WorkflowDraftView": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkflowPeriods"
+            },
+            {
+              "additionalProperties": true,
+              "type": "object"
+            }
+          ],
+          "title": "Args"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "entryContract": {
+          "$ref": "#/$defs/WorkflowEntryContract"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "parameters": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parameters"
+        },
+        "scriptSource": {
+          "maxLength": 16384,
+          "title": "Scriptsource",
+          "type": "string"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "entryContract",
+        "scriptSource",
+        "args",
+        "summary"
+      ],
+      "title": "WorkflowDraftView",
+      "type": "object"
+    },
+    "WorkflowEntryContract": {
+      "enum": [
+        "channel_attribution@1",
+        "channel_overview@1",
+        "agent_workflow@1"
+      ],
+      "type": "string"
+    },
+    "WorkflowPeriods": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline": {
+          "$ref": "#/$defs/RunPeriod"
+        },
+        "current": {
+          "$ref": "#/$defs/RunPeriod"
+        }
+      },
+      "required": [
+        "baseline",
+        "current"
+      ],
+      "title": "WorkflowPeriods",
+      "type": "object"
+    },
+    "WorkflowView": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "workflow",
+          "default": "workflow",
+          "title": "Kind",
+          "type": "string"
+        },
+        "objectId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Objectid",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "value": {
+          "$ref": "#/$defs/PublicWorkflow"
+        }
+      },
+      "required": [
+        "objectId",
+        "revision",
+        "value"
+      ],
+      "title": "WorkflowView",
       "type": "object"
     }
   },

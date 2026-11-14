@@ -28,6 +28,3 @@ export const capabilityNames = {
   json_output: "JSON",
   schema_output: "JSON Schema",
 } as const;
-
-export type RoutedCallResponse = components["schemas"]["RoutedCallResponse"];
-export type RoutedModelEvent = components["schemas"]["RoutedModelEvent"];

@@ -115,6 +115,32 @@ test("home dev/build/typecheck select only home and never schedule Python contra
   }
 });
 
+test("Agent seed receives the Retail import credentials while dev gets endpoint policy only", () => {
+  const graph = dryRun("dev", "seed", "-F", "agent", "-F", "web");
+  const agentDev = graph.tasks.find((entry) => entry.taskId === "@compass/agent#dev");
+  const agentSeed = graph.tasks.find((entry) => entry.taskId === "@compass/agent#seed");
+  const webSeed = graph.tasks.find((entry) => entry.taskId === "@compass/web#seed");
+  for (const key of ["COMPASS_RETAIL_RUN_SCOPE", "COMPASS_RETAIL_RUN_READONLY_DSN"]) {
+    assert.ok(agentSeed.resolvedTaskDefinition.passThroughEnv.includes(key));
+    assert.ok(!agentDev.resolvedTaskDefinition.passThroughEnv.includes(key));
+    assert.ok(!webSeed.resolvedTaskDefinition.passThroughEnv.includes(key));
+  }
+  assert.ok(
+    agentDev.resolvedTaskDefinition.passThroughEnv.includes("COMPASS_DATA_ALLOWED_ENDPOINTS"),
+  );
+  assert.ok(
+    !webSeed.resolvedTaskDefinition.passThroughEnv.includes("COMPASS_DATA_ALLOWED_ENDPOINTS"),
+  );
+  for (const task of [agentDev, agentSeed]) {
+    for (const key of [
+      "DATABASE_URL",
+      "COMPASS_RETAIL_ALLOWED_ENDPOINTS",
+      "COMPASS_MODEL_ENCRYPTION_KEY",
+    ])
+      assert.ok(task.resolvedTaskDefinition.passThroughEnv.includes(key));
+  }
+});
+
 test("Web build/typecheck schedule the shared uncached contract generation once", () => {
   const graph = dryRun("build", "typecheck", "-F", "web");
   assert.deepEqual(graph.tasks.map((entry) => entry.taskId).sort(), [
@@ -201,4 +227,17 @@ test("offline data tool checks include canonical SQL and keep database acceptanc
     dev.tasks.find((entry) => entry.taskId === "@compass/data-seed#dev")?.command,
     "<NONEXISTENT>",
   );
+});
+
+test("strict Turbo dev environment forwards worker authentication and Agent scheduler settings", () => {
+  const worker = dryRun("dev", "-F", "worker").tasks[0];
+  for (const key of ["COMPASS_WORKER_ID", "COMPASS_WORKER_TOKEN", "COMPASS_RUNTIME_LEASE_SECONDS"])
+    assert.ok(worker.environmentVariables.specified.passThroughEnv.includes(key), key);
+  const agent = dryRun("dev", "-F", "agent").tasks[0];
+  for (const key of [
+    "COMPASS_WORKER_CREDENTIALS",
+    "COMPASS_RUNTIME_MAX_ACTIVE",
+    "COMPASS_RUNTIME_LEASE_SECONDS",
+  ])
+    assert.ok(agent.environmentVariables.specified.passThroughEnv.includes(key), key);
 });

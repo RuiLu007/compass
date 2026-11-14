@@ -15,10 +15,3 @@ export function parseCallResponse(value: unknown): CallResponse {
     throw new Error("模型结果格式不兼容，请稍后重试。");
   }
 }
-
-export function parseRoutedResponse(value: unknown) {
-  return parseModelContract<import("./types").RoutedCallResponse>("RoutedCallResponse", value);
-}
-export function parseRoutedEvent(value: unknown) {
-  return parseModelContract<import("./types").RoutedModelEvent>("RoutedModelEvent", value);
-}

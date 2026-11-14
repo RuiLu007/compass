@@ -38,7 +38,7 @@ def test_showcase_http_requires_platform_admin_and_rejects_arbitrary_input():
 
     settings = Settings(compass_agent_service_token="unit-service-token")
     with (
-        patch("compass_agent.model_api.get_settings", return_value=settings),
+        patch("compass_agent.api.models.get_settings", return_value=settings),
         TestClient(app) as client,
     ):
         assert client.get("/v1/models/reliability/scenarios").status_code == 401

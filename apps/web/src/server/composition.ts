@@ -8,7 +8,7 @@ import { bindAccess } from "./modules/access/infrastructure/pg-access";
 import { bindAudit } from "./modules/audit/pg-store";
 import { bindNotifications } from "./modules/notifications/pg-store";
 import { createIdentityService } from "./modules/identity/public";
-import { createAccessService } from "./modules/access/public";
+import { createAccessService, requirePermission } from "./modules/access/public";
 import { createModelAuthorizer } from "./modules/models/public";
 import { createQueryService } from "./modules/access/application/query-service";
 import { verifyPassword, DUMMY_PASSWORD_HASH } from "./modules/identity/infrastructure/password";
@@ -116,6 +116,48 @@ function bindUseCases(client: SqlClient) {
   };
 }
 export type WebUseCases = ReturnType<typeof bindUseCases>;
+
+/** Recheck the initiating user at each durable execution boundary, without a browser session. */
+export async function authorizeRuntime(
+  context: {
+    actor_user_id: string;
+    purpose?: string;
+    scope: { kind?: string; tenant_id?: string; workspace_id?: string };
+  },
+  approval: boolean,
+) {
+  return withTransaction("query", async (client) => {
+    const { identity, access } = bind(client);
+    const user = await identity.user(context.actor_user_id);
+    if (user.status !== "active") throw new ApplicationError("forbidden", "账号已停用。");
+    const actor = {
+      userId: user.id,
+      isPlatformAdmin: user.isPlatformAdmin,
+      sessionId: "runtime",
+      expiresAt: "",
+    };
+    if (context.purpose === "runtime_diagnostics") {
+      if (!actor.isPlatformAdmin || context.scope.kind !== "platform")
+        throw new ApplicationError("forbidden", "当前权限不足。");
+      return { details: false, revision: "platform" };
+    }
+    if (!context.scope.tenant_id || !context.scope.workspace_id)
+      throw new ApplicationError("forbidden", "当前权限不足。");
+    const current = await access.current(actor, context.scope.tenant_id);
+    const workspace = await access.workspace(context.scope.tenant_id, context.scope.workspace_id);
+    if (workspace.status !== "active" || (approval && current.role !== "admin"))
+      throw new ApplicationError("forbidden", "当前权限不足。");
+    const scope = { tenantId: context.scope.tenant_id, workspaceId: context.scope.workspace_id };
+    if (context.purpose === "runtime_usage") {
+      if (current.role !== "admin" || !current.memberId)
+        throw new ApplicationError("forbidden", "当前权限不足。");
+    } else {
+      requirePermission(current, "module.analysis", scope);
+      requirePermission(current, "models.invoke", scope);
+    }
+    return { details: current.role === "admin", revision: current.authzVersion };
+  });
+}
 
 /** One request owns one connection and snapshot. Revision is read before that transaction commits. */
 export async function execute<T>(

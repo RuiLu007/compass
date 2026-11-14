@@ -1,13 +1,13 @@
 # 988: 第 16 课｜从 ReAct 到 Plan-and-Execute：建立受控自主执行机制
 
-| 项         | 值                                                           |
-| ---------- | ------------------------------------------------------------ |
-| Phase      | draft                                                        |
-| Profile    | standard                                                     |
-| 优先级     | P1                                                           |
-| 负责人     | andy                                                         |
-| 目标日期   | 待填                                                         |
-| 涉及子系统 | apps/agent（ReAct、Todo 计划状态、Verifier、预算与停止控制） |
+| 项         | 值                                                       |
+| ---------- | -------------------------------------------------------- |
+| Phase      | dev                                                      |
+| Profile    | standard                                                 |
+| 优先级     | P1                                                       |
+| 负责人     | andy                                                     |
+| 目标日期   | 待填                                                     |
+| 涉及子系统 | apps/agent（Run、验证与预算）、apps/web（Chat 计划面板） |
 
 ## 一句话描述
 
@@ -32,3 +32,5 @@
 
 - [素材索引](context/_INDEX.md)
 - [产品需求文档](spec/PRD.md)，本课需求与验收标准的维护位置。
+- [技术方案](design/TECH_DESIGN.md) · [代码设计](design/CODE_DESIGN.md) · [HTML 审阅版](design/TECH_DESIGN.html)。方案已复评，实施基线为已同步的第 15 课代码。
+- [技术方案评审](review/design_review.md) · [实施记录](IMPLEMENTATION.md) · [课堂运行说明](../../docs/lesson-16-controlled-autonomy.md)。

@@ -20,6 +20,29 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+  redis:
+    image: public.ecr.aws/docker/library/redis:8.2.11-alpine@sha256:fe9daae35cd4fd6ec22416aa4fe0cf6b3e36741e06ff45b9986253fe2a81c041
+    restart: unless-stopped
+    command:
+      [
+        redis-server,
+        /usr/local/etc/redis/redis.conf,
+        --requirepass,
+        "${COMPASS_REDIS_PASSWORD:-compass_redis_local_only}",
+      ]
+    environment:
+      REDISCLI_AUTH: ${COMPASS_REDIS_PASSWORD:-compass_redis_local_only}
+    ports:
+      - "127.0.0.1:56379:6379"
+    volumes:
+      - redis-data:/data
+      - ../redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    mem_limit: 768m
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      timeout: 3s
+      retries: 30
   postgres:
     image: pgvector/pgvector:pg17@sha256:feb68f4f15446397d8cac7f4fe48fe4586de83160d1fc48b46283312d1a33966
     environment:
@@ -31,7 +54,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U compass -d compass"]
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "compass", "-d", "compass"]
       interval: 2s
       timeout: 3s
       retries: 30
@@ -44,6 +67,10 @@ services:
       DATABASE_URL: ${COMPASS_AGENT_RUNTIME_URL:-postgresql+psycopg://compass_agent_runtime:compass_agent_runtime_local_only@postgres:5432/compass_agent}
       AGENT_MIGRATION_DATABASE_URL: ${COMPASS_AGENT_MIGRATOR_URL:-postgresql+psycopg://compass_agent_migrator:compass_agent_migration_local_only@postgres:5432/compass_agent}
       AGENT_PROVISION_DATABASE_URL: postgresql://compass:compass_local_only@postgres:5432/compass
+      COMPASS_MODEL_ENCRYPTION_KEY: ${COMPASS_MODEL_ENCRYPTION_KEY:-}
+      COMPASS_RETAIL_ALLOWED_ENDPOINTS: ${COMPASS_RETAIL_ALLOWED_ENDPOINTS:-127.0.0.1:55432,localhost:55432,postgres:5432}
+      COMPASS_RETAIL_RUN_SCOPE: ${COMPASS_RETAIL_RUN_SCOPE:-}
+      COMPASS_RETAIL_RUN_READONLY_DSN: ${COMPASS_RETAIL_RUN_READONLY_DSN:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,6 +90,18 @@ services:
       context: ../..
       dockerfile: deploy/containers/agent.Dockerfile
     environment:
+      COMPASS_REDIS_URL: redis://redis:6379/0
+      COMPASS_REDIS_PASSWORD: ${COMPASS_REDIS_PASSWORD:-compass_redis_local_only}
+      COMPASS_RUNTIME_STATE_KEY: ${COMPASS_RUNTIME_STATE_KEY:-}
+      COMPASS_RUNTIME_EVENT_TOKEN: ${COMPASS_RUNTIME_EVENT_TOKEN:-}
+      COMPASS_WORKER_CREDENTIALS: '{"worker-1":"${COMPASS_WORKER_1_TOKEN:-compass_worker_one_local_only}","worker-2":"${COMPASS_WORKER_2_TOKEN:-compass_worker_two_local_only}"}'
+      COMPASS_RUNTIME_MAX_ACTIVE: ${COMPASS_RUNTIME_MAX_ACTIVE:-2}
+      COMPASS_RUNTIME_MAX_BACKLOG: ${COMPASS_RUNTIME_MAX_BACKLOG:-12}
+      COMPASS_RUNTIME_TENANT_ACTIVE: ${COMPASS_RUNTIME_TENANT_ACTIVE:-1}
+      COMPASS_RUNTIME_TENANT_BACKLOG: ${COMPASS_RUNTIME_TENANT_BACKLOG:-4}
+      COMPASS_RUNTIME_TENANT_OVERRIDES: ${COMPASS_RUNTIME_TENANT_OVERRIDES:-{}}
+      COMPASS_RUNTIME_LEASE_SECONDS: ${COMPASS_RUNTIME_LEASE_SECONDS:-15}
+      COMPASS_WEB_AUTHZ_URL: http://web:8100/api/internal/analysis/authorize
       DATABASE_URL: ${COMPASS_AGENT_RUNTIME_URL:-postgresql+psycopg://compass_agent_runtime:compass_agent_runtime_local_only@postgres:5432/compass_agent}
       COMPASS_DEMO_ENABLED: "true"
       COMPASS_AGENT_SERVICE_TOKEN: ${COMPASS_AGENT_SERVICE_TOKEN:-}
@@ -70,12 +109,29 @@ services:
       COMPASS_MODEL_ALLOWED_ORIGINS: ${COMPASS_MODEL_ALLOWED_ORIGINS:-https://api.deepseek.com}
       COMPASS_MODEL_MAX_CONCURRENCY: ${COMPASS_MODEL_MAX_CONCURRENCY:-8}
       COMPASS_MODEL_MAX_INFLIGHT: ${COMPASS_MODEL_MAX_INFLIGHT:-32}
-      COMPASS_RETAIL_RUN_SCOPE: ${COMPASS_RETAIL_RUN_SCOPE:-}
-      COMPASS_RETAIL_RUN_READONLY_DSN: ${COMPASS_RETAIL_RUN_READONLY_DSN:-}
+      COMPASS_CONTROLLED_AUTONOMY_ENABLED: ${COMPASS_CONTROLLED_AUTONOMY_ENABLED:-false}
+      COMPASS_AUTONOMY_MODEL_PROFILES: ${COMPASS_AUTONOMY_MODEL_PROFILES:-[]}
+      COMPASS_AUTONOMY_TOKEN_BUDGET: ${COMPASS_AUTONOMY_TOKEN_BUDGET:-160000}
+      COMPASS_AUTONOMY_COST_BUDGET_MICROUSD: ${COMPASS_AUTONOMY_COST_BUDGET_MICROUSD:-500000}
+      COMPASS_RETAIL_ALLOWED_ENDPOINTS: ${COMPASS_RETAIL_ALLOWED_ENDPOINTS:-127.0.0.1:55432,localhost:55432,postgres:5432}
       LITELLM_LOCAL_MODEL_COST_MAP: "True"
+      COMPASS_DATA_ALLOWED_ENDPOINTS: ${COMPASS_DATA_ALLOWED_ENDPOINTS:-127.0.0.1:5432,localhost:5432,127.0.0.1:3306,localhost:3306,mysql:3306}
+      COMPASS_MCP_ALLOWED_ORIGINS: ${COMPASS_MCP_ALLOWED_ORIGINS:-}
+      COMPASS_MCP_LOCAL_FIXTURE_ORIGINS: ${COMPASS_MCP_LOCAL_FIXTURE_ORIGINS:-}
+      COMPASS_TOOL_BATCH_MODE: ${COMPASS_TOOL_BATCH_MODE:-serial}
+      COMPASS_TOOL_FAILURE_MODE: ${COMPASS_TOOL_FAILURE_MODE:-stop}
+      COMPASS_SANDBOX_ENABLED: ${COMPASS_SANDBOX_ENABLED:-false}
+      COMPASS_SANDBOX_DOMAIN: ${COMPASS_SANDBOX_DOMAIN:-127.0.0.1:8112}
+      COMPASS_SANDBOX_API_KEY: ${COMPASS_SANDBOX_API_KEY:-}
+      COMPASS_SANDBOX_IMAGE: ${COMPASS_SANDBOX_IMAGE:-compass-sandbox-python:lesson18}
+      COMPASS_SANDBOX_HOST_ID: ${COMPASS_SANDBOX_HOST_ID:-lesson18-local}
+      COMPASS_SANDBOX_VOLUME_PREFIX: ${COMPASS_SANDBOX_VOLUME_PREFIX:-compass-sandbox-slot}
+      COMPASS_SANDBOX_SLOTS: ${COMPASS_SANDBOX_SLOTS:-16}
     ports:
       - "127.0.0.1:8102:8102"
     depends_on:
+      redis:
+        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     healthcheck:
@@ -157,12 +213,25 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
-  worker:
+  worker: &worker
     profiles: [worker]
     build:
       context: ../..
       dockerfile: deploy/containers/worker.Dockerfile
     init: true
-    stop_grace_period: 10s
+    stop_grace_period: 12s
+    environment:
+      AGENT_API_URL: http://agent:8102
+      COMPASS_WORKER_ID: worker-1
+      COMPASS_WORKER_TOKEN: ${COMPASS_WORKER_1_TOKEN:-compass_worker_one_local_only}
+      COMPASS_RUNTIME_LEASE_SECONDS: ${COMPASS_RUNTIME_LEASE_SECONDS:-15}
+  worker-2:
+    <<: *worker
+    environment:
+      AGENT_API_URL: http://agent:8102
+      COMPASS_WORKER_ID: worker-2
+      COMPASS_WORKER_TOKEN: ${COMPASS_WORKER_2_TOKEN:-compass_worker_two_local_only}
+      COMPASS_RUNTIME_LEASE_SECONDS: ${COMPASS_RUNTIME_LEASE_SECONDS:-15}
 volumes:
+  redis-data:
   postgres-data:

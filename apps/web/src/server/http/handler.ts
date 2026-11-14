@@ -1,7 +1,9 @@
 import "server-only";
 import { z } from "zod";
 import { handleAnalysisRunRequest, isAnalysisRunRoute } from "./analysis-run-handler";
+import { handleDurableAnalysis, isDurableAnalysisRoute } from "./durable-analysis-handler";
 import { handleModelRequest, isModelRoute } from "./model-handler";
+import { handleRetailConnection } from "./retail-connection-handler";
 import * as dto from "../../contracts/web";
 import {
   sessionSchema,
@@ -52,8 +54,11 @@ async function dispatchWebRequest(request: Request): Promise<Response> {
     const route = path.join("/");
     const method = request.method;
     const token = tokenFromCookie(request.headers.get("cookie"));
+    if (isDurableAnalysisRoute(route, request)) return handleDurableAnalysis(request, token);
     if (isAnalysisRunRoute(route)) return handleAnalysisRunRequest(request, token);
     if (isModelRoute(route)) return handleModelRequest(request, token);
+    if (path[0] === "data" && (path[1] === "retail-connection" || path[1] === "connections"))
+      return await handleRetailConnection(request, token, queryValues(url), path.slice(1));
     const writing = method !== "GET";
     if (writing) requireSameOrigin(request);
     const query = queryValues(url);

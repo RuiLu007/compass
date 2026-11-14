@@ -5,16 +5,21 @@ import { readModelEvents } from "./model-stream";
 export class ApiError extends Error {
   status: number;
   code?: string;
-  constructor(status: number, message: string, code?: string) {
+  currentVersion?: number;
+  constructor(status: number, message: string, code?: string, currentVersion?: number) {
     super(message);
     this.status = status;
     this.code = code;
+    if (Number.isSafeInteger(currentVersion) && currentVersion! > 0)
+      this.currentVersion = currentVersion;
   }
 }
 export type DocumentPhase = "boot" | "active" | "retired";
 export type StreamRequestOptions<T> = {
+  method?: "GET" | "POST";
   signal: AbortSignal;
   consume: (body: ReadableStream<Uint8Array>, signal: AbortSignal) => Promise<T>;
+  onHeaders?: (headers: Headers) => void;
   timeoutMs?: number;
   inputLimitBytes?: number;
   retainOnNotFound?: boolean;
@@ -118,12 +123,13 @@ export class DocumentSession {
     return true;
   }
   navigate(destination: string) {
-    if (this.disposed || !this.confirmNavigation()) return;
+    if (this.disposed || !this.confirmNavigation()) return false;
     const target = new URL(destination, location.href);
     if (target.origin !== location.origin) throw new Error("Invalid navigation target");
     const path = target.pathname + target.search + target.hash;
     if (this.navigation) this.navigation.push(path);
     else this.recover(path);
+    return true;
   }
   private recover(destination: string) {
     if (this.disposed) return;
@@ -306,7 +312,12 @@ export class DocumentSession {
     path: string,
     method = "GET",
     body?: unknown,
-    options?: { retainOnNotFound?: boolean; signal?: AbortSignal; timeoutMs?: number },
+    options?: {
+      retainOnNotFound?: boolean;
+      signal?: AbortSignal;
+      timeoutMs?: number;
+      durable?: boolean;
+    },
   ): Promise<T> {
     const generation = this.generation;
     this.assertCurrent(generation);
@@ -323,7 +334,13 @@ export class DocumentSession {
         credentials: "same-origin",
         signal: controller.signal,
         headers:
-          method === "GET" ? {} : { "Content-Type": "application/json", "X-CSRF-Token": this.csrf },
+          method === "GET"
+            ? {}
+            : {
+                "Content-Type": "application/json",
+                "X-CSRF-Token": this.csrf,
+                ...(options?.durable ? { "X-Compass-Run-Version": "2" } : {}),
+              },
         ...(method === "GET" ? {} : { body: JSON.stringify(body ?? {}) }),
       });
       this.assertCurrent(generation);
@@ -337,6 +354,7 @@ export class DocumentSession {
           response.status,
           error.error?.message ?? "操作失败，请重试。",
           error.error?.code,
+          error.error?.currentVersion,
         );
       }
       if (response.headers.get("X-Compass-View-Revision") !== this.payload.session.viewRevision) {
@@ -379,12 +397,12 @@ export class DocumentSession {
     }, options.timeoutMs ?? 200000);
     try {
       const response = await fetch(`/api/web/v1/${path}`, {
-        method: "POST",
+        method: options.method ?? "POST",
         cache: "no-store",
         credentials: "same-origin",
         signal: controller.signal,
         headers: { "Content-Type": "application/json", "X-CSRF-Token": this.csrf },
-        body: serialized,
+        ...(options.method === "GET" ? {} : { body: serialized }),
       });
       this.assertCurrent(generation);
       if (controller.signal.aborted) throw new DOMException("运行读取已停止。", "AbortError");
@@ -406,6 +424,7 @@ export class DocumentSession {
       }
       if (!response.body)
         throw new ApiError(503, options.unavailableMessage ?? "运行任务未返回结果。");
+      options.onHeaders?.(response.headers);
       const result = await options.consume(response.body, controller.signal);
       this.assertCurrent(generation);
       if (controller.signal.aborted) throw new DOMException("运行读取已停止。", "AbortError");

@@ -1,0 +1,7 @@
+{
+  "output": "../TECH_DESIGN.html",
+  "cover": {
+    "file": "cover.png",
+    "alt": "第 16 课 · 受控自主执行：Todo 计划、Verifier 核验与 Attempt 预算。"
+  }
+}

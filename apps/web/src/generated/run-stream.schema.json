@@ -55,6 +55,7 @@
         "terminalStatus": {
           "enum": [
             "completed",
+            "waiting",
             "failed",
             "canceled",
             "cleanup_unconfirmed"
@@ -201,6 +202,323 @@
       "title": "ChannelRunParams",
       "type": "object"
     },
+    "ExecutionDetail": {
+      "additionalProperties": false,
+      "properties": {
+        "input": {
+          "anyOf": [
+            {
+              "maxLength": 32768,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Input"
+        },
+        "narration": {
+          "anyOf": [
+            {
+              "maxLength": 32768,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Narration"
+        },
+        "output": {
+          "anyOf": [
+            {
+              "maxLength": 32768,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Output"
+        },
+        "thinking": {
+          "anyOf": [
+            {
+              "maxLength": 32768,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Thinking"
+        }
+      },
+      "title": "ExecutionDetail",
+      "type": "object"
+    },
+    "ExecutionDisplay": {
+      "additionalProperties": false,
+      "properties": {
+        "inputPreview": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Inputpreview"
+        },
+        "language": {
+          "enum": [
+            "text",
+            "json",
+            "sql",
+            "javascript",
+            "python"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "outputPreview": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Outputpreview"
+        },
+        "policy": {
+          "enum": [
+            "summary",
+            "preview"
+          ],
+          "title": "Policy",
+          "type": "string"
+        }
+      },
+      "title": "ExecutionDisplay",
+      "type": "object"
+    },
+    "ExecutionEnvironment": {
+      "additionalProperties": false,
+      "properties": {
+        "environmentId": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Environmentid"
+        },
+        "kind": {
+          "enum": [
+            "service",
+            "quickjs",
+            "sandbox"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "runtime": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Runtime"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "ExecutionEnvironment",
+      "type": "object"
+    },
+    "ExecutionOrigin": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "builtin",
+            "mcp"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "serverId": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Serverid"
+        },
+        "serverName": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Servername"
+        },
+        "toolName": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Toolname"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "ExecutionOrigin",
+      "type": "object"
+    },
+    "ExecutionSkill": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "stage": {
+          "enum": [
+            "load",
+            "script"
+          ],
+          "title": "Stage",
+          "type": "string"
+        },
+        "version": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "stage"
+      ],
+      "title": "ExecutionSkill",
+      "type": "object"
+    },
+    "ExecutionSubAgent": {
+      "additionalProperties": false,
+      "properties": {
+        "childRunId": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Childrunid"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ExecutionSubAgent",
+      "type": "object"
+    },
+    "ExecutionWorkflow": {
+      "additionalProperties": false,
+      "properties": {
+        "assetId": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Assetid"
+        },
+        "mode": {
+          "enum": [
+            "generated",
+            "reused",
+            "fixed"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Name"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Version"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "title": "ExecutionWorkflow",
+      "type": "object"
+    },
     "JsonValue": {},
     "ProductRunParams": {
       "additionalProperties": false,
@@ -236,6 +554,298 @@
         "channelCode"
       ],
       "title": "ProductRunParams",
+      "type": "object"
+    },
+    "RunArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "byteSize": {
+          "maximum": 524288,
+          "minimum": 1,
+          "title": "Bytesize",
+          "type": "integer"
+        },
+        "id": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "mediaType": {
+          "const": "image/png",
+          "title": "Mediatype",
+          "type": "string"
+        },
+        "name": {
+          "const": "chart.png",
+          "title": "Name",
+          "type": "string"
+        },
+        "stepId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Stepid",
+          "type": "string"
+        },
+        "toolCallId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Toolcallid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "mediaType",
+        "byteSize",
+        "stepId",
+        "toolCallId"
+      ],
+      "title": "RunArtifact",
+      "type": "object"
+    },
+    "RunAutonomyAction": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "replace",
+            "select",
+            "complete",
+            "skip",
+            "retail",
+            "database",
+            "submit",
+            "unknown"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "actionIndex": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Actionindex",
+          "type": "integer"
+        },
+        "code": {
+          "pattern": "^[a-z][a-z0-9_]{0,79}$",
+          "title": "Code",
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/RunTodoItem"
+          },
+          "maxItems": 6,
+          "title": "Items",
+          "type": "array"
+        },
+        "layer": {
+          "anyOf": [
+            {
+              "enum": [
+                "rule",
+                "schema",
+                "tool_result"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Layer"
+        },
+        "level": {
+          "anyOf": [
+            {
+              "enum": [
+                "step",
+                "run"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Level"
+        },
+        "planVersion": {
+          "maximum": 400,
+          "minimum": 0,
+          "title": "Planversion",
+          "type": "integer"
+        },
+        "selectedTodoId": {
+          "anyOf": [
+            {
+              "pattern": "^t[1-9][0-9]{0,2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Selectedtodoid"
+        },
+        "stepId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Stepid",
+          "type": "string"
+        },
+        "todoId": {
+          "anyOf": [
+            {
+              "pattern": "^t[1-9][0-9]{0,2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Todoid"
+        }
+      },
+      "required": [
+        "stepId",
+        "actionIndex",
+        "action",
+        "code",
+        "planVersion",
+        "selectedTodoId",
+        "items"
+      ],
+      "title": "RunAutonomyAction",
+      "type": "object"
+    },
+    "RunAutonomyBudget": {
+      "additionalProperties": false,
+      "properties": {
+        "attempts": {
+          "minimum": 0,
+          "title": "Attempts",
+          "type": "integer"
+        },
+        "costMicrousd": {
+          "$ref": "#/$defs/RunAutonomyUsage"
+        },
+        "steps": {
+          "$ref": "#/$defs/RunAutonomyUsage"
+        },
+        "tokens": {
+          "$ref": "#/$defs/RunAutonomyUsage"
+        },
+        "tools": {
+          "$ref": "#/$defs/RunAutonomyUsage"
+        },
+        "unknownAttempts": {
+          "minimum": 0,
+          "title": "Unknownattempts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "steps",
+        "tools",
+        "tokens",
+        "costMicrousd",
+        "attempts",
+        "unknownAttempts"
+      ],
+      "title": "RunAutonomyBudget",
+      "type": "object"
+    },
+    "RunAutonomyResult": {
+      "additionalProperties": false,
+      "properties": {
+        "budget": {
+          "$ref": "#/$defs/RunAutonomyBudget"
+        },
+        "firstPlanStep": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Firstplanstep"
+        },
+        "outcome": {
+          "enum": [
+            "completed",
+            "waiting",
+            "failed",
+            "budget_exhausted",
+            "human_required",
+            "canceled",
+            "cleanup_unconfirmed"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "partial": {
+          "items": {
+            "$ref": "#/$defs/RunVerifiedSummary"
+          },
+          "maxItems": 2,
+          "title": "Partial",
+          "type": "array"
+        },
+        "planVersion": {
+          "maximum": 400,
+          "minimum": 0,
+          "title": "Planversion",
+          "type": "integer"
+        },
+        "reason": {
+          "pattern": "^[a-z][a-z0-9_]{0,79}$",
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "outcome",
+        "reason",
+        "planVersion",
+        "firstPlanStep",
+        "budget",
+        "partial"
+      ],
+      "title": "RunAutonomyResult",
+      "type": "object"
+    },
+    "RunAutonomyUsage": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "minimum": 0,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "remaining": {
+          "minimum": 0,
+          "title": "Remaining",
+          "type": "integer"
+        },
+        "used": {
+          "minimum": 0,
+          "title": "Used",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "limit",
+        "used",
+        "remaining"
+      ],
+      "title": "RunAutonomyUsage",
       "type": "object"
     },
     "RunCanceled": {
@@ -314,6 +924,14 @@
     "RunCompleted": {
       "additionalProperties": false,
       "properties": {
+        "artifacts": {
+          "items": {
+            "$ref": "#/$defs/RunArtifact"
+          },
+          "maxItems": 40,
+          "title": "Artifacts",
+          "type": "array"
+        },
         "file": {
           "discriminator": {
             "mapping": {
@@ -362,6 +980,231 @@
       "title": "RunEmpty",
       "type": "object"
     },
+    "RunExecutionNode": {
+      "additionalProperties": false,
+      "description": "Execution snapshot with optional detail for currently authorized viewers.",
+      "properties": {
+        "dependsOn": {
+          "items": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Dependson",
+          "type": "array"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecutionDetail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "display": {
+          "$ref": "#/$defs/ExecutionDisplay"
+        },
+        "endedAtMs": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Endedatms"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecutionEnvironment"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "model",
+            "narration",
+            "tool",
+            "workflow",
+            "skill",
+            "subagent",
+            "group"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "modelCallId": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Modelcallid"
+        },
+        "origin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecutionOrigin"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "parentId": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parentid"
+        },
+        "revision": {
+          "maximum": 1024,
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "scheduling": {
+          "anyOf": [
+            {
+              "enum": [
+                "sequential",
+                "parallel"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Scheduling"
+        },
+        "skill": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecutionSkill"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "startedAtMs": {
+          "minimum": 0,
+          "title": "Startedatms",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "preparing",
+            "running",
+            "completed",
+            "empty",
+            "failed",
+            "canceled",
+            "waiting",
+            "incomplete"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "stepId": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Stepid"
+        },
+        "subagent": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecutionSubAgent"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Summary"
+        },
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "toolCallId": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Toolcallid"
+        },
+        "workflow": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecutionWorkflow"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "kind",
+        "status",
+        "title",
+        "startedAtMs"
+      ],
+      "title": "RunExecutionNode",
+      "type": "object"
+    },
     "RunExtensionPayload": {
       "additionalProperties": false,
       "properties": {
@@ -403,11 +1246,18 @@
       "properties": {
         "errorCode": {
           "enum": [
+            "input_token_limit_exceeded",
+            "output_token_limit_exceeded",
+            "invalid_model_input",
             "model_failed",
             "model_incomplete",
             "model_unavailable",
             "run_timeout",
             "context_limit",
+            "workflow_unavailable",
+            "workflow_failed",
+            "tool_catalog_limit",
+            "tool_setup_failed",
             "step_limit",
             "internal_error"
           ],
@@ -430,19 +1280,35 @@
     "RunFinished": {
       "additionalProperties": false,
       "properties": {
+        "durationMs": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Durationms"
+        },
         "payload": {
           "discriminator": {
             "mapping": {
               "canceled": "#/$defs/RunCanceled",
               "cleanup_unconfirmed": "#/$defs/RunCleanupUnconfirmed",
               "completed": "#/$defs/RunCompleted",
-              "failed": "#/$defs/RunFailed"
+              "failed": "#/$defs/RunFailed",
+              "waiting": "#/$defs/RunWaiting"
             },
             "propertyName": "status"
           },
           "oneOf": [
             {
               "$ref": "#/$defs/RunCompleted"
+            },
+            {
+              "$ref": "#/$defs/RunWaiting"
             },
             {
               "$ref": "#/$defs/RunFailed"
@@ -534,7 +1400,7 @@
           "type": "string"
         },
         "seq": {
-          "maximum": 96,
+          "maximum": 4096,
           "minimum": 1,
           "title": "Seq",
           "type": "integer"
@@ -648,6 +1514,359 @@
       "title": "RunStarted",
       "type": "object"
     },
+    "RunTodoItem": {
+      "additionalProperties": false,
+      "properties": {
+        "channelCode": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z0-9_]{1,24}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Channelcode"
+        },
+        "compareTo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunPeriod"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "dependsOn": {
+          "items": {
+            "pattern": "^t[1-9][0-9]{0,2}$",
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Dependson",
+          "type": "array"
+        },
+        "goal": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Goal",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^t[1-9][0-9]{0,2}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "optional": {
+          "title": "Optional",
+          "type": "boolean"
+        },
+        "period": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunPeriod"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "out_of_scope",
+                "duplicate_optional"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "failed",
+            "verified",
+            "skipped"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "goal",
+        "status",
+        "dependsOn",
+        "optional"
+      ],
+      "title": "RunTodoItem",
+      "type": "object"
+    },
+    "RunToolPreparation": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "preparing",
+            "prepared"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "stepId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Stepid",
+          "type": "string"
+        },
+        "toolIndex": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Toolindex",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "stepId",
+        "toolIndex",
+        "status"
+      ],
+      "title": "RunToolPreparation",
+      "type": "object"
+    },
+    "RunVerifiedSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "channelCode": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z0-9_]{1,24}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Channelcode"
+        },
+        "comparePaidCent": {
+          "anyOf": [
+            {
+              "pattern": "^(?:0|-?[1-9][0-9]{0,19})$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Comparepaidcent"
+        },
+        "compareTo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunPeriod"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dimension": {
+          "enum": [
+            "channel",
+            "product"
+          ],
+          "title": "Dimension",
+          "type": "string"
+        },
+        "paidCent": {
+          "pattern": "^(?:0|-?[1-9][0-9]{0,19})$",
+          "title": "Paidcent",
+          "type": "string"
+        },
+        "period": {
+          "$ref": "#/$defs/RunPeriod"
+        },
+        "queryId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Queryid",
+          "type": "string"
+        },
+        "rowCount": {
+          "maximum": 200,
+          "minimum": 1,
+          "title": "Rowcount",
+          "type": "integer"
+        },
+        "stepId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Stepid",
+          "type": "string"
+        },
+        "toolCallId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Toolcallid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "queryId",
+        "stepId",
+        "toolCallId",
+        "dimension",
+        "period",
+        "compareTo",
+        "channelCode",
+        "rowCount",
+        "paidCent",
+        "comparePaidCent"
+      ],
+      "title": "RunVerifiedSummary",
+      "type": "object"
+    },
+    "RunWaiting": {
+      "additionalProperties": false,
+      "properties": {
+        "continuation": {
+          "const": "execute_tool",
+          "default": "execute_tool",
+          "title": "Continuation",
+          "type": "string"
+        },
+        "nodeKey": {
+          "const": "tool_approval",
+          "default": "tool_approval",
+          "title": "Nodekey",
+          "type": "string"
+        },
+        "proposal": {
+          "$ref": "#/$defs/ToolApprovalProposal"
+        },
+        "runId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Runid",
+          "type": "string"
+        },
+        "status": {
+          "const": "waiting",
+          "title": "Status",
+          "type": "string"
+        },
+        "waitId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Waitid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "runId",
+        "waitId",
+        "proposal"
+      ],
+      "title": "RunWaiting",
+      "type": "object"
+    },
+    "RunWorkflowAsset": {
+      "additionalProperties": false,
+      "properties": {
+        "assetId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Assetid",
+          "type": "string"
+        },
+        "definitionVersion": {
+          "const": 1,
+          "title": "Definitionversion",
+          "type": "integer"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "assetId",
+        "name",
+        "definitionVersion"
+      ],
+      "title": "RunWorkflowAsset",
+      "type": "object"
+    },
+    "RunWorkflowProgress": {
+      "additionalProperties": false,
+      "properties": {
+        "asset": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunWorkflowAsset"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9_-]{1,80}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "key": {
+          "pattern": "^[a-z0-9_:@-]{1,72}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "dynamic",
+            "fixed",
+            "skill"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "running",
+            "completed",
+            "failed",
+            "canceled",
+            "waiting"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "key",
+        "status"
+      ],
+      "title": "RunWorkflowProgress",
+      "type": "object"
+    },
     "StepFinished": {
       "additionalProperties": false,
       "properties": {
@@ -725,7 +1944,7 @@
           "type": "string"
         },
         "stepIndex": {
-          "maximum": 6,
+          "maximum": 100,
           "minimum": 1,
           "title": "Stepindex",
           "type": "integer"
@@ -813,9 +2032,102 @@
       "title": "StreamExtension",
       "type": "object"
     },
+    "ToolApprovalProposal": {
+      "additionalProperties": false,
+      "properties": {
+        "argumentsDigest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Argumentsdigest",
+          "type": "string"
+        },
+        "connectionId": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Connectionid"
+        },
+        "connectionRevision": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Connectionrevision"
+        },
+        "proposalId": {
+          "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+          "title": "Proposalid",
+          "type": "string"
+        },
+        "schemaHash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schemahash"
+        },
+        "summary": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        },
+        "toolCallId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Toolcallid",
+          "type": "string"
+        },
+        "toolName": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Toolname",
+          "type": "string"
+        }
+      },
+      "required": [
+        "proposalId",
+        "toolName",
+        "toolCallId",
+        "argumentsDigest",
+        "summary"
+      ],
+      "title": "ToolApprovalProposal",
+      "type": "object"
+    },
     "ToolEmptyPayload": {
       "additionalProperties": false,
       "properties": {
+        "resultPreview": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Resultpreview"
+        },
         "rowCount": {
           "const": 0,
           "title": "Rowcount",
@@ -864,10 +2176,25 @@
             "retail_unavailable",
             "retail_query_failed",
             "retail_query_timeout",
+            "database_query_failed",
+            "database_unavailable",
+            "database_query_timeout",
             "result_limit"
           ],
           "title": "Errorcode",
           "type": "string"
+        },
+        "resultPreview": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Resultpreview"
         },
         "status": {
           "const": "error",
@@ -962,6 +2289,18 @@
     "ToolStartedPayload": {
       "additionalProperties": false,
       "properties": {
+        "inputPreview": {
+          "anyOf": [
+            {
+              "maxLength": 8192,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Inputpreview"
+        },
         "params": {
           "anyOf": [
             {
@@ -1007,6 +2346,7 @@
         "toolKind": {
           "enum": [
             "retail_sales",
+            "database_query",
             "unavailable"
           ],
           "title": "Toolkind",
@@ -1026,6 +2366,18 @@
     "ToolSucceededPayload": {
       "additionalProperties": false,
       "properties": {
+        "resultPreview": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Resultpreview"
+        },
         "rowCount": {
           "maximum": 200,
           "minimum": 1,

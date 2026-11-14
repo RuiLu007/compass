@@ -1,0 +1,43 @@
+"""Static tool declarations shared by discovery and per-Run registration."""
+
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Literal
+
+from compass_agent.schemas import ToolDefinition
+from compass_agent.tools.contracts import InProcessBinding, RegisteredTool, ToolPolicy
+from compass_agent.tools.registry import bounded_payload, parse_arguments
+
+
+@dataclass(frozen=True)
+class CatalogContext:
+    enabled: frozenset[str]
+    database: bool = False
+    sandbox: bool = False
+    workflow: bool = False
+
+
+@dataclass(frozen=True)
+class ToolSpec:
+    name: str
+    category: Literal["builtin", "business"]
+    capability: str
+    definition: Callable[[CatalogContext], ToolDefinition | None]
+    available: Callable[[CatalogContext], bool]
+    parallel_safe: bool = False
+    orchestrates: bool = False
+    factory: Callable[[], RegisteredTool] | None = None
+
+    def register(self, context: CatalogContext, handler: Callable) -> RegisteredTool:
+        if self.factory is not None:
+            return self.factory()
+        return RegisteredTool(
+            self.name,
+            self.definition(context),
+            ToolPolicy(),
+            InProcessBinding(handler(self.name), orchestrates=self.orchestrates),
+            parse_arguments,
+            lambda args, execution: execution.require_running(),
+            bounded_payload,
+            parallel_safe=self.parallel_safe,
+        )

@@ -1,8 +1,19 @@
 from datetime import date, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, RootModel, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    RootModel,
+    SecretStr,
+    StringConstraints,
+    field_serializer,
+    model_validator,
+)
 
 
 class Health(BaseModel):
@@ -43,7 +54,70 @@ class TenantScope(StrictModel):
 class TrustedContext(StrictModel):
     actor_user_id: UUID
     scope: Annotated[PlatformScope | TenantScope, Field(discriminator="kind")]
-    purpose: Literal["manage", "test", "chat", "module_read"]
+    purpose: Literal[
+        "manage",
+        "test",
+        "chat",
+        "module_read",
+        "data_manage",
+        "mcp_manage",
+        "runtime_diagnostics",
+        "runtime_usage",
+    ]
+
+
+class RetailConnectionFields(StrictModel):
+    host: str = Field(min_length=1, max_length=253, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9.-]*$")
+    port: int = Field(strict=True, ge=1, le=65535)
+    database_name: str = Field(pattern=r"^[a-z_][a-z0-9_]{0,62}$")
+    role: str = Field(pattern=r"^[a-z_][a-z0-9_]{0,62}$")
+    sslmode: Literal["disable", "prefer", "require", "verify-full"]
+    retail_tenant_id: int = Field(strict=True, ge=1, le=9007199254740991)
+
+
+class RetailConnectionSave(RetailConnectionFields):
+    revision: int = Field(strict=True, ge=0, lt=2147483647)
+    password: SecretStr | None = Field(default=None, min_length=1, max_length=1024)
+
+
+class RetailConnectionView(RetailConnectionFields):
+    revision: int = Field(ge=1)
+    password_configured: Literal[True] = True
+
+
+class RetailConnectionStatus(StrictModel):
+    connection: RetailConnectionView | None
+
+
+class RetailConnectionTest(StrictModel):
+    revision: int = Field(ge=1)
+    status: Literal["ok", "connection_failed", "identity_mismatch", "unavailable"]
+
+
+class DataConnectionFields(StrictModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
+    engine: Literal["postgresql", "mysql"]
+    host: str = Field(min_length=1, max_length=253, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9.-]*$")
+    port: int = Field(strict=True, ge=1, le=65535)
+    database_name: str = Field(min_length=1, max_length=64, pattern=r"^[^\x00-\x1f\x7f]+$")
+    role: str = Field(min_length=1, max_length=128, pattern=r"^[^\x00-\x1f\x7f]+$")
+    sslmode: Literal["disable", "prefer", "require", "verify-full"]
+    retail_tenant_id: int | None = Field(default=None, strict=True, ge=1, le=9007199254740991)
+
+
+class DataConnectionSave(DataConnectionFields):
+    revision: int = Field(strict=True, ge=0, lt=2147483647)
+    password: SecretStr | None = Field(default=None, min_length=1, max_length=1024)
+
+
+class DataConnectionView(DataConnectionFields):
+    id: UUID
+    revision: int = Field(ge=1)
+    password_configured: Literal[True] = True
+
+
+class DataConnectionList(StrictModel):
+    items: list[DataConnectionView]
 
 
 class Capability(StrictModel):
@@ -61,6 +135,65 @@ class ModelCapabilities(StrictModel):
     reasoning_efforts: list[str]
 
 
+class ModelTokenLimits(StrictModel):
+    model_config = ConfigDict(frozen=True)
+
+    context_window_tokens: int | None = Field(default=None, gt=0, le=9007199254740991)
+    max_input_tokens: int | None = Field(default=None, gt=0, le=9007199254740991)
+    max_output_tokens: int | None = Field(default=None, gt=0, le=9007199254740991)
+
+
+class CatalogTokenLimits(StrictModel):
+    model_config = ConfigDict(frozen=True)
+
+    catalog_key: str
+    sdk_version: str
+    limits: ModelTokenLimits
+
+
+class GenerationDefaults(StrictModel):
+    model_config = ConfigDict(frozen=True)
+
+    max_tokens: int | None = Field(default=None, ge=1, le=32768)
+    temperature: float | None = Field(default=None, ge=0, le=2, allow_inf_nan=False)
+    top_p: float | None = Field(default=None, ge=0, le=1, allow_inf_nan=False)
+
+
+class GenerationProfileInput(StrictModel):
+    limits: ModelTokenLimits = Field(default_factory=ModelTokenLimits)
+    defaults: GenerationDefaults = Field(default_factory=GenerationDefaults)
+    import_catalog: bool = False
+
+
+class GenerationProfile(StrictModel):
+    model_config = ConfigDict(frozen=True)
+
+    limits: ModelTokenLimits = Field(default_factory=ModelTokenLimits)
+    defaults: GenerationDefaults = Field(default_factory=GenerationDefaults)
+    catalog_snapshot: CatalogTokenLimits | None = None
+
+    def resolve_limits(self) -> ModelTokenLimits:
+        base = self.catalog_snapshot.limits if self.catalog_snapshot else ModelTokenLimits()
+        return base.model_copy(update=self.limits.model_dump(exclude_unset=True))
+
+
+class GenerationProfileView(GenerationProfile):
+    effective_limits: ModelTokenLimits
+    limit_sources: dict[str, Literal["override", "litellm", "unknown"]]
+
+    @field_serializer("limits")
+    def serialize_overrides(self, limits: ModelTokenLimits) -> dict:
+        return limits.model_dump(exclude_unset=True)
+
+
+class AvailableGeneration(StrictModel):
+    binding_version: int
+    limits: ModelTokenLimits
+    default_max_tokens: int
+    application_max_output_tokens: int = 32768
+    supported_parameters: list[str] | None = None
+
+
 class CatalogItem(StrictModel):
     id: str
     vendor: str
@@ -71,6 +204,7 @@ class CatalogItem(StrictModel):
     source: Literal["litellm", "project_verified", "systemone"]
     base_url: str | None = None
     capabilities: ModelCapabilities
+    token_limits: CatalogTokenLimits | None = None
 
 
 class CatalogPage(StrictModel):
@@ -89,6 +223,7 @@ class ProviderCreate(StrictModel):
     base_url: str = Field(default="", max_length=2048)
     api_key: str = Field(default="", max_length=4096, repr=False)
     connection_params: dict | None = Field(default=None, repr=False)
+    generation_profile: GenerationProfileInput | None = None
     enabled: bool = False
     chat_visible: bool = False
 
@@ -102,6 +237,7 @@ class ProviderPatch(StrictModel):
     base_url: str | None = Field(default=None, max_length=2048)
     api_key: str | None = Field(default=None, min_length=1, max_length=4096, repr=False)
     connection_params: dict | None = Field(default=None, repr=False)
+    generation_profile: GenerationProfileInput | None = None
     enabled: bool | None = None
     chat_visible: bool | None = None
 
@@ -137,6 +273,7 @@ class ProviderView(StrictModel):
     version: int
     binding_version: int
     capabilities: ModelCapabilities
+    generation_profile: GenerationProfileView | None = None
     latest_test: TestSummary | None = None
     created_at: datetime
     updated_at: datetime
@@ -155,6 +292,7 @@ class AvailableModel(StrictModel):
     api_model: str
     kind: Literal["llm"]
     capabilities: ModelCapabilities
+    generation: AvailableGeneration | None = None
 
 
 class AvailableModels(StrictModel):
@@ -219,9 +357,12 @@ class ChatMessage(StrictModel):
         return self
 
 
+RUN_CONTEXT_MESSAGES = 512
+
+
 class GenerateInput(StrictModel):
     kind: Literal["generate"] = "generate"
-    messages: list[ChatMessage] = Field(min_length=1, max_length=64)
+    messages: list[ChatMessage] = Field(min_length=1, max_length=RUN_CONTEXT_MESSAGES)
     stream: bool = False
     thinking: bool = False
     reasoning_effort: Literal["low", "medium", "high", "max"] | None = None
@@ -229,6 +370,8 @@ class GenerateInput(StrictModel):
     output_format: Literal["text", "json", "schema"] = "text"
     output_schema: dict | None = None
     max_tokens: int = Field(default=8192, ge=1, le=32768)
+    temperature: float | None = Field(default=None, ge=0, le=2, allow_inf_nan=False)
+    top_p: float | None = Field(default=None, ge=0, le=1, allow_inf_nan=False)
     continuation_token: str | None = Field(default=None, max_length=1048576, repr=False)
 
     @model_validator(mode="after")
@@ -292,21 +435,27 @@ class MainModelSelection(StrictModel):
 
 RUN_STREAM_PROTOCOL: Literal["compass.run"] = "compass.run"
 RUN_STREAM_VERSION: Literal[1] = 1
+DEFAULT_RUN_TIMEOUT_SECONDS = 600
 RUN_STREAM_LIMITS = {
     "frameBytes": 256 * 1024,
-    "streamBytes": 2 * 1024 * 1024,
-    "events": 96,
+    "streamBytes": 4 * 1024 * 1024,
+    "events": 4096,
     "batchItems": 16,
     "batchBytes": 32 * 1024,
-    "batchWaitMs": 100,
+    "batchWaitMs": 24,
     "heartbeatMs": 15_000,
     "extensionBytes": 4 * 1024,
+    "toolInputBytes": 8 * 1024,
+    "toolResultBytes": 4 * 1024,
     "jsonDepth": 20,
     "answerBytes": 32 * 1024,
     "fileBytes": 128 * 1024,
     "fileRows": 200,
-    "steps": 6,
+    "steps": 100,
+    "timeoutSeconds": DEFAULT_RUN_TIMEOUT_SECONDS,
     "toolsPerStep": 4,
+    "executionNodes": 768,
+    "executionDepth": 12,
 }
 
 RunUUID = Annotated[str, Field(pattern=r"^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$")]
@@ -320,20 +469,31 @@ RunToolError = Literal[
     "retail_unavailable",
     "retail_query_failed",
     "retail_query_timeout",
+    "database_query_failed",
+    "database_unavailable",
+    "database_query_timeout",
     "result_limit",
 ]
+type ModelInputError = Literal[
+    "input_token_limit_exceeded", "output_token_limit_exceeded", "invalid_model_input"
+]
 RunError = Literal[
+    ModelInputError,
     "model_failed",
     "model_incomplete",
     "model_unavailable",
     "run_timeout",
     "context_limit",
+    "workflow_unavailable",
+    "workflow_failed",
+    "tool_catalog_limit",
+    "tool_setup_failed",
     "step_limit",
     "internal_error",
 ]
 RunStopCause = Literal["user", "disconnected", "shutdown"]
 RunCleanupCause = RunStopCause | Literal["deadline", "execution_error"]
-RunTerminalStatus = Literal["completed", "failed", "canceled", "cleanup_unconfirmed"]
+RunTerminalStatus = Literal["completed", "waiting", "failed", "canceled", "cleanup_unconfirmed"]
 
 
 class RunContractModel(BaseModel):
@@ -345,15 +505,90 @@ class AnalysisHistoryTurn(RunContractModel):
     answer: str = Field(min_length=1, max_length=RUN_STREAM_LIMITS["answerBytes"])
 
 
+class RunPeriod(RunContractModel):
+    start: RunDay
+    end: RunDay
+
+
+class WorkflowPeriods(RunContractModel):
+    baseline: RunPeriod
+    current: RunPeriod
+
+
+class WorkflowAssetRef(WorkflowPeriods):
+    asset_id: UUID = Field(alias="assetId", strict=False)
+    definition_version: Literal[1] = Field(alias="definitionVersion")
+
+
+type WorkflowEntryContract = Literal[
+    "channel_attribution@1", "channel_overview@1", "agent_workflow@1"
+]
+
+
+class WorkflowAssetView(RunContractModel):
+    asset_id: UUID = Field(alias="assetId", strict=False)
+    name: str = Field(min_length=1, max_length=80)
+    status: Literal["active", "disabled"]
+    definition_version: Literal[1] = Field(alias="definitionVersion")
+    entry_contract: WorkflowEntryContract = Field(alias="entryContract")
+    metadata_revision: int = Field(alias="metadataRevision", ge=1)
+    script_source: str | None = Field(default=None, alias="scriptSource", max_length=16384)
+    description: str | None = Field(default=None, max_length=500)
+    parameters: dict | None = None
+
+
+class WorkflowAssetList(RunContractModel):
+    items: list[WorkflowAssetView]
+    next_cursor: str | None = Field(default=None, alias="nextCursor")
+
+
+class WorkflowAssetPatch(RunContractModel):
+    metadata_revision: int = Field(alias="metadataRevision", ge=1, lt=2147483647)
+    name: str = Field(min_length=1, max_length=80)
+    status: Literal["active", "disabled"]
+
+
+class WorkflowAssetDelete(RunContractModel):
+    metadata_revision: int = Field(alias="metadataRevision", ge=1, lt=2147483647)
+
+
+class WorkflowDraftConfirm(RunContractModel):
+    name: str = Field(min_length=1, max_length=80)
+
+
+class WorkflowDraftView(RunContractModel):
+    name: str = Field(min_length=1, max_length=80)
+    entry_contract: WorkflowEntryContract = Field(alias="entryContract")
+    script_source: str = Field(alias="scriptSource", max_length=16384)
+    args: WorkflowPeriods | dict
+    summary: str
+    description: str | None = Field(default=None, max_length=500)
+    parameters: dict | None = None
+
+
+class RunConstraints(RunContractModel):
+    plan: Literal["required"] | None = None
+    max_steps: int | None = Field(
+        default=None, alias="maxSteps", ge=1, le=RUN_STREAM_LIMITS["steps"]
+    )
+    timeout_seconds: int | None = Field(
+        default=None, alias="timeoutSeconds", ge=1, le=DEFAULT_RUN_TIMEOUT_SECONDS
+    )
+
+
 class AnalysisRunInput(RunContractModel):
     # JSON carries UUID text; keep the rest of the Run contract strictly typed.
     request_id: UUID = Field(alias="requestId", strict=False)
     question: str = Field(min_length=1, max_length=8000)
     history: list[AnalysisHistoryTurn] = Field(default_factory=list, max_length=12)
     selection: MainModelSelection
+    workflow_asset_ref: WorkflowAssetRef | None = Field(default=None, alias="workflowAssetRef")
+    constraints: RunConstraints | None = None
 
     @model_validator(mode="after")
     def validate_visible_context_bytes(self):
+        if self.constraints and self.workflow_asset_ref:
+            raise ValueError("analysis constraints require a direct task")
         # Match the BFF's newline-separated byte accounting before any Run can
         # route, invoke a model, or open a tool connection.
         visible = [
@@ -363,11 +598,6 @@ class AnalysisRunInput(RunContractModel):
         if len("\n".join(visible).encode()) > 32 * 1024:
             raise ValueError("visible context exceeds 32 KiB")
         return self
-
-
-class RunPeriod(RunContractModel):
-    start: RunDay
-    end: RunDay
 
 
 class ChannelRunParams(RunContractModel):
@@ -417,21 +647,34 @@ class ToolEventKey(RunContractModel):
 
 
 class ToolStartedPayload(ToolEventKey):
-    tool_kind: Literal["retail_sales", "unavailable"] = Field(alias="toolKind")
+    tool_kind: Literal["retail_sales", "database_query", "unavailable"] = Field(alias="toolKind")
     params: RetailRunParams | None
+    input_preview: str | None = Field(
+        default_factory=lambda: None,
+        alias="inputPreview",
+        max_length=RUN_STREAM_LIMITS["toolInputBytes"],
+    )
 
 
-class ToolSucceededPayload(ToolEventKey):
+class ToolFinishedKey(ToolEventKey):
+    result_preview: str | None = Field(
+        default_factory=lambda: None,
+        alias="resultPreview",
+        max_length=RUN_STREAM_LIMITS["toolResultBytes"],
+    )
+
+
+class ToolSucceededPayload(ToolFinishedKey):
     status: Literal["ok"]
     row_count: RunRowCount = Field(alias="rowCount")
 
 
-class ToolEmptyPayload(ToolEventKey):
+class ToolEmptyPayload(ToolFinishedKey):
     status: Literal["empty"]
     row_count: Literal[0] = Field(alias="rowCount")
 
 
-class ToolFailedPayload(ToolEventKey):
+class ToolFailedPayload(ToolFinishedKey):
     status: Literal["error"]
     error_code: RunToolError = Field(alias="errorCode")
 
@@ -484,6 +727,15 @@ AnalysisFile = Annotated[
 ]
 
 
+class RunArtifact(RunContractModel):
+    id: RunUUID
+    name: Literal["chart.png"]
+    media_type: Literal["image/png"] = Field(alias="mediaType")
+    byte_size: int = Field(alias="byteSize", ge=1, le=512 * 1024)
+    step_id: RunUUID = Field(alias="stepId")
+    tool_call_id: RunToolId = Field(alias="toolCallId")
+
+
 class RunCompleted(RunContractModel):
     status: Literal["completed"]
     final_answer: Annotated[
@@ -491,6 +743,38 @@ class RunCompleted(RunContractModel):
         Field(min_length=1, max_length=RUN_STREAM_LIMITS["answerBytes"]),
     ] = Field(alias="finalAnswer")
     file: AnalysisFile
+    artifacts: list[RunArtifact] = Field(default_factory=list, max_length=40)
+
+
+class BudgetProposal(RunContractModel):
+    proposal_id: RunUUID = Field(alias="proposalId")
+    revision: Literal[1] = 1
+    campaign_key: Literal["classroom-retail"] = Field(alias="campaignKey")
+    tenant_id: RunUUID = Field(alias="tenantId")
+    workspace_id: RunUUID = Field(alias="workspaceId")
+    delta_cent: str = Field(alias="deltaCent", pattern=r"^(?:0|-?[1-9][0-9]{0,19})$")
+    summary: str = Field(min_length=1, max_length=2000)
+    evidence_refs: list[RunUUID] = Field(alias="evidenceRefs", min_length=1, max_length=2)
+
+
+class ToolApprovalProposal(RunContractModel):
+    proposal_id: RunUUID = Field(alias="proposalId")
+    tool_name: str = Field(alias="toolName", min_length=1, max_length=128)
+    tool_call_id: RunToolId = Field(alias="toolCallId")
+    arguments_digest: str = Field(alias="argumentsDigest", pattern=r"^[0-9a-f]{64}$")
+    summary: str = Field(min_length=1, max_length=2000)
+    connection_id: RunUUID | None = Field(default=None, alias="connectionId")
+    connection_revision: int | None = Field(default=None, alias="connectionRevision", ge=1)
+    schema_hash: str | None = Field(default=None, alias="schemaHash", pattern=r"^[0-9a-f]{64}$")
+
+
+class RunWaiting(RunContractModel):
+    status: Literal["waiting"]
+    run_id: RunUUID = Field(alias="runId")
+    wait_id: RunUUID = Field(alias="waitId")
+    node_key: Literal["tool_approval"] = Field(default="tool_approval", alias="nodeKey")
+    continuation: Literal["execute_tool"] = "execute_tool"
+    proposal: ToolApprovalProposal
 
 
 class RunFailed(RunContractModel):
@@ -511,9 +795,222 @@ class RunCleanupUnconfirmed(RunContractModel):
 
 
 RunResult = Annotated[
-    RunCompleted | RunFailed | RunCanceled | RunCleanupUnconfirmed,
+    RunCompleted | RunWaiting | RunFailed | RunCanceled | RunCleanupUnconfirmed,
     Field(discriminator="status"),
 ]
+
+
+RunTodoId = Annotated[str, Field(pattern=r"^t[1-9][0-9]{0,2}$")]
+RunAutonomyCode = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,79}$")]
+RunMoney = Annotated[str, Field(pattern=r"^(?:0|-?[1-9][0-9]{0,19})$")]
+
+
+class RunTodoItem(RunContractModel):
+    id: RunTodoId
+    goal: str = Field(min_length=1, max_length=200)
+    status: Literal["pending", "failed", "verified", "skipped"]
+    depends_on: list[RunTodoId] = Field(alias="dependsOn", max_length=5)
+    optional: bool
+    period: RunPeriod | None = None
+    compare_to: RunPeriod | None = Field(default=None, alias="compareTo")
+    channel_code: str | None = Field(
+        default=None, alias="channelCode", pattern=r"^[A-Z0-9_]{1,24}$"
+    )
+    reason: Literal["out_of_scope", "duplicate_optional"] | None = None
+
+
+class RunAutonomyAction(RunContractModel):
+    step_id: RunUUID = Field(alias="stepId")
+    action_index: int = Field(alias="actionIndex", ge=1, le=4)
+    action: Literal[
+        "replace", "select", "complete", "skip", "retail", "database", "submit", "unknown"
+    ]
+    code: RunAutonomyCode
+    todo_id: RunTodoId | None = Field(default=None, alias="todoId")
+    level: Literal["step", "run"] | None = None
+    layer: Literal["rule", "schema", "tool_result"] | None = None
+    plan_version: int = Field(
+        alias="planVersion", ge=0, le=RUN_STREAM_LIMITS["steps"] * RUN_STREAM_LIMITS["toolsPerStep"]
+    )
+    selected_todo_id: RunTodoId | None = Field(alias="selectedTodoId")
+    items: list[RunTodoItem] = Field(max_length=6)
+
+
+class RunAutonomyUsage(RunContractModel):
+    limit: int = Field(ge=0)
+    used: int = Field(ge=0)
+    remaining: int = Field(ge=0)
+
+
+class RunAutonomyBudget(RunContractModel):
+    steps: RunAutonomyUsage
+    tools: RunAutonomyUsage
+    tokens: RunAutonomyUsage
+    cost_microusd: RunAutonomyUsage = Field(alias="costMicrousd")
+    attempts: int = Field(ge=0)
+    unknown_attempts: int = Field(alias="unknownAttempts", ge=0)
+
+
+class RunVerifiedSummary(RunContractModel):
+    query_id: RunUUID = Field(alias="queryId")
+    step_id: RunUUID = Field(alias="stepId")
+    tool_call_id: RunToolId = Field(alias="toolCallId")
+    dimension: Literal["channel", "product"]
+    period: RunPeriod
+    compare_to: RunPeriod | None = Field(alias="compareTo")
+    channel_code: str | None = Field(alias="channelCode", pattern=r"^[A-Z0-9_]{1,24}$")
+    row_count: RunRowCount = Field(alias="rowCount")
+    paid_cent: RunMoney = Field(alias="paidCent")
+    compare_paid_cent: RunMoney | None = Field(alias="comparePaidCent")
+
+
+class RunAutonomyResult(RunContractModel):
+    outcome: Literal[
+        "completed",
+        "waiting",
+        "failed",
+        "budget_exhausted",
+        "human_required",
+        "canceled",
+        "cleanup_unconfirmed",
+    ]
+    reason: RunAutonomyCode
+    plan_version: int = Field(
+        alias="planVersion", ge=0, le=RUN_STREAM_LIMITS["steps"] * RUN_STREAM_LIMITS["toolsPerStep"]
+    )
+    first_plan_step: int | None = Field(alias="firstPlanStep", ge=1, le=RUN_STREAM_LIMITS["steps"])
+    budget: RunAutonomyBudget
+    partial: list[RunVerifiedSummary] = Field(max_length=2)
+
+
+class RunWorkflowAsset(RunContractModel):
+    asset_id: RunUUID = Field(alias="assetId")
+    name: str = Field(min_length=1, max_length=80)
+    definition_version: Literal[1] = Field(alias="definitionVersion")
+
+
+class RunWorkflowProgress(RunContractModel):
+    source: Literal["dynamic", "fixed", "skill"]
+    key: str = Field(pattern=r"^[a-z0-9_:@-]{1,72}$")
+    status: Literal["running", "completed", "failed", "canceled", "waiting"]
+    detail: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,80}$")
+    asset: RunWorkflowAsset | None = None
+
+
+class RunToolPreparation(RunContractModel):
+    step_id: RunUUID = Field(alias="stepId")
+    tool_index: int = Field(alias="toolIndex", ge=1, le=RUN_STREAM_LIMITS["toolsPerStep"])
+    status: Literal["preparing", "prepared"]
+
+
+class ExecutionOrigin(RunContractModel):
+    kind: Literal["builtin", "mcp"]
+    tool_name: str | None = Field(default_factory=lambda: None, alias="toolName", max_length=200)
+    server_id: str | None = Field(default_factory=lambda: None, alias="serverId", max_length=120)
+    server_name: str | None = Field(
+        default_factory=lambda: None, alias="serverName", max_length=120
+    )
+
+
+class ExecutionEnvironment(RunContractModel):
+    kind: Literal["service", "quickjs", "sandbox"]
+    runtime: str | None = Field(default_factory=lambda: None, max_length=80)
+    environment_id: str | None = Field(
+        default_factory=lambda: None, alias="environmentId", max_length=120
+    )
+
+
+class ExecutionWorkflow(RunContractModel):
+    mode: Literal["generated", "reused", "fixed"]
+    asset_id: RunUUID | None = Field(default_factory=lambda: None, alias="assetId")
+    name: str | None = Field(default_factory=lambda: None, max_length=80)
+    version: int | None = Field(default_factory=lambda: None, ge=1)
+
+
+class ExecutionSkill(RunContractModel):
+    name: str = Field(min_length=1, max_length=120)
+    version: str = Field(min_length=1, max_length=40)
+    stage: Literal["load", "script"]
+
+
+class ExecutionSubAgent(RunContractModel):
+    name: str = Field(min_length=1, max_length=120)
+    child_run_id: RunUUID | None = Field(default_factory=lambda: None, alias="childRunId")
+
+
+class ExecutionDisplay(RunContractModel):
+    policy: Literal["summary", "preview"] = Field(default_factory=lambda: "summary")
+    input_preview: str | None = Field(
+        default_factory=lambda: None, alias="inputPreview", max_length=1024
+    )
+    output_preview: str | None = Field(
+        default_factory=lambda: None, alias="outputPreview", max_length=1024
+    )
+    language: Literal["text", "json", "sql", "javascript", "python"] = Field(
+        default_factory=lambda: "text"
+    )
+
+
+class ExecutionDetail(RunContractModel):
+    thinking: str | None = Field(default_factory=lambda: None, max_length=32 * 1024)
+    narration: str | None = Field(default_factory=lambda: None, max_length=32 * 1024)
+    input: str | None = Field(default_factory=lambda: None, max_length=32 * 1024)
+    output: str | None = Field(default_factory=lambda: None, max_length=32 * 1024)
+
+
+class RunExecutionNode(RunContractModel):
+    """Execution snapshot with optional detail for currently authorized viewers."""
+
+    id: RunUUID
+    parent_id: RunUUID | None = Field(default_factory=lambda: None, alias="parentId")
+    revision: int = Field(ge=1, le=1024)
+    kind: Literal["model", "narration", "tool", "workflow", "skill", "subagent", "group"]
+    status: Literal[
+        "preparing", "running", "completed", "empty", "failed", "canceled", "waiting", "incomplete"
+    ]
+    title: str = Field(min_length=1, max_length=160)
+    summary: str | None = Field(default_factory=lambda: None, max_length=512)
+    started_at_ms: int = Field(alias="startedAtMs", ge=0)
+    ended_at_ms: int | None = Field(default_factory=lambda: None, alias="endedAtMs", ge=0)
+    step_id: RunUUID | None = Field(default_factory=lambda: None, alias="stepId")
+    model_call_id: RunUUID | None = Field(default_factory=lambda: None, alias="modelCallId")
+    tool_call_id: RunToolId | None = Field(default_factory=lambda: None, alias="toolCallId")
+    origin: ExecutionOrigin | None = Field(default_factory=lambda: None)
+    executor: ExecutionEnvironment | None = Field(default_factory=lambda: None)
+    workflow: ExecutionWorkflow | None = Field(default_factory=lambda: None)
+    skill: ExecutionSkill | None = Field(default_factory=lambda: None)
+    subagent: ExecutionSubAgent | None = Field(default_factory=lambda: None)
+    scheduling: Literal["sequential", "parallel"] | None = Field(default_factory=lambda: None)
+    depends_on: list[RunUUID] = Field(default_factory=list, alias="dependsOn", max_length=16)
+    display: ExecutionDisplay = Field(default_factory=ExecutionDisplay)
+    detail: ExecutionDetail | None = Field(default_factory=lambda: None)
+
+    @model_validator(mode="after")
+    def validate_node(self):
+        if self.parent_id == self.id or self.id in self.depends_on:
+            raise ValueError("execution node cannot reference itself")
+        if len(set(self.depends_on)) != len(self.depends_on):
+            raise ValueError("duplicate execution dependency")
+        if (
+            self.origin
+            and self.origin.kind == "mcp"
+            and not (self.kind == "tool" and self.origin.server_id and self.origin.tool_name)
+        ):
+            raise ValueError("MCP calls require server and tool identity")
+        if self.scheduling is not None and self.kind != "group":
+            raise ValueError("scheduling belongs to an execution group")
+        for kind in ("workflow", "skill", "subagent"):
+            if getattr(self, kind) is not None and self.kind != kind:
+                raise ValueError("execution metadata must match kind")
+        if self.display.policy == "summary" and (
+            self.display.input_preview is not None or self.display.output_preview is not None
+        ):
+            raise ValueError("summary policy forbids previews")
+        if self.ended_at_ms is not None and self.ended_at_ms < self.started_at_ms:
+            raise ValueError("execution time order")
+        if (self.status in {"preparing", "running"}) != (self.ended_at_ms is None):
+            raise ValueError("execution end time must match status")
+        return self
 
 
 class RunExtensionPayload(RunContractModel):
@@ -578,6 +1075,7 @@ class StreamBatch(RunContractModel):
 class RunFinished(RunContractModel):
     type: Literal["run.finished"]
     payload: RunResult
+    duration_ms: int | None = Field(default_factory=lambda: None, alias="durationMs", ge=0)
 
 
 RunStreamEvent = Annotated[
@@ -837,11 +1335,6 @@ class RoutedCallResponse(StrictModel):
     metrics: RoutingMetrics = Field(default_factory=RoutingMetrics)
 
 
-class RoutingStartEvent(StrictModel):
-    type: Literal["start"] = "start"
-    call_id: UUID
-
-
 class ClassificationEvent(StrictModel):
     type: Literal["classification_status"] = "classification_status"
     call_id: UUID
@@ -854,27 +1347,6 @@ class RouteSelectedEvent(StrictModel):
     intent: Intent
     features: RoutingFeatures
     routing: ModelRoute
-
-
-class RoutingFinalEvent(RoutedCallResponse):
-    type: Literal["final"] = "final"
-
-
-class RoutedModelEvent(
-    RootModel[
-        Annotated[
-            RoutingStartEvent
-            | ClassificationEvent
-            | RouteSelectedEvent
-            | TextDeltaEvent
-            | ToolDeltaEvent
-            | ReasoningMetaEvent
-            | RoutingFinalEvent,
-            Field(discriminator="type"),
-        ]
-    ]
-):
-    pass
 
 
 type ReliabilityScenario = Literal[
@@ -1003,3 +1475,463 @@ class ModelComparison(StrictModel):
     environment: str
     sample_ratio: float
     items: list[ModelComparisonRow] = Field(max_length=2)
+
+
+class McpToolSelection(StrictModel):
+    name: str = Field(min_length=1, max_length=256)
+    effect: Literal["read_only", "local_artifact", "external_write", "unknown"] = "unknown"
+    approval: Literal["none", "required"] = "required"
+
+    @model_validator(mode="after")
+    def safe_policy(self):
+        if self.effect in {"external_write", "unknown"} and self.approval != "required":
+            raise ValueError("external and unknown effects require approval")
+        return self
+
+
+class McpConnectionSave(StrictModel):
+    revision: int = Field(ge=0)
+    name: str = Field(min_length=1, max_length=80)
+    endpoint: str = Field(min_length=1, max_length=2048)
+    token: SecretStr | None = None
+    enabled: bool = True
+    required: bool = False
+    max_inflight: int = Field(default=1, ge=1, le=2)
+    selected_tools: Literal["all"] | list[str] = "all"
+    tool_policies: list[McpToolSelection] = Field(default_factory=list, max_length=256)
+
+    @model_validator(mode="after")
+    def unique_tools(self):
+        if len({tool.name for tool in self.tool_policies}) != len(self.tool_policies):
+            raise ValueError("duplicate tool policy")
+        if isinstance(self.selected_tools, list) and (
+            len(self.selected_tools) > 16
+            or len(set(self.selected_tools)) != len(self.selected_tools)
+            or any(not name or len(name) > 256 for name in self.selected_tools)
+        ):
+            raise ValueError("invalid tool selection")
+        return self
+
+
+class McpConnectionView(StrictModel):
+    id: UUID
+    revision: int
+    name: str
+    endpoint: str
+    has_token: bool
+    enabled: bool
+    required: bool
+    max_inflight: int
+    selected_tools: Literal["all"] | list[str]
+    tool_policies: list[McpToolSelection]
+
+
+class McpConnectionList(StrictModel):
+    items: list[McpConnectionView]
+
+
+class McpConnectionDelete(StrictModel):
+    revision: int = Field(ge=1)
+
+
+class McpDiscoveredTool(StrictModel):
+    name: str
+    description: str
+    input_schema: dict[str, Any]
+    output_schema: dict[str, Any] | None = None
+
+
+class McpDiscoveryResult(StrictModel):
+    revision: int
+    tools: list[McpDiscoveredTool]
+
+
+class SandboxInspection(RunContractModel):
+    allocation_id: RunUUID = Field(alias="allocationId")
+    run_id: RunUUID = Field(alias="runId")
+    step_id: RunUUID = Field(alias="stepId")
+    tool_call_id: RunToolId = Field(alias="toolCallId")
+    status: Literal["ok", "error", "unknown"]
+    cleanup: Literal["confirmed", "unconfirmed"]
+    result: JsonValue = None
+    chart_sha256: str | None = Field(default=None, alias="chartSha256", pattern=r"^[0-9a-f]{64}$")
+
+
+# Message snapshots and Run streams share this single v2 business protocol.
+def valid_stream_id(value: str) -> str:
+    if any(int(part) > 2**64 - 1 for part in value.split("-")):
+        raise ValueError("stream ID overflow")
+    return value
+
+
+StreamId = Annotated[
+    str,
+    Field(pattern=r"^(0|[1-9][0-9]{0,19})-(0|[1-9][0-9]{0,19})$"),
+    AfterValidator(valid_stream_id),
+]
+DurableStatus = Literal[
+    "created", "running", "waiting", "paused", "cancelling", "completed", "failed", "canceled"
+]
+
+
+class SessionSubmit(RunContractModel):
+    request_id: UUID = Field(alias="requestId", strict=False)
+    session_id: UUID | None = Field(default=None, alias="sessionId", strict=False)
+    question: str = Field(min_length=1, max_length=8000)
+    selection: MainModelSelection
+    workflow_asset_ref: WorkflowAssetRef | None = Field(default=None, alias="workflowAssetRef")
+    constraints: RunConstraints | None = None
+
+    @model_validator(mode="after")
+    def valid_submission(self):
+        if not self.question.strip():
+            raise ValueError("invalid submission")
+        if self.constraints and self.workflow_asset_ref:
+            raise ValueError("analysis constraints require a direct task")
+        return self
+
+
+class ControlCommand(RunContractModel):
+    request_id: UUID = Field(alias="requestId", strict=False)
+    expected_version: int = Field(alias="expectedVersion", ge=1)
+
+
+class DecisionCommand(ControlCommand):
+    wait_id: UUID = Field(alias="waitId", strict=False)
+    proposal_id: UUID = Field(alias="proposalId", strict=False)
+    proposal_revision: int = Field(alias="proposalRevision", ge=1)
+    proposal_digest: str = Field(alias="proposalDigest", pattern=r"^[a-f0-9]{64}$")
+    decision_id: UUID = Field(alias="decisionId", strict=False)
+    decision: Literal["approve", "reject"]
+
+
+class ReconcileCommand(ControlCommand):
+    wait_id: UUID = Field(alias="waitId", strict=False)
+    action_id: UUID = Field(alias="actionId", strict=False)
+
+
+class ExternalRunEvent(RunContractModel):
+    event_id: UUID = Field(alias="eventId", strict=False)
+    wait_id: UUID = Field(alias="waitId", strict=False)
+    event_type: str = Field(alias="eventType", min_length=1, max_length=80)
+    correlation_key: str = Field(alias="correlationKey", min_length=1, max_length=200)
+    payload: dict[str, JsonValue]
+
+
+class ControlReceipt(RunContractModel):
+    run_id: RunUUID | None = Field(alias="runId")
+    session_id: RunUUID = Field(alias="sessionId")
+    version: int = Field(ge=1)
+    status: str = Field(max_length=32)
+    code: str | None = Field(default=None, max_length=80)
+
+
+class RunPublicSnapshot(RunContractModel):
+    ordinal: int = Field(ge=1)
+    version: int = Field(ge=1)
+    status: DurableStatus
+    reason_code: str | None = Field(alias="reasonCode", max_length=80)
+    recovery_status: Literal["ready", "required", "blocked"] = Field(alias="recoveryStatus")
+    cleanup_status: Literal["none", "pending", "confirmed", "unconfirmed"] = Field(
+        alias="cleanupStatus"
+    )
+
+
+class MessageContent(RunContractModel):
+    text: str = Field(max_length=RUN_STREAM_LIMITS["answerBytes"])
+    artifact_ids: list[RunUUID] = Field(alias="artifactIds", default_factory=list, max_length=40)
+
+
+class MessageSnapshot(RunContractModel):
+    message_id: RunUUID = Field(alias="messageId")
+    ordinal: int = Field(ge=1)
+    role: Literal["user", "assistant"]
+    revision: int = Field(ge=1)
+    status: Literal["streaming", "completed", "incomplete"]
+    content: MessageContent
+
+
+class MessageUpsert(RunContractModel):
+    type: Literal["message.upsert"] = "message.upsert"
+    payload: MessageSnapshot
+
+
+class MessageDeltaValue(RunContractModel):
+    message_id: RunUUID = Field(alias="messageId")
+    revision: int = Field(ge=2)
+    text: str = Field(min_length=1, max_length=8192)
+
+
+class MessageDelta(RunContractModel):
+    type: Literal["message.delta"] = "message.delta"
+    payload: MessageDeltaValue
+
+
+class RunUpsert(RunContractModel):
+    type: Literal["run.upsert"] = "run.upsert"
+    payload: RunPublicSnapshot
+
+
+class PublicApproval(RunContractModel):
+    wait_id: RunUUID = Field(alias="waitId")
+    proposal_id: RunUUID = Field(alias="proposalId")
+    proposal_revision: int = Field(alias="proposalRevision", ge=1)
+    proposal_digest: str = Field(alias="proposalDigest", pattern=r"^[a-f0-9]{64}$")
+    action_id: RunUUID = Field(alias="actionId")
+    kind: Literal["approval", "external_event", "reconciliation"]
+    status: Literal["pending", "approved", "rejected", "expired", "canceled"]
+    summary: str = Field(max_length=2000)
+    expires_at: str | None = Field(alias="expiresAt")
+    decision_id: RunUUID | None = Field(alias="decisionId")
+    reason_code: str | None = Field(alias="reasonCode", max_length=80)
+
+
+class PublicArtifact(RunContractModel):
+    id: RunUUID
+    name: str = Field(min_length=1, max_length=160)
+    media_type: Literal["image/png", "text/csv"] = Field(alias="mediaType")
+    byte_size: int = Field(alias="byteSize", ge=1, le=2097152)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    step_id: RunUUID = Field(alias="stepId")
+    tool_call_id: str = Field(alias="toolCallId", max_length=200)
+
+
+class WaitView(PublicApproval):
+    run_version: int = Field(alias="runVersion", ge=1)
+    allowed_actions: list[Literal["approve", "reject", "reconcile"]] = Field(alias="allowedActions")
+
+
+class PublicWorkflow(RunContractModel):
+    draft_id: RunUUID = Field(alias="draftId")
+    draft: WorkflowDraftView
+    status: Literal["offered", "saved", "expired"]
+    asset_id: RunUUID | None = Field(alias="assetId")
+    expires_at: str = Field(alias="expiresAt")
+
+
+class ViewObject(RunContractModel):
+    object_id: str = Field(alias="objectId", min_length=1, max_length=200)
+    revision: int = Field(ge=1)
+
+
+class ExecutionView(ViewObject):
+    kind: Literal["execution.node"] = "execution.node"
+    value: RunExecutionNode
+
+
+class TimelineValue(RunContractModel):
+    ordinal: int = Field(ge=1)
+    event: RunProgressEvent
+
+
+class TimelineView(ViewObject):
+    kind: Literal["timeline"] = "timeline"
+    value: TimelineValue
+
+
+class PlanView(ViewObject):
+    kind: Literal["plan"] = "plan"
+    value: RunAutonomyResult
+
+
+class NarrationView(ViewObject):
+    kind: Literal["narration"] = "narration"
+    value: RunRoutedPayload
+
+
+class WorkflowView(ViewObject):
+    kind: Literal["workflow"] = "workflow"
+    value: PublicWorkflow
+
+
+class ApprovalView(ViewObject):
+    kind: Literal["approval"] = "approval"
+    value: PublicApproval
+
+
+class ArtifactView(ViewObject):
+    kind: Literal["artifact"] = "artifact"
+    value: PublicArtifact
+
+
+PublicViewObject = Annotated[
+    ExecutionView
+    | TimelineView
+    | PlanView
+    | NarrationView
+    | WorkflowView
+    | ApprovalView
+    | ArtifactView,
+    Field(discriminator="kind"),
+]
+
+
+class ViewUpsert(RunContractModel):
+    type: Literal["view.upsert"] = "view.upsert"
+    payload: PublicViewObject
+
+
+AgentEvent = Annotated[
+    MessageUpsert | MessageDelta | RunUpsert | ViewUpsert, Field(discriminator="type")
+]
+
+
+class AgentPacket(RunContractModel):
+    packet_id: str = Field(alias="packetId", min_length=1, max_length=240)
+    run_id: RunUUID = Field(alias="runId")
+    seq: StreamId | None
+    request_id: RunUUID = Field(alias="requestId")
+    occurred_at: str = Field(alias="occurredAt", max_length=40)
+    event: AgentEvent
+
+
+class RunCursor(RunContractModel):
+    run_id: RunUUID = Field(alias="runId")
+    seq: StreamId
+
+
+class MessagePage(RunContractModel):
+    next_cursor: str | None = Field(alias="nextCursor", max_length=500)
+
+
+class AgentResponse(RunContractModel):
+    protocol: Literal["compass.run"] = "compass.run"
+    version: Literal[2] = 2
+    session_id: RunUUID = Field(alias="sessionId")
+    mode: Literal["snapshot", "delta"]
+    packets: list[AgentPacket] = Field(max_length=8192)
+    cursors: list[RunCursor] = Field(max_length=50)
+    page: MessagePage | None
+
+    @model_validator(mode="after")
+    def envelope(self):
+        runs = {cursor.run_id for cursor in self.cursors}
+        if len(runs) != len(self.cursors) or any(p.run_id not in runs for p in self.packets):
+            raise ValueError("run cursor mismatch")
+        if self.mode == "snapshot":
+            if self.page is None or any(
+                p.seq is not None or p.event.type == "message.delta" for p in self.packets
+            ):
+                raise ValueError("invalid snapshot")
+        else:
+            if self.page is not None or len(self.cursors) != 1 or not self.packets:
+                raise ValueError("invalid delta")
+            previous = (0, 0)
+            for packet in self.packets:
+                if packet.seq is None:
+                    raise ValueError("missing stream ID")
+                current = tuple(map(int, packet.seq.split("-")))
+                if current <= previous:
+                    raise ValueError("invalid stream order")
+                previous = current
+            if self.cursors[0].seq != self.packets[-1].seq:
+                raise ValueError("invalid envelope cursor")
+        return self
+
+
+class SessionListItem(RunContractModel):
+    session_id: RunUUID = Field(alias="sessionId")
+    title: str
+    title_status: Literal["fallback", "pending", "generated", "manual"] = Field(
+        default="fallback", alias="titleStatus"
+    )
+    session_type: Literal["chat", "workflow"] = Field(alias="sessionType")
+    icon_key: Literal["chat", "workflow"] = Field(alias="iconKey")
+    version: int = Field(ge=1)
+    updated_at: str = Field(alias="updatedAt")
+    latest_run_id: RunUUID | None = Field(alias="latestRunId")
+    execution_status: DurableStatus | None = Field(alias="executionStatus")
+
+
+class SessionList(RunContractModel):
+    items: list[SessionListItem] = Field(max_length=50)
+    next_cursor: str | None = Field(alias="nextCursor")
+
+
+class SessionAccepted(RunContractModel):
+    session_id: RunUUID = Field(alias="sessionId")
+    run_id: RunUUID = Field(alias="runId")
+    stream_url: str = Field(alias="streamUrl")
+    session: SessionListItem | None = None
+
+
+class SessionMutation(RunContractModel):
+    request_id: UUID = Field(alias="requestId", strict=False)
+
+
+class SessionRename(SessionMutation):
+    title: str = Field(min_length=1, max_length=80)
+
+
+class SessionDeleted(RunContractModel):
+    session_id: RunUUID = Field(alias="sessionId")
+
+
+class WorkerBoot(RunContractModel):
+    boot_id: Annotated[UUID, Field(strict=False)] = Field(alias="bootId")
+
+
+class ExecutionGrant(RunContractModel):
+    run_id: Annotated[UUID, Field(strict=False)] = Field(alias="runId")
+    worker_id: str = Field(alias="workerId", min_length=1, max_length=64)
+    boot_id: Annotated[UUID, Field(strict=False)] = Field(alias="bootId")
+    epoch: Annotated[UUID, Field(strict=False)]
+    expires_at: Annotated[datetime, Field(strict=False)] = Field(alias="expiresAt")
+    checkpoint_no: int = Field(alias="checkpointNo", ge=0)
+
+
+class WorkerLeaseCommand(RunContractModel):
+    grant: ExecutionGrant
+
+
+class WorkerAdvanceCommand(WorkerLeaseCommand):
+    expected_checkpoint: int = Field(alias="expectedCheckpoint", ge=0)
+
+
+class WorkerAdvanceAck(RunContractModel):
+    command_id: Annotated[UUID, Field(strict=False)] = Field(alias="commandId")
+    status: Literal["running", "continue", "parked", "done", "interrupted"]
+    checkpoint_no: int = Field(alias="checkpointNo", ge=0)
+    reason_code: str | None = Field(alias="reasonCode", max_length=80)
+
+
+class SchedulingPublic(RunContractModel):
+    phase: Literal["scheduling"] = "scheduling"
+    status: Literal["ready", "leased", "reclaiming", "parked", "done"]
+    reason_code: str = Field(alias="reasonCode", max_length=80)
+    claim_count: int = Field(alias="claimCount", ge=0)
+    occurred_at: Annotated[datetime, Field(strict=False)] = Field(alias="occurredAt")
+    summary: str = Field(max_length=200)
+
+
+class RuntimeUsage(RunContractModel):
+    tenant_id: Annotated[UUID, Field(strict=False)] = Field(alias="tenantId")
+    limits: dict[str, int]
+    jobs: dict[str, int]
+    backlog: int = Field(ge=0)
+    occupied: int = Field(ge=0)
+    settled_tokens: int = Field(alias="settledTokens", ge=0)
+    settled_cost_microusd: int | None = Field(alias="settledCostMicrousd", ge=0)
+    unknown_attempts: int = Field(alias="unknownAttempts", ge=0)
+    reserved_tokens: int = Field(alias="reservedTokens", ge=0)
+    reserved_cost_microusd: int = Field(alias="reservedCostMicrousd", ge=0)
+
+
+class RuntimeTimelineEntry(RunContractModel):
+    id: str = Field(max_length=200)
+    kind: Literal["scheduling", "step", "attempt", "model", "command"]
+    status: str = Field(max_length=80)
+    occurred_at: Annotated[datetime, Field(strict=False)] = Field(alias="occurredAt")
+    reason_code: str | None = Field(alias="reasonCode", default=None, max_length=80)
+    step_id: Annotated[UUID, Field(strict=False)] | None = Field(alias="stepId", default=None)
+    attempt_id: Annotated[UUID, Field(strict=False)] | None = Field(alias="attemptId", default=None)
+    model_call_id: Annotated[UUID, Field(strict=False)] | None = Field(
+        alias="modelCallId", default=None
+    )
+    worker_id: str | None = Field(alias="workerId", default=None, max_length=64)
+    epoch: Annotated[UUID, Field(strict=False)] | None = None
+
+
+class RuntimeTimeline(RunContractModel):
+    run_id: Annotated[UUID, Field(strict=False)] = Field(alias="runId")
+    entries: list[RuntimeTimelineEntry] = Field(max_length=4096)

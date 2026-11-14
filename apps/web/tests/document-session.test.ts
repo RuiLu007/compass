@@ -127,7 +127,7 @@ describe("quiet background authorization", () => {
     });
     const onEvent = vi.fn();
     const call = session.modelRequest(
-      "models/calls",
+      `platform/models/${id}/tests`,
       { call_id: id },
       {
         signal: new AbortController().signal,
@@ -289,7 +289,7 @@ describe("quiet background authorization", () => {
     const onEvent = vi.fn();
     const call = session
       .modelRequest(
-        "models/calls",
+        `platform/models/${id}/tests`,
         { call_id: id },
         {
           signal: new AbortController().signal,

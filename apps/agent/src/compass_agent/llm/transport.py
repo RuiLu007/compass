@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from compass_agent.llm.errors import RuntimeErrorCode, RuntimeFailure
+from compass_agent.llm.errors import RuntimeErrorCode, RuntimeFailure, model_input_error
+from compass_agent.schemas import ModelInputError
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,11 @@ class ObservedStream(httpx.AsyncByteStream):
             self.resources.saw_done = True
             return b"data: [DONE]\n\n"
         value = self.payload(payload)
+        if isinstance(value, dict) and isinstance(value.get("error"), dict):
+            failure = model_input_error(value)
+            if failure is not None:
+                self.resources.error_code = failure
+                raise RuntimeFailure(failure)
         # LiteLLM 1.106.6 scans for a sentinel substring before parsing JSON.
         # JSON-equivalent escapes preserve model text while making only real DONE a sentinel.
         normalized = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()
@@ -161,12 +167,25 @@ class BoundedStream(httpx.AsyncByteStream):
         await self.stream.aclose()
 
 
+async def read_model_input_error(response: httpx.Response) -> ModelInputError | None:
+    body = bytearray()
+    try:
+        async for chunk in response.aiter_bytes(chunk_size=4096):
+            body.extend(chunk)
+            if len(body) > 16 * 1024:
+                return None
+        return model_input_error(json.loads(body))
+    except (ValueError, httpx.HTTPError):
+        return None
+
+
 class SingleAttemptTransport(httpx.AsyncBaseTransport):
-    def __init__(self, resources, inner=None, observe_openai=True):
+    def __init__(self, resources, inner=None, observe_openai=True, *, classify_model_input=False):
         self.resources = resources
         self.observe_openai = observe_openai
         self.inner = inner or httpx.AsyncHTTPTransport(retries=0)
         self.used = False
+        self.classify_model_input = classify_model_input
 
     async def handle_async_request(self, request):
         if self.used:
@@ -192,6 +211,10 @@ class SingleAttemptTransport(httpx.AsyncBaseTransport):
                 if response.status_code >= 500
                 else "provider_protocol_error"
             )
+            if self.classify_model_input and response.status_code in {400, 422}:
+                self.resources.error_code = (
+                    await read_model_input_error(response) or self.resources.error_code
+                )
             await response.aclose()
             raise RuntimeFailure(
                 self.resources.error_code,

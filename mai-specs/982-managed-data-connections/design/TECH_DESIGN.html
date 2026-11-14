@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="zh-CN" data-generated-by="my-render-design-html">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="referrer" content="no-referrer">
+  <title>工作区数据库连接</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&amp;icon_names=account_tree,code,database,sync&amp;display=block">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.11.1/styles/github.min.css" media="(prefers-color-scheme: light)">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.11.1/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
+  <script defer src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.11.1/highlight.min.js"></script>
+  <!-- 下方样式和首屏 SVG 是示例，可按方案主题调整配色、字体与构图。 -->
+  <style>
+    :root {
+      color-scheme: light dark;
+      --system-accent: #315db6;
+      --accent: var(--project-accent, var(--system-accent));
+      --page: #f7f8fa;
+      --panel: #fff;
+      --soft: #eff1f5;
+      --ink: #172132;
+      --muted: #515d6d;
+      --line: #d9dee7;
+      font-family: system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--page);
+      color: var(--ink);
+    }
+    @supports (color: AccentColor) {
+      :root { --system-accent: AccentColor; }
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --page: #12161e;
+        --panel: #1a202b;
+        --soft: #222a38;
+        --ink: #edf0f5;
+        --muted: #b1bdd0;
+        --line: #384353;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      max-width: 76rem;
+      margin: 0 auto;
+      padding: 0 clamp(1rem, 4vw, 3.5rem);
+      line-height: 1.7;
+      accent-color: var(--accent);
+    }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    a { color: inherit; text-decoration-color: var(--accent); text-underline-offset: .25em; }
+    p, ul { margin: .6rem 0 0; }
+    h1, h2, h3 { margin: 0; line-height: 1.25; }
+    h1 { font-size: clamp(2.35rem, 4.4vw, 3.75rem); letter-spacing: -.045em; text-wrap: balance; }
+    h2 { font-size: clamp(1.45rem, 3vw, 2rem); }
+    h3 { font-size: 1.12rem; }
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+      gap: clamp(1.25rem, 4vw, 3rem);
+      align-items: center;
+      padding-block: clamp(2.5rem, 8vw, 6rem) clamp(1.75rem, 5vw, 3.5rem);
+      border-top: 4px solid var(--accent);
+    }
+    .eyebrow { margin: 0 0 .8rem; color: var(--muted); font-size: .85rem; font-weight: 650; }
+    .lead { max-width: 32em; margin-top: 1rem; color: var(--muted); font-size: 1.1rem; }
+    .hero-graphic, .diagram, .table-scroll {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 1rem;
+      background: var(--panel);
+    }
+    .hero-graphic { margin: 0; padding: clamp(.6rem, 1.6vw, 1.15rem); }
+    .hero-graphic svg { display: block; width: 100%; height: auto; color: var(--ink); }
+    .hero-graphic .track { fill: none; stroke: var(--line); }
+    .hero-graphic .route { fill: none; stroke: var(--accent); stroke-width: 2.5; }
+    .hero-graphic .arrow { fill: var(--accent); }
+    .hero-graphic .node { fill: var(--panel); stroke: var(--line); stroke-width: 1.5; }
+    .hero-graphic .node-primary { fill: var(--soft); stroke: var(--accent); stroke-width: 2; }
+    .hero-graphic .node-kind { fill: var(--muted); font-size: 15px; }
+    .hero-graphic .node-label { fill: currentColor; font-size: 21px; font-weight: 650; }
+    nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .4rem 1.25rem;
+      padding-block: .8rem;
+      border-block: 1px solid var(--line);
+      font-size: .92rem;
+    }
+    main { padding-bottom: 4rem; }
+    section { padding-block: clamp(1.55rem, 4vw, 2.75rem); border-bottom: 1px solid var(--line); }
+    section > p, section > ul { max-width: 58em; }
+    section > h3 { margin-top: 1.4rem; }
+    figure { margin: 1rem 0 0; }
+    .diagram, .table-scroll { padding: clamp(.75rem, 2vw, 1.25rem); }
+    .diagram-output, .table-scroll, pre { overflow-x: auto; }
+    .diagram-output > svg {
+      display: block;
+      width: clamp(calc(var(--diagram-width) * .85), 100%, var(--diagram-width));
+      max-width: none !important;
+      height: auto;
+      margin-inline: auto;
+    }
+    figcaption, summary { color: var(--muted); font-size: .9rem; }
+    .diagram-output:not([hidden]) + figcaption { margin-top: .8rem; }
+    summary { cursor: pointer; margin-top: .45rem; }
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    th, td { padding: .5rem .7rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+    pre, code { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
+    pre {
+      margin: .7rem 0 0;
+      padding: .9rem 1rem;
+      border: 1px solid var(--line);
+      border-radius: .65rem;
+      background: var(--soft);
+      font-size: .88rem;
+      line-height: 1.6;
+      tab-size: 2;
+    }
+    pre > code.hljs { padding: 0; background: transparent; }
+    :not(pre) > code { overflow-wrap: anywhere; }
+    .material-symbols-outlined { display: none; }
+    .symbols-ready .material-symbols-outlined {
+      display: inline-block;
+      margin-inline-end: .4rem;
+      vertical-align: -.12em;
+      color: var(--muted);
+      font: normal 1.25rem/1 "Material Symbols Outlined";
+      font-feature-settings: "liga";
+      white-space: nowrap;
+    }
+    @media (max-width: 46rem) {
+      .hero { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div>
+      <p class="eyebrow">技术方案 · 开发者审阅</p>
+      <h1>工作区数据库连接</h1>
+      <p class="lead">管理多条 PostgreSQL 和 MySQL 连接。经营分析沿用工作区的默认 Retail。</p>
+    </div>
+    <figure class="hero-graphic">
+      <svg viewBox="0 0 530 230" role="img" aria-labelledby="hero-title hero-desc">
+        <title id="hero-title">工作区配置到只读查询</title>
+        <desc id="hero-desc">管理员保存配置，Agent 读取快照并发起只读查询。</desc>
+        <defs>
+          <marker id="hero-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path class="arrow" d="M0 0 L8 4 L0 8 Z"></path>
+          </marker>
+        </defs>
+        <path class="track" d="M18 43H512 M18 187H512 M265 16V214" stroke-dasharray="4 5"></path>
+        <path class="route" d="M145 116H186" marker-end="url(#hero-arrow)"></path>
+        <path class="route" d="M342 116H382" marker-end="url(#hero-arrow)"></path>
+        <rect class="node" x="14" y="81" width="130" height="70" rx="10"></rect>
+        <rect class="node-primary" x="187" y="69" width="155" height="94" rx="12"></rect>
+        <rect class="node" x="384" y="81" width="132" height="70" rx="10"></rect>
+        <g text-anchor="middle">
+          <text class="node-kind" x="79" y="105">Web</text>
+          <text class="node-label" x="79" y="131">管理端</text>
+          <text class="node-kind" x="265" y="105">Agent</text>
+          <text class="node-label" x="265" y="131">工作区配置</text>
+          <text class="node-kind" x="450" y="105">PostgreSQL</text>
+          <text class="node-label" x="450" y="131">数据库</text>
+        </g>
+      </svg>
+      <figcaption>配置与凭据由 Agent 管理，执行路径按当前工作区选择连接。</figcaption>
+    </figure>
+  </header>
+  <nav aria-label="页内目录">
+    <a href="#flow">请求与数据流</a> <a href="#data">工作区连接</a> <a href="#code">保存与运行</a> <a href="#migration">初始化与恢复</a>
+  </nav>
+  <main>
+    <section id="flow"><h2><span class="material-symbols-outlined" aria-hidden="true">account_tree</span>请求与数据流</h2><figure class="diagram" data-diagram><div class="diagram-output" tabindex="0" hidden></div><figcaption>管理员逐条测试 PostgreSQL 和 MySQL，分析使用默认 Retail 快照。</figcaption><details><summary>查看图源</summary><pre data-mermaid>flowchart LR
+  accTitle: 工作区连接管理与探测
+  Web[&quot;数据连接管理页&quot;] --&gt; BFF[&quot;Web 工作区与平台权限&quot;]
+  BFF --&gt; Agent[&quot;Agent 管理与探测&quot;]
+  Agent --&gt; Catalog[(&quot;多连接配置&quot;)]
+  Agent --&gt; Postgres[(&quot;PostgreSQL&quot;)]
+  Agent --&gt; MySQL[(&quot;MySQL&quot;)]
+  Run[&quot;经营分析 Run&quot;] --&gt; Catalog
+  Run --&gt; Retail[(&quot;默认 Retail&quot;)]</pre></details></figure></section>
+<section id="data"><h2><span class="material-symbols-outlined" aria-hidden="true">database</span>工作区连接</h2><figure class="diagram" data-diagram><div class="diagram-output" tabindex="0" hidden></div><figcaption>一个工作区可有多行。查询同时匹配租户、工作区与连接 ID。</figcaption><details><summary>查看图源</summary><pre data-mermaid>erDiagram
+  accTitle: 工作区数据连接
+  DATA_CONNECTION {
+    uuid id PK &quot;连接标识&quot;
+    uuid workspace_id UK &quot;工作区与名称联合唯一&quot;
+    uuid tenant_id &quot;Web 租户逻辑 ID&quot;
+    string name UK &quot;工作区内的连接名称&quot;
+    string engine &quot;PostgreSQL 或 MySQL&quot;
+    string host &quot;数据库主机&quot;
+    int port &quot;连接端口&quot;
+    string database_name &quot;数据库名&quot;
+    string role &quot;登录账号&quot;
+    string sslmode &quot;SSL 模式&quot;
+    bigint retail_tenant_id &quot;普通连接为空&quot;
+    string password_ciphertext &quot;加密密码&quot;
+    int revision &quot;配置版本&quot;
+  }</pre></details></figure></section>
+<section id="code"><h2><span class="material-symbols-outlined" aria-hidden="true">code</span>保存与运行</h2><p>设计示意。写入比较配置版本，变更端点或登录条件时重新录入密码。普通测试执行固定 SELECT 1，默认 Retail 校验只读身份和数据权限。</p><pre tabindex="0"><code class="language-python"># Agent 保存。唯一工作区键与条件更新处理并发首次创建和旧版本写入。
+current = find(scope.tenant_id, scope.workspace_id, connection_id)
+if (current.revision if current else 0) != command.revision:
+    raise conflict
+## login_target 含 host、port、database、role 和 sslmode。
+if command.password is None and (
+    current is None or current.login_target != command.login_target
+):
+    raise validation_failed
+assert_allowed_endpoint(command.host, command.port)
+ciphertext = seal_for_scope(command.password) if command.password else current.ciphertext
+if command.revision == 0:
+    saved = insert_if_absent(scope, connection_id, command, ciphertext)
+else:
+    saved = update_where_revision_matches(scope, connection_id, command, ciphertext)
+if saved is None:
+    raise conflict</code></pre><pre tabindex="0"><code class="language-python"># 分析请求在受控执行阶段读取已授权范围，Agent DB 事务在 Retail 查询前关闭。
+scope = trusted.scope
+if retail_tools_allowed and scope.kind == &quot;tenant&quot;:
+    snapshot = await control.perform(lambda: load_retail_binding(scope))
+else:
+    snapshot = None
+# load_retail_binding 只返回匹配范围、凭据可解密且端点仍被允许的快照。</code></pre></section>
+<section id="migration"><h2><span class="material-symbols-outlined" aria-hidden="true">sync</span>初始化与恢复</h2><p>升级保留原 Retail 密文及版本。seed 补齐缺失的默认连接。恢复使用升级前备份及原加密密钥。</p></section>
+  </main>
+  <script type="module">
+    window.hljs?.highlightAll();
+    document.fonts.load('20px "Material Symbols Outlined"').then(fonts => {
+      if (fonts.length) document.documentElement.classList.add('symbols-ready');
+    }).catch(() => {});
+
+    const diagrams = [...document.querySelectorAll('[data-diagram]')];
+    if (diagrams.length) {
+      try {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11.16.0/dist/mermaid.esm.min.mjs');
+        const colorScheme = matchMedia('(prefers-color-scheme: dark)');
+        let pending = Promise.resolve();
+        let renderedTheme;
+
+        async function renderDiagrams() {
+          const theme = colorScheme.matches ? 'dark' : 'neutral';
+          if (theme === renderedTheme) return;
+          mermaid.initialize({
+            startOnLoad: false,
+            securityLevel: 'strict',
+            suppressErrorRendering: true,
+            htmlLabels: false,
+            theme,
+            fontFamily: getComputedStyle(document.body).fontFamily
+          });
+          for (const [index, figure] of diagrams.entries()) {
+            const output = figure.querySelector('.diagram-output');
+            const source = figure.querySelector('[data-mermaid]');
+            try {
+              const { svg } = await mermaid.render(`review-${theme}-${index + 1}`, source.textContent.trim());
+              output.innerHTML = svg;
+              const drawing = output.querySelector('svg');
+              drawing.style.setProperty('--diagram-width', `${drawing.viewBox.baseVal.width}px`);
+              output.hidden = false;
+              source.closest('details').hidden = true;
+            } catch (error) {
+              output.hidden = true;
+              source.closest('details').hidden = false;
+              console.warn('图表未能绘制', error);
+            }
+          }
+          renderedTheme = theme;
+        }
+
+        function scheduleRender() {
+          pending = pending.then(renderDiagrams);
+        }
+
+        colorScheme.addEventListener('change', scheduleRender);
+        scheduleRender();
+      } catch (error) {
+        console.warn('图表组件未能加载', error);
+      }
+    }
+  </script>
+</body>
+</html>

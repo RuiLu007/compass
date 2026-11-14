@@ -2,6 +2,14 @@
   "$schema": "https://turborepo.com/schema.json",
   "extends": ["//"],
   "tasks": {
+    "test:e2e": {
+      "passThroughEnv": [
+        "$TURBO_EXTENDS$",
+        "WEB_TEST_WORKFLOW",
+        "WEB_TEST_TOOL_RUNTIME",
+        "DURABLE_MATRIX_FILE"
+      ]
+    },
     "build": {
       "dependsOn": ["^build", "//#contracts"]
     },

@@ -3,6 +3,9 @@ import type { components } from "../generated/api";
 import { isModelContract } from "../contracts/model-contract";
 import {
   parseAnalysisCancelAck,
+  RUN_STREAM_LIMITS,
+  autonomyExtensions,
+  projectAutonomyExtension,
   projectRunBody,
   ProtocolError,
   type AnalysisCancelAck,
@@ -13,10 +16,15 @@ import { ApplicationError, MODEL_ERRORS, type ErrorCode } from "./platform/error
 import { privateHeaders } from "./http/responses";
 
 const JSON_LIMIT = 64 * 1024;
-const START_TIMEOUT_MS = 195_000;
+const START_TIMEOUT_MS = (RUN_STREAM_LIMITS.timeoutSeconds + 15) * 1_000;
 const CANCEL_TIMEOUT_MS = 5_000;
 
-export type AnalysisRunAgentInput = components["schemas"]["AnalysisRunInput"];
+type AnalysisRunContract = components["schemas"]["AnalysisRunInput"];
+type WorkflowEntry = "workflowAssetRef";
+export type AnalysisRunAgentInput = Omit<AnalysisRunContract, WorkflowEntry | "constraints"> &
+  Partial<Pick<AnalysisRunContract, WorkflowEntry>> & {
+    constraints?: Partial<components["schemas"]["RunConstraints"]> | null;
+  };
 
 type CommonOptions = {
   context: TrustedModelContext;
@@ -197,7 +205,10 @@ export async function startAnalysisRunAgent(options: StartOptions): Promise<Resp
     const projected = await projectRunBody(upstream.body, {
       requestId: options.input.requestId,
       signal: active.controller.signal,
-      batch: false,
+      batch: true,
+      extensions: autonomyExtensions,
+      publicExtensions: autonomyExtensions,
+      translateExtension: projectAutonomyExtension,
     });
     const body = ownedStream(projected, active.controller, active.dispose, options.onStreamFailure);
     return new Response(body, {
@@ -281,5 +292,122 @@ export async function cancelAnalysisRunAgent(options: CancelOptions): Promise<Re
           : unavailable();
     errorTraces.set(failure, correlation);
     throw failure;
+  }
+}
+
+export async function workflowAssetAgent(
+  options: CommonOptions & {
+    assetId?: string;
+    draftId?: string;
+    cursor?: string;
+    patch?: components["schemas"]["WorkflowAssetPatch"];
+    confirm?: components["schemas"]["WorkflowDraftConfirm"];
+    remove?: components["schemas"]["WorkflowAssetDelete"];
+  },
+): Promise<Response> {
+  const serviceToken = process.env.COMPASS_AGENT_SERVICE_TOKEN;
+  if (!serviceToken) throw unavailable();
+  const active = lifetime(options.signal, CANCEL_TIMEOUT_MS);
+  try {
+    const suffix = options.draftId
+      ? `/drafts/${encodeURIComponent(options.draftId)}${options.confirm ? "/confirm" : ""}`
+      : options.assetId
+        ? "/" + encodeURIComponent(options.assetId)
+        : "";
+    const url = new URL(
+      "/v1/analysis/workflows" + suffix,
+      process.env.AGENT_API_URL ?? "http://127.0.0.1:8102",
+    );
+    if (options.cursor) url.searchParams.set("cursor", options.cursor);
+    const command = options.patch ?? options.confirm ?? options.remove;
+    const upstream = await fetch(url, {
+      method: options.remove
+        ? "DELETE"
+        : options.patch
+          ? "PATCH"
+          : options.confirm
+            ? "POST"
+            : "GET",
+      headers: agentHeaders(options.context, serviceToken, "application/json"),
+      body: command ? JSON.stringify(command) : undefined,
+      signal: active.controller.signal,
+      redirect: "error",
+      cache: "no-store",
+    });
+    const headers = { ...privateHeaders, "X-Compass-View-Revision": options.revision };
+    if (options.remove && upstream.status === 204)
+      return new Response(null, { status: 204, headers });
+    const value = await boundedJson(upstream);
+    if (!upstream.ok) throw domainError(value, upstream.status);
+    if (options.remove) throw protocolError();
+    const schema =
+      options.draftId && !options.confirm
+        ? "WorkflowDraftView"
+        : options.assetId || options.confirm
+          ? "WorkflowAssetView"
+          : "WorkflowAssetList";
+    if (!isModelContract(schema, value)) throw protocolError();
+    return Response.json(value, { headers });
+  } catch (error) {
+    throw error instanceof ApplicationError ? error : unavailable();
+  } finally {
+    active.dispose();
+  }
+}
+
+export async function analysisArtifactAgent(
+  options: CommonOptions & { runId: string; artifactId: string },
+): Promise<Response> {
+  const serviceToken = process.env.COMPASS_AGENT_SERVICE_TOKEN;
+  if (!serviceToken) throw unavailable();
+  const active = lifetime(options.signal, CANCEL_TIMEOUT_MS);
+  try {
+    const url = new URL(
+      `/v1/analysis/runs/${encodeURIComponent(options.runId)}/artifacts/${encodeURIComponent(options.artifactId)}`,
+      process.env.AGENT_API_URL ?? "http://127.0.0.1:8102",
+    );
+    const upstream = await fetch(url, {
+      headers: agentHeaders(options.context, serviceToken, "image/png"),
+      signal: active.controller.signal,
+      redirect: "error",
+      cache: "no-store",
+    });
+    if (!upstream.ok) throw domainError(await boundedJson(upstream), upstream.status);
+    const media = upstream.headers.get("content-type") ?? "";
+    const csv = media === "text/csv; charset=utf-8";
+    if ((!csv && media !== "image/png") || !upstream.body) throw protocolError();
+    const reader = upstream.body.getReader();
+    let size = 0;
+    const chunks: Uint8Array[] = [];
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > 512 * 1024) throw protocolError();
+        chunks.push(value);
+      }
+    } finally {
+      await reader.cancel().catch(() => undefined);
+      reader.releaseLock();
+    }
+    const data = Buffer.concat(chunks);
+    if (!csv && (data.length < 8 || data.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a"))
+      throw protocolError();
+    return new Response(data, {
+      headers: {
+        ...privateHeaders,
+        "Content-Type": media,
+        "X-Content-Type-Options": "nosniff",
+        "Content-Disposition": csv
+          ? 'attachment; filename="analysis.csv"'
+          : 'inline; filename="chart.png"',
+        "X-Compass-View-Revision": options.revision,
+      },
+    });
+  } catch (error) {
+    throw error instanceof ApplicationError ? error : unavailable();
+  } finally {
+    active.dispose();
   }
 }

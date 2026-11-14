@@ -349,8 +349,8 @@ def test_record_failure_after_success_marks_actual_root_and_logical_failed(syste
 
 
 def test_api_prepare_failure_keeps_safe_trace_and_denied_requests_do_not_start_trace(system):
+    from compass_agent.api.models import get_model_service
     from compass_agent.main import app
-    from compass_agent.model_api import get_model_service
     from fastapi.testclient import TestClient
 
     _, _, service = system
@@ -359,7 +359,7 @@ def test_api_prepare_failure_keeps_safe_trace_and_denied_requests_do_not_start_t
     settings = Settings(compass_agent_service_token="unit-service-token")
     try:
         with (
-            patch("compass_agent.model_api.get_settings", return_value=settings),
+            patch("compass_agent.api.models.get_settings", return_value=settings),
             TestClient(app) as client,
         ):
             app.state.observation = owner

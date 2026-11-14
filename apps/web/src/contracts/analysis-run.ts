@@ -1,7 +1,8 @@
 import Ajv2020, { type ValidateFunction } from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
+import { ExecutionSequence, type ExecutionNode } from "./execution-node";
 import type { components } from "../generated/api";
-import runStreamSchema from "../generated/run-stream.schema.json";
+import runStreamSchema from "../generated/run-stream.schema.json" with { type: "json" };
 import {
   RUN_STREAM_LIMITS,
   RUN_STREAM_PROTOCOL,
@@ -21,6 +22,16 @@ export type AnalysisCancelAck = Schemas["AnalysisCancelAck"];
 export type ExtensionData = StreamExtension["payload"]["data"];
 export type ExtensionSchemas = ReadonlyMap<string, (data: ExtensionData) => boolean>;
 export type ParseRunPacket = (value: unknown) => RunPacket;
+export type RunAutonomyAction = Schemas["RunAutonomyAction"];
+export type RunAutonomyResult = Schemas["RunAutonomyResult"];
+export type RunWorkflowProgress = Schemas["RunWorkflowProgress"];
+export type RunToolPreparation = Schemas["RunToolPreparation"];
+
+const autonomyActionName = "compass.autonomy.action";
+const autonomyResultName = "compass.autonomy.result";
+const workflowProgressName = "compass.workflow.node";
+const toolPreparationName = "compass.tool.preparation";
+const executionNodeName = "compass.execution.node";
 
 const ajv = new Ajv2020({ allErrors: false, strict: false });
 addFormats(ajv);
@@ -30,6 +41,115 @@ const runPacketValidator = validator<RunPacket>(runStreamSchema.$id);
 const cancelAckValidator = validator<AnalysisCancelAck>(
   `${runStreamSchema.$id}#/$defs/AnalysisCancelAck`,
 );
+
+const autonomyActionValidator = validator<RunAutonomyAction>(
+  `${runStreamSchema.$id}#/$defs/RunAutonomyAction`,
+);
+const autonomyResultValidator = validator<RunAutonomyResult>(
+  `${runStreamSchema.$id}#/$defs/RunAutonomyResult`,
+);
+const workflowProgressValidator = validator<RunWorkflowProgress>(
+  `${runStreamSchema.$id}#/$defs/RunWorkflowProgress`,
+);
+const toolPreparationValidator = validator<RunToolPreparation>(
+  `${runStreamSchema.$id}#/$defs/RunToolPreparation`,
+);
+const executionNodeValidator = validator<ExecutionNode>(
+  `${runStreamSchema.$id}#/$defs/RunExecutionNode`,
+);
+export const autonomyExtensions: ExtensionSchemas = new Map<
+  string,
+  (data: ExtensionData) => boolean
+>([
+  [`${autonomyActionName}@1`, autonomyActionValidator],
+  [`${autonomyResultName}@1`, autonomyResultValidator],
+  [`${workflowProgressName}@1`, workflowProgressValidator],
+  [`${toolPreparationName}@1`, toolPreparationValidator],
+  [`${executionNodeName}@1`, executionNodeValidator],
+  ["compass.runtime.failure@1", (data) => Boolean(runtimeFailureData(data))],
+]);
+
+export function executionNode(event: StreamExtension): ExecutionNode | undefined {
+  if (
+    event.payload.name === executionNodeName &&
+    event.payload.version === 1 &&
+    executionNodeValidator(event.payload.data)
+  )
+    return event.payload.data;
+}
+
+export function autonomyAction(event: StreamExtension): RunAutonomyAction | undefined {
+  if (
+    event.payload.name === autonomyActionName &&
+    event.payload.version === 1 &&
+    autonomyActionValidator(event.payload.data)
+  )
+    return event.payload.data;
+}
+
+export function autonomyResult(event: StreamExtension): RunAutonomyResult | undefined {
+  if (
+    event.payload.name === autonomyResultName &&
+    event.payload.version === 1 &&
+    autonomyResultValidator(event.payload.data)
+  )
+    return event.payload.data;
+}
+
+export function workflowProgress(event: StreamExtension): RunWorkflowProgress | undefined {
+  if (
+    event.payload.name === workflowProgressName &&
+    event.payload.version === 1 &&
+    workflowProgressValidator(event.payload.data)
+  )
+    return event.payload.data;
+}
+
+export function toolPreparation(event: StreamExtension): RunToolPreparation | undefined {
+  if (
+    event.payload.name === toolPreparationName &&
+    event.payload.version === 1 &&
+    toolPreparationValidator(event.payload.data)
+  )
+    return event.payload.data;
+}
+
+export function runtimeFailure(event: StreamExtension) {
+  if (event.payload.name !== "compass.runtime.failure" || event.payload.version !== 1) return;
+  return runtimeFailureData(event.payload.data);
+}
+
+function runtimeFailureData(data: ExtensionData):
+  | {
+      stage: "routing" | "tool_setup" | "execution" | "verification";
+      exceptionType: string;
+      reasonCode: string;
+    }
+  | undefined {
+  const { stage, exceptionType, reasonCode } = data;
+  if (
+    (stage === "routing" ||
+      stage === "tool_setup" ||
+      stage === "execution" ||
+      stage === "verification") &&
+    typeof exceptionType === "string" &&
+    /^[A-Za-z_][A-Za-z0-9_]{0,79}$/.test(exceptionType) &&
+    typeof reasonCode === "string" &&
+    /^[a-z][a-z0-9_]{0,79}$/.test(reasonCode)
+  )
+    return { stage, exceptionType, reasonCode };
+}
+
+export function projectAutonomyExtension(event: StreamExtension): StreamExtension | undefined {
+  return autonomyAction(event) ||
+    autonomyResult(event) ||
+    workflowProgress(event) ||
+    executionNode(event) ||
+    toolPreparation(event) ||
+    runtimeFailure(event)
+    ? event
+    : undefined;
+}
 
 const encoder = new TextEncoder();
 const heartbeat = encoder.encode(": keepalive\n\n");
@@ -165,6 +285,7 @@ function checkFile(
 
 /** Ordered state validation shared by the BFF and the browser. */
 export class RunSequence {
+  private readonly execution = new ExecutionSequence();
   runId: string | undefined;
   private seq = 0;
   private eventCount = 0;
@@ -174,6 +295,9 @@ export class RunSequence {
   private readonly steps = new Map<string, StepSlot>();
   private readonly modelCalls = new Set<string>();
   private terminal: RunFinished | undefined;
+  private autonomyTerminal: RunAutonomyResult | undefined;
+  private lastActionIndex = 0;
+  private planVersion = 0;
   private readonly requestId: string;
   private readonly extensions: ExtensionSchemas | undefined;
 
@@ -204,6 +328,7 @@ export class RunSequence {
 
     const visible: (RunProgressEvent | RunStarted)[] = [];
     for (const item of items) {
+      check(!this.autonomyTerminal || item.type === "run.finished", "autonomy_result_order");
       switch (item.type) {
         case "run.started":
           break;
@@ -222,17 +347,22 @@ export class RunSequence {
             "step_order",
           );
           this.activeStep = stepId;
+          this.lastActionIndex = 0;
           this.modelCalls.add(modelCallId);
           this.steps.set(stepId, { tools: new Map() });
           break;
         }
         case "tool.started": {
           const info = item.payload;
+          check(
+            encoder.encode(info.inputPreview ?? "").byteLength <= RUN_STREAM_LIMITS.toolInputBytes,
+            "tool_input_bytes",
+          );
           const step = this.openStep(info.stepId);
           check(
             !step.tools.has(info.toolCallId) &&
               info.toolIndex === step.tools.size + 1 &&
-              [...step.tools.values()].every((tool) => tool.done) &&
+              [...step.tools.values()].filter((tool) => !tool.done).length < 2 &&
               (info.toolKind === "retail_sales" || info.params === null),
             "tool_start_order",
           );
@@ -241,12 +371,19 @@ export class RunSequence {
         }
         case "tool.finished": {
           const info = item.payload;
+          check(
+            encoder.encode(info.resultPreview ?? "").byteLength <=
+              RUN_STREAM_LIMITS.toolResultBytes,
+            "tool_result_bytes",
+          );
           const tool = this.openStep(info.stepId).tools.get(info.toolCallId);
           check(
             tool &&
               !tool.done &&
               tool.start.toolIndex === info.toolIndex &&
-              (info.status === "error" || tool.start.params !== null),
+              (info.status === "error" ||
+                tool.start.toolKind === "database_query" ||
+                tool.start.params !== null),
             "tool_finish_order",
           );
           tool.done = info;
@@ -270,6 +407,15 @@ export class RunSequence {
           const validator = this.extensions?.get(extensionKey(item));
           if (!validator) continue;
           check(validator(info.data), "extension_shape");
+          const node = executionNode(item);
+          if (node) {
+            try {
+              this.execution.accept(node, RUN_STREAM_LIMITS);
+            } catch {
+              throw new ProtocolError("execution_node_order_or_shape");
+            }
+          }
+          this.acceptAutonomy(item);
           break;
         }
         case "run.finished":
@@ -293,9 +439,79 @@ export class RunSequence {
     return step;
   }
 
+  private acceptAutonomy(event: StreamExtension): void {
+    const action = autonomyAction(event);
+    if (action) {
+      this.openStep(action.stepId);
+      const ids = new Set(action.items.map((item) => item.id));
+      check(
+        action.actionIndex === this.lastActionIndex + 1 &&
+          action.planVersion >= this.planVersion &&
+          action.planVersion <= this.planVersion + 1 &&
+          (action.planVersion === 0) === (action.items.length === 0) &&
+          ids.size === action.items.length &&
+          action.items.every((item) =>
+            item.dependsOn.every((id) => id !== item.id && ids.has(id)),
+          ) &&
+          (action.selectedTodoId === null ||
+            action.items.some(
+              (item) =>
+                item.id === action.selectedTodoId &&
+                (item.status === "pending" || item.status === "failed"),
+            )),
+        "autonomy_plan_order",
+      );
+      this.lastActionIndex = action.actionIndex;
+      this.planVersion = action.planVersion;
+      return;
+    }
+    const result = autonomyResult(event);
+    if (result) {
+      const partialAllowed = ["failed", "budget_exhausted", "human_required"].includes(
+        result.outcome,
+      );
+      check(
+        !this.activeStep &&
+          !this.autonomyTerminal &&
+          result.planVersion === this.planVersion &&
+          ((result.firstPlanStep ?? null) === null) === (result.planVersion === 0) &&
+          (result.firstPlanStep ?? 0) <= this.steps.size &&
+          (partialAllowed || result.partial.length === 0) &&
+          result.partial.every((summary) => {
+            const tool = this.steps.get(summary.stepId)?.tools.get(summary.toolCallId);
+            const params = tool?.start.params;
+            return (
+              tool?.done?.status === "ok" &&
+              tool.done.rowCount === summary.rowCount &&
+              params?.dimension === summary.dimension &&
+              params.period.start === summary.period.start &&
+              params.period.end === summary.period.end &&
+              params.compareTo?.start === summary.compareTo?.start &&
+              params.compareTo?.end === summary.compareTo?.end &&
+              (params.dimension === "product" ? params.channelCode : null) === summary.channelCode
+            );
+          }),
+        "autonomy_result",
+      );
+      this.autonomyTerminal = result;
+    }
+  }
+
   private checkTerminal(runId: string, event: RunFinished): void {
     check(!this.activeStep, "terminal_with_open_step");
     const { payload } = event;
+    if (this.autonomyTerminal) {
+      const outcome = this.autonomyTerminal.outcome;
+      check(
+        payload.status ===
+          (outcome === "budget_exhausted" || outcome === "human_required" ? "failed" : outcome),
+        "autonomy_terminal_mismatch",
+      );
+    }
+    if (payload.status === "waiting") {
+      check(payload.runId === runId, "waiting_run_mismatch");
+      return;
+    }
     if (payload.status !== "completed") return;
     check(this.lastStepStatus === "completed", "success_without_completed_step");
     check(
@@ -477,7 +693,12 @@ export async function* projectRun(
         if (!window.length) due = performance.now() + RUN_STREAM_LIMITS.batchWaitMs;
         window.push(event);
         windowBytes += itemBytes;
-        if (!options.batch || window.length >= RUN_STREAM_LIMITS.batchItems) yield* flush();
+        if (
+          !options.batch ||
+          event.type === "tool.started" ||
+          window.length >= RUN_STREAM_LIMITS.batchItems
+        )
+          yield* flush();
       }
       pending = next();
     }

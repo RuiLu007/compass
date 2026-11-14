@@ -13,10 +13,7 @@ import { privateHeaders } from "./http/responses";
 const LIMIT = 2 * 1024 * 1024;
 const unavailable = () => new ApplicationError("unavailable", "模型服务暂时不可用。");
 const protocolError = () => new ApplicationError("provider_protocol_error", "模型响应格式异常。");
-type ModelEvent =
-  | components["schemas"]["ModelEvent"]
-  | components["schemas"]["RoutedModelEvent"]
-  | components["schemas"]["ShowcaseEvent"];
+type ModelEvent = components["schemas"]["ModelEvent"] | components["schemas"]["ShowcaseEvent"];
 type Options = {
   path: string;
   method?: "GET" | "POST" | "PATCH";
@@ -28,7 +25,8 @@ type Options = {
   callId?: string;
   providerId?: string;
   stream?: boolean;
-  onStreamFailure: (error: unknown) => Promise<void>;
+  timeoutMs?: number;
+  onStreamFailure?: (error: unknown) => Promise<void>;
 };
 
 async function boundedJson(response: Response): Promise<unknown> {
@@ -86,7 +84,7 @@ export async function requestModelAgent(options: Options): Promise<Response> {
   const timer = setTimeout(() => {
     timedOut = true;
     abort.abort();
-  }, 190_000);
+  }, options.timeoutMs ?? 190_000);
   const cleanup = () => {
     clearTimeout(timer);
     options.signal.removeEventListener("abort", cancel);
@@ -167,7 +165,6 @@ function validatedStream(
     total = 0,
     start: Extract<ModelEvent, { type: "start" }> | undefined;
   let final: Extract<ModelEvent, { type: "final" }> | undefined;
-  let selectedProvider: string | undefined;
   let canceled = false;
   const output = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -183,11 +180,7 @@ function validatedStream(
         const event: unknown = JSON.parse(data);
         if (
           !isModelContract(
-            options.schema === "ShowcaseReport"
-              ? "ShowcaseEvent"
-              : options.schema === "RoutedCallResponse"
-                ? "RoutedModelEvent"
-                : "ModelEvent",
+            options.schema === "ShowcaseReport" ? "ShowcaseEvent" : "ModelEvent",
             event,
           )
         )
@@ -203,26 +196,9 @@ function validatedStream(
             throw protocolError();
           start = typed;
         } else if (!start) throw protocolError();
-        if (typed.type === "route_selected") {
-          if (selectedProvider) throw protocolError();
-          selectedProvider = typed.routing.provider_id;
-        }
-        if (
-          options.schema === "RoutedCallResponse" &&
-          ["text_delta", "tool_delta", "reasoning_meta"].includes(typed.type) &&
-          !selectedProvider
-        )
-          throw protocolError();
         if (typed.type === "final") {
           if (options.schema === "ShowcaseReport") {
             if (!("simulation" in typed) || typed.simulation !== true) throw protocolError();
-          } else if (options.schema === "RoutedCallResponse") {
-            if (!("result" in typed)) throw protocolError();
-            if (
-              typed.result &&
-              (!selectedProvider || typed.result.provider_id !== selectedProvider)
-            )
-              throw protocolError();
           } else if (
             !("provider_id" in typed) ||
             !(start && "provider_id" in start) ||
@@ -259,7 +235,7 @@ function validatedStream(
         abort.abort();
         if (!canceled) {
           controller.error(protocolError());
-          await options.onStreamFailure(error);
+          await options.onStreamFailure?.(error);
         }
       } finally {
         await reader.cancel().catch(() => {});

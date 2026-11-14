@@ -12,6 +12,8 @@ from starlette.concurrency import run_in_threadpool
 
 from compass_agent.llm.admission import ExecutionGate
 from compass_agent.llm.contracts import (
+    AgentCallResponse,
+    AttemptBudget,
     ExecutionRequest,
     GenerationOutput,
     ProviderAccess,
@@ -23,9 +25,10 @@ from compass_agent.llm.litellm_chat import LiteLLMChatAdapter
 from compass_agent.llm.policy import CallPolicy, LogicalPolicy
 from compass_agent.llm.runtime import Runtime
 from compass_agent.llm.systemone_decision import SystemOneDecisionAdapter
+from compass_agent.models.attempts import AttemptRecorder
 from compass_agent.models.errors import ModelError
 from compass_agent.models.secrets import ModelContinuationCodec
-from compass_agent.schemas import CallResponse
+from compass_agent.schemas import CallResponse, GenerateInput
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +53,7 @@ def create_runtime(secrets, transport_factory=None):
     )
 
 
-def to_response(result):
+def to_response(result, *, agent_call=False):
     response = CallResponse(
         execution=result.execution,
         call_id=result.call_id,
@@ -72,6 +75,10 @@ def to_response(result):
         response.text = result.output.text
         response.tool_calls = list(result.output.tool_calls)
         response.continuation_token = result.output.continuation_token
+        if agent_call:
+            return AgentCallResponse(
+                **response.model_dump(), analysis_thinking=result.output.analysis_thinking
+            )
     else:
         response.answers = result.output.answers
         response.raw_response = result.output.raw_response
@@ -245,6 +252,7 @@ class ModelService:
         *,
         logical_policy: LogicalPolicy | None = None,
         tool_output_validation: ToolOutputValidation = "strict",
+        attempt_budget: AttemptBudget | None = None,
     ):
         result = self._initial(prepared, request)
         task = watcher = None
@@ -255,10 +263,18 @@ class ModelService:
             key, params = self.repository.secrets.open_connection(
                 prepared.spec.provider_id, prepared.ciphertext
             )
+            effective_request = request.model_copy(deep=True)
+            if isinstance(effective_request, GenerateInput):
+                profile = prepared.spec.generation_profile
+                if profile is not None:
+                    defaults = profile.defaults.model_dump(exclude_none=True)
+                    for name, value in defaults.items():
+                        if name not in request.model_fields_set or getattr(request, name) is None:
+                            setattr(effective_request, name, value)
             invocation = ExecutionRequest(
                 prepared.context,
                 ProviderAccess(prepared.spec, SecretStr(key), params),
-                request.model_copy(deep=True),
+                effective_request,
                 prepared.policy,
                 tool_output_validation,
             )
@@ -268,6 +284,8 @@ class ModelService:
                     logical_policy or LogicalPolicy(),
                     emit,
                     observation=self.observations.get(prepared.context.call_id),
+                    recorder=AttemptRecorder(self.repository, attempt_budget),
+                    **({"attempt_budget": attempt_budget} if attempt_budget is not None else {}),
                 )
             )
             if disconnect:
@@ -284,7 +302,7 @@ class ModelService:
                     raise asyncio.CancelledError()
             outcome = await asyncio.shield(task)
             sent = outcome.upstream_sent
-            result = to_response(outcome)
+            result = to_response(outcome, agent_call=tool_output_validation == "agent_dispatch")
             if len(result.model_dump_json().encode()) > 2 * 1048576:
                 result.status = "failed"
                 result.error_code = "response_too_large"
@@ -293,6 +311,8 @@ class ModelService:
                 result.answers = {}
                 result.raw_response = None
                 result.continuation_token = None
+                if isinstance(result, AgentCallResponse):
+                    result.analysis_thinking = ""
         except asyncio.CancelledError:
             canceled = True
             result.status = "canceled"

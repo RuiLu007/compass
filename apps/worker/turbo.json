@@ -13,6 +13,14 @@
     },
     "test": {
       "env": ["PYTHON_TOOLCHAIN_ID"]
+    },
+    "dev": {
+      "passThroughEnv": [
+        "$TURBO_EXTENDS$",
+        "COMPASS_WORKER_ID",
+        "COMPASS_WORKER_TOKEN",
+        "COMPASS_RUNTIME_LEASE_SECONDS"
+      ]
     }
   }
 }

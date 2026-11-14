@@ -65,7 +65,7 @@ class ProviderFixture:
         if request.url.path.endswith("/systemone"):
             answers = {}
             intent_scene = None
-            if set(body["questions"]) == {"category", "scene"}:
+            if set(body["questions"]) == {"scene"}:
                 context = json.dumps(body["state"], ensure_ascii=False)
                 intent_scene = self.routing_scene(context)
             for key, question in body["questions"].items():
@@ -76,10 +76,8 @@ class ProviderFixture:
                 elif kind == "choice":
                     keys = list(criteria)
                     if intent_scene:
-                        target = "input_boundary" if intent_scene == "SC-39" else "business_channel"
-                        target = target if key == "category" else intent_scene
-                        keys.remove(target)
-                        keys.insert(0, target)
+                        keys.remove(intent_scene)
+                        keys.insert(0, intent_scene)
                     answers[key] = {
                         "type": kind,
                         "choice": keys[0],
@@ -143,12 +141,7 @@ class ProviderFixture:
             )
         if "你是Compass意图分类器" in text:
             scene = self.routing_scene(text)
-            answer = json.dumps(
-                {
-                    "category_id": "input_boundary" if scene == "SC-39" else "business_channel",
-                    "scene_id": scene,
-                }
-            )
+            answer = json.dumps({"scene_id": scene})
         elif "用户本轮问题属于与业务数据分析无关" in text:
             answer = (
                 "我主要帮助处理经营与业务数据分析。你有没有想分析的销售、库存或其他业务数据任务？"

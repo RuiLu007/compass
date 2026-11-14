@@ -2,9 +2,7 @@
 
 import asyncio
 import base64
-import csv
 import inspect
-import io
 import json
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
@@ -13,37 +11,25 @@ from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
-from compass_agent.llm.contracts import GenerationOutput, ProviderProgress
-from compass_agent.llm.errors import RuntimeFailure
-from compass_agent.llm.litellm_chat import complete_output
-from compass_agent.models.lifecycle import ExecutionTasks
-from compass_agent.routing.service import SelectedRoute
-from compass_agent.run_api import (
+from compass_agent.api.runs import (
     RunStreamResponse,
     _log_terminal,
     cancel_run,
     get_agent_executor,
     start_run,
 )
-from compass_agent.runtime.artifact import ExportCandidate, build_analysis_file
-from compass_agent.runtime.control import (
-    OwnerKey,
-    PhaseCanceled,
-    RunRegistry,
-    StopRequested,
-)
-from compass_agent.runtime.executor import AgentExecutor
-from compass_agent.runtime.retail import (
-    RetailBinding,
-    RetailQueryResult,
-    RetailRow,
-    binding_for,
-    prepare_retail_call,
-    query_retail,
-)
+from compass_agent.llm.contracts import GenerationOutput, ProviderProgress
+from compass_agent.llm.errors import RuntimeFailure
+from compass_agent.llm.litellm_chat import complete_output
+from compass_agent.models.lifecycle import ExecutionTasks
+from compass_agent.routing.service import SelectedRoute
+from compass_agent.runtime.context import compass_definition
+from compass_agent.runtime.control import OwnerKey, RunRegistry
+from compass_agent.runtime.service import RunService
 from compass_agent.runtime.stream import RunWriter
 from compass_agent.schemas import (
     RUN_STREAM_LIMITS,
+    AnalysisCancelAck,
     AnalysisFileNone,
     AnalysisHistoryTurn,
     AnalysisRunInput,
@@ -55,14 +41,12 @@ from compass_agent.schemas import (
     MainModelSelection,
     ModelCapabilities,
     ModelRoute,
-    ProductRunParams,
     RoutingFeatures,
     RoutingMetrics,
     RunCompleted,
     RunEmpty,
     RunFailed,
     RunFinished,
-    RunPeriod,
     RunStarted,
     StepFinished,
     StepFinishedPayload,
@@ -79,12 +63,15 @@ from compass_agent.schemas import (
     ToolStartedPayload,
     TrustedContext,
 )
-from compass_agent.settings import RetailRunScopeConfig, Settings
+from compass_agent.settings import Settings
+from compass_agent.tools.contracts import PhaseCanceled, StopRequested
 from fastapi import Response
 from fastapi.testclient import TestClient
 from psycopg.pq import TransactionStatus
 from pydantic import SecretStr, ValidationError
 from starlette.requests import Request
+
+from .query_fixtures import provider_for
 
 TENANT_ID = UUID("10000000-0000-0000-0000-000000000001")
 WORKSPACE_ID = UUID("20000000-0000-0000-0000-000000000002")
@@ -116,77 +103,6 @@ def auth_headers(context: TrustedContext, token: str = "run-service-token") -> d
         "Authorization": "Bearer " + token,
         "X-Compass-Context": encoded,
     }
-
-
-def retail_settings() -> Settings:
-    scope = {
-        "tenantId": str(TENANT_ID),
-        "workspaceId": str(WORKSPACE_ID),
-        "release": "retail-dev-20261022b",
-        "contentHash": "7ae26405a71589c98ca8379bec1e1ec1ff77e16232ff2e1bf26b6d4501b8183e",
-        "role": "unit_a_east",
-        "retailTenantId": 101,
-        "schema": "core",
-    }
-    return Settings(
-        compass_retail_run_scope=json.dumps(scope),
-        compass_retail_run_readonly_dsn=SecretStr("postgresql://unused"),
-    )
-
-
-@pytest.mark.parametrize(
-    "role",
-    ["a_east", "Unit_a_east", "unit-a_east", "x" * 57 + "_a_east"],
-)
-def test_retail_scope_rejects_non_manifest_role_identifiers(role: str) -> None:
-    value = json.loads(retail_settings().compass_retail_run_scope)
-    value["role"] = role
-    with pytest.raises(ValidationError):
-        RetailRunScopeConfig.model_validate(value)
-
-
-def binding() -> RetailBinding:
-    return RetailBinding(
-        tenant_id=TENANT_ID,
-        workspace_id=WORKSPACE_ID,
-        release="retail-dev-20261022b",
-        content_hash="7ae26405a71589c98ca8379bec1e1ec1ff77e16232ff2e1bf26b6d4501b8183e",
-        role="unit_a_east",
-        retail_tenant_id=101,
-        schema_name="core",
-        dsn=SecretStr("postgresql://unused"),
-    )
-
-
-def product_call(call_id: str = "call_product") -> ToolCall:
-    return ToolCall(
-        id=call_id,
-        function=ToolCallFunction(
-            name="retail_sales",
-            arguments=json.dumps(
-                {
-                    "dimension": "product",
-                    "period": {"start": "2025-10-01", "end": "2025-10-08"},
-                    "compareTo": {"start": "2025-09-01", "end": "2025-09-08"},
-                    "channelCode": "TMALL",
-                }
-            ),
-        ),
-    )
-
-
-def product_result() -> RetailQueryResult:
-    return RetailQueryResult(
-        status="ok",
-        dimension="product",
-        params=ProductRunParams(
-            dimension="product",
-            period=RunPeriod(start="2025-10-01", end="2025-10-08"),
-            compareTo=RunPeriod(start="2025-09-01", end="2025-09-08"),
-            channelCode="TMALL",
-        ),
-        rows=(RetailRow("SPU-1", "=危险公式", 1200, 800, -400),),
-    )
 
 
 def test_run_writer_enforces_start_sequence_and_terminal() -> None:
@@ -234,7 +150,7 @@ def test_agent_dispatch_preserves_unknown_tool_for_safe_executor_observation() -
         tools=[
             ToolDefinition(
                 function=ToolFunction(
-                    name="retail_sales",
+                    name="custom_query",
                     parameters={
                         "type": "object",
                         "properties": {"dimension": {"const": "channel"}},
@@ -260,71 +176,14 @@ def test_agent_dispatch_preserves_unknown_tool_for_safe_executor_observation() -
         complete_output(request, strict, True)
 
 
-def test_retail_rejects_unknown_invalid_and_unavailable_before_dispatch() -> None:
-    unknown = prepare_retail_call(
-        ToolCall(
-            id="unknown",
-            function=ToolCallFunction(name="shell", arguments='{"x":1}'),
-        ),
-        binding(),
-    )
-    duplicate = prepare_retail_call(
-        ToolCall(
-            id="duplicate",
-            function=ToolCallFunction(
-                name="retail_sales",
-                arguments=(
-                    '{"dimension":"channel","dimension":"channel",'
-                    '"period":{"start":"2025-01-01","end":"2025-01-02"},'
-                    '"compareTo":null}'
-                ),
-            ),
-        ),
-        binding(),
-    )
-    unavailable = prepare_retail_call(product_call(), None)
-    assert unknown.safe_error == "unknown_tool" and unknown.params is None
-    assert duplicate.safe_error == "invalid_parameters" and duplicate.params is None
-    assert unavailable.safe_error == "retail_unavailable"
-    assert isinstance(unavailable.params, ProductRunParams)
-    assert unknown.tool_kind == duplicate.tool_kind == "unavailable"
-    assert unavailable.tool_kind == "retail_sales"
-
-
-def test_retail_configuration_error_log_never_contains_scope_or_dsn(caplog) -> None:
-    sentinel = "credential-sentinel-never-log"
-    settings = Settings(
-        compass_retail_run_scope='{"unexpected":"' + sentinel + '"}',
-        compass_retail_run_readonly_dsn=SecretStr("postgresql://" + sentinel),
-    )
-    assert binding_for(settings, CHAT) is None
-    assert "configuration_code=invalid_scope" in caplog.text
-    assert sentinel not in repr([record.__dict__ for record in caplog.records])
-
-
-def test_csv_is_bom_crlf_formula_safe_and_standard_base64() -> None:
-    step_id = uuid4()
-    run_id = uuid4()
-    result = build_analysis_file(
-        ExportCandidate(step_id, "call_product", product_result()),
-        run_id,
-    )
-    assert result.status == "ready"
-    content = base64.b64decode(result.content_base64, validate=True)
-    assert content.startswith(b"\xef\xbb\xbf") and b"\r\n" in content
-    assert b"'=\xe5\x8d\xb1\xe9\x99\xa9\xe5\x85\xac\xe5\xbc\x8f" in content
-    rows = list(csv.reader(io.StringIO(content.decode("utf-8-sig"))))
-    assert rows[1][-3:] == ["1200", "800", "-400"]
-
-
 def test_final_answer_budget_uses_serialized_json_bytes() -> None:
     exact = "x" * (RUN_STREAM_LIMITS["answerBytes"] - 2)
-    assert AgentExecutor._final_answer(exact) == exact
+    assert RunService._final_answer(exact) == exact
     with pytest.raises(Exception, match="model_incomplete"):
-        AgentExecutor._final_answer("x" * (RUN_STREAM_LIMITS["answerBytes"] - 1))
+        RunService._final_answer("x" * (RUN_STREAM_LIMITS["answerBytes"] - 1))
     # Each quote is one UTF-8 byte but two JSON bytes after escaping.
     with pytest.raises(Exception, match="model_incomplete"):
-        AgentExecutor._final_answer('"' * (RUN_STREAM_LIMITS["answerBytes"] // 2))
+        RunService._final_answer('"' * (RUN_STREAM_LIMITS["answerBytes"] // 2))
 
 
 class FakeModels:
@@ -366,14 +225,27 @@ def selected_route() -> SelectedRoute:
         schema_output=yes,
         reasoning_efforts=[],
     )
-    provider = cast(
-        Any,
-        SimpleNamespace(
-            id=PROVIDER_ID,
-            binding_version=7,
-            alias="Retail Pro",
-            capabilities=capabilities,
-        ),
+    from datetime import UTC, datetime
+
+    from compass_agent.schemas import ProviderView
+
+    provider = ProviderView(
+        id=PROVIDER_ID,
+        catalog_id="fixture",
+        vendor="fixture",
+        api_model="unit-model",
+        alias="Retail Pro",
+        kind="llm",
+        base_url="https://fixture.test/v1",
+        has_api_key=True,
+        enabled=True,
+        chat_visible=True,
+        chat_supported=True,
+        version=1,
+        binding_version=7,
+        capabilities=capabilities,
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     intent = Intent(category_id="CAT-03", scene_id="SC-12")
     features = RoutingFeatures(
@@ -420,10 +292,11 @@ def model_result(*, tool_calls=(), text="", token=None, finish="stop") -> CallRe
 def test_agent_generation_observation_stage_resets_after_routing() -> None:
     async def scenario():
         models = FakeModels([model_result(text="完成", finish="stop")])
-        executor = AgentExecutor(
+        executor = RunService(
             cast(Any, models),
             cast(Any, FakeRouting(selected_route())),
-            retail_settings(),
+            tools_provider=provider_for(lambda _scope: binding()),
+            definition=compass_definition(),
         )
         registry = RunRegistry()
         control = registry.register(OwnerKey.from_context(CHAT))
@@ -432,70 +305,6 @@ def test_agent_generation_observation_stage_resets_after_routing() -> None:
 
         assert result.status == "completed"
         assert models.logical_observation_stages == ["inference"]
-
-    asyncio.run(scenario())
-
-
-def test_executor_runs_tools_with_original_ids_continuation_and_csv() -> None:
-    async def scenario():
-        models = FakeModels(
-            [
-                model_result(
-                    tool_calls=(
-                        product_call(),
-                        ToolCall(
-                            id="call_unknown",
-                            function=ToolCallFunction(name="other", arguments="{}"),
-                        ),
-                    ),
-                    token="sealed-continuation",
-                    finish="tool_calls",
-                ),
-                model_result(text="商品 SPU-1 变化最大。", finish="stop"),
-            ]
-        )
-        queried = []
-
-        async def retail(prepared, _control):
-            queried.append(prepared.tool_call_id)
-            return product_result()
-
-        executor = AgentExecutor(
-            cast(Any, models),
-            cast(Any, FakeRouting(selected_route())),
-            retail_settings(),
-            retail_query=retail,
-        )
-        registry = RunRegistry()
-        control = registry.register(OwnerKey.from_context(CHAT))
-        events = []
-        result = await executor.run(run_command(), CHAT, control, events.append)
-        assert result.status == "completed" and result.file.status == "ready"
-        assert queried == ["call_product"]
-        assert [event.type for event in events] == [
-            "run.routed",
-            "step.started",
-            "tool.started",
-            "tool.finished",
-            "tool.started",
-            "tool.finished",
-            "step.finished",
-            "step.started",
-            "step.finished",
-        ]
-        second = models.requests[1][1]
-        assert second.continuation_token == "sealed-continuation"
-        assert [message.role for message in second.messages[-3:]] == [
-            "assistant",
-            "tool",
-            "tool",
-        ]
-        assert [message.tool_call_id for message in second.messages[-2:]] == [
-            "call_product",
-            "call_unknown",
-        ]
-        assert models.requests[0][2]["expected_binding_version"] == 7
-        assert models.requests[0][2]["deadline"] == control.deadline_at
 
     asyncio.run(scenario())
 
@@ -518,7 +327,7 @@ class FakeCursor:
 
     async def fetchall(self):
         if "session_user" in self.statement:
-            return [("unit_a_east", "unit_a_east", "on", True)]
+            return [("unit_a_east", "unit_a_east", "on", True, True)]
         return [("SPU-1", "商品", 1200, 800, -400)]
 
     async def close(self):
@@ -548,75 +357,10 @@ class FakeConnection:
         self.closed = True
 
 
-def test_retail_cancel_waits_for_query_then_rolls_back_and_closes() -> None:
-    async def scenario():
-        registry = RunRegistry()
-        control = registry.register(OwnerKey.from_context(CHAT))
-        started = asyncio.Event()
-        release = asyncio.Event()
-        connection = FakeConnection(started, release)
-        prepared = prepare_retail_call(product_call(), binding())
-
-        async def connect(_binding, _run_id):
-            return connection
-
-        task = asyncio.create_task(
-            control.perform(lambda: query_retail(prepared, control, connect=connect))
-        )
-        await started.wait()
-        control.request_stop("user")
-        with pytest.raises(StopRequested):
-            await task
-        result = control.commit(
-            RunCompleted(
-                status="completed",
-                finalAnswer="late",
-                file=AnalysisFileNone(status="none"),
-            )
-        )
-        assert result.status == "canceled" and result.cleanup == "confirmed"
-        assert connection.canceled and connection.rolled_back and connection.closed
-        assert connection.cursor_value.closed
-
-    asyncio.run(scenario())
-
-
-def test_retail_failed_cancel_is_confirmed_when_query_then_settles() -> None:
-    class FailedCancelConnection(FakeConnection):
-        async def cancel_safe(self, timeout):
-            assert timeout == 1
-            asyncio.get_running_loop().call_soon(self.release.set)
-            raise RuntimeError("cancel request failed")
-
-    async def scenario():
-        registry = RunRegistry()
-        control = registry.register(OwnerKey.from_context(CHAT))
-        started = asyncio.Event()
-        release = asyncio.Event()
-        connection = FailedCancelConnection(started, release)
-        prepared = prepare_retail_call(product_call(), binding())
-
-        async def connect(_binding, _run_id):
-            return connection
-
-        task = asyncio.create_task(
-            control.perform(lambda: query_retail(prepared, control, connect=connect))
-        )
-        await started.wait()
-        control.request_stop("user")
-        with pytest.raises(StopRequested):
-            await task
-        result = control.commit(RunFailed(status="failed", errorCode="internal_error"))
-        assert result.status == "canceled" and result.cleanup == "confirmed"
-        assert connection.rolled_back and connection.closed
-
-    asyncio.run(scenario())
-
-
 def test_deadline_preserves_unconfirmed_phase_cleanup_receipt() -> None:
     async def scenario():
         registry = RunRegistry()
-        control = registry.register(OwnerKey.from_context(CHAT), lifetime_s=0.01)
+        control = registry.register(OwnerKey.from_context(CHAT), lifetime_s=0.2)
 
         async def operation():
             try:
@@ -629,23 +373,6 @@ def test_deadline_preserves_unconfirmed_phase_cleanup_receipt() -> None:
         result = control.commit(RunFailed(status="failed", errorCode="internal_error"))
         assert result.status == "cleanup_unconfirmed"
         assert result.reason == "deadline"
-
-    asyncio.run(scenario())
-
-
-def test_retail_connect_timeout_is_a_typed_tool_failure() -> None:
-    async def scenario():
-        registry = RunRegistry()
-        control = registry.register(OwnerKey.from_context(CHAT))
-        prepared = prepare_retail_call(product_call(), binding())
-
-        async def connect(_binding, _run_id):
-            raise TimeoutError()
-
-        result = await query_retail(prepared, control, connect=connect)
-        assert result.status == "error"
-        assert result.error_code == "retail_query_timeout"
-        assert control.cleanup_confirmed
 
     asyncio.run(scenario())
 
@@ -665,7 +392,10 @@ def test_cancel_endpoint_runs_on_owner_event_loop_and_is_idempotent() -> None:
 
         control.request_stop = request_stop
         response = Response()
-        ack = await cancel_run(control.id, RunEmpty(), response, CHAT, registry)
+        ack = await cancel_run(
+            control.id, RunEmpty(), response, CHAT, registry, Request({"type": "http"})
+        )
+        assert isinstance(ack, AnalysisCancelAck)
         assert response.status_code == 202 and ack.root.status == "accepted"
         terminal = control.commit(
             RunCompleted(
@@ -675,7 +405,10 @@ def test_cancel_endpoint_runs_on_owner_event_loop_and_is_idempotent() -> None:
             )
         )
         assert terminal.status == "canceled"
-        repeated = await cancel_run(control.id, RunEmpty(), Response(), CHAT, registry)
+        repeated = await cancel_run(
+            control.id, RunEmpty(), Response(), CHAT, registry, Request({"type": "http"})
+        )
+        assert isinstance(repeated, AnalysisCancelAck)
         assert repeated.root.status == "already_terminal"
 
     asyncio.run(scenario())
@@ -767,6 +500,7 @@ def test_cancel_immediately_after_first_packet_returns_canceled_terminal_without
         control.request_stop("user")
         terminal = await anext(iterator)
         packet = json.loads(terminal.removeprefix(b"data: ").removesuffix(b"\n\n"))
+        assert packet["event"].pop("durationMs") >= 0
         assert packet["event"] == {
             "type": "run.finished",
             "payload": {"status": "canceled", "reason": "user", "cleanup": "confirmed"},
@@ -884,8 +618,14 @@ def test_analysis_http_rejects_missing_service_token_without_dispatch() -> None:
     app.dependency_overrides[get_agent_executor] = lambda: NeverExecutor()
     try:
         with (
-            patch("compass_agent.main.get_settings", return_value=Settings()),
-            patch("compass_agent.model_api.get_settings", return_value=Settings()),
+            patch(
+                "compass_agent.main.get_settings",
+                return_value=Settings(compass_agent_service_token=""),
+            ),
+            patch(
+                "compass_agent.api.models.get_settings",
+                return_value=Settings(compass_agent_service_token=""),
+            ),
             TestClient(app) as client,
         ):
             response = client.post(
@@ -898,6 +638,18 @@ def test_analysis_http_rejects_missing_service_token_without_dispatch() -> None:
         assert dispatched == []
     finally:
         app.dependency_overrides.clear()
+
+
+def test_agent_run_is_the_only_product_inference_entrypoint() -> None:
+    from compass_agent.main import app
+
+    with TestClient(app) as client:
+        paths = client.get("/openapi.json").json()["paths"]
+        assert "post" in paths["/v1/analysis/runs"]
+        assert "/v1/models/calls" not in paths
+        assert "get" in paths["/v1/models/calls/{call_id}"]
+        assert "post" in paths["/v1/models/providers/{provider_id}/tests"]
+        assert client.post("/v1/models/calls", json={}).status_code == 404
 
 
 def test_analysis_http_auth_owner_headers_and_body_limit(caplog) -> None:
@@ -961,16 +713,17 @@ def test_analysis_http_auth_owner_headers_and_body_limit(caplog) -> None:
             )
 
     executor = ImmediateExecutor()
-    caplog.set_level("INFO", logger="compass_agent.run_api")
+    caplog.set_level("INFO", logger="compass_agent.api.runs")
     sentinel = "private-question-sentinel"
-    settings = Settings(compass_agent_service_token="run-service-token")
+    settings = Settings(
+        compass_agent_service_token="run-service-token", compass_runtime_state_key=SecretStr("")
+    )
     app.dependency_overrides[get_agent_executor] = lambda: executor
     wrong_purpose = CHAT.model_copy(update={"purpose": "module_read"})
-    other_owner = CHAT.model_copy(update={"actor_user_id": uuid4()})
     try:
         with (
             patch("compass_agent.main.get_settings", return_value=settings),
-            patch("compass_agent.model_api.get_settings", return_value=settings),
+            patch("compass_agent.api.models.get_settings", return_value=settings),
             TestClient(app) as client,
         ):
             denied = client.post(
@@ -993,75 +746,16 @@ def test_analysis_http_auth_owner_headers_and_body_limit(caplog) -> None:
                 headers=auth_headers(CHAT),
                 json=command.model_dump(mode="json", by_alias=True),
             )
-            assert started.status_code == 200 and executor.calls == 1, started.text
-            assert started.headers["content-type"].startswith("text/event-stream")
-            assert started.headers["x-accel-buffering"] == "no"
-            assert "private" in started.headers["cache-control"]
-            packets = [
-                json.loads(line.removeprefix("data: "))
-                for line in started.text.splitlines()
-                if line.startswith("data: ")
-            ]
-            run_id = packets[0]["runId"]
-            assert packets[-1]["event"]["type"] == "run.finished"
-
-            hidden = client.post(
-                f"/v1/analysis/runs/{run_id}/cancel",
-                headers=auth_headers(other_owner),
-                json={},
-            )
-            assert hidden.status_code == 404
-            assert hidden.json()["error"]["code"] == "not_found"
-
-            cancel = client.post(
-                f"/v1/analysis/runs/{run_id}/cancel",
-                headers=auth_headers(CHAT),
-                json={},
-            )
-            assert cancel.status_code == 200
-            assert cancel.json()["status"] == "already_terminal"
-            assert cancel.headers["content-type"].startswith("application/json")
-            assert "no-store" in cancel.headers["cache-control"]
-            records = [
-                record
-                for record in caplog.records
-                if getattr(record, "event_name", "").startswith("analysis.")
-            ]
-            names = {record.event_name for record in records}
-            assert {
-                "analysis.run.started",
-                "analysis.step.started",
-                "analysis.tool.started",
-                "analysis.tool.finished",
-                "analysis.step.finished",
-                "analysis.run.finished",
-                "analysis.run.cancel",
-            } <= names
-            correlated = [record for record in records if hasattr(record, "step_id")]
-            assert correlated and {record.run_id for record in correlated} == {run_id}
-            assert any(
-                record.event_name == "analysis.tool.finished"
-                and record.tool_call_id == "call_safe"
-                and record.error_code == "retail_unavailable"
-                for record in records
-            )
-            assert any(
-                record.event_name == "analysis.run.finished"
-                and record.status == "completed"
-                and record.cleanup == "confirmed"
-                for record in records
-            )
-            assert any(
-                record.event_name == "analysis.run.cancel" and record.stop_reason == "user"
-                for record in records
-            )
-            assert sentinel not in repr([record.__dict__ for record in records])
+            assert started.status_code == 503 and executor.calls == 0
+            assert started.json()["error"]["code"] == "runtime_unavailable"
+            assert "no-store" in started.headers["cache-control"]
+            assert sentinel not in repr([record.__dict__ for record in caplog.records])
     finally:
         app.dependency_overrides.clear()
 
 
 def test_cleanup_unconfirmed_terminal_log_is_code_and_id_only(caplog) -> None:
-    caplog.set_level("INFO", logger="compass_agent.run_api")
+    caplog.set_level("INFO", logger="compass_agent.api.runs")
 
     async def scenario():
         registry = RunRegistry()
@@ -1075,7 +769,10 @@ def test_cleanup_unconfirmed_terminal_log_is_code_and_id_only(caplog) -> None:
             )
         )
         _log_terminal(control, result)
-        ack = await cancel_run(control.id, RunEmpty(), Response(), CHAT, registry)
+        ack = await cancel_run(
+            control.id, RunEmpty(), Response(), CHAT, registry, Request({"type": "http"})
+        )
+        assert isinstance(ack, AnalysisCancelAck)
         assert ack.root.status == "already_terminal"
         return str(control.id)
 
@@ -1091,3 +788,27 @@ def test_cleanup_unconfirmed_terminal_log_is_code_and_id_only(caplog) -> None:
     )
     assert cancel_record.terminal_status == "cleanup_unconfirmed"
     assert cancel_record.cleanup == "unconfirmed"
+
+
+# Shared authorized-connection fixture; no business tool is loaded by the Runtime.
+def binding():
+    from compass_agent.data_connections.transport import AuthorizedDatabaseBinding
+
+    return AuthorizedDatabaseBinding(
+        TENANT_ID, WORKSPACE_ID, "unit_a_east", SecretStr("postgresql://unused")
+    )
+
+
+def product_call(call_id="call_query", channel_code="POS"):
+    return ToolCall(
+        id=call_id,
+        function=ToolCallFunction(
+            name="database_query",
+            arguments=json.dumps(
+                {
+                    "op": "query",
+                    "sql": "SELECT 1 AS value",
+                }
+            ),
+        ),
+    )

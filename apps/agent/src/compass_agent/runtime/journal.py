@@ -1,0 +1,870 @@
+"""Accepted execution results and explicit recovery boundaries, independent of HTTP."""
+
+import asyncio
+import logging
+from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
+from hashlib import sha256
+from time import monotonic
+from uuid import UUID, uuid4, uuid5
+
+from pydantic import TypeAdapter
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from compass_agent.execution_context import execution_scope
+from compass_agent.models.errors import ModelError
+from compass_agent.runtime.entities import (
+    AgentAction,
+    AgentArtifact,
+    AgentAttempt,
+    AgentCheckpoint,
+    AgentMessage,
+    AgentRun,
+    AgentStep,
+    AgentToolBinding,
+)
+from compass_agent.runtime.private_state import digest
+from compass_agent.runtime.store import now
+
+logger = logging.getLogger(__name__)
+
+
+class BoundaryYield(BaseException):
+    """A root call and its worker receipt committed; return at this recovery boundary."""
+
+
+class RecoveryStop(BaseException):
+    """Unwind resource-owning orchestration without converting a paused Run into failure."""
+
+    def __init__(self, reason):
+        self.reason = reason
+
+
+def checkpoint_digest(value):
+    return digest(
+        {
+            name: getattr(value, name)
+            for name in (
+                "schema_version",
+                "position",
+                "completed_refs",
+                "message_refs",
+                "tool_binding_refs",
+                "artifact_refs",
+                "plan_state",
+                "budget_state",
+                "pending_calls",
+            )
+        }
+        | {
+            "verifier": sha256(value.verifier_state).hexdigest(),
+            "continuation": sha256(value.continuation_state or b"").hexdigest(),
+            "boundary": str(value.boundary_outbox_id),
+        }
+    )
+
+
+class ExecutionJournal:
+    def __init__(self, store, publisher, run_id, epoch, *, access=None):
+        self.store, self.publisher, self.run_id, self.epoch = store, publisher, run_id, epoch
+        self.access = access
+        self.counters: dict[str, int] = {}
+        self.parent: ContextVar[UUID | None] = ContextVar("journal_parent", default=None)
+        self.active_attempt: ContextVar[UUID | None] = ContextVar("journal_attempt", default=None)
+        self._last_attempt: ContextVar[UUID | None] = ContextVar(
+            "journal_last_attempt", default=None
+        )
+        self.model_secrets = None
+        self.flush_progress: Callable[[], Awaitable[None]] | None = None
+        self.pending_proposal = None
+        self.approved_proposal: dict | None = None
+        self.approved_proposals: list[dict] = []
+        self.completed_deliveries: dict[str, int] = {}
+        self.fault: Callable[[str, UUID], Awaitable[None]] | None = None
+        self.text_message = None
+        self.text_lock = asyncio.Lock()
+        self.pending_drafts = []
+        self.active_started = monotonic()
+        run = store.read_run(run_id)
+        self.active_base = run.active_ms
+        # Preserve the original model request fingerprint when an older Run resumes.
+        self.deepseek_thinking = run.config_snapshot.get("deepseekThinking", False)
+        self.state_providers = {}
+
+    def business_state(self):
+        return {path: provider() for path, provider in self.state_providers.items()}
+
+    @property
+    def last_attempt(self):
+        return self._last_attempt.get()
+
+    @last_attempt.setter
+    def last_attempt(self, value):
+        self._last_attempt.set(value)
+
+    def identifier(self, path):
+        number = self.counters.get(path, 0) + 1
+        self.counters[path] = number
+        return uuid5(self.run_id, f"id:{path}:{number}")
+
+    @staticmethod
+    def binding_snapshot(tool):
+        from dataclasses import asdict
+
+        from compass_agent.tools.contracts import InProcessBinding
+
+        binding = tool.binding
+        value = (
+            {"environment": "in_process", "orchestrates": binding.orchestrates}
+            if isinstance(binding, InProcessBinding)
+            else asdict(binding)
+            if binding
+            else {}
+        )
+        return TypeAdapter(dict).dump_python(value, mode="json")
+
+    def catalog_declarations(self):
+        with Session(self.store.engine) as tx:
+            rows = tx.scalars(
+                select(AgentToolBinding)
+                .where(AgentToolBinding.run_id == self.run_id)
+                .order_by(AgentToolBinding.created_at, AgentToolBinding.id)
+            ).all()
+            if not rows:
+                return None
+            # Preserve model-visible ordering via the original catalog traversal order.
+            rows = sorted(rows, key=lambda row: int(row.binding.get("catalogOrdinal", 0)))
+            return {row.alias: (row.declaration, row.binding) for row in rows}
+
+    def freeze_catalog(self, registry, *, asset_names=None):
+        from dataclasses import asdict
+
+        asset_names = asset_names or {}
+        with self.store.transaction() as tx:
+            _, run = self.store.lock(tx, self.run_id)
+            self.store.require_epoch(run, self.epoch)
+            existing = {
+                r.alias: r
+                for r in tx.scalars(
+                    select(AgentToolBinding).where(AgentToolBinding.run_id == run.id)
+                )
+            }
+            if existing and set(existing) != set(registry.entries):
+                raise RecoveryStop("tool_catalog_changed")
+            for ordinal, (name, tool) in enumerate(registry.entries.items()):
+                declaration = tool.definition.model_dump(mode="json") if tool.definition else {}
+                binding, policy = self.binding_snapshot(tool), asdict(tool.policy)
+                if name in asset_names:
+                    binding["workflowName"] = asset_names[name]
+                if name in existing:
+                    row = existing[name]
+                    previous = {
+                        key: value for key, value in row.binding.items() if key != "catalogOrdinal"
+                    }
+                    if (row.declaration, previous, row.policy) != (declaration, binding, policy):
+                        raise RecoveryStop("tool_catalog_changed")
+                    continue
+                tx.add(
+                    AgentToolBinding(
+                        id=uuid5(run.id, "binding:" + name),
+                        run_id=run.id,
+                        catalog_id=registry.catalog_id,
+                        alias=name,
+                        original_name=binding.get("remote_name", name),
+                        source=binding.get("environment", "in_process"),
+                        config_ref=binding.get("connection_id"),
+                        config_revision=binding.get("revision"),
+                        declaration=declaration,
+                        schema_sha256=digest(declaration),
+                        binding={**binding, "catalogOrdinal": ordinal},
+                        policy=policy,
+                        created_at=now(),
+                    )
+                )
+
+    def approves(self, prepared, step_id):
+        return self.approved_action(prepared, step_id) is not None
+
+    def approved_action(self, prepared, step_id):
+        proposals = self.approved_proposals + (
+            [self.approved_proposal] if self.approved_proposal else []
+        )
+        return next(
+            (
+                p
+                for p in proposals
+                if p.get("toolName") == prepared.tool.name
+                and digest(p.get("args")) == digest(prepared.args)
+                and p.get("callId") == prepared.call_id
+                and p.get("stepId") == str(step_id)
+            ),
+            None,
+        )
+
+    def artifact(self, ref, content):
+        from compass_agent.runtime.resources import RuntimeResources
+
+        RuntimeResources(self.store).artifact(self, ref, content)
+
+    def draft(self, detail, *, step_id=None):
+        from compass_agent.runtime.resources import RuntimeResources
+
+        return RuntimeResources(self.store).offer(self, detail, step_id=step_id)
+
+    async def text_delta(self, value):
+        if self.store.scheduler or not value:
+            return
+        async with self.text_lock:
+            if self.text_message is None:
+                with Session(self.store.engine) as tx:
+                    message = tx.scalars(
+                        select(AgentMessage).where(
+                            AgentMessage.run_id == self.run_id,
+                            AgentMessage.channel == "conversation",
+                            AgentMessage.role == "assistant",
+                        )
+                    ).one()
+                    self.text_message = [
+                        str(message.id),
+                        message.revision,
+                        len((message.public_content or {}).get("text", "").encode()),
+                    ]
+            run = await asyncio.to_thread(self.store.read_run, self.run_id)
+            self.store.require_epoch(run, self.epoch)
+            from compass_agent.schemas import RUN_STREAM_LIMITS
+
+            size = self.text_message[2] + len(value.encode())
+            if size > RUN_STREAM_LIMITS["answerBytes"]:
+                raise ModelError("run_content_limit", 409)
+            self.text_message[2] = size
+            for start in range(0, len(value), 8192):
+                self.text_message[1] += 1
+                await self.publisher.delta(
+                    self.run_id,
+                    {
+                        "packetId": str(uuid4()),
+                        "runId": str(self.run_id),
+                        "seq": None,
+                        "requestId": str(run.request_id),
+                        "occurredAt": now().isoformat(),
+                        "event": {
+                            "type": "message.delta",
+                            "payload": {
+                                "messageId": self.text_message[0],
+                                "revision": self.text_message[1],
+                                "text": value[start : start + 8192],
+                            },
+                        },
+                    },
+                )
+
+    def workflow(self, source, args, *, parent_model_step=None):
+        from compass_agent.execution_context import execution_path
+
+        key = str(self.identifier(execution_path.get() + "/workflow"))
+        with self.store.transaction() as tx:
+            _, run = self.store.lock(tx, self.run_id)
+            self.store.require_epoch(run, self.epoch)
+            parent = self.parent.get() or (
+                uuid5(run.id, "step:root/model:" + str(parent_model_step))
+                if parent_model_step is not None
+                else None
+            )
+            snapshot = {
+                "source": source,
+                "args": args,
+                "runnerVersion": 1,
+                "clock": {
+                    "timeMs": int(run.created_at.timestamp() * 1000),
+                    "seed": int(key.replace("-", "")[:8], 16),
+                },
+            }
+            identifier = uuid5(run.id, "workflow:" + key)
+            step = tx.get(AgentStep, identifier)
+            saved = None
+            if step:
+                if step.definition_snapshot != snapshot:
+                    raise RecoveryStop("workflow_replay_mismatch")
+                if step.accepted_attempt_id:
+                    attempt = tx.get(AgentAttempt, step.accepted_attempt_id)
+                    if attempt is None or attempt.output_content is None:
+                        raise RecoveryStop("checkpoint_corrupt")
+                    saved = self.store.private.open(
+                        run.id, "attempt-output", attempt.output_content
+                    )
+                    if digest(saved) != attempt.output_sha256:
+                        raise RecoveryStop("checkpoint_corrupt")
+            else:
+                ordinal = (
+                    tx.scalar(select(func.max(AgentStep.ordinal)).where(AgentStep.run_id == run.id))
+                    or 0
+                )
+                tx.add(
+                    AgentStep(
+                        id=identifier,
+                        run_id=run.id,
+                        parent_step_id=parent,
+                        node_key="workflow:" + key,
+                        kind="workflow",
+                        ordinal=ordinal + 1,
+                        status="running",
+                        revision=1,
+                        definition_snapshot=snapshot,
+                        input_sha256=digest(args),
+                        created_at=now(),
+                    )
+                )
+            calls = tx.execute(
+                select(AgentStep.node_key, AgentAttempt.delivery_no)
+                .join(AgentAttempt, AgentStep.accepted_attempt_id == AgentAttempt.id)
+                .where(AgentStep.run_id == run.id, AgentStep.node_key.like(f"host:{key}:%"))
+                .order_by(AgentAttempt.delivery_no)
+            ).all()
+            return {
+                "key": key,
+                "stepId": identifier,
+                "snapshot": snapshot,
+                "clock": snapshot["clock"],
+                "deliveryOrder": [int(row[0].rsplit(":", 1)[1]) for row in calls],
+                "saved": saved,
+            }
+
+    async def workflow_result(self, workflow, args, result, *, rejection=None):
+        prepared = await asyncio.to_thread(
+            self.prepare,
+            "workflow",
+            "workflow:" + workflow["key"],
+            args,
+            workflow["snapshot"],
+        )
+        await self.host_result(prepared, result, notify=False, rejection=rejection)
+
+    async def subagent_begin(self, key, prompt, model_step):
+        token = None
+        if self.parent.get() is None:
+            token = self.parent.set(uuid5(self.run_id, "step:root/model:" + str(model_step)))
+        try:
+            return await asyncio.to_thread(self.prepare, "subagent", key, {"prompt": prompt}, None)
+        finally:
+            if token is not None:
+                self.parent.reset(token)
+
+    async def host_begin(self, workflow, number, inputs):
+        return await asyncio.to_thread(
+            self.prepare, "workflow_host", f"host:{workflow}:{number}", inputs, None
+        )
+
+    async def external_event(self, key, event_type, correlation_key, payload_schema):
+        """A trusted workflow boundary resumes with the accepted event payload."""
+        from compass_agent.runtime.hitl import HumanDecisions
+
+        inputs = {
+            "eventType": event_type,
+            "correlationKey": correlation_key,
+            "schema": payload_schema,
+        }
+        step_id, attempt_id, saved = await asyncio.to_thread(
+            self.prepare, "external_event", "external:" + key, inputs, inputs
+        )
+        if saved is not None:
+            return saved["result"]
+        decisions = HumanDecisions(self.store)
+        accepted = await asyncio.to_thread(
+            decisions.external_result, self.run_id, self.epoch, step_id
+        )
+        if accepted is None:
+            await self.gate()
+            await asyncio.to_thread(
+                decisions.await_external,
+                self.run_id,
+                self.epoch,
+                step_id,
+                event_type,
+                correlation_key,
+                payload_schema,
+            )
+            await self.publisher.flush(self.run_id)
+            raise RecoveryStop("waiting_external_event")
+        await self.gate()
+        await asyncio.to_thread(self.dispatched, attempt_id)
+        await asyncio.to_thread(
+            self.accept,
+            step_id,
+            attempt_id,
+            {"result": accepted["payload"], "budget": {}, "continuation": None},
+        )
+        await self.publisher.flush(self.run_id)
+        return accepted["payload"]
+
+    async def host_result(self, prepared, value, *, notify=True, rejection=None):
+        step_id, attempt_id, saved = prepared
+        wrapped = {"result": value, "budget": {}, "continuation": None}
+        if rejection is not None:
+            wrapped["rejection"] = rejection
+        if saved is not None:
+            if digest(saved) != digest(wrapped):
+                raise RecoveryStop("workflow_replay_mismatch")
+            return
+        await asyncio.to_thread(self.dispatched, attempt_id)
+        await asyncio.to_thread(self.accept, step_id, attempt_id, wrapped, self.business_state())
+        if self.fault and notify:
+            await self.fault("host_result_committed", self.run_id)
+
+    async def gate(self):
+        if self.flush_progress:
+            await self.flush_progress()
+        await self.publisher.flush(self.run_id)
+        run = await asyncio.to_thread(self.store.read_run, self.run_id)
+        if run.execution_epoch != self.epoch:
+            raise RecoveryStop("execution_fenced")
+        if run.status == "cancelling":
+            from compass_agent.tools.contracts import StopRequested
+
+            raise StopRequested()
+        if run.control_intent == "pause":
+            raise RecoveryStop("user_paused")
+        if self.access:
+            try:
+                await self.access()
+            except ModelError as error:
+                # An admission failure precedes physical dispatch. Carry it through tool
+                # and model adapters without manufacturing an unknown external effect.
+                raise RecoveryStop(error.code) from None
+        self.publisher.require_owner()
+
+    def prepare(self, kind, key, inputs, definition):
+        with self.store.transaction() as tx:
+            session, run = self.store.lock(tx, self.run_id)
+            self.store.require_epoch(run, self.epoch)
+            step = tx.scalar(
+                select(AgentStep).where(AgentStep.run_id == run.id, AgentStep.node_key == key)
+            )
+            request_digest = digest(inputs)
+            if step:
+                if step.input_sha256 != request_digest or step.definition_snapshot != (
+                    definition or {}
+                ):
+                    changes = []
+                    if kind == "model" and step.accepted_attempt_id:
+                        attempt = tx.get(AgentAttempt, step.accepted_attempt_id)
+                        if attempt:
+                            refs = attempt.receipt.get("inputMessageRefs", [])
+                            messages = inputs.get("request", {}).get("messages", [])
+                            changes = [
+                                str(index + 1)
+                                for index, (ref, message) in enumerate(
+                                    zip(refs, messages, strict=False)
+                                )
+                                if ref != str(uuid5(run.id, "context:" + digest(message)))
+                            ]
+                            if len(refs) != len(messages):
+                                changes.append("count")
+                    logger.warning(
+                        "analysis.checkpoint.mismatch run_id=%s step_id=%s kind=%s "
+                        "input_changed=%s definition_changed=%s message_positions=%s",
+                        run.id,
+                        step.id,
+                        kind,
+                        step.input_sha256 != request_digest,
+                        step.definition_snapshot != (definition or {}),
+                        changes,
+                    )
+                    raise ModelError("workflow_replay_mismatch", 409)
+                if step.accepted_attempt_id:
+                    attempt = tx.get(AgentAttempt, step.accepted_attempt_id)
+                    value = self.store.private.open(
+                        run.id, "attempt-output", attempt.output_content
+                    )
+                    if digest(value) != attempt.output_sha256:
+                        raise ModelError("checkpoint_corrupt", 409)
+                    if kind == "model" and run.checkpoint_no:
+                        checkpoint = tx.get(AgentCheckpoint, (run.id, run.checkpoint_no))
+                        if checkpoint and checkpoint.continuation_state:
+                            continuations = self.store.private.open(
+                                run.id, "continuations", checkpoint.continuation_state
+                            )
+                            value = {**value, "continuation": continuations.get(str(attempt.id))}
+                    return step.id, attempt.id, value
+                attempts = tx.scalars(
+                    select(AgentAttempt)
+                    .where(AgentAttempt.step_id == step.id)
+                    .order_by(AgentAttempt.number)
+                ).all()
+                if attempts and attempts[-1].status in {"dispatched", "unknown", "incomplete"}:
+                    raise RecoveryStop("execution_unknown")
+                if attempts and attempts[-1].status == "prepared":
+                    attempts[-1].execution_epoch = self.epoch
+                    return step.id, attempts[-1].id, None
+                number = len(attempts) + 1
+            else:
+                step = AgentStep(
+                    id=uuid5(run.id, "step:" + key),
+                    run_id=run.id,
+                    parent_step_id=self.parent.get(),
+                    node_key=key,
+                    kind=kind,
+                    ordinal=(
+                        tx.scalar(
+                            select(func.max(AgentStep.ordinal)).where(AgentStep.run_id == run.id)
+                        )
+                        or 0
+                    )
+                    + 1,
+                    status="running",
+                    revision=1,
+                    definition_snapshot=definition or {},
+                    input_sha256=request_digest,
+                    created_at=now(),
+                )
+                tx.add(step)
+                tx.flush()
+                number = 1
+            attempt = AgentAttempt(
+                id=uuid4(),
+                run_id=run.id,
+                step_id=step.id,
+                number=number,
+                execution_epoch=self.epoch,
+                status="prepared",
+                input_content=self.store.private.seal(run.id, "attempt-input", inputs),
+                receipt={"actionId": inputs["actionId"]}
+                if kind == "tool" and inputs.get("actionId")
+                else {},
+                budget_receipt={},
+                created_at=now(),
+            )
+            tx.add(attempt)
+            tx.flush()
+            if kind == "model":
+                messages = inputs.get("request", {}).get("messages", [])
+                refs = []
+                ordinal = (
+                    tx.scalar(
+                        select(func.max(AgentMessage.ordinal)).where(AgentMessage.run_id == run.id)
+                    )
+                    or 0
+                )
+                for message in messages:
+                    identifier = uuid5(run.id, "context:" + digest(message))
+                    if tx.get(AgentMessage, identifier) is None:
+                        ordinal += 1
+                        tx.add(
+                            AgentMessage(
+                                id=identifier,
+                                run_id=run.id,
+                                step_id=step.id,
+                                attempt_id=attempt.id,
+                                ordinal=ordinal,
+                                channel="context",
+                                role=message["role"],
+                                status="completed",
+                                revision=1,
+                                private_content=self.store.private.seal(
+                                    run.id, "context-message", message
+                                ),
+                                created_at=now(),
+                                updated_at=now(),
+                            )
+                        )
+                    refs.append(str(identifier))
+                attempt.receipt = {"inputMessageRefs": refs}
+                attempt.input_content = self.store.private.seal(
+                    run.id,
+                    "attempt-input",
+                    {
+                        "requestDigest": request_digest,
+                        "inputMessageRefs": refs,
+                        "definition": definition or {},
+                    },
+                )
+            return step.id, attempt.id, None
+
+    def dispatched(self, attempt_id):
+        self.publisher.require_owner()
+        with self.store.transaction() as tx:
+            _, run = self.store.lock(tx, self.run_id)
+            self.store.require_epoch(run, self.epoch)
+            if run.status != "running":
+                raise ModelError("run_stopped", 409)
+            attempt = tx.get(AgentAttempt, attempt_id)
+            attempt.status, attempt.dispatched_at = "dispatched", now()
+            if attempt.receipt.get("actionId"):
+                action = tx.get(AgentAction, UUID(attempt.receipt["actionId"]))
+                if action is None or action.run_id != run.id or action.state != "pending":
+                    raise RecoveryStop("action_conflict")
+                action.state, action.updated_at = "unknown", now()
+
+    def accept(self, step_id, attempt_id, value, business_state=None, *, boundary=False):
+        self.publisher.require_owner()
+        states = business_state or {}
+        with self.store.transaction() as tx:
+            session, run = self.store.lock(tx, self.run_id)
+            self.store.require_epoch(run, self.epoch)
+            run.active_ms = max(
+                run.active_ms, self.active_base + int((monotonic() - self.active_started) * 1000)
+            )
+            step, attempt = tx.get(AgentStep, step_id), tx.get(AgentAttempt, attempt_id)
+            if attempt.status != "dispatched":
+                raise ModelError("attempt_conflict", 409)
+            continuations = {}
+            if run.checkpoint_no:
+                previous = tx.get(AgentCheckpoint, (run.id, run.checkpoint_no))
+                if previous and previous.continuation_state:
+                    continuations = self.store.private.open(
+                        run.id, "continuations", previous.continuation_state
+                    )
+            if value.get("continuation") is not None:
+                continuations[str(attempt.id)] = value["continuation"]
+                value = {**value, "continuation": None}
+            attempt.output_content = self.store.private.seal(run.id, "attempt-output", value)
+            attempt.output_sha256 = digest(value)
+            attempt.status, attempt.finished_at = "completed", now()
+            if attempt.receipt.get("actionId"):
+                action = tx.get(AgentAction, UUID(attempt.receipt["actionId"]))
+                if action is None or action.run_id != run.id:
+                    raise RecoveryStop("action_conflict")
+                result = value["result"]
+                action.state = (
+                    "unknown"
+                    if result.get("cleanup") == "unconfirmed"
+                    else "applied"
+                    if result.get("status") in {"ok", "empty"}
+                    else "denied"
+                )
+                action.receipt = {
+                    "attemptId": str(attempt.id),
+                    "status": result.get("status"),
+                    "cleanup": result.get("cleanup"),
+                    "outputDigest": digest(result),
+                }
+                action.updated_at = now()
+            attempt.budget_receipt = value.get("budget", {})
+            attempt.delivery_no = (
+                tx.scalar(
+                    select(func.max(AgentAttempt.delivery_no)).where(AgentAttempt.run_id == run.id)
+                )
+                or 0
+            ) + 1
+            step.accepted_attempt_id = attempt.id
+            step.status = "failed" if value.get("rejection") else "completed"
+            step.finished_at = now()
+            step.revision += 1
+            box = self.store.outbox(tx, session, run, [])
+            tx.flush()
+            accepted = tx.scalars(
+                select(AgentAttempt).where(
+                    AgentAttempt.run_id == run.id, AgentAttempt.status == "completed"
+                )
+            ).all()
+            refs = [
+                {"stepId": str(a.step_id), "attemptId": str(a.id), "outputDigest": a.output_sha256}
+                for a in accepted
+            ]
+            position = {
+                "schemaVersion": 1,
+                "nextNode": "journal-replay",
+                "lastStepId": str(step.id),
+            }
+            number = (run.checkpoint_no or 0) + 1
+            private = {
+                "schemaVersion": 1,
+                "accepted": refs,
+                "states": {path: state["verifier"] for path, state in states.items()},
+            }
+            checkpoint = AgentCheckpoint(
+                run_id=run.id,
+                number=number,
+                schema_version=1,
+                boundary_outbox_id=box.id,
+                position=position,
+                completed_refs=refs,
+                message_refs=[
+                    str(v)
+                    for v in tx.scalars(
+                        select(AgentMessage.id).where(AgentMessage.run_id == run.id)
+                    )
+                ],
+                tool_binding_refs=[
+                    str(v)
+                    for v in tx.scalars(
+                        select(AgentToolBinding.id).where(AgentToolBinding.run_id == run.id)
+                    )
+                ],
+                artifact_refs=[
+                    {"id": str(v.id), "sha256": v.sha256}
+                    for v in tx.scalars(select(AgentArtifact).where(AgentArtifact.run_id == run.id))
+                ],
+                plan_state={
+                    "schemaVersion": 1,
+                    "states": {path: state["plan"] for path, state in states.items()},
+                },
+                verifier_state=self.store.private.seal(run.id, "verifier", private),
+                continuation_state=self.store.private.seal(run.id, "continuations", continuations),
+                budget_state={
+                    "schemaVersion": 1,
+                    "activeMs": run.active_ms,
+                    "receipts": [{"attemptId": str(v.id), **v.budget_receipt} for v in accepted],
+                    "states": {path: state["budget"] for path, state in states.items()},
+                },
+                pending_calls=[
+                    str(v)
+                    for v in tx.scalars(
+                        select(AgentAttempt.id).where(
+                            AgentAttempt.run_id == run.id,
+                            AgentAttempt.status.in_(["prepared", "dispatched", "unknown"]),
+                        )
+                    )
+                ],
+                state_sha256="",
+                created_at=now(),
+            )
+            checkpoint.state_sha256 = checkpoint_digest(checkpoint)
+            tx.add(checkpoint)
+            run.checkpoint_no = number
+            self.last_attempt = attempt.id
+            if boundary and self.store.scheduler:
+                return self.store.scheduler.accepted_boundary(tx, run, step)
+            return False
+
+    def unknown(self, attempt_id):
+        with self.store.transaction() as tx:
+            _, run = self.store.lock(tx, self.run_id)
+            if run.execution_epoch != self.epoch:
+                return
+            attempt = tx.get(AgentAttempt, attempt_id)
+            if attempt and attempt.status == "dispatched":
+                attempt.status, attempt.error_code = "unknown", "execution_unknown"
+
+    async def call(
+        self, kind, key, inputs, operation, result_type, *, definition=None, budget=None
+    ):
+        adapter = TypeAdapter(result_type)
+        # Read accepted results before pause checks: pure reconstruction consumes no new resources.
+        try:
+            step_id, attempt_id, saved = await asyncio.to_thread(
+                self.prepare, kind, key, inputs, definition
+            )
+            budget_fields = ("steps", "tokens", "cost_microusd", "attempts", "unknown_attempts")
+            if saved is not None:
+                self.last_attempt = attempt_id
+                if budget is not None:
+                    for name, value in saved.get("budget", {}).items():
+                        setattr(budget, name, getattr(budget, name) + value)
+                saved = self.restore_continuation(saved["result"], saved.get("continuation"))
+                return adapter.validate_json(__import__("json").dumps(saved))
+            before = {name: getattr(budget, name) for name in budget_fields} if budget else {}
+            await self.gate()
+        except asyncio.CancelledError:
+            from compass_agent.tools.contracts import PhaseCanceled
+
+            # Only local admission and replay ran; the physical dispatch intent has
+            # not been committed and operation() has never been invoked.
+            raise PhaseCanceled(cleanup_confirmed=True) from None
+        await asyncio.to_thread(self.dispatched, attempt_id)
+        parent_token, attempt_token = self.parent.set(step_id), self.active_attempt.set(attempt_id)
+        try:
+            with execution_scope(key, absolute=True):
+                result = await operation()
+            encoded = adapter.dump_python(result, mode="json")
+            continuation = None
+            if (
+                isinstance(encoded, dict)
+                and encoded.get("continuation_token")
+                and self.model_secrets
+            ):
+                continuation = self.model_secrets.open(
+                    encoded["continuation_token"], "tool_continuation", ttl=900
+                )
+                encoded["continuation_token"] = None
+            encoded = {
+                "result": encoded,
+                "continuation": continuation,
+                "budget": {name: getattr(budget, name) - old for name, old in before.items()},
+            }
+            yielded = await asyncio.to_thread(
+                self.accept, step_id, attempt_id, encoded, self.business_state(), boundary=True
+            )
+            self.last_attempt = attempt_id
+            await self.publisher.flush(self.run_id)
+            if yielded:
+                if self.flush_progress:
+                    await self.flush_progress()
+                raise BoundaryYield()
+            return result
+        except BaseException:
+            await asyncio.shield(asyncio.to_thread(self.unknown, attempt_id))
+            raise
+        finally:
+            self.parent.reset(parent_token)
+            self.active_attempt.reset(attempt_token)
+
+    def validate_checkpoint(self):
+        with Session(self.store.engine) as tx:
+            run = tx.get(AgentRun, self.run_id)
+            assert run is not None
+            unknown = tx.scalar(
+                select(AgentAttempt.id)
+                .join(AgentStep, AgentStep.id == AgentAttempt.step_id)
+                .where(
+                    AgentAttempt.run_id == run.id,
+                    AgentAttempt.status.in_(["dispatched", "unknown", "incomplete"]),
+                    AgentStep.kind != "workflow_host",
+                )
+                .limit(1)
+            )
+            if unknown:
+                raise ModelError("execution_unknown", 409)
+            if run.checkpoint_no is None:
+                return
+            checkpoint = tx.get(AgentCheckpoint, (run.id, run.checkpoint_no))
+            if (
+                checkpoint is None
+                or checkpoint.schema_version != 1
+                or checkpoint.state_sha256 != checkpoint_digest(checkpoint)
+            ):
+                raise ModelError("checkpoint_invalid", 409)
+            self.store.private.open(run.id, "verifier", checkpoint.verifier_state)
+            if checkpoint.continuation_state:
+                self.store.private.open(run.id, "continuations", checkpoint.continuation_state)
+            for identifier in checkpoint.message_refs:
+                message = tx.get(AgentMessage, UUID(identifier))
+                if message is None or message.run_id != run.id:
+                    raise ModelError("checkpoint_invalid", 409)
+                if message.private_content:
+                    self.store.private.open(run.id, "context-message", message.private_content)
+            for identifier in checkpoint.tool_binding_refs:
+                binding = tx.get(AgentToolBinding, UUID(identifier))
+                if (
+                    binding is None
+                    or binding.run_id != run.id
+                    or digest(binding.declaration) != binding.schema_sha256
+                ):
+                    raise ModelError("checkpoint_invalid", 409)
+            for ref in checkpoint.artifact_refs:
+                artifact = tx.get(AgentArtifact, UUID(ref["id"]))
+                if (
+                    artifact is None
+                    or artifact.run_id != run.id
+                    or sha256(artifact.content).hexdigest() != ref["sha256"]
+                ):
+                    raise ModelError("checkpoint_invalid", 409)
+            for ref in checkpoint.completed_refs:
+                attempt = tx.get(AgentAttempt, UUID(ref["attemptId"]))
+                if (
+                    attempt is None
+                    or attempt.run_id != run.id
+                    or attempt.output_sha256 != ref["outputDigest"]
+                ):
+                    raise ModelError("checkpoint_invalid", 409)
+                value = self.store.private.open(run.id, "attempt-output", attempt.output_content)
+                if digest(value) != ref["outputDigest"]:
+                    raise ModelError("checkpoint_corrupt", 409)
+
+    def restore_continuation(self, value, continuation):
+        if continuation is not None:
+            if self.model_secrets is None:
+                raise ModelError("runtime_state_invalid", 409)
+            value = dict(value)
+            value["continuation_token"] = self.model_secrets.seal("tool_continuation", continuation)
+        return value

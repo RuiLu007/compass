@@ -9,10 +9,11 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from compass_agent.api.models import get_model_service
+from compass_agent.llm.contracts import AgentCallResponse
 from compass_agent.llm.errors import RuntimeFailure
 from compass_agent.llm.systemone_decision import validate_answers
 from compass_agent.main import app
-from compass_agent.model_api import get_model_service
 from compass_agent.models.errors import ModelError
 from compass_agent.models.service import create_runtime
 from compass_agent.schemas import ChatMessage, DecisionQuestion, ModelEvent, ToolCall
@@ -23,6 +24,52 @@ from pydantic import ValidationError
 from .provider_fixture import FixtureStream
 from .test_models import MANAGE, TEST, create, generate, headers, invoke
 from .test_models import system as system
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+def test_chat_run_captures_provider_thinking_without_serializing_its_key(system, streaming):
+    repo, _, service = system
+    _, saved = create(repo)
+    payload = wire_response("分析结束")
+    payload["choices"][0]["message"]["reasoning_content"] = "先比较实付金额。unit-key-never-return"
+
+    def reply(_):
+        if not streaming:
+            return httpx.Response(200, json=payload)
+        metadata = {key: field for key, field in payload.items() if key != "choices"}
+        metadata["object"] = "chat.completion.chunk"
+        choices = [
+            {"index": 0, "delta": {"reasoning_content": "先比较实付金额。"}, "finish_reason": None},
+            {
+                "index": 0,
+                "delta": {"reasoning_content": "unit-key-never-return"},
+                "finish_reason": None,
+            },
+            {"index": 0, "delta": {"content": "分析结束"}, "finish_reason": "stop"},
+        ]
+        body = (
+            "".join(
+                "data: " + json.dumps({**metadata, "choices": [choice]}) + "\n\n"
+                for choice in choices
+            )
+            + "data: [DONE]\n\n"
+        )
+        return httpx.Response(200, content=body, headers={"content-type": "text/event-stream"})
+
+    service.runtime = create_runtime(repo.secrets, lambda: httpx.MockTransport(reply))
+
+    async def scenario():
+        request = generate(thinking=True, stream=streaming)
+        prepared = await service.prepare(uuid4(), saved.provider_id, request, TEST)
+        result = await service.run(prepared, request, tool_output_validation="agent_dispatch")
+        assert isinstance(result, AgentCallResponse)
+        assert result.status == "completed"
+        assert result.analysis_thinking == "先比较实付金额。[REDACTED]"
+        ordinary = await invoke(service, saved.provider_id, request)
+        assert not isinstance(ordinary, AgentCallResponse)
+        assert "先比较实付金额" not in ordinary.model_dump_json()
+
+    asyncio.run(scenario())
 
 
 def wire_response(content="ok", finish: str | None = "stop", tool_calls=None):
@@ -371,7 +418,7 @@ def test_sse_public_contract_has_one_final_and_no_reasoning_text(system):
     try:
         with (
             patch(
-                "compass_agent.model_api.get_settings",
+                "compass_agent.api.models.get_settings",
                 return_value=Settings(compass_agent_service_token="unit-service-token"),
             ),
             TestClient(app) as client,

@@ -28,6 +28,12 @@ from compass_agent.llm.policy import CallPolicy
 from compass_agent.models import PreparedCall, RoutingGrant
 from compass_agent.models.entities import ModelCall, ModelChange, Provider
 from compass_agent.models.errors import ModelError
+from compass_agent.models.generation import (
+    available_generation,
+    build_profile,
+    profile_view,
+    stored_profile,
+)
 from compass_agent.models.secrets import SecretStore
 from compass_agent.models.validation import validate_connection_params, validate_endpoint
 from compass_agent.schemas import (
@@ -86,8 +92,17 @@ class ModelRepository:
     ):
         if command.connection_params is not None:
             validate_connection_params(command.connection_params, self.allowed_origins)
+        profile_submitted = "generation_profile" in command.model_fields_set
+        fingerprint_fields = command.model_dump(mode="json", exclude={"generation_profile"})
+        # Retain pre-976 operation fingerprints and distinguish omitted limits from explicit null.
+        if profile_submitted:
+            fingerprint_fields["generation_profile"] = (
+                command.generation_profile.model_dump(mode="json", exclude_unset=True)
+                if command.generation_profile is not None
+                else None
+            )
         fingerprint = self.secrets.fingerprint(
-            {"provider_id": str(provider_id), "command": command.model_dump(mode="json")}
+            {"provider_id": str(provider_id), "command": fingerprint_fields}
         )
         try:
             with Session(self.engine) as session, session.begin():
@@ -140,7 +155,13 @@ class ModelRepository:
                     row.version += 1
                 values = command.model_dump(
                     exclude_unset=True,
-                    exclude={"operation_id", "expected_version", "api_key", "connection_params"},
+                    exclude={
+                        "operation_id",
+                        "expected_version",
+                        "api_key",
+                        "connection_params",
+                        "generation_profile",
+                    },
                 )
                 for key, value in values.items():
                     if value is not None:
@@ -153,6 +174,23 @@ class ModelRepository:
                         row.catalog_id, row.api_model
                     )
                 row.base_url = validate_endpoint(row.base_url, row.adapter, self.allowed_origins)
+                binding_changed = old != (row.catalog_id, row.api_model, row.base_url)
+                previous_profile = row.generation_profile
+                if binding_changed and previous_profile is not None and not profile_submitted:
+                    raise ModelError("generation_profile_review_required")
+                if profile_submitted:
+                    profile = (
+                        build_profile(
+                            row,
+                            command.generation_profile,
+                            None if binding_changed else stored_profile(row),
+                        )
+                        if command.generation_profile is not None
+                        else None
+                    )
+                    row.generation_profile = (
+                        profile.model_dump(mode="json", exclude_unset=True) if profile else None
+                    )
                 if row.chat_visible and not chat_supported(row):
                     raise ModelError("chat_model_not_supported")
                 if (
@@ -183,8 +221,8 @@ class ModelRepository:
                 if not row.api_key_ciphertext:
                     raise ModelError("validation_failed")
                 if (
-                    old is None
-                    or old != (row.catalog_id, row.api_model, row.base_url)
+                    binding_changed
+                    or previous_profile != row.generation_profile
                     or command.api_key is not None
                     or command.connection_params is not None
                 ):
@@ -270,6 +308,7 @@ class ModelRepository:
             version=row.version,
             binding_version=row.binding_version,
             capabilities=capabilities(row.kind, row.vendor, row.api_model),
+            generation_profile=profile_view(row),
             latest_test=summary,
             created_at=row.created_at,
             updated_at=row.updated_at,
@@ -325,6 +364,7 @@ class ModelRepository:
                         alias=row.alias,
                         api_model=row.api_model,
                         kind="llm",
+                        generation=available_generation(row),
                         capabilities=capabilities(row.kind, row.vendor, row.api_model),
                     )
                     for row in rows
@@ -448,6 +488,7 @@ class ModelRepository:
                     row.api_model,
                     row.sdk_model,
                     row.base_url,
+                    stored_profile(row),
                 )
                 scope = context.scope
                 session.add(

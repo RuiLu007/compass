@@ -21,7 +21,7 @@
 
 - 在 `apps/agent` 内实现单 Agent 的同步 ReAct。Run、Step、消息与工具结果在内存中推进，记录基础 Run/Step 事件。
 - 系统提示词保存在代码里。代码内固定定义一个 Retail 查询工具，使用项目的受限只读连接执行参数化 SQL。模型填写查询参数，结果按调用 ID 回填。
-- BFF 沿用分析 Chat 的身份与权限校验，调用 Agent 并转发可展示的运行进度和终态。Web 按轮展示工具卡片，区分工具状态、`finalAnswer` 和文件卡片。
+- BFF 沿用分析 Chat 的身份与权限校验，调用 Agent 并转发可展示的运行进度和终态。Web 按轮展示工具卡片，区分工具状态、`finalAnswer` 和文件卡片。Agent Run 是唯一业务推理入口，旧单次推理 POST 下线。
 - Chat 按 Run ID 发起终止。BFF 鉴权并转发，Agent 停止后续 Step，取消在途模型调用或真实 Retail 查询。各层清理流、连接及本轮未提交的文件。Agent 确认清理后，页面显示「已终止」。
 - 首期由服务端将已授权的商品查询结果导出为 CSV，随本次 Run 返回，用户可在 Chat 下载。第 18 课将取消和资源回收扩展到统一工具执行层、并行调用和 Sandbox，并交付受控 Artifact。第 19 课交付持久 Run 的控制、Checkpoint 与 Resume，第 20 课交付异步调度与断线续流。系统提示词的数据库管理和编辑后台留给后续。
 
@@ -37,3 +37,4 @@
 - [产品需求文档](spec/PRD.md)，本课需求与验收标准的维护位置。
 
 - [技术方案](design/TECH_DESIGN.md) · [HTML 审阅版](design/TECH_DESIGN.html)。设计稿已整理为 7 项实施任务，课堂发布库接入和端到端验收随实现执行。
+- [测试验收](test/TEST_PLAN.md)，记录单元、PostgreSQL 集成和浏览器验收。

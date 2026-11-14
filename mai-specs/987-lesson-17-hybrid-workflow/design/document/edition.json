@@ -1,0 +1,96 @@
+{
+  "title": "Agent 主导的混合 Workflow",
+  "subtitle": "在分析 Chat 中生成与复用 SubAgent 编排脚本，运行固定提案和复盘 Skill。",
+  "brand": "Compass",
+  "label": "《企业级Agent工程架构实战营》 · 第 17 课 · 架构设计与代码导读",
+  "topics": ["Autonomous Agent", "Dynamic Workflow", "程序固定 Workflow", "Workflow in Skill"],
+  "source": "../TECH_DESIGN.md",
+  "guide": "guide.md",
+  "output": "../TECH_DESIGN.html",
+  "code": {
+    "registered-workflow": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "class RegisteredWorkflow",
+      "language": "python"
+    },
+    "architecture": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "主意图为预算提案",
+      "language": "mermaid"
+    },
+    "dynamic-diagram": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "Agent 判断是否值得编排",
+      "language": "mermaid"
+    },
+    "fixed-diagram": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "校验证据和提案限额",
+      "language": "mermaid"
+    },
+    "dynamic-request": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "const lead = await agent",
+      "language": "javascript"
+    },
+    "dynamic-core": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "async def run_dynamic_workflow",
+      "language": "python"
+    },
+    "fixed-core": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "async def run_budget_proposal",
+      "language": "python"
+    },
+    "skill-core": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "def build_weekly_review",
+      "language": "python"
+    },
+    "files": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "apps/agent/src/compass_agent/runtime/workflow_runner.py",
+      "language": "diff"
+    },
+    "skill-instructions": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "用户要求例会周报",
+      "language": "markdown"
+    },
+    "workflow-asset-ddl": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "CREATE TABLE workflow_asset",
+      "language": "sql"
+    },
+    "dynamic-runtime": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "独立 Workflow Runtime",
+      "language": "mermaid"
+    },
+    "save-confirmation": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "def confirm_draft(",
+      "language": "python"
+    },
+    "save-sequence": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "再次读取原始邀请",
+      "language": "mermaid"
+    },
+    "execution-node": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "type ExecutionNodeShape",
+      "language": "typescript"
+    },
+    "execution-flow": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "ExecutionTrace · Run 内状态",
+      "language": "mermaid"
+    }
+  },
+  "cover": {
+    "file": "cover.png",
+    "alt": "第 17 课 · 混合 Workflow：QuickJS 编排、SubAgent、个人工作流与 Skill。"
+  }
+}

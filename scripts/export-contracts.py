@@ -10,7 +10,12 @@ from compass_agent.schemas import (
     RUN_STREAM_VERSION,
     AnalysisCancelAck,
     DemoOverview,
+    RunAutonomyAction,
+    RunAutonomyResult,
+    RunExecutionNode,
     RunPacket,
+    RunToolPreparation,
+    RunWorkflowProgress,
 )
 from pydantic import BaseModel
 from pydantic.json_schema import models_json_schema
@@ -35,7 +40,15 @@ openapi.setdefault("components", {}).setdefault("schemas", {}).update(
     json.loads(json.dumps(model_contracts["$defs"]).replace("#/$defs/", "#/components/schemas/"))
 )
 _, run_contracts = models_json_schema(
-    [(RunPacket, "validation"), (AnalysisCancelAck, "validation")],
+    [
+        (RunPacket, "validation"),
+        (AnalysisCancelAck, "validation"),
+        (RunAutonomyAction, "validation"),
+        (RunAutonomyResult, "validation"),
+        (RunToolPreparation, "validation"),
+        (RunWorkflowProgress, "validation"),
+        (RunExecutionNode, "validation"),
+    ],
     by_alias=True,
 )
 run_stream = {

@@ -17,21 +17,16 @@ def catalog():
     return value["version"], scenes
 
 
-def validate_intent(value):
-    intent = Intent.model_validate(value)
-    scene = catalog()[1].get(intent.scene_id)
-    if scene is None or scene["category_id"] != intent.category_id:
+def intent_for_scene(scene_id: str) -> Intent:
+    scene = catalog()[1].get(scene_id)
+    if scene is None:
         raise ModelError("intent_invalid", 503)
-    return intent
+    return Intent(category_id=scene["category_id"], scene_id=scene_id)
 
 
 def features_for(intent):
     row = catalog()[1][intent.scene_id]
     return RoutingFeatures(**{key: row[key] for key in RoutingFeatures.model_fields})
-
-
-def categories():
-    return {row["category_id"]: row["category_name"] for row in catalog()[1].values()}
 
 
 def descriptions():

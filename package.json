@@ -10,8 +10,9 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "setup": "uv sync --locked --all-packages && pnpm contracts",
+    "setup": "uv sync --locked --all-packages && npm ci --prefix apps/agent/workflow-runner --ignore-scripts && pnpm contracts",
     "dev": "node scripts/tasks.mjs dev",
+    "lesson17:start": "node --env-file=.env -e \"process.execve('/usr/bin/env', ['env', 'uv', 'run', '--locked', '--package', 'compass-agent', 'python', 'scripts/lesson-17-start.py'], process.env)\"",
     "build": "node scripts/tasks.mjs build",
     "deploy": "node scripts/deploy.mjs up",
     "deploy:status": "node scripts/deploy.mjs status",
@@ -47,7 +48,11 @@
     "test:integration": "node scripts/tasks.mjs test:integration",
     "test:e2e": "node scripts/tasks.mjs test:e2e",
     "test:setup": "node scripts/tasks.mjs test:setup",
-    "observability": "node scripts/observability.mjs"
+    "observability": "node scripts/observability.mjs",
+    "sandbox": "node scripts/sandbox.mjs",
+    "start": "node scripts/start.mjs",
+    "stop": "node scripts/stop.mjs",
+    "restart": "node scripts/restart.mjs"
   },
   "devDependencies": {
     "openapi-typescript": "7.13.0",

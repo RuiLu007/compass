@@ -143,6 +143,8 @@ export function ModelPlayground({
           reasoning_effort:
             thinking && effort ? (effort as GenerateInput["reasoning_effort"]) : null,
           max_tokens: maxTokens,
+          temperature: null,
+          top_p: null,
           tools: toolsEnabled ? JSON.parse(tools) : [],
           output_format: outputFormat,
           output_schema: outputFormat === "schema" ? JSON.parse(schema) : null,

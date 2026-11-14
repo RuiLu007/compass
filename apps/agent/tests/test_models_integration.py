@@ -232,3 +232,25 @@ def test_reliable_generation_persists_two_attempts_atomically_and_rejects_duplic
         assert len(upstream.requests) == 2
 
     asyncio.run(run())
+    from compass_agent.runtime.entities import ModelAttempt
+
+    with Session(repo.engine) as session:
+        call = session.get(ModelCall, call_id)
+        attempts = session.scalars(
+            select(ModelAttempt)
+            .where(ModelAttempt.call_id == call_id)
+            .order_by(ModelAttempt.number)
+        ).all()
+        assert call and call.content_status == "captured" and call.request_content
+        request = repo.secrets.open(call.request_content.decode(), "model-request")
+        assert request["value"]["messages"] == value.model_dump(mode="json")["messages"]
+        assert len(attempts) == 2
+        assert [item.status for item in attempts] == ["failed", "completed"]
+        assert all(item.origin == "live" and item.sent for item in attempts)
+        assert all(item.reserved_tokens > 0 and item.request_content is None for item in attempts)
+        assert all(item.output_content and item.output_sha256 for item in attempts)
+        assert call.output_content == attempts[1].output_content
+        assert all(
+            str(item.id) in {str(a.attempt_id) for a in repo.call(call_id, CHAT).execution.attempts}
+            for item in attempts
+        )

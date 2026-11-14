@@ -1,6 +1,7 @@
 """PostgreSQL acceptance: native/SQL, 0001 upgrade, roles, drift and restore."""
 
 import importlib.util
+import json
 import os
 import subprocess
 from datetime import UTC, datetime
@@ -13,11 +14,25 @@ import psycopg
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
+from compass_agent.data_connections.connections import DataConnections
 from compass_agent.database import Base
 from compass_agent.models.entities import Provider
+from compass_agent.models.errors import ModelError
 from compass_agent.models.secrets import SecretStore
+from compass_agent.schemas import (
+    DataConnectionSave,
+    ProviderCreate,
+    RetailConnectionSave,
+    TenantScope,
+    TrustedContext,
+    WorkflowAssetPatch,
+)
+from compass_agent.settings import Settings
+from compass_agent.workflows.assets import DYNAMIC_CONTRACT, WorkflowAsset, WorkflowAssets
 from cryptography.fernet import Fernet
 from psycopg import sql
+from psycopg.conninfo import conninfo_to_dict
+from pydantic import SecretStr
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
@@ -206,7 +221,7 @@ def test_unknown_sequence_refused_before_adopting_database(targets):
         "ALTER TABLE model_provider DROP COLUMN api_key_ciphertext",
         "ALTER TABLE model_provider ALTER COLUMN api_key_ciphertext TYPE integer USING 0",
         "ALTER TABLE model_provider DROP CONSTRAINT ck_model_provider_chat_kind",
-        "ALTER TABLE model_call DROP CONSTRAINT model_call_pkey",
+        "ALTER TABLE model_call DROP CONSTRAINT model_call_pkey CASCADE",
         "ALTER TABLE model_provider DROP CONSTRAINT ck_model_provider_adapter; "
         "ALTER TABLE model_provider ADD CONSTRAINT ck_model_provider_adapter "
         "CHECK (adapter IN ('litellm_chat','aliyun_decision'))",
@@ -256,14 +271,164 @@ def pg_tool(tool, url, data=None):
     return result.stdout
 
 
+@pytest.mark.parametrize("mode", ["native", "sql"])
+def test_0004_retail_upgrade_and_idempotent_default(targets, mode):
+    runtime, _ = targets("retail_" + mode)
+    assert db.migrate(target="0004") == "applied"
+    with psycopg.connect(db.dsn(runtime)) as connection:
+        connection.execute("INSERT INTO demo_daily_sales VALUES ('2026-10-01',12345,7)")
+    assert db.migrate(mode=mode, start="0004") == "applied"
+    scope = TenantScope(kind="tenant", tenant_id=uuid4(), workspace_id=uuid4())
+    key = Fernet.generate_key().decode()
+    settings = Settings(
+        compass_model_encryption_key=key,
+        compass_retail_run_scope=json.dumps(
+            {
+                "tenantId": str(scope.tenant_id),
+                "workspaceId": str(scope.workspace_id),
+                "release": "compatible-retail-release",
+                "contentHash": "a" * 64,
+                "role": "fixture_a_east",
+                "retailTenantId": 987,
+                "schema": "core",
+            }
+        ),
+        compass_retail_run_readonly_dsn=SecretStr(
+            "postgresql://fixture_a_east:dummy@127.0.0.1:55432/retail"
+        ),
+    )
+    engine = create_engine(runtime)
+    try:
+        service = DataConnections(engine, settings)
+        assert service.status(scope).connection is None
+        assert service.seed_default(settings)
+        initial = service.status(scope).connection
+        assert initial is not None and initial.revision == 1 and initial.retail_tenant_id == 987
+        assert "dummy" not in initial.model_dump_json()
+        edited = RetailConnectionSave.model_validate(
+            {**initial.model_dump(exclude={"password_configured"}), "retail_tenant_id": 654}
+        )
+        assert service.save(scope, edited).revision == 2
+        with pytest.raises(ModelError, match="version_conflict"):
+            service.save(scope, edited)
+        with pytest.raises(ModelError, match="validation_failed"):
+            service.save(scope, edited.model_copy(update={"revision": 2, "database_name": "other"}))
+        assert not service.seed_default(settings)
+        saved = service.status(scope).connection
+        assert saved is not None and saved.retail_tenant_id == 654
+        assert service.status(scope.model_copy(update={"tenant_id": uuid4()})).connection is None
+        assert service.status(scope.model_copy(update={"workspace_id": uuid4()})).connection is None
+        with psycopg.connect(db.dsn(runtime)) as connection:
+            assert connection.execute("SELECT revenue_minor FROM demo_daily_sales").fetchone() == (
+                12345,
+            )
+            secret = connection.execute(
+                "SELECT password_ciphertext FROM data_connection"
+            ).fetchone()
+            assert secret is not None and secret[0] != "dummy"
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                connection.execute("DELETE FROM data_connection")
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("mode", ["native", "sql"])
+def test_0005_default_migrates_and_coexists_with_other_engines(targets, mode):
+    runtime, _ = targets("data_connections_" + mode)
+    assert db.migrate(target="0005") == "applied"
+    scope = TenantScope(kind="tenant", tenant_id=uuid4(), workspace_id=uuid4())
+    key = Fernet.generate_key().decode()
+    cipher = SecretStore(key).seal(
+        f"retail_connection:{scope.tenant_id}:{scope.workspace_id}", {"password": "retail-fixture"}
+    )
+    with psycopg.connect(db.dsn(runtime)) as connection:
+        connection.execute(
+            """
+            INSERT INTO retail_connection (
+                workspace_id, tenant_id, host, port, database_name, role, sslmode,
+                retail_tenant_id, password_ciphertext, revision
+            ) VALUES (%s, %s, '127.0.0.1', 55432, 'retail', 'fixture_a_east', 'prefer',
+                      101, %s, 7)
+            """,
+            (scope.workspace_id, scope.tenant_id, cipher),
+        )
+    assert db.migrate(mode=mode, start="0005") == "applied"
+    engine = create_engine(runtime)
+    try:
+        service = DataConnections(engine, Settings(compass_model_encryption_key=key))
+        listing = service.list(scope)
+        assert len(listing.items) == 1 and listing.items[0].revision == 7
+        assert listing.items[0].id == scope.workspace_id
+        binding = service.binding_for_run(scope)
+        assert binding and conninfo_to_dict(binding.dsn.get_secret_value())["password"] == (
+            "retail-fixture"
+        )
+        values = {
+            "name": "Business MySQL",
+            "engine": "mysql",
+            "host": "127.0.0.1",
+            "port": 3306,
+            "database_name": "business",
+            "role": "reader",
+            "sslmode": "disable",
+            "revision": 0,
+            "password": "mysql-fixture",
+        }
+        command = DataConnectionSave.model_validate(values)
+        mysql = service.save_connection(scope, command, None)
+        pg = service.save_connection(
+            scope,
+            DataConnectionSave.model_validate(
+                {**values, "name": "Warehouse", "engine": "postgresql", "port": 5432}
+            ),
+            None,
+        )
+        assert {item.id for item in service.list(scope).items} == {
+            scope.workspace_id,
+            mysql.id,
+            pg.id,
+        }
+        assert "mysql-fixture" not in service.list(scope).model_dump_json()
+        change = command.model_copy(update={"name": "Updated", "revision": 1, "password": None})
+        assert service.save_connection(scope, change, mysql.id).revision == 2
+        with pytest.raises(ModelError, match="version_conflict"):
+            service.save_connection(scope, change, mysql.id)
+        other = scope.model_copy(update={"workspace_id": uuid4()})
+        with pytest.raises(ModelError, match="not_found"):
+            service.test_connection_target(other, mysql.id)
+        assert service.list(other).items == []
+        assert service.test_connection_target(scope, pg.id)[0].revision == 1
+        assert service.test_connection_target(scope, scope.workspace_id)[0].revision == 7
+    finally:
+        engine.dispose()
+
+
 def test_restores_data_and_encrypted_values_into_new_owned_database(targets):
     runtime, source = targets("backup")
     db.migrate()
     provider_id = uuid4()
-    secrets = SecretStore(Fernet.generate_key().decode())
+    key = Fernet.generate_key().decode()
+    secrets = SecretStore(key)
+    retail_settings = Settings(compass_model_encryption_key=key)
+    retail_scope = TenantScope(kind="tenant", tenant_id=uuid4(), workspace_id=uuid4())
     now = datetime.now(UTC)
     engine = create_engine(db.dsn(runtime).replace("postgresql://", "postgresql+psycopg://", 1))
     try:
+        DataConnections(engine, retail_settings).save(
+            retail_scope,
+            RetailConnectionSave.model_validate(
+                {
+                    "host": "127.0.0.1",
+                    "port": 55432,
+                    "database_name": "retail",
+                    "role": "fixture_a_east",
+                    "sslmode": "prefer",
+                    "retail_tenant_id": 101,
+                    "revision": 0,
+                    "password": "fixture-retail-password",
+                }
+            ),
+        )
         with Session(engine) as session:
             session.add(
                 Provider(
@@ -273,6 +438,7 @@ def test_restores_data_and_encrypted_values_into_new_owned_database(targets):
                     api_model="deepseek-v4-pro",
                     sdk_model="deepseek/deepseek-v4-pro",
                     alias="restore fixture",
+                    generation_profile={"defaults": {"max_tokens": 1024}},
                     kind="llm",
                     adapter="litellm_chat",
                     base_url="https://api.deepseek.com",
@@ -294,19 +460,32 @@ def test_restores_data_and_encrypted_values_into_new_owned_database(targets):
         connection.execute("INSERT INTO demo_daily_sales VALUES ('2026-10-01',9999,9)")
     backup = pg_tool("pg_dump", source)
     assert len(backup) > 1000
-    _, destination = targets("restore")
+    restored_runtime, destination = targets("restore")
     pg_tool("pg_restore", destination, backup)
     assert schema(source, restored=True) == schema(destination, restored=True)
     assert db.migrate() == "already_applied"
+    restored_engine = create_engine(restored_runtime)
+    try:
+        revision, binding = DataConnections(restored_engine, retail_settings).test_target(
+            retail_scope
+        )
+        assert revision == 1 and binding is not None
+        assert conninfo_to_dict(binding.dsn.get_secret_value())["password"] == (
+            "fixture-retail-password"
+        )
+    finally:
+        restored_engine.dispose()
     with psycopg.connect(db.dsn(destination)) as connection:
         assert connection.execute("SELECT revenue_minor FROM demo_daily_sales").fetchone() == (
             9999,
         )
         restored = connection.execute(
-            "SELECT api_key_ciphertext FROM model_provider WHERE id=%s", (provider_id,)
+            "SELECT api_key_ciphertext, generation_profile FROM model_provider WHERE id=%s",
+            (provider_id,),
         ).fetchone()
         assert restored is not None
         assert secrets.open_key(provider_id, restored[0]) == "fixture-restore-key"
+        assert restored[1] == {"defaults": {"max_tokens": 1024}}
         for statement in [
             "UPDATE model_provider SET kind='unknown'",
             "UPDATE model_provider SET adapter='unknown'",
@@ -316,6 +495,59 @@ def test_restores_data_and_encrypted_values_into_new_owned_database(targets):
             with pytest.raises(psycopg.errors.CheckViolation):
                 with connection.transaction():
                     connection.execute(sql.SQL(cast(LiteralString, statement)))
+
+
+def seed_legacy_provider(runtime, secrets, actor_id):
+    body = ProviderCreate(
+        operation_id=uuid4(),
+        catalog_id="deepseek/deepseek-v4-pro",
+        api_model="deepseek-v4-pro",
+        alias="Pro",
+        base_url="https://api.deepseek.com",
+        api_key="legacy-fixture-key",
+        enabled=True,
+        chat_visible=True,
+    )
+    provider_id = uuid4()
+    fingerprint = secrets.fingerprint(
+        {
+            "provider_id": "None",
+            "command": body.model_dump(mode="json", exclude={"generation_profile"}),
+        }
+    )
+    with psycopg.connect(db.dsn(runtime)) as connection:
+        connection.execute(
+            """
+            INSERT INTO model_provider (
+                id, catalog_id, vendor, api_model, sdk_model, alias, kind, adapter,
+                base_url, api_key_ciphertext, enabled, chat_visible,
+                version, binding_version, created_at, updated_at, updated_by
+            ) VALUES (
+                %s, %s, 'deepseek', %s, %s, %s, 'llm', 'litellm_chat',
+                %s, %s, true, true, 1, 1, now(), now(), %s
+            )
+            """,
+            (
+                provider_id,
+                body.catalog_id,
+                body.api_model,
+                body.catalog_id,
+                body.alias,
+                body.base_url,
+                secrets.seal_key(provider_id, body.api_key),
+                actor_id,
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO model_change (
+                operation_id, provider_id, actor_user_id, request_mac, after_version,
+                changed_fields, created_at
+            ) VALUES (%s,%s,%s,%s,1,'[]',now())
+            """,
+            (body.operation_id, provider_id, actor_id, fingerprint),
+        )
+    return body, provider_id
 
 
 @pytest.mark.parametrize("mode", ["native", "sql"])
@@ -328,7 +560,7 @@ def test_upgrades_0002_decision_preserving_provider_secrets_and_history(targets,
     from compass_agent.schemas import DecisionInput, DecisionQuestion
 
     from .provider_fixture import ProviderFixture
-    from .test_models import ORIGINS, TEST, create, invoke
+    from .test_models import MANAGE, ORIGINS, TEST, invoke
 
     runtime, migration = targets("legacydecision")
     assert db.migrate(target="0002") == "applied"
@@ -338,7 +570,7 @@ def test_upgrades_0002_decision_preserving_provider_secrets_and_history(targets,
     upstream = ProviderFixture()
     service = ModelService(repo, create_runtime(secrets, upstream.transport), gate=ExecutionGate())
     try:
-        body, saved = create(repo)
+        body, provider_id = seed_legacy_provider(runtime, secrets, MANAGE.actor_user_id)
         # Seed the historical layout with its own column list before upgrading.
         legacy_call_id = uuid4()
         with psycopg.connect(db.dsn(migration)) as connection:
@@ -348,7 +580,7 @@ def test_upgrades_0002_decision_preserving_provider_secrets_and_history(targets,
                 "requested_model,purpose,actor_user_id,capability_summary,status,started_at,"
                 "deadline_at,upstream_outcome_unknown) VALUES (%s,%s,1,1,%s,'test',%s,'[]',"
                 "'completed',now(),now()+interval '180 seconds',false)",
-                (legacy_call_id, saved.provider_id, body.api_model, TEST.actor_user_id),
+                (legacy_call_id, provider_id, body.api_model, TEST.actor_user_id),
             )
         with psycopg.connect(db.dsn(migration)) as connection:
             connection.execute("SET ROLE compass_agent_owner")
@@ -357,32 +589,34 @@ def test_upgrades_0002_decision_preserving_provider_secrets_and_history(targets,
                 "catalog_id='aliyun/decision-model-preview',vendor='aliyun', "
                 "api_model='decision-model-preview',sdk_model=NULL,chat_visible=false, "
                 "base_url='https://decision.example.com/compatible-mode/v1' WHERE id=%s",
-                (saved.provider_id,),
+                (provider_id,),
             )
             before = connection.execute(
-                "SELECT * FROM model_provider WHERE id=%s", (saved.provider_id,)
+                "SELECT * FROM model_provider WHERE id=%s", (provider_id,)
             ).fetchone()
         assert db.migrate(mode=mode, start="0002") == "applied"
         assert db.migrate(mode=mode) == "already_applied"
         with Session(engine) as session:
-            row = session.get(Provider, saved.provider_id)
+            row = session.get(Provider, provider_id)
             assert row is not None and row.adapter == "systemone_decision"
             assert row.version == row.binding_version == 1
             assert secrets.open_key(row.id, row.api_key_ciphertext) == body.api_key
         with psycopg.connect(db.dsn(migration)) as connection:
             after = connection.execute(
-                "SELECT * FROM model_provider WHERE id=%s", (saved.provider_id,)
+                "SELECT * FROM model_provider WHERE id=%s", (provider_id,)
             ).fetchone()
         assert before is not None and after is not None
         assert ["systemone_decision" if v == "aliyun_decision" else v for v in before] == list(
-            after
+            after[:-1]
         )
-        assert repo.operation(body.operation_id).provider_id == saved.provider_id
+        assert after[-1] is None
+        assert repo.save(body, MANAGE).provider_id == provider_id
+        assert repo.operation(body.operation_id).provider_id == provider_id
         assert repo.call(legacy_call_id, TEST).status == "completed"
         result = asyncio.run(
             invoke(
                 service,
-                saved.provider_id,
+                provider_id,
                 DecisionInput(
                     state="保留配置测试",
                     questions={"ok": DecisionQuestion(type="noul", instructions="是否可用？")},
@@ -398,7 +632,7 @@ def test_upgrades_0002_decision_preserving_provider_secrets_and_history(targets,
 def test_0003_upgrade_preserves_call_history_and_adds_nullable_execution(targets, mode):
     from compass_agent.models.repository import ModelRepository
 
-    from .test_models import ORIGINS, TEST, create
+    from .test_models import MANAGE, ORIGINS, TEST
 
     runtime, migration = targets("execution")
     assert db.migrate(target="0003") == "applied"
@@ -406,7 +640,7 @@ def test_0003_upgrade_preserves_call_history_and_adds_nullable_execution(targets
     try:
         secrets = SecretStore(Fernet.generate_key().decode())
         repo = ModelRepository(engine, secrets, ORIGINS)
-        body, saved = create(repo)
+        body, provider_id = seed_legacy_provider(runtime, secrets, MANAGE.actor_user_id)
         call_id = uuid4()
         with psycopg.connect(db.dsn(migration)) as connection:
             connection.execute("SET ROLE compass_agent_owner")
@@ -415,12 +649,12 @@ def test_0003_upgrade_preserves_call_history_and_adds_nullable_execution(targets
                 "requested_model,purpose,actor_user_id,capability_summary,status,started_at,"
                 "deadline_at,upstream_outcome_unknown) VALUES (%s,%s,1,1,%s,'test',%s,'[]',"
                 "'completed',now(),now()+interval '180 seconds',false)",
-                (call_id, saved.provider_id, body.api_model, TEST.actor_user_id),
+                (call_id, provider_id, body.api_model, TEST.actor_user_id),
             )
         assert db.migrate(mode=mode, start="0003") == "applied"
         assert repo.call(call_id, TEST).execution is None
         assert repo.call(call_id, TEST).status == "completed"
-        assert repo.operation(body.operation_id).provider_id == saved.provider_id
+        assert repo.operation(body.operation_id).provider_id == provider_id
         with psycopg.connect(db.dsn(runtime)) as connection:
             connection.execute(
                 "UPDATE model_call SET execution=%s WHERE call_id=%s", ('{"version": 1}', call_id)
@@ -430,3 +664,390 @@ def test_0003_upgrade_preserves_call_history_and_adds_nullable_execution(targets
             ).fetchone() == ("1",)
     finally:
         engine.dispose()
+
+
+@pytest.mark.parametrize("mode", ["native", "sql"])
+def test_0006_upgrade_adds_workflow_assets_without_broadening_runtime_grants(targets, mode):
+    runtime, _ = targets("workflow_" + mode)
+    assert db.migrate(target="0006") == "applied"
+    with psycopg.connect(db.dsn(runtime)) as connection:
+        connection.execute("INSERT INTO demo_daily_sales VALUES ('2026-11-11',12345,7)")
+    assert db.migrate(mode=mode, start="0006") == "applied"
+    assert db.migrate(mode=mode) == "already_applied"
+    with psycopg.connect(db.dsn(runtime)) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            db.TARGET,
+        )
+        assert connection.execute("SELECT revenue_minor FROM demo_daily_sales").fetchone() == (
+            12345,
+        )
+        assert connection.execute(
+            """
+            SELECT has_table_privilege('workflow_asset','INSERT'),
+                   has_column_privilege('workflow_asset','name','UPDATE'),
+                   has_column_privilege('workflow_asset','script_source','UPDATE')
+            """
+        ).fetchone() == (True, True, False)
+
+
+@pytest.mark.parametrize("mode", ["native", "sql"])
+def test_0010_session_upgrade_keeps_historical_titles(targets, mode):
+    runtime_url, _ = targets("session_upgrade_" + mode)
+    assert db.migrate(target="0010") == "applied"
+    ids = [uuid4() for _ in range(4)]
+    with psycopg.connect(db.dsn(runtime_url)) as connection:
+        connection.execute(
+            "INSERT INTO agent_session "
+            "(id, tenant_id, workspace_id, owner_user_id, title, session_type, "
+            "version, context_start_ordinal, created_at, updated_at) "
+            "VALUES (%s,%s,%s,%s,'已有标题','chat',1,1,now(),now())",
+            ids,
+        )
+    assert db.migrate(mode=mode, start="0010") == "applied"
+    assert db.migrate(mode=mode, start="0010") == "already_applied"
+    with psycopg.connect(db.dsn(runtime_url)) as connection:
+        assert connection.execute(
+            "SELECT title,title_status,title_attempts,title_next_at,deleted_at "
+            "FROM agent_session WHERE id=%s",
+            (ids[0],),
+        ).fetchone() == ("已有标题", "fallback", 0, None, None)
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            connection.execute("DELETE FROM agent_session WHERE id=%s", (ids[0],))
+
+
+@pytest.mark.parametrize("mode", ["native", "sql"])
+def test_0011_workflow_upgrade_preserves_old_assets_and_immutable_contracts(targets, mode):
+    runtime, _ = targets("dynamic_workflow_" + mode)
+    assert db.migrate(target="0011") == "applied"
+    old_id, new_id, tenant, workspace, owner = [uuid4() for _ in range(5)]
+    with psycopg.connect(db.dsn(runtime)) as connection:
+        connection.execute(
+            """
+            INSERT INTO workflow_asset
+                (asset_id, tenant_id, workspace_id, owner_user_id, name,
+                 entry_contract, script_source, script_sha256)
+            VALUES (%s,%s,%s,%s,'旧工作流','channel_attribution@1','return 1',%s)
+            """,
+            (old_id, tenant, workspace, owner, b"0" * 32),
+        )
+    assert db.migrate(mode=mode, start="0011") == "applied"
+    assert db.migrate(mode=mode, start="0011") == "already_applied"
+    with psycopg.connect(db.dsn(runtime)) as connection:
+        assert connection.execute(
+            "SELECT entry_contract, script_source, description, parameters "
+            "FROM workflow_asset WHERE asset_id = %s",
+            (old_id,),
+        ).fetchone() == ("channel_attribution@1", "return 1", None, None)
+        connection.execute(
+            """
+            INSERT INTO workflow_asset
+                (asset_id, tenant_id, workspace_id, owner_user_id, name,
+                 entry_contract, script_source, script_sha256, description, parameters)
+            VALUES (%s,%s,%s,%s,'新工作流','agent_workflow@1','return 2',%s,
+                    '复盘经营数据','{"type":"object"}')
+            """,
+            (new_id, tenant, workspace, owner, b"1" * 32),
+        )
+        assert connection.execute(
+            """
+            SELECT has_column_privilege('workflow_asset','name','UPDATE'),
+                   has_column_privilege('workflow_asset','description','UPDATE'),
+                   has_column_privilege('workflow_asset','parameters','UPDATE')
+            """
+        ).fetchone() == (True, False, False)
+
+
+@pytest.mark.parametrize("mode", ["native", "sql"])
+def test_workflow_deletion_keeps_history_and_allows_saving_the_same_script(targets, mode):
+    runtime, _ = targets("workflow_delete_" + mode)
+    assert db.migrate(target="0013") == "applied"
+    context = TrustedContext(
+        actor_user_id=uuid4(),
+        scope=TenantScope(kind="tenant", tenant_id=uuid4(), workspace_id=uuid4()),
+        purpose="chat",
+    )
+    assert isinstance(context.scope, TenantScope)
+    asset_id = uuid4()
+    with psycopg.connect(db.dsn(runtime)) as connection:
+        connection.execute(
+            """
+            INSERT INTO workflow_asset
+                (asset_id, tenant_id, workspace_id, owner_user_id, name, entry_contract,
+                 script_source, script_sha256, description, parameters)
+            VALUES (%s,%s,%s,%s,'旧资产','agent_workflow@1','return 1',
+                    sha256(convert_to('return 1','UTF8')),'原说明','{"type":"object"}')
+            """,
+            (asset_id, context.scope.tenant_id, context.scope.workspace_id, context.actor_user_id),
+        )
+    assert db.migrate(mode=mode, start="0013") == "applied"
+    engine = create_engine(runtime)
+    assets = WorkflowAssets(engine)
+    try:
+        assert [item.asset_id for item in assets.active_tools(context, limit=10)] == [asset_id]
+        other = context.model_copy(update={"actor_user_id": uuid4()})
+        with pytest.raises(ModelError, match="not_found"):
+            assets.delete(other, asset_id, 1)
+        with pytest.raises(ModelError, match="version_conflict"):
+            assets.delete(context, asset_id, 2)
+        assets.delete(context, asset_id, 1)
+        assets.delete(context, asset_id, 1)
+        assert assets.list(context).items == assets.active_tools(context, limit=10) == []
+        with pytest.raises(ModelError, match="not_found"):
+            assets.get(context, asset_id, active=True)
+        with pytest.raises(ModelError, match="not_found"):
+            assets.patch(
+                context,
+                asset_id,
+                WorkflowAssetPatch(name="恢复", status="active", metadataRevision=2),
+            )
+        with Session(engine) as session:
+            deleted = session.get(WorkflowAsset, asset_id)
+            assert deleted and deleted.deleted_at and deleted.script_source == "return 1"
+        with psycopg.connect(db.dsn(runtime)) as connection:
+            assert connection.execute(
+                "SELECT has_table_privilege('workflow_asset','DELETE')"
+            ).fetchone() == (False,)
+        parameters = {"type": "object"}
+        new_asset = assets.save(
+            context,
+            "重新保存",
+            "return 1",
+            DYNAMIC_CONTRACT,
+            description="新说明",
+            parameters=parameters,
+        )
+        assert new_asset.asset_id != asset_id
+        assert assets.get(context, new_asset.asset_id, active=True).name == "重新保存"
+        assert (
+            assets.save(
+                context,
+                "再次保存",
+                "return 1",
+                DYNAMIC_CONTRACT,
+                description="新说明",
+                parameters=parameters,
+            ).asset_id
+            == new_asset.asset_id
+        )
+    finally:
+        engine.dispose()
+
+
+def test_session_title_jobs_and_soft_delete(targets):
+    import asyncio
+    from uuid import UUID
+
+    from compass_agent.llm.admission import ExecutionGate
+    from compass_agent.models.repository import ModelRepository
+    from compass_agent.models.service import ModelService, create_runtime
+    from compass_agent.runtime.entities import AgentRun
+    from compass_agent.runtime.message_reader import MessageReader
+    from compass_agent.runtime.session_management import (
+        claim_title,
+        finish_title,
+        process_titles,
+        update_session,
+    )
+    from compass_agent.runtime.store import RuntimeStore, now, public_run
+    from compass_agent.schemas import (
+        MainModelSelection,
+        SessionMutation,
+        SessionRename,
+        SessionSubmit,
+    )
+
+    from .provider_fixture import ProviderFixture
+    from .test_agent_run import CHAT
+    from .test_models import ORIGINS, create
+
+    url, _ = targets("session_metadata")
+    assert db.migrate() == "applied"
+    engine = create_engine(url)
+    store = RuntimeStore(engine, Fernet.generate_key().decode())
+    store.ready = True
+    reader = MessageReader(store)
+    try:
+        first = SessionSubmit(
+            requestId=uuid4(),
+            question="比较两周\n门店渠道实付的变化",
+            selection=MainModelSelection(mode="auto"),
+        )
+        created = store.submit(first, CHAT)
+        assert store.submit(first, CHAT) == created
+        session_id, run_id = UUID(created["sessionId"]), UUID(created["runId"])
+        assert created["session"]["title"] == "比较两周 门店渠道实付的变化"
+        assert created["session"]["titleStatus"] == "pending"
+        original_time = created["session"]["updatedAt"]
+        job = claim_title(store)
+        assert job is not None and job.question == first.question and job.attempt == 1
+        assert claim_title(store) is None
+        foreign = CHAT.model_copy(update={"actor_user_id": uuid4()})
+        rename = SessionRename(requestId=uuid4(), title="  门店复盘  ")
+        with pytest.raises(ModelError, match="not_found"):
+            update_session(store, session_id, rename, foreign)
+        manual = update_session(store, session_id, rename, CHAT)
+        assert manual == update_session(store, session_id, rename, CHAT)
+        finish_title(store, job, "迟到的自动标题")
+        assert reader.session(session_id, CHAT)["title"] == "门店复盘"
+        assert reader.session(session_id, CHAT)["updatedAt"] == original_time
+        deletion = SessionMutation(requestId=uuid4())
+        with pytest.raises(ModelError, match="session_busy"):
+            update_session(store, session_id, deletion, CHAT)
+        with store.transaction() as tx:
+            run = tx.get(AgentRun, run_id)
+            assert run is not None
+            run.status = "completed"
+            run.finished_at = now()
+            run.public_view = {**run.public_view, "run": public_run(run)}
+        assert update_session(store, session_id, deletion, CHAT) == {"sessionId": str(session_id)}
+        assert update_session(store, session_id, deletion, CHAT) == {"sessionId": str(session_id)}
+        assert update_session(store, session_id, SessionMutation(requestId=uuid4()), CHAT) == {
+            "sessionId": str(session_id)
+        }
+        assert not reader.sessions(CHAT).items
+        with pytest.raises(ModelError, match="not_found"):
+            reader.messages(session_id, CHAT)
+        with pytest.raises(ModelError, match="not_found"):
+            store.artifact(run_id, uuid4(), CHAT)
+        with pytest.raises(ModelError, match="not_found"):
+            store.submit(first, CHAT)
+        repository = ModelRepository(engine, SecretStore(Fernet.generate_key().decode()), ORIGINS)
+        _, provider = create(repository)
+        fixture = ProviderFixture()
+        models = ModelService(
+            repository, create_runtime(repository.secrets, fixture.transport), gate=ExecutionGate()
+        )
+        second = store.submit(
+            first.model_copy(
+                update={
+                    "request_id": uuid4(),
+                    "selection": MainModelSelection(mode="fixed", provider_id=provider.provider_id),
+                }
+            ),
+            CHAT,
+        )
+
+        async def wait_for_generated_title():
+            async def allowed(context):
+                assert context == CHAT
+
+            task = asyncio.create_task(process_titles(store, allowed, lambda: models, lambda: True))
+            try:
+                async with asyncio.timeout(5):
+                    while True:
+                        item = await asyncio.to_thread(
+                            reader.session, UUID(second["sessionId"]), CHAT
+                        )
+                        if item["titleStatus"] == "generated":
+                            return item["title"]
+                        await asyncio.sleep(0.05)
+            finally:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
+        generated = asyncio.run(wait_for_generated_title())
+        assert generated == "这是模型测试回复。"
+        sent = json.loads(fixture.requests[0].content)
+        assert sent["messages"][-1]["content"] == first.question
+        assert sent["stream"] is False and not sent.get("tools")
+        item = reader.sessions(CHAT).items[0]
+        assert item.title == generated and item.title_status == "generated"
+        assert item.updated_at == second["session"]["updatedAt"]
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("mode", ["native", "sql"])
+def test_0008_upgrade_backfills_attempt_summaries_without_inventing_content(targets, mode):
+    from .test_models import MANAGE, TEST
+
+    runtime, migration = targets("attempts_" + mode)
+    assert db.migrate(target="0008") == "applied"
+    engine = create_engine(runtime)
+    try:
+        secrets = SecretStore(Fernet.generate_key().decode())
+        body, provider_id = seed_legacy_provider(runtime, secrets, MANAGE.actor_user_id)
+        call_id, first_attempt = uuid4(), uuid4()
+        historical = {
+            "version": 1,
+            "attempts": [
+                {
+                    "attempt_id": str(first_attempt),
+                    "status": "failed",
+                    "sent": True,
+                    "cleanup_confirmed": True,
+                    "upstream_outcome_unknown": False,
+                    "error_code": "upstream_unavailable",
+                    "usage": {"input_tokens": 12},
+                },
+                {"status": "completed", "sent": True, "duration_ms": 10},
+            ],
+        }
+        with psycopg.connect(db.dsn(migration)) as connection:
+            connection.execute("SET ROLE compass_agent_owner")
+            connection.execute(
+                "INSERT INTO model_call (call_id,provider_id,config_version,binding_version,"
+                "requested_model,purpose,actor_user_id,capability_summary,status,started_at,"
+                "deadline_at,upstream_outcome_unknown,execution) VALUES (%s,%s,1,1,%s,'test',"
+                "%s,'[]','completed',now(),now()+interval '180 seconds',false,%s)",
+                (
+                    call_id,
+                    provider_id,
+                    body.api_model,
+                    TEST.actor_user_id,
+                    json.dumps(historical),
+                ),
+            )
+        assert db.migrate(mode=mode, start="0008") == "applied"
+        assert db.migrate(mode=mode) == "already_applied"
+        with psycopg.connect(db.dsn(runtime)) as connection:
+            rows = connection.execute(
+                "SELECT id,number,status,origin,request_content,output_content,"
+                "actual_cost_microusd,usage FROM model_attempt WHERE call_id=%s ORDER BY number",
+                (call_id,),
+            ).fetchall()
+            assert len(rows) == 2 and rows[0][0] == first_attempt
+            assert [row[1:4] for row in rows] == [
+                (1, "failed", "legacy_summary"),
+                (2, "completed", "legacy_summary"),
+            ]
+            assert all(row[4:7] == (None, None, None) for row in rows)
+            assert rows[0][7] == {"input_tokens": 12} and rows[1][7] == {}
+            assert connection.execute(
+                "SELECT request_content,output_content FROM model_call WHERE call_id=%s",
+                (call_id,),
+            ).fetchone() == (None, None)
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("mode", ["native", "sql"])
+def test_0012_provider_upgrade_preserves_binding_and_defaults_to_null(targets, mode):
+    runtime, _ = targets("model_profile_" + mode)
+    assert db.migrate(target="0012") == "applied"
+    provider_id, actor_id = uuid4(), uuid4()
+    with psycopg.connect(db.dsn(runtime)) as connection:
+        connection.execute(
+            """
+            INSERT INTO model_provider (
+                id, catalog_id, vendor, api_model, sdk_model, alias, kind, adapter,
+                base_url, api_key_ciphertext, enabled, chat_visible,
+                version, binding_version, created_at, updated_at, updated_by
+            ) VALUES (
+                %s, 'deepseek/deepseek-chat', 'deepseek', 'deepseek-chat',
+                'deepseek/deepseek-chat', 'Legacy profile', 'llm', 'litellm_chat',
+                'https://api.deepseek.com', 'legacy-ciphertext', true, true, 2, 1, now(), now(), %s
+            )
+            """,
+            (provider_id, actor_id),
+        )
+    assert db.migrate(mode=mode, start="0012") == "applied"
+    assert db.migrate(mode=mode, start="0012") == "already_applied"
+    with psycopg.connect(db.dsn(runtime)) as connection:
+        assert connection.execute(
+            """
+            SELECT generation_profile, api_key_ciphertext, version, binding_version
+            FROM model_provider WHERE id=%s
+            """,
+            (provider_id,),
+        ).fetchone() == (None, "legacy-ciphertext", 2, 1)

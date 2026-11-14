@@ -4,7 +4,10 @@ from datetime import date
 
 from sqlalchemy.orm import Session
 
+from compass_agent.data_connections.connections import DataConnections
 from compass_agent.database import DemoSale, get_engine
+from compass_agent.models.errors import ModelError
+from compass_agent.settings import get_settings
 
 FIXTURE = [
     (date(2026, 10, 1), 1280000, 128),
@@ -20,9 +23,15 @@ def seed(session: Session) -> None:
 
 
 def main() -> None:
-    with Session(get_engine()) as session:
+    engine, settings = get_engine(), get_settings()
+    with Session(engine) as session:
         seed(session)
     print("Compass synthetic fixture ready (3 days).")
+    try:
+        if DataConnections(engine, settings).seed_default(settings):
+            print("Compass default Retail connection registered.")
+    except ModelError as error:
+        raise SystemExit(f"Retail connection initialization failed ({error.code}).") from None
 
 
 if __name__ == "__main__":

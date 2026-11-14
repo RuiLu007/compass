@@ -1,10 +1,10 @@
 # Web / BFF
 
-Next.js App Router + React + TypeScript。UI 与 BFF 在一个 Node 服务中部署。当前交付 [Feature 995](../../mai-specs/995-web-management-foundation/README.md)：本地账号、数据库会话、租户与工作区、直接成员、固定模板和个人权限、个人设置、通知与审计，以及原型完整导航框架。Feature 993 增加平台模型路由管理、测试与分析 Chat 模型选择；Feature 989 将 Chat 接入同步 Agent Run，展示多轮 Retail 工具过程、最终回答和 CSV，并支持终止。决策模型仍仅在管理端测试。通用文件上传、报告、看板、插件、定时及其余 Agent/Memory 管理保持待接入状态。
+Next.js App Router + React + TypeScript。UI 与 BFF 在一个 Node 服务中部署。当前交付 [Feature 995](../../mai-specs/995-web-management-foundation/README.md)：本地账号、数据库会话、租户与工作区、直接成员、固定模板和个人权限、个人设置、通知与审计，以及原型完整导航框架。Feature 993 增加平台模型路由管理、测试与分析 Chat 模型选择；Feature 989 将 Chat 接入同步 Agent Run，展示通用工具过程、最终回答和产物，并支持终止。决策模型仍仅在管理端测试。通用文件上传、报告、看板、插件、定时及其余 Agent/Memory 管理保持待接入状态。
 
 ## 启动与账号
 
-第 14 课在平台模型管理页增加“调用观测”、本实例导出状态与两模型只读对比；Trace 详情进入独立登录的本地 Langfuse。Chat / 测试收到响应头后显示本轮观测编号，取消和断流时保留。平台 API 沿用管理员鉴权，浏览器 Trace Context 不进入内部链路。部署与数据边界见 [观测运行说明](../../deploy/observability/README.md)。
+第 14 课在平台模型管理页增加“调用观测”、本实例导出状态与两模型只读对比；Trace 详情进入独立登录的本地 Langfuse。Provider 诊断收到响应头后可显示观测编号，分析 Chat 的观测编号可从 Run 响应头取得。平台 API 沿用管理员鉴权，浏览器 Trace Context 不进入内部链路。部署与数据边界见 [观测运行说明](../../deploy/observability/README.md)。
 
 从 Compass 根目录复制 `.env.example` 到 `.env`，安装依赖后执行：
 
@@ -38,6 +38,10 @@ pnpm dev -F web
 
 样式扫描限定在 `src/`，避免开发日志、测试产物与缓存变化触发热更新。
 
+## UI 规范与组件演示
+
+[Compass UI 样式规范](../../docs/ui-style-guide.md)统一基础样式、组件状态、代码展示和交互。启动 Web 并登录后，在「体验指南」（`/guide`）查看和操作实际组件。
+
 ## 验证
 
 ```bash
@@ -65,30 +69,42 @@ pnpm test:e2e -F web
 
 平台入口 `/platform/models` 不要求租户成员身份；租户“Agent 与能力 → 模型路由”仅提供开放摘要。Chat 同时要求分析入口与 `models.invoke`，升级不自动授予新动作。BFF 在授权事务结束后调用 Agent，使用服务端 `AGENT_API_URL` 与 `COMPASS_AGENT_SERVICE_TOKEN`，不接收浏览器声明的内部身份。Provider 凭据只由 Agent 加密保存，Web 数据库不保存副本。配置步骤见 [Agent 模型接入](../agent/README.md#模型接入)。
 
-模型浏览器测试需要额外启动 `apps/agent/tests/e2e_app.py`，配置专用 Agent 测试数据库、同一服务令牌和加密密钥，并使 `AGENT_API_URL` 指向该宿主。它只替换上游 HTTP，Web、BFF、Agent API 与数据库均实际运行。Playwright 使用 `.next-e2e` 独立输出目录，保留日常开发服务。真实供应商验收单独记录在 [993 实施记录](../../mai-specs/993-lesson-11-llm-runtime/IMPLEMENTATION.md)。
+模型浏览器测试需要额外启动 `apps/agent/tests/e2e_app.py`，配置专用 Agent 测试数据库、同一服务令牌和加密密钥，并使 `AGENT_API_URL` 指向该宿主。它只替换上游 HTTP，Web、BFF、Agent API 与数据库均实际运行。Playwright 使用 `.next-e2e-<端口>` 独立输出目录，保留日常开发服务。真实供应商验收单独记录在 [993 实施记录](../../mai-specs/993-lesson-11-llm-runtime/IMPLEMENTATION.md)。
 
 模型目录复用 LiteLLM 支持的生成模型协议，添加 Provider 支持手工 `provider/model` 标识。Base URL 留空使用 SDK 默认；API Key 与供应商连接参数均只写不回显。连接参数 JSON 可配置 Azure 版本、Bedrock 区域及原生认证等，留空保留，`{}` 清空。Chat 按生成模型类型、启用状态、平台可见性和用户权限开放。
 
 ## 切换应用与页面状态
 
-切换 App 或标签页时界面、滚动位置、草稿、附件、聊天与在途生成保持原样。离开和返回不触发遮蔽、禁用、刷新或恢复复验；定时会话检查静默执行，临时失败不影响当前界面。登录失效、权限变更、离线及文档离开仍清理旧内容；页面内存不跨整页刷新持久保存。
+切换 App 或标签页时界面、滚动位置、草稿、附件、聊天与在途生成保持原样。离开和返回不触发遮蔽、禁用、刷新或恢复复验；定时会话检查静默执行，临时失败不影响当前界面。登录失效、权限变更、离线及文档离开仍清理旧内容；分析会话从 Agent Message 恢复到稳定 URL；整页刷新保留已提交消息、执行过程、审批和产物，未提交草稿与附件仍保存在页面内存。参见 [第 19 课](../../docs/lesson-19-durable-runtime.md)。
 
 ## 意图分流与响应
 
-分析输入框可选择静态主模型或“系统优化”，每轮仍只向 `models/calls` 发起一次请求。Agent 返回两级 `intent`、字典 `features`、契约 `routing`、Runtime `result` 与 `metrics`；回答下方“意图分类与响应结构”可展开查看。闲聊命中 `SC-39` 后使用独立 prompt 调用 Flash 婉拒，并询问业务数据任务。
+分析输入框可选择静态主模型或“系统优化”，每次发送创建一个 Run。Agent 先分类和选模，再用 `run.routed` 返回实际模型、场景和工具启用状态。闲聊命中 `SC-39` 后使用独立提示词调用 Flash 婉拒，并询问业务数据任务。
 
-BFF 与页面分别校验 `RoutedModelEvent` / `RoutedCallResponse`，实际 Provider 在 `route_selected` 后绑定；Provider 诊断继续沿用 `ModelEvent` / `CallResponse`。生成期间可停止，失败和不完整回答不进入成功上下文；分类详情仅保留在本页。浏览器验收位于 `tests/e2e/intent-routing.spec.ts`，使用独立Web/Agent PostgreSQL库及受控上游宿主。
+旧 `POST /api/web/v1/models/calls` 已下线。Provider 诊断继续使用 `ModelEvent` / `CallResponse`，调用记录仍可按 ID 查询。浏览器路由验收位于 `tests/e2e/intent-routing.spec.ts`，使用独立 Web / Agent PostgreSQL 库和受控上游。
 
-## Agent Run 与 Retail 分析
+## Agent Run 与通用分析
 
 分析 Chat 的发送入口为 `POST /api/web/v1/analysis/runs`，停止入口为 `POST /api/web/v1/analysis/runs/{runId}/cancel`。两者复用同源、CSRF、有效工作区、`module.analysis` 与 `models.invoke` 检查；授权事务提交后，BFF 才携服务端可信主体请求 Agent。浏览器不能传内部身份、Retail 账号或连接信息。
 
-BFF 严格校验 `compass.run` v1 的 UTF-8 SSE、包 Schema、序号、Run / Step / ToolCall 生命周期、唯一终态、文件来源和干净 EOF，再重新编号转发。页面按 Step 显示工具卡，只有成功终态在完整 EOF 后提交 `finalAnswer`、历史和 Blob 文件。重置对话、退出、权限版本变化或范围切换会中止活动请求并撤销下载 URL。
+BFF 严格校验 `compass.run` v1 的 UTF-8 SSE、包 Schema、序号、Run / Step / ToolCall 生命周期、唯一终态、文件来源和干净 EOF，再重新编号转发。页面显示简短进度，按执行顺序展示查询卡片。完整 EOF 后提交成功终态，以 Markdown 渲染 `finalAnswer` 并展示可用文件，追问历史保存回答原文。重置对话、退出、权限版本变化或范围切换会中止活动请求并撤销下载 URL。
 
-当前部署要求 Agent 单进程、单副本。Retail 发布绑定只配置在 Agent；Web 只使用当前会话范围。课堂配置、对照 SQL 和停止演示见 [第 15 课复现说明](../../docs/lesson-15-agent-run.md)。
+排查时从 Run 的 `step.started` 事件取得模型调用编号，按 ID 查询调用记录。
+
+平台管理员可在工作区的「数据与语义 → 数据连接」新增、编辑和测试多条 PostgreSQL 或 MySQL 连接。配置保存在 Agent 应用库，Web 校验活跃工作区、数据模块权限及管理权限后转发请求。PostgreSQL 查询工具发现当前工作区获授权的连接与表，模型自行查询；现有 Retail 连接继续保留。当前部署要求 Agent 单进程、单副本。默认连接初始化、对照 SQL 和停止演示见 [第 15 课复现说明](../../docs/lesson-15-agent-run.md)。
 
 ## 可靠性模拟测试
 
 平台管理员进入 `/platform/models`（Agent 与模型）即可运行 11 个固定场景：正常、429/503 恢复、次数耗尽、认证失败、超时、半途断流、Schema 拦截、取消、并发过载及关闭失败隔离。页面展示真实事件、预览、尝试摘要、未知用量、容量及可提交结果；无需模型密钥。普通租户用户不能访问模拟接口。
 
-Chat 与 Provider 诊断均在唯一 final 及干净 EOF 后提交成功结果；失败时清除嵌套终态与续接 token。普通调用详情展示 execution 摘要，旧记录没有明细时保持原显示。浏览器验收位于 `tests/e2e/reliability.spec.ts`，使用独立 PostgreSQL 测试库及 Agent。
+Chat Run 与流式 Provider 诊断均在唯一终态及干净 EOF 后提交成功结果。普通调用详情展示 execution 摘要，旧记录没有明细时保持原显示。浏览器验收位于 `tests/e2e/reliability.spec.ts`，使用独立 PostgreSQL 测试库及 Agent。
+
+## 分析计划面板
+
+分析 Chat 将当前 Run 的 Todo 显示在输入框上方。用「先列计划 · 渠道与商品诊断」填入预置问题。Agent 启用与课堂配置见 [第 16 课运行说明](../../docs/lesson-16-controlled-autonomy.md)。
+
+## 统一执行过程
+
+分析 Chat 使用 `UiExecutionTimeline` 展示运行事件。运行时默认折叠，单行显示最近更新的事件和用时。展开后按时间排列思考与工具等事件，支持独立查看公开详情。完成时自动折叠为完成状态和总用时。`/guide#ui-execution` 演示同一个组件的状态和详情交互。样式遵循[全局 UI 规范](../../docs/ui-style-guide.md)。
+
+课程案例按钮只填普通问题和通用约束。默认工具为 Todo、数据库查询与可用时的 Python，另按用户配置加载 MCP。Workflow 页面保留历史资产查看、改名、启停和脚本导出，旧执行契约已停止。临时课程能力按 [Showcase 规范](../../examples/showcases/README.md) 独立管理。

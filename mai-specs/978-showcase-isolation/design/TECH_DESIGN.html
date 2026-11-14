@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="zh-CN" data-generated-by="my-render-design-html">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Showcase 隔离与 Agent 能力收敛</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&amp;icon_names=account_tree,code,database,folder,route&amp;display=block"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.11.1/styles/github.min.css"
+      media="(prefers-color-scheme: light)"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.11.1/styles/github-dark.min.css"
+      media="(prefers-color-scheme: dark)"
+    />
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.11.1/highlight.min.js"
+    ></script>
+    <!-- 下方样式和首屏 SVG 是示例，可按方案主题调整配色、字体与构图。 -->
+    <style>
+      :root {
+        color-scheme: light dark;
+        --system-accent: #315db6;
+        --accent: var(--project-accent, var(--system-accent));
+        --page: #f7f8fa;
+        --panel: #fff;
+        --soft: #eff1f5;
+        --ink: #172132;
+        --muted: #515d6d;
+        --line: #d9dee7;
+        font-family: system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: var(--page);
+        color: var(--ink);
+      }
+      @supports (color: AccentColor) {
+        :root {
+          --system-accent: AccentColor;
+        }
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --page: #12161e;
+          --panel: #1a202b;
+          --soft: #222a38;
+          --ink: #edf0f5;
+          --muted: #b1bdd0;
+          --line: #384353;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        max-width: 76rem;
+        margin: 0 auto;
+        padding: 0 clamp(1rem, 4vw, 3.5rem);
+        line-height: 1.7;
+        accent-color: var(--accent);
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      a {
+        color: inherit;
+        text-decoration-color: var(--accent);
+        text-underline-offset: 0.25em;
+      }
+      p,
+      ul {
+        margin: 0.6rem 0 0;
+      }
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        line-height: 1.25;
+      }
+      h1 {
+        font-size: clamp(2.35rem, 4.4vw, 3.75rem);
+        letter-spacing: -0.045em;
+        text-wrap: balance;
+      }
+      h2 {
+        font-size: clamp(1.45rem, 3vw, 2rem);
+      }
+      h3 {
+        font-size: 1.12rem;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+        gap: clamp(1.25rem, 4vw, 3rem);
+        align-items: center;
+        padding-block: clamp(2.5rem, 8vw, 6rem) clamp(1.75rem, 5vw, 3.5rem);
+        border-top: 4px solid var(--accent);
+      }
+      .eyebrow {
+        margin: 0 0 0.8rem;
+        color: var(--muted);
+        font-size: 0.85rem;
+        font-weight: 650;
+      }
+      .lead {
+        max-width: 32em;
+        margin-top: 1rem;
+        color: var(--muted);
+        font-size: 1.1rem;
+      }
+      .hero-graphic,
+      .diagram,
+      .table-scroll {
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 1rem;
+        background: var(--panel);
+      }
+      .hero-graphic {
+        margin: 0;
+        padding: clamp(0.6rem, 1.6vw, 1.15rem);
+      }
+      .hero-graphic svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        color: var(--ink);
+      }
+      .hero-graphic .track {
+        fill: none;
+        stroke: var(--line);
+      }
+      .hero-graphic .route {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 2.5;
+      }
+      .hero-graphic .arrow {
+        fill: var(--accent);
+      }
+      .hero-graphic .node {
+        fill: var(--panel);
+        stroke: var(--line);
+        stroke-width: 1.5;
+      }
+      .hero-graphic .node-primary {
+        fill: var(--soft);
+        stroke: var(--accent);
+        stroke-width: 2;
+      }
+      .hero-graphic .node-kind {
+        fill: var(--muted);
+        font-size: 15px;
+      }
+      .hero-graphic .node-label {
+        fill: currentColor;
+        font-size: 21px;
+        font-weight: 650;
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem 1.25rem;
+        padding-block: 0.8rem;
+        border-block: 1px solid var(--line);
+        font-size: 0.92rem;
+      }
+      main {
+        padding-bottom: 4rem;
+      }
+      section {
+        padding-block: clamp(1.55rem, 4vw, 2.75rem);
+        border-bottom: 1px solid var(--line);
+      }
+      section > p,
+      section > ul {
+        max-width: 58em;
+      }
+      section > h3 {
+        margin-top: 1.4rem;
+      }
+      figure {
+        margin: 1rem 0 0;
+      }
+      .diagram,
+      .table-scroll {
+        padding: clamp(0.75rem, 2vw, 1.25rem);
+      }
+      .diagram-output,
+      .table-scroll,
+      pre {
+        overflow-x: auto;
+      }
+      .diagram-output > svg {
+        display: block;
+        width: clamp(calc(var(--diagram-width) * 0.85), 100%, var(--diagram-width));
+        max-width: none !important;
+        height: auto;
+        margin-inline: auto;
+      }
+      figcaption,
+      summary {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      .diagram-output:not([hidden]) + figcaption {
+        margin-top: 0.8rem;
+      }
+      summary {
+        cursor: pointer;
+        margin-top: 0.45rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+      }
+      th,
+      td {
+        padding: 0.5rem 0.7rem;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      pre,
+      code {
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      }
+      pre {
+        margin: 0.7rem 0 0;
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--line);
+        border-radius: 0.65rem;
+        background: var(--soft);
+        font-size: 0.88rem;
+        line-height: 1.6;
+        tab-size: 2;
+      }
+      pre > code.hljs {
+        padding: 0;
+        background: transparent;
+      }
+      :not(pre) > code {
+        overflow-wrap: anywhere;
+      }
+      .material-symbols-outlined {
+        display: none;
+      }
+      .symbols-ready .material-symbols-outlined {
+        display: inline-block;
+        margin-inline-end: 0.4rem;
+        vertical-align: -0.12em;
+        color: var(--muted);
+        font: normal 1.25rem/1 "Material Symbols Outlined";
+        font-feature-settings: "liga";
+        white-space: nowrap;
+      }
+      @media (max-width: 46rem) {
+        .hero {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="hero">
+      <div>
+        <p class="eyebrow">技术方案 · 已批准实施</p>
+        <h1>Showcase 隔离与 Agent 能力收敛</h1>
+        <p class="lead">
+          案例提供目标和数据，模型通过通用查询与代码执行完成任务。实现与验收记录见同级上层
+          IMPLEMENTATION.md。
+        </p>
+      </div>
+      <figure class="hero-graphic">
+        <svg viewBox="0 0 530 230" role="img" aria-labelledby="hero-title hero-desc">
+          <title id="hero-title">隔离演示与核心</title>
+          <desc id="hero-desc">普通问题进入 Agent，调用通用工具得到结果。</desc>
+          <defs>
+            <marker
+              id="hero-arrow"
+              markerWidth="8"
+              markerHeight="8"
+              refX="7"
+              refY="4"
+              orient="auto"
+            >
+              <path class="arrow" d="M0 0 L8 4 L0 8 Z"></path>
+            </marker>
+          </defs>
+          <path class="track" d="M18 43H512 M18 187H512 M265 16V214" stroke-dasharray="4 5"></path>
+          <path class="route" d="M145 116H186" marker-end="url(#hero-arrow)"></path>
+          <path class="route" d="M342 116H382" marker-end="url(#hero-arrow)"></path>
+          <rect class="node" x="14" y="81" width="130" height="70" rx="10"></rect>
+          <rect class="node-primary" x="187" y="69" width="155" height="94" rx="12"></rect>
+          <rect class="node" x="384" y="81" width="132" height="70" rx="10"></rect>
+          <g text-anchor="middle">
+            <text class="node-kind" x="79" y="105">INPUT</text>
+            <text class="node-label" x="79" y="131">普通业务问题</text>
+            <text class="node-kind" x="265" y="105">AGENT</text>
+            <text class="node-label" x="265" y="131">自主查数与计算</text>
+            <text class="node-kind" x="450" y="105">OUTPUT</text>
+            <text class="node-label" x="450" y="131">回答与现有产物</text>
+          </g>
+        </svg>
+        <figcaption>临时演示能力独立装配，核心不识别案例。</figcaption>
+      </figure>
+    </header>
+    <nav aria-label="页内目录">
+      <a href="#scope">删减清单</a><a href="#flow">执行路径</a><a href="#isolation">演示隔离</a
+      ><a href="#migration">迁移顺序</a><a href="#code">装配示意</a>
+    </nav>
+    <main>
+      <section id="scope">
+        <h2>默认能力收敛</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>能力</th>
+                <th>处理</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Todo / database_query / python_analysis / MCP</td>
+                <td>保留通用执行；数据库连接从 Retail 抽离。</td>
+              </tr>
+              <tr>
+                <td>retail_sales / load_weekly_review / build_weekly_review</td>
+                <td>删除生产实现，业务问题由模型查数与计算完成。</td>
+              </tr>
+              <tr>
+                <td>零售专用 Workflow</td>
+                <td>退出默认装配；用户资产保留查看与导出。</td>
+              </tr>
+              <tr>
+                <td>showcase / require_product_evidence</td>
+                <td>新请求移除；历史快照单独读取。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section id="flow">
+        <h2>同一问题，同一执行入口</h2>
+        <figure class="diagram" data-diagram>
+          <div class="diagram-output" tabindex="0" hidden></div>
+          <figcaption>案例只提供问题和数据范围，模型决定查询与计算步骤。</figcaption>
+          <details open>
+            <summary>查看图源</summary>
+            <pre data-mermaid>
+flowchart TD
+accTitle: 产品执行与演示隔离
+A[普通提问或案例问题] --&gt; B[通用 Agent 循环]
+B --&gt; C[发现表与字段]
+C --&gt; D[授权只读 SQL]
+D --&gt; E{是否需要代码处理}
+E -- 是 --&gt; F[Python 沙箱]
+E -- 否 --&gt; G[依据结果回答]
+F --&gt; G
+H[独立 Showcase 入口] --&gt; I[局部工具与 Skill]
+I --&gt; B</pre>
+          </details>
+        </figure>
+        <p>Runtime 负责模型循环、权限、预算、持久化、取消和恢复。业务口径由数据源说明提供。</p>
+      </section>
+      <section id="isolation">
+        <h2>临时演示的边界</h2>
+        <pre tabindex="0"><code class="language-diff">+ examples/showcases/&lt;case_id&gt;/README.md
++ examples/showcases/&lt;case_id&gt;/prompts.md
++ examples/showcases/&lt;case_id&gt;/tools/&lt;tool_name&gt;/
++ examples/showcases/&lt;case_id&gt;/skills/&lt;skill_name&gt;/
++ examples/showcases/&lt;case_id&gt;/runner.py
++ examples/showcases/&lt;case_id&gt;/tests/
+! apps/agent/src/compass_agent/tools/catalog.py
+! apps/agent/src/compass_agent/runtime/
+! apps/agent/src/compass_agent/schemas.py
+! apps/web/src/components/analysis-composer.tsx
+! apps/web/src/server/http/analysis-run-handler.ts</code></pre>
+        <p>
+          演示 README
+          登记教学目标、负责人、依赖、退出条件；按需创建工具与运行入口，生产包不包含演示。Showcase
+          调用核心公开接口，核心保持单向依赖。
+        </p>
+        <p>
+          注册复用 ToolSpec、AgentDefinition、Registry 与
+          Dispatcher；临时工具只由自己的入口显式启用。
+        </p>
+      </section>
+      <section id="migration">
+        <h2>迁移顺序</h2>
+        <ol>
+          <li>建立规范与默认清单、导入、打包边界。</li>
+          <li>先抽离授权连接，打通 SQL → Python 通路。</li>
+          <li>删除固定零售与周报工具，案例改为普通提问。</li>
+          <li>同步公开契约，处理旧请求、活动 Run 与旧工作流。</li>
+          <li>验收查询、计算、缺口、权限、取消及持久恢复。</li>
+        </ol>
+        <p>
+          切换前完成或明确取消受影响的旧 Run；保留用户数据和迁移历史。HTML
+          文件产物另列切片，需要独立设计类型约束、下载与隔离预览。
+        </p>
+      </section>
+      <section id="code">
+        <h2>拟议装配方式</h2>
+        <pre
+          tabindex="0"
+        ><code class="language-python">TOOLS = (TODO_WRITE, DATABASE_QUERY, PYTHON_ANALYSIS)
+
+# 预检与执行复用当前 Run 装配出的 RegisteredTool。
+# 演示入口独立提供自己的工具集合。
+agent = AgentDefinition(
+    system_prompt=demo_instructions,
+    tools=tuple(spec.register(demo_context, demo_handlers)
+                for spec in DEMO_TOOLS),
+)</code></pre>
+        <p>保留授权与运行机制，减少案例专属策略。工作流能力通用化后，按正常功能准入。</p>
+      </section>
+    </main>
+    <script type="module">
+      window.hljs?.highlightAll();
+      document.fonts
+        .load('20px "Material Symbols Outlined"')
+        .then((fonts) => {
+          if (fonts.length) document.documentElement.classList.add("symbols-ready");
+        })
+        .catch(() => {});
+
+      const diagrams = [...document.querySelectorAll("[data-diagram]")];
+      if (diagrams.length) {
+        try {
+          const { default: mermaid } =
+            await import("https://cdn.jsdelivr.net/npm/mermaid@11.16.0/dist/mermaid.esm.min.mjs");
+          const colorScheme = matchMedia("(prefers-color-scheme: dark)");
+          let pending = Promise.resolve();
+          let renderedTheme;
+
+          async function renderDiagrams() {
+            const theme = colorScheme.matches ? "dark" : "neutral";
+            if (theme === renderedTheme) return;
+            mermaid.initialize({
+              startOnLoad: false,
+              securityLevel: "strict",
+              suppressErrorRendering: true,
+              htmlLabels: false,
+              theme,
+              fontFamily: getComputedStyle(document.body).fontFamily,
+            });
+            for (const [index, figure] of diagrams.entries()) {
+              const output = figure.querySelector(".diagram-output");
+              const source = figure.querySelector("[data-mermaid]");
+              try {
+                const { svg } = await mermaid.render(
+                  `review-${theme}-${index + 1}`,
+                  source.textContent.trim(),
+                );
+                output.innerHTML = svg;
+                const drawing = output.querySelector("svg");
+                drawing.style.setProperty("--diagram-width", `${drawing.viewBox.baseVal.width}px`);
+                output.hidden = false;
+                source.closest("details").hidden = true;
+              } catch (error) {
+                output.hidden = true;
+                source.closest("details").hidden = false;
+                console.warn("图表未能绘制", error);
+              }
+            }
+            renderedTheme = theme;
+          }
+
+          function scheduleRender() {
+            pending = pending.then(renderDiagrams);
+          }
+
+          colorScheme.addEventListener("change", scheduleRender);
+          scheduleRender();
+        } catch (error) {
+          console.warn("图表组件未能加载", error);
+        }
+      }
+    </script>
+  </body>
+</html>

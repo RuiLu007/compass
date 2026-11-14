@@ -3,15 +3,60 @@ import type { PagePayload } from "@/contracts/page";
 import { OrganizationPages } from "@/features/organization/pages";
 import { PersonalPages, GovernancePages } from "@/features/personal/pages";
 import { AnalysisComposer } from "./analysis-composer";
-import { Blocks } from "lucide-react";
+import { AnalysisWorkflows } from "./analysis-workflows";
+import { UiGuide } from "./ui/guide";
+import { Blocks, CircleAlert } from "lucide-react";
+import { RetailConnectionPage } from "@/features/data/retail-connection-page";
 import { ModelsPages } from "@/features/models/pages";
+import type { WorkflowAssetRef } from "@/client/analysis-run";
+import { isModelContract } from "@/contracts/model-contract";
+
+function workflowSelection(viewKey: string) {
+  const query = new URL(viewKey, "https://compass.local").searchParams;
+  const value = query.get("workflow");
+  if (query.has("session") || !value || value.length > 1024) return undefined;
+  try {
+    const selected = JSON.parse(value) as { name?: unknown; ref?: unknown } | null;
+    if (
+      typeof selected?.name === "string" &&
+      selected.name.trim().length > 0 &&
+      selected.name.length <= 80 &&
+      isModelContract("WorkflowAssetRef", selected.ref)
+    )
+      return { name: selected.name, ref: selected.ref as WorkflowAssetRef };
+  } catch {
+    return undefined;
+  }
+}
+
 export function ProductContent({ payload }: { payload: PagePayload }) {
-  const { page } = payload;
+  const { page, session } = payload;
+  const { tenantId, workspaceId } = session.scope;
   const content =
     page.section === "analysis" ? (
-      <AnalysisComposer payload={payload} />
+      <AnalysisComposer payload={payload} workflow={workflowSelection(payload.viewKey)} />
+    ) : page.id === "plugins-workflows" ? (
+      <section className="workflow-library" aria-label="Workflow">
+        {tenantId &&
+        workspaceId &&
+        session.capabilities.includes("models.invoke") &&
+        session.capabilities.includes("module.analysis") ? (
+          <AnalysisWorkflows
+            scope={{ tenantId, workspaceId }}
+            analysisHref={session.navigation.find((entry) => entry.id === "analysis-new")?.href}
+          />
+        ) : (
+          <div className="ui-panel">
+            <p className="ui-notice" data-tone="warning">
+              <CircleAlert size={17} aria-hidden="true" /> 当前账户尚未获得工作流访问权限。
+            </p>
+          </div>
+        )}
+      </section>
     ) : ["platform-models", "capabilities-models"].includes(page.id) ? (
       <ModelsPages payload={payload} />
+    ) : page.id === "data-sources" ? (
+      <RetailConnectionPage session={payload.session} />
     ) : page.kind === "placeholder" ? (
       <section className="module-placeholder">
         <div className="placeholder-icon">
@@ -32,36 +77,7 @@ export function ProductContent({ payload }: { payload: PagePayload }) {
     ) : page.section === "personal" ? (
       <PersonalPages payload={payload} />
     ) : page.id === "guide" ? (
-      <section className="panel guide">
-        <p className="eyebrow">COMPASS DESIGN</p>
-        <h2>清晰、克制、有据可循</h2>
-        <p>
-          从左侧选择工作模块，在二级导航与页签中定位功能。顶部切换工作空间，个人菜单管理资料与会话。
-        </p>
-        <div className="swatches">
-          {["#F8F9F6", "#FFFFFF", "#202B27", "#62716A", "#1C5145", "#E5EEE7"].map((color) => (
-            <div key={color}>
-              <span style={{ background: color }} />
-              {color}
-            </div>
-          ))}
-        </div>
-        <h3>快捷操作</h3>
-        <p>
-          ⌘ / Ctrl + K 搜索页面；方向键选择结果；Esc
-          关闭弹层。收起侧栏后，可通过悬停或键盘聚焦预览导航。
-        </p>
-        <h3>当前可用</h3>
-        <p>
-          登录会话、工作空间、直接成员、个人权限、资料偏好与 Web
-          审计。分析、报告、看板与记忆业务将在后续版本逐步开放。
-        </p>
-        <div className="actions">
-          <button>主要操作</button>
-          <button className="secondary">次要操作</button>
-          <button disabled>暂不可用</button>
-        </div>
-      </section>
+      <UiGuide />
     ) : (
       <GovernancePages payload={payload} />
     );

@@ -1,0 +1,128 @@
+{
+  "title": "Agent 执行内核",
+  "subtitle": "从一次 Chat 请求到 ReAct、只读查询和流式回答。",
+  "brand": "Compass",
+  "label": "《企业级Agent工程架构实战营》 · 第 15 课 · 架构设计与代码导读",
+  "topics": [
+    "Agent Run",
+    "ReAct",
+    "database_query",
+    "SSE"
+  ],
+  "source": "../TECH_DESIGN.md",
+  "guide": "guide.md",
+  "output": "../TECH_DESIGN.html",
+  "metrics": [
+    {
+      "value": "20",
+      "label": "个模型 Step / Run",
+      "detail": "每步最多 4 条工具调用"
+    },
+    {
+      "value": "8",
+      "label": "个活动 Run / 进程",
+      "detail": "请求内执行模式"
+    },
+    {
+      "value": "180",
+      "label": "秒 / Run",
+      "detail": "从注册起计算"
+    },
+    {
+      "value": "50",
+      "label": "行 / 次查询",
+      "detail": "结果最多 4 KiB"
+    }
+  ],
+  "code": {
+    "architecture": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "accTitle: 分析 Chat 到 Agent Runtime",
+      "language": "mermaid"
+    },
+    "runtime-uml": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "accTitle: Agent Runtime 总体 UML",
+      "language": "mermaid"
+    },
+    "components": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "accTitle: Agent Runtime 执行组件",
+      "language": "mermaid"
+    },
+    "state": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "accTitle: 一次 Run 的数据关系",
+      "language": "mermaid"
+    },
+    "database": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "accTitle: 从查表到提交数据库结果",
+      "language": "mermaid"
+    },
+    "cancel": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "accTitle: 派发前检查与提交终态前检查",
+      "language": "mermaid"
+    },
+    "sequence": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "accTitle: Agent、BFF 与 Chat 流式时序",
+      "language": "mermaid"
+    },
+    "loop": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "for index in range(1, RUN_STREAM_LIMITS",
+      "language": "python"
+    },
+    "dispatch": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "query, relations = parse_read_sql(action.sql)",
+      "language": "python"
+    },
+    "commit": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "def commit(self, candidate: RunResult)",
+      "language": "python"
+    },
+    "wire": {
+      "file": "../STREAM_PROTOCOL.md",
+      "contains": "data: {\"protocol\":\"compass.run\"",
+      "language": "text"
+    },
+    "files-runtime": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "AgentState、Step、ToolResult 与注入接口",
+      "language": "text"
+    },
+    "files-model": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "选择模型配置，将分类与生成分开",
+      "language": "text"
+    },
+    "files-query": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "工具共用运行控制接口 ToolControl",
+      "language": "text"
+    },
+    "files-web": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "请求 Agent，合批并转发 SSE",
+      "language": "text"
+    },
+    "files-contracts": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "从 Agent 导出 Schema 与流限制",
+      "language": "text"
+    },
+    "files-tests": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "Run、SSE、取消与资源清理",
+      "language": "text"
+    }
+  },
+  "cover": {
+    "file": "cover.png",
+    "alt": "第 15 课 · Agent Runtime：执行生命周期、ReAct 循环、模型接入与工具编排。"
+  }
+}

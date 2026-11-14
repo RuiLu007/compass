@@ -45,7 +45,7 @@ flowchart LR
 | 导出自诊断               | stdout JSON，如 `event=observability`、instance_id、reason、计数                          | 宿主进程日志；Docker 日志滚动保留 3 × 10 MiB / 服务         |
 | 原模型记录               | 既有 call_id、状态与安全用量摘要                                                          | Agent 业务库，结构保持 0004                                 |
 
-Langfuse 通过 HTTP 接收 Span，不读取 Compass 的本地日志文件。Agent 不直连 Langfuse 数据表。Trace ID 在响应头和当前页面内关联，现有业务库没有新增 Trace 字段；导出丢失时可继续按 call_id 查询原调用记录。
+Langfuse 通过 HTTP 接收 Span，不读取 Compass 的本地日志文件。Agent 不直连 Langfuse 数据表。Trace ID 通过响应头关联；持久 Run 的配置快照保存安全的 Trace carrier 和响应头，恢复执行沿用原 Trace，重复受理返回原关联。导出丢失时可继续按 call_id 查询模型调用记录。
 
 Span 的可读结构示例（实际传输为 protobuf）：
 

@@ -39,3 +39,5 @@ uv.lock
 /apps/home/src/components/GhostFibers.css
 /apps/home/react-bits.lock.json
 /apps/home/licenses/
+
+**/.next-e2e-*/

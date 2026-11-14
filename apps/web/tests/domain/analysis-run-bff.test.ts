@@ -17,10 +17,12 @@ vi.mock("../../src/server/composition", () => ({
 import {
   encodeRunPacket,
   RUN_STREAM_PROTOCOL,
+  RUN_STREAM_LIMITS,
   RUN_STREAM_VERSION,
   type RunEvent,
 } from "../../src/contracts/analysis-run";
 import { handleAnalysisRunRequest } from "../../src/server/http/analysis-run-handler";
+import { handleDurableAnalysis } from "../../src/server/http/durable-analysis-handler";
 import { csrfToken } from "../../src/server/http/security";
 import { ApplicationError } from "../../src/server/platform/errors";
 
@@ -133,6 +135,159 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+});
+
+describe("Workflow deletion BFF", () => {
+  function remove(csrf: string) {
+    return handleAnalysisRunRequest(
+      new Request(
+        `${origin}/api/web/v1/analysis/workflows/${id(12)}?${new URLSearchParams(scope)}`,
+        {
+          method: "DELETE",
+          headers: { origin, "content-type": "application/json", "x-csrf-token": csrf },
+          body: JSON.stringify({ metadataRevision: 2 }),
+        },
+      ),
+      token,
+    );
+  }
+
+  it("requires CSRF and sends the expected revision with the authorized delete", async () => {
+    expect((await remove("invalid")).status).toBe(403);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+    mocks.fetch.mockResolvedValue(new Response(null, { status: 204 }));
+    const response = await remove(csrfToken(token));
+    expect(response.status).toBe(204);
+    expect(response.headers.get("X-Compass-View-Revision")).toBe("a".repeat(64));
+    expect(response.headers.get("Cache-Control")).toContain("no-store");
+    expect(mocks.authorize).toHaveBeenCalledWith(token, {
+      kind: "tenant",
+      purpose: "chat",
+      ...scope,
+    });
+    const [url, init] = mocks.fetch.mock.calls[0];
+    expect(url.pathname).toBe(`/v1/analysis/workflows/${id(12)}`);
+    expect(init.method).toBe("DELETE");
+    expect(JSON.parse(init.body)).toEqual({ metadataRevision: 2 });
+  });
+});
+
+describe("analysis Session management BFF", () => {
+  const sessionId = id(12);
+  const item = {
+    sessionId,
+    title: "渠道周报",
+    titleStatus: "manual",
+    sessionType: "chat",
+    iconKey: "chat",
+    version: 3,
+    updatedAt: "2026-11-14T08:00:00Z",
+    latestRunId: runId,
+    executionStatus: "completed",
+  };
+
+  function sessionRequest(method: "GET" | "PATCH" | "DELETE", csrf = csrfToken(token)) {
+    const path = `${origin}/api/web/v1/analysis/sessions/${sessionId}`;
+    return handleDurableAnalysis(
+      method === "GET"
+        ? new Request(`${path}?${new URLSearchParams(scope)}`)
+        : new Request(path, {
+            method,
+            headers: { origin, "content-type": "application/json", "x-csrf-token": csrf },
+            body: JSON.stringify({
+              ...scope,
+              requestId,
+              ...(method === "PATCH" ? { title: item.title } : {}),
+            }),
+          }),
+      token,
+    );
+  }
+
+  it("forwards the submitted constraints and rejects budgets above the Run limits", async () => {
+    const submit = (constraints: unknown) =>
+      handleDurableAnalysis(
+        new Request(`${origin}/api/web/v1/analysis/sessions/submit`, {
+          method: "POST",
+          headers: { origin, "content-type": "application/json", "x-csrf-token": csrfToken(token) },
+          body: JSON.stringify({
+            ...scope,
+            requestId,
+            question: startInput.question,
+            selection: { mode: "auto", provider_id: null },
+            constraints,
+          }),
+        }),
+        token,
+      );
+    expect((await submit({ maxSteps: RUN_STREAM_LIMITS.steps + 1 })).status).toBe(422);
+    expect((await submit({ timeoutSeconds: RUN_STREAM_LIMITS.timeoutSeconds + 1 })).status).toBe(
+      422,
+    );
+    expect(mocks.fetch).not.toHaveBeenCalled();
+    mocks.fetch.mockResolvedValueOnce(
+      Response.json(
+        { error: { code: "invalid_parameters", message: "无效请求。", requestId } },
+        { status: 422 },
+      ),
+    );
+    expect((await submit({ verification: { rules: ["require_product_evidence"] } })).status).toBe(
+      422,
+    );
+    expect(new URL(mocks.fetch.mock.calls[0][0]).pathname).toBe("/v1/analysis/sessions/retry");
+    mocks.fetch.mockClear();
+
+    const constraints = {
+      maxSteps: 2,
+      timeoutSeconds: 5,
+    };
+    mocks.fetch.mockResolvedValueOnce(
+      Response.json(
+        { sessionId, runId, streamUrl: `/v1/analysis/runs/${runId}/events` },
+        { status: 202 },
+      ),
+    );
+    expect((await submit(constraints)).status).toBe(202);
+    expect(JSON.parse(mocks.fetch.mock.calls[0][1].body).constraints).toEqual(constraints);
+  });
+
+  it("reads and renames metadata through the owner-scoped Agent endpoint", async () => {
+    mocks.fetch.mockImplementation(async (url, init) => {
+      expect(String(url)).toBe(`http://agent.test/v1/analysis/sessions/${sessionId}`);
+      expect(init.cache).toBe("no-store");
+      if (init.method === "PATCH")
+        expect(JSON.parse(init.body)).toEqual({ requestId, title: item.title });
+      return Response.json(item);
+    });
+    expect(await (await sessionRequest("GET")).json()).toEqual(item);
+    const renamed = await sessionRequest("PATCH");
+    expect(await renamed.json()).toEqual(item);
+    expect(renamed.headers.get("cache-control")).toBe("private, no-store");
+    expect(mocks.authorize).toHaveBeenCalledWith(token, {
+      kind: "tenant",
+      purpose: "chat",
+      ...scope,
+    });
+  });
+
+  it("requires CSRF and returns the running-task deletion conflict", async () => {
+    expect((await sessionRequest("DELETE", "invalid")).status).toBe(403);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+    mocks.fetch.mockResolvedValueOnce(
+      Response.json(
+        { error: { code: "session_busy", message: "private", requestId } },
+        { status: 409 },
+      ),
+    );
+    const blocked = await sessionRequest("DELETE");
+    expect(blocked.status).toBe(409);
+    expect(await blocked.json()).toMatchObject({
+      error: { code: "session_busy", message: "请先停止任务，等任务结束后再删除会话。" },
+    });
+    expect(JSON.parse(mocks.fetch.mock.calls[0][1].body)).toEqual({ requestId });
+    mocks.fetch.mockResolvedValueOnce(Response.json({ sessionId }));
+    expect(await (await sessionRequest("DELETE")).json()).toEqual({ sessionId });
+  });
 });
 
 describe("analysis Run BFF", () => {
@@ -365,7 +520,7 @@ describe("analysis Run BFF", () => {
           }),
       );
       const pending = request("analysis/runs", startInput);
-      await vi.advanceTimersByTimeAsync(195_000);
+      await vi.advanceTimersByTimeAsync((RUN_STREAM_LIMITS.timeoutSeconds + 15) * 1_000);
       const response = await pending;
       expect(response.status).toBe(503);
       expect(await response.text()).not.toContain("private timeout");

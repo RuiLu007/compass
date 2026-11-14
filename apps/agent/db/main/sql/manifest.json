@@ -1,9 +1,9 @@
 {
   "owner": "agent",
   "databaseKey": "main",
-  "feature": "991",
+  "feature": "977",
   "from": "empty",
-  "to": "0004",
+  "to": "0014",
   "engine": "PostgreSQL 17",
   "tool": "Alembic 1.20.0",
   "sourceRevision": "working-tree; fixed by source SHA-256",
@@ -23,21 +23,138 @@
     {
       "source": "../../migrations/versions/0004_reliable_execution.py",
       "sha256": "0de305dc970161bc065373d077f441277e2d2094e21e819e3f76692a74e646cb"
+    },
+    {
+      "source": "../../migrations/versions/0005_retail_connection.py",
+      "sha256": "468a7d8025c6f10ba13c8000ced21061df5c7801f42a1d56a839471efb335f1b"
+    },
+    {
+      "source": "../../migrations/versions/0006_data_connections.py",
+      "sha256": "766151447cb24d33194e792156d8844eb6a20916201547089fe19c6f14f10fad"
+    },
+    {
+      "source": "../../migrations/versions/0007_workflow_assets.py",
+      "sha256": "630ab76dbf04b8b55d21b35c7befea8d4a5b7b1d191aaa721851804d356364cd"
+    },
+    {
+      "source": "../../migrations/versions/0008_tool_runtime.py",
+      "sha256": "05accae62e4747b875a9ac58757c74d068b6440ec3235c0b56059bbadf8d8b9a"
+    },
+    {
+      "source": "../../migrations/versions/0009_durable_runs.py",
+      "sha256": "8d13979b8334ec228e9866444ef5be407f918e639b449e05765b1e1824a73528"
+    },
+    {
+      "source": "../../migrations/versions/0010_run_scheduler.py",
+      "sha256": "1ff54134ba93bdcdd35ef723c11a4bb788dc8938f1a7820681217597bf757e76"
+    },
+    {
+      "source": "../../migrations/versions/0011_session_management.py",
+      "sha256": "86d1068cfaa7d78c7fde00b91f9d1308e904591b464f335507af8bfc1b5e7950"
+    },
+    {
+      "source": "../../migrations/versions/0012_dynamic_workflow.py",
+      "sha256": "5260c371a96a73006a9ef3cce698b7912aa9bf0f753e67d87298511ee1b8c302"
+    },
+    {
+      "source": "../../migrations/versions/0013_model_generation_profile.py",
+      "sha256": "fb388e9deb8f6f9311596742b7d0b45e838fb3642f1433429b9aeffd4dceb7ac"
+    },
+    {
+      "source": "../../migrations/versions/0014_workflow_asset_deletion.py",
+      "sha256": "26a9d717852a4670de56ec5f8fb87a894b0952831f7b5dc5cfaa8d37046e4059"
     }
   ],
   "files": {
-    "bootstrap.sql": "eba8c4f22a8d802c5b25e90e976fec4a78e5788762c122512f136c063c05aa4d",
+    "bootstrap.sql": "1f793b7670b2f8109eaa2d3a720313506e1ef23b8817a8459094d7c2b20f4158",
     "upgrades/0001__0002.sql": "471825e3af6e2d456e1973e62bd3545a5fc47fa4a84a6e599df86173753772ea",
     "upgrades/0001__0003.sql": "80d749841c34b3567a5d085892068d7de4e273c92c2248ebb7f99e173ae77565",
     "upgrades/0002__0003.sql": "fbc8e5d4c434c7d06c4326a697b62789ea959ee8d1df59bb26cbd2b1daaf96e1",
     "upgrades/0001__0004.sql": "ba362ad778a52d84df41f5fb0ca8090026dc6f71d156095746bc38be4b964e8c",
     "upgrades/0002__0004.sql": "cd0690f7f69828132c9f6dd15a57f397cd6adedfd987397a4263b397c4512623",
-    "upgrades/0003__0004.sql": "b39ec36208a1be36e46875ebe520b8db612c40ce5d1ffc8b3b734612bdb96c31"
+    "upgrades/0003__0004.sql": "b39ec36208a1be36e46875ebe520b8db612c40ce5d1ffc8b3b734612bdb96c31",
+    "upgrades/0001__0005.sql": "e3f7c1575341e99fad777f62b8b1f91d9bc70a8f72ed3dfb6eef2296a3584bc1",
+    "upgrades/0002__0005.sql": "434f792f6ee27d255c6e2609d32a26db2ddf73008265e04b3138fb1fd168c71a",
+    "upgrades/0003__0005.sql": "66d9d5761ae8fdceb5297d2da2b87303adfea616aec1c4bf6b6a433865f8cbe2",
+    "upgrades/0004__0005.sql": "d74cda7c1f4e2f3bed0253f0877972481793e1814280771507f384374de65e84",
+    "upgrades/0001__0006.sql": "7a9737774f47874940c3b752c887d19446e20f6446208d11c28437afa74229d0",
+    "upgrades/0002__0006.sql": "acf69d14aa68dc1cf16a698530192886975c4f088dc479c477bcb9b33c5c1867",
+    "upgrades/0003__0006.sql": "62184a2efe42edb6755b8fd2c2ef3260da1ea0e8f7aa4abd8c50af8cd96e35d2",
+    "upgrades/0004__0006.sql": "c7f56b1d9f567a5dfcf7cb15f3510a169ccb6b93b6c3d4aaa075547f649c59d6",
+    "upgrades/0005__0006.sql": "83c5f38a036cbbe126084289a48e02ef3e90627b8e9535471de7a281e05a3101",
+    "upgrades/0001__0007.sql": "47b46a2eeee164253f328af526962ddc988b3ccc4eac29884fb0a91b8ed539a2",
+    "upgrades/0002__0007.sql": "78d637db1af3538959fa267bac0cf29b5d16603aebc2614af57da7a8bf7f96d2",
+    "upgrades/0003__0007.sql": "1a289207f96127489edcf00ecc4bc120788a3de96a7b5b622abdc43499b10fa6",
+    "upgrades/0004__0007.sql": "fa51974ad98a9628611d7478572a041b0bce7f8a52ed9763f7d190eaa60f41a8",
+    "upgrades/0005__0007.sql": "91873232f07f5a80e6d54fe8da953f90f76838010f6db94340e84eb2280c4a7a",
+    "upgrades/0006__0007.sql": "d30398730f7004427ba87f28495cd76520c612e1d3cb74f48a48f75ac1e4d81c",
+    "upgrades/0001__0008.sql": "873d8c1f741de9ce99d09ed675d956340f3f9e620dbf02aef85a3ea2fb55813d",
+    "upgrades/0002__0008.sql": "cfb5e3515e90918c516250c168dfb83ffb7a5bd3dfe7ce3cf2e839dd1c492214",
+    "upgrades/0003__0008.sql": "a92d48589563ebdb6dbfa1a5ff97b76b4b6a1acf41a9495b1ca0344025f40355",
+    "upgrades/0004__0008.sql": "096a358eabad655af9ea89e6446c65c669fe41d8b46753703547df47c5a3f2ed",
+    "upgrades/0005__0008.sql": "7a4280a2180410187f162f8404fde9febec2741cf18da6b0c381697c23c92a4e",
+    "upgrades/0006__0008.sql": "e6dc37d65d61e4d1e9698b5eee47b8e3ce6909f214df632b6a82d3369fc72ff7",
+    "upgrades/0007__0008.sql": "1a9c589c0f71823ec588f7a1eea29ea193d089f6fbdf539197d1bd5f61819411",
+    "upgrades/0001__0010.sql": "d526ba9ecc9368f1564a886abdfc6c74bebcafd0577ceb44e5bbe945dfb0f93f",
+    "upgrades/0002__0010.sql": "4a3253535b5560c0740feef9d0acaf4d86924afcbfb4fe7d5a505cf3cec588e2",
+    "upgrades/0003__0010.sql": "b954cbcac877d023d06b87628da1425bafd7263c6cc2edac338c69957ec18c53",
+    "upgrades/0004__0010.sql": "1cbb9828e7fdb1e78dca3acae2a8fdaeee5389bff7299164295ae1c7fbb5c685",
+    "upgrades/0005__0010.sql": "38b3bba3b5cec705817ec18e7b891f022994568e206d76bbd2a0ce4d3da6a279",
+    "upgrades/0006__0010.sql": "01396c61d0bb5f5353c660046818b4b3b4aba7d8653e879502ece2a9eec08470",
+    "upgrades/0007__0010.sql": "4f370f6d0d8559b85806d106ead3e440466dfcdaadc3c6e59928ca098f69a161",
+    "upgrades/0008__0010.sql": "44c4823b4bb3641d1ec6627e0c4f38f2015710b5bdaa20f385f20405802f6c84",
+    "upgrades/0009__0010.sql": "d733e199deb08d3bb1441df3832866719e94d79440086d714e020ca946378836",
+    "upgrades/0001__0011.sql": "9bb31ccc6c19ea56c20672d7e803f8047f412b1caec5938ec3a725f61e693fac",
+    "upgrades/0002__0011.sql": "a7872e77f8a0687ac69f53858b85666041dab01f947c80d5ca656e3ea6306af6",
+    "upgrades/0003__0011.sql": "69cef09eef57cd508f3cdf85ca8a677aa3b76dea4214f8d4dca9eb42073c7fe5",
+    "upgrades/0004__0011.sql": "90ae1b8fa92095af060b56cdb6f5ccfe99ef2b622755674874c0ec360632c590",
+    "upgrades/0005__0011.sql": "beb1783c8f1edef47f39a71f60331280fa3077eb5b4043bb6ce070283d280620",
+    "upgrades/0006__0011.sql": "5312714bcd7fd923545d7e199746db3fb871bb4bb2e72b0d5f7093979bdf6144",
+    "upgrades/0007__0011.sql": "5f61fcdb5e3cb75e9f20e55a4bb3dfec0f6f5313b658a02d32db0b46d4307165",
+    "upgrades/0008__0011.sql": "f33cff6c7f872426e29ed60bc49cad7ea168d14c4807d9c20652de1b2f08ed72",
+    "upgrades/0009__0011.sql": "0681b85dc02441308dc86fb034536616e4bc7c327c4139366bdbfe2faa9d3abd",
+    "upgrades/0010__0011.sql": "e86b5a1bffda639c9db98d2fc3cccf0174ca6f2c0986629006035c8c2d8fa252",
+    "upgrades/0001__0012.sql": "4ad3b0cd21eee664993c93ba52f9a9b2c50bd60f37bbb727fa7c22227188e21c",
+    "upgrades/0002__0012.sql": "2d05b77525d777320f987065d40af2962f22ee13fcf63b5420bcbba8ff1a765e",
+    "upgrades/0003__0012.sql": "83da42d27b8fe44a0bb3ea906d71c78ddfc3cd1c66013591280da8dd47e48b51",
+    "upgrades/0004__0012.sql": "e6d3d7fd91dc75acb1025545844fc26e435f041e4fdaf716ea83cff58df5f088",
+    "upgrades/0005__0012.sql": "8bb56821dcf2cc9df2fad91c18b0cd70bdda5aa57033775d7fcd737db1e5bcdd",
+    "upgrades/0006__0012.sql": "8761150a874f1b9e2bb08a4f93d73b47fce3a500b0969e4355bc50e7ed7458f8",
+    "upgrades/0007__0012.sql": "a4317ffb7b59b97b71e10e74e69eafcb4f084ca8b585e2db9a5be8c1c1d67ca6",
+    "upgrades/0008__0012.sql": "e344fc6c5aa335739752f6137037aad5935125178c3084d2eb5af9d354d1f4a9",
+    "upgrades/0009__0012.sql": "131cb542beaaff2359c070b053fd5e38e2acb067b330e76b8e540dcbe721739e",
+    "upgrades/0010__0012.sql": "fcb42bd1ef6a97bc4255922169d9214ade69a5cc492908b09b4e186a072d359e",
+    "upgrades/0011__0012.sql": "c92496bf96dc9b2ade23b75155fe5ceec5df436757bcd47ea748cf6f26a0dc0c",
+    "upgrades/0001__0013.sql": "9ae6bc31c48fca9d252adb0689c4dd889cb72b8ee12e5b57190bbce21a0863ea",
+    "upgrades/0002__0013.sql": "131e88aa40fda22147eb21df3bf07bdf438456bb6de0dd3bf128016320963312",
+    "upgrades/0003__0013.sql": "870bab55ff094c3a21c74143f84ba5d4ae1e5e1b02cfcf55e848c35286562044",
+    "upgrades/0004__0013.sql": "c66f1146ce96228956fe33671bdd5b48486cd3b139c694198189de03ab7c08c8",
+    "upgrades/0005__0013.sql": "fec2ffc4017fb585f71ca1a0bef869cdcdd893d75001e03c6f3ba728a6ea6a0e",
+    "upgrades/0006__0013.sql": "2f7d87f6c0d1735abc81a8fbc66374faa129194580b7b4ca720eff1c3053451e",
+    "upgrades/0007__0013.sql": "08bbad4770635581337473969bea11fad4ff2bb1d554101c1aa338a7db29f5e7",
+    "upgrades/0008__0013.sql": "b5b924de230d0f3ac2fa1213c0cfc0674bfad38e115b036f106ea0ebd0557342",
+    "upgrades/0009__0013.sql": "846346f2d685ffef6da30af2996a0df0246c3298ba2f786d09911038775606d9",
+    "upgrades/0010__0013.sql": "39398cffde1c94bc20622b6e88143603f36b66929924c499b1cdbffc73833d0a",
+    "upgrades/0011__0013.sql": "56da07b4debbfb5aca1c78a837be663d5ec1e8347d8de6a380bfa8daff55e6f1",
+    "upgrades/0012__0013.sql": "a4ef1bf9d796f38b1f72d592683c437f4c0556592aa49bfda2231dfad840640a",
+    "upgrades/0001__0014.sql": "056b06bdf8842fd91fdbddc680c90a1560573c4eb65bd2cf49739b8c974f3329",
+    "upgrades/0002__0014.sql": "b3a2138f43e53f488cfaa540a6e0188b25de13eb2c5c60565369ef732010a5e5",
+    "upgrades/0003__0014.sql": "77b4f8b5f714c73ca6b3e6a7629abf7ec9df38e71214a5fb1151f0d8619aa42b",
+    "upgrades/0004__0014.sql": "aca70dd558a799bd42127a9edf582217f67b2c0ffecad13dc519a518a484d718",
+    "upgrades/0005__0014.sql": "9671b025fcaa139e7ca661b3f4a45caf200d70d0f18ea524f93d08dd16fa7ff2",
+    "upgrades/0006__0014.sql": "e4faed9d6757d83c7086ac798f49707239ca9c2fdd03741ef4aa0ced51a03170",
+    "upgrades/0007__0014.sql": "0234c432586f75bd53836ecbf995aac1d4e1b6b8f9cb16968e3915f01cbd1cc0",
+    "upgrades/0008__0014.sql": "b2dafe251592f110189a295dc70e02fb91481de19a39079764d57342fdf729da",
+    "upgrades/0009__0014.sql": "d78b8c6e9101f40f53350d08e9730e819b450d1e0e686c9a7388c58ec9472989",
+    "upgrades/0010__0014.sql": "6765bdbb93132e224df1f9e56bcef40022916ea03bb0e82b195386418a62f37a",
+    "upgrades/0011__0014.sql": "67e84795a210e7d1779339e87249e6fc3d73b9ccc2e9a05c832a4142d4036105",
+    "upgrades/0012__0014.sql": "82c2d8d4bc43e248deb5f578794b6b31b8dd1f91bf48398bd749ec0886720b88",
+    "upgrades/0013__0014.sql": "588d78d938b0d94e2d58770d99f0634ec7c87969946e54fad46633b028dfaf8a"
   },
   "generate": "pnpm db:sql -F agent",
-  "apply": "pnpm db:apply-sql -F agent -- --from empty --to 0004",
+  "apply": "pnpm db:apply-sql -F agent -- --from empty --to 0014",
   "transaction": "single transaction with advisory lock",
   "prerequisites": "Provisioned Agent-owned database; expected start and source checksums",
-  "dataImpact": "Adds model configuration and metadata; renames decision adapter; adds nullable execution summary; preserves keys and rows",
+  "dataImpact": "Adds model configuration and metadata; renames decision adapter; adds execution summaries and multi-engine workspace connections; adds durable runs, checkpoints, HITL and immutable artifacts; adds asynchronous session titles, session deletion metadata and workflow tool contracts and soft deletion; backfills historical model attempt metadata without raw content; preserves existing Retail configuration, credentials and revisions",
   "recovery": "Restore verified backup to new owned database with original encryption key"
 }

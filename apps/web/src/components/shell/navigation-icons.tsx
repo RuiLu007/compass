@@ -1,10 +1,11 @@
 import type { SVGProps } from "react";
 
-// Geometry from Feature 999's canonical prototype/core.js. Keep navigation.js and
-// workspaces.js mappings in sync here; do not substitute visually similar icons.
+// Keep icons shared with Feature 999's canonical prototype in sync with its
+// core.js geometry and its navigation.js and workspaces.js mappings.
 const paths = {
   compass: "M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Zm-7-4-2 6-5 2 2-6Z",
   spark: "m12 2 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z",
+  workflow: "M3 3h8v8H3zM13 13h8v8h-8zM7 11v4a2 2 0 0 0 2 2h4",
   folder: "M3 5h6l2 3h10v12H3Z",
   code: "m8 6-6 6 6 6m8-12 6 6-6 6M14 3l-4 18",
   chart: "M4 4v16h16M8 15v-4m5 4V7m5 8v-6",
@@ -57,6 +58,7 @@ export const secondaryIcons: Record<string, NavigationIconName> = {
   "plugins-skills": "book",
   "plugins-prompts": "file",
   "plugins-agents": "spark",
+  "plugins-workflows": "workflow",
   "plugins-templates": "file",
   "plugins-datasets": "database",
   "automations-all": "clock",

@@ -56,5 +56,93 @@
         "href": "/resources/lessons/14/technical-design.html"
       }
     ]
+  },
+  {
+    "number": 15,
+    "title": "搭建 Agent 执行内核",
+    "description": "Agent Run、Retail 工具调用、流式响应与终止清理。",
+    "artifacts": [
+      {
+        "id": "technical-design",
+        "title": "技术方案 · 学员阅读版",
+        "source": "mai-specs/989-lesson-15-agent-execution-kernel/design/TECH_DESIGN.html",
+        "href": "/resources/lessons/15/technical-design.html"
+      }
+    ]
+  },
+  {
+    "number": 16,
+    "title": "受控自主执行",
+    "description": "同一 ReAct 循环中的 Todo 计划、通用工具和执行预算。",
+    "artifacts": [
+      {
+        "id": "technical-design",
+        "title": "技术方案 · 学员阅读版",
+        "source": "mai-specs/988-lesson-16-controlled-autonomy/design/TECH_DESIGN.html",
+        "href": "/resources/lessons/16/technical-design.html",
+        "markdown": {
+          "source": "mai-specs/988-lesson-16-controlled-autonomy/design/TECH_DESIGN.md",
+          "href": "/resources/lessons/16/technical-design.md"
+        }
+      }
+    ]
+  },
+  {
+    "number": 17,
+    "title": "Agent 主导的混合 Workflow",
+    "description": "模型生成工作流，调度独立 SubAgent，并将确认保存的资产复用为工具。",
+    "artifacts": [
+      {
+        "id": "technical-design",
+        "title": "技术方案 · 学员阅读版",
+        "source": "mai-specs/987-lesson-17-hybrid-workflow/design/TECH_DESIGN.html",
+        "href": "/resources/lessons/17/technical-design.html"
+      }
+    ]
+  },
+  {
+    "number": 18,
+    "title": "统一工具执行与 Sandbox",
+    "description": "内置工具、MCP、Sandbox 与统一工具调度。",
+    "artifacts": [
+      {
+        "id": "technical-design",
+        "title": "技术方案 · 学员阅读版",
+        "source": "mai-specs/986-lesson-18-tool-execution-sandbox/design/TECH_DESIGN.html",
+        "href": "/resources/lessons/18/technical-design.html"
+      }
+    ]
+  },
+  {
+    "number": 19,
+    "title": "完整运行持久化与人工确认",
+    "description": "Session、Run、执行恢复与 Human in the Loop。",
+    "artifacts": [
+      {
+        "id": "technical-design",
+        "title": "技术方案 · 学员阅读版",
+        "source": "mai-specs/985-lesson-19-durable-runtime-hitl/design/TECH_DESIGN.html",
+        "href": "/resources/lessons/19/technical-design.html"
+      },
+      {
+        "id": "hitl-design",
+        "title": "Human in the Loop · 增量方案",
+        "source": "mai-specs/985-lesson-19-durable-runtime-hitl/design/HITL_DESIGN.html",
+        "href": "/resources/lessons/19/hitl-design.html"
+      }
+    ]
+  },
+  {
+    "number": 20,
+    "title": "异步 Run 与 Worker 接管",
+    "description": "异步调度、Worker 接管、运行治理与过程展示。",
+    "artifacts": [
+      {
+        "id": "technical-design",
+        "title": "技术方案 · 学员阅读版",
+        "source": "mai-specs/984-lesson-20-production-agent-runtime/design/TECH_DESIGN.html",
+        "href": "/resources/lessons/20/technical-design.html"
+      }
+    ]
   }
 ]

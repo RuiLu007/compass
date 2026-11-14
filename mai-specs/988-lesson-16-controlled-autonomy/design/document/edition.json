@@ -1,0 +1,27 @@
+{
+  "title": "第 16 课 · 受控自主执行",
+  "subtitle": "同一 ReAct 循环中的 Todo 计划、通用工具与模型自主回答。",
+  "brand": "Compass",
+  "label": "技术方案 · 当前实现",
+  "source": "../TECH_DESIGN.md",
+  "guide": "guide.md",
+  "output": "../TECH_DESIGN.html",
+  "code": {
+    "loop": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "execute_turn",
+      "language": "text"
+    },
+    "answer": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "finalAnswer=self._final_answer",
+      "language": "python"
+    }
+  },
+  "topics": [
+    "ReAct",
+    "Todo 计划",
+    "通用工具"
+  ],
+  "hero": "overview.svg"
+}

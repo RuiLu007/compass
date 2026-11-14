@@ -1,44 +1,38 @@
 import { test, expect, type BrowserContext, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+import {
+  DurableAnalysisFixture,
+  fixtureProviderId as providerId,
+} from "./durable-analysis.fixture";
 
-// These are UI scenarios: login/authorization use the real Web app; model responses are local.
+// UI scenarios use real Web login/authorization and a persistent per-test v2 Agent fixture.
 const tenantId = "99500000-0000-4000-8000-000000000010";
 const workspaceId = "99500000-0000-4000-8000-000000000020";
-const providerId = "99300000-0000-4000-8000-000000000101";
 const origin = `http://127.0.0.1:${process.env.WEB_TEST_PORT ?? 8110}`;
 const analysisPath = `/t/${tenantId}/w/${workspaceId}/analysis`;
 const password = process.env.WEB_TEST_PASSWORD ?? "teaching-995-only-password";
-type AnalysisRequest = {
-  requestId: string;
-  tenantId: string;
-  workspaceId: string;
-  question: string;
-  history: { question: string; answer: string }[];
-  selection: { mode: "auto" | "fixed"; provider_id: string | null };
-};
-type InteractiveRunScenario =
-  | "canceled_confirmed"
-  | "cleanup_unconfirmed"
-  | "already_terminal_completed"
-  | "already_terminal_disconnected";
+test.use({ acceptDownloads: true, storageState: process.env.WEB_TEST_STORAGE_STATE });
+let authenticatedCookies: Parameters<BrowserContext["addCookies"]>[0] | undefined;
 
 async function enter(page: Page, context: BrowserContext) {
-  const login = await context.request.post("/api/web/v1/auth/login", {
-    headers: { origin },
-    data: { loginName: "teaching.admin", password },
-  });
-  expect(login.status()).toBe(200);
-  const session = await context.request.get(
-    `/api/web/v1/session?${new URLSearchParams({ tenantId, workspaceId, pageId: "analysis-new" })}`,
-  );
+  if (authenticatedCookies) await context.addCookies(authenticatedCookies);
+  const sessionPath = `/api/web/v1/session?${new URLSearchParams({ tenantId, workspaceId, pageId: "analysis-new" })}`,
+    initial = await context.request.get(sessionPath);
+  if (initial.status() === 401) {
+    const login = await context.request.post("/api/web/v1/auth/login", {
+      headers: { origin },
+      data: { loginName: "teaching.admin", password },
+    });
+    expect(login.status()).toBe(200);
+  }
+  const session = initial.ok() ? initial : await context.request.get(sessionPath);
   expect(session.status()).toBe(200);
+  authenticatedCookies = await context.cookies();
   const revision = session.headers()["x-compass-view-revision"];
   expect(revision).toBeTruthy();
   const supported = { state: "supported", reason: "UI fixture" };
-  const requests: AnalysisRequest[] = [];
-  let release: (() => void) | undefined;
-  let hold = false;
-  await page.route("**/api/web/v1/models/available?**", async (route) => {
-    await route.fulfill({
+  await page.route("**/api/web/v1/models/available?**", (route) =>
+    route.fulfill({
       headers: { "X-Compass-View-Revision": revision, "Cache-Control": "no-store" },
       json: {
         items: [
@@ -59,347 +53,14 @@ async function enter(page: Page, context: BrowserContext) {
           },
         ],
       },
-    });
-  });
-  await page.route("**/api/web/v1/analysis/runs/*/cancel", async (route) => {
-    const runId = route.request().url().split("/").at(-2)!;
-    await route.fulfill({
-      headers: { "X-Compass-View-Revision": revision, "Cache-Control": "no-store" },
-      json: { runId, status: "accepted" },
-    });
-  });
-  await page.route("**/api/web/v1/analysis/runs", async (route) => {
-    const request = route.request().postDataJSON() as AnalysisRequest;
-    requests.push(request);
-    if (hold) {
-      hold = false;
-      await new Promise<void>((resolve) => (release = resolve));
-    }
-    const runId = `98900000-0000-4000-8000-${String(200 + requests.length).padStart(12, "0")}`;
-    const channelStepId = "98900000-0000-4000-8000-000000000301";
-    const productStepId = "98900000-0000-4000-8000-000000000302";
-    const channelModelCallId = "98900000-0000-4000-8000-000000000303";
-    const productModelCallId = "98900000-0000-4000-8000-000000000304";
-    const answerStepId = "98900000-0000-4000-8000-000000000305";
-    const answerModelCallId = "98900000-0000-4000-8000-000000000306";
-    const text = Array.from(
-      { length: 55 },
-      (_, index) => `${index + 1}. 销售分析示例：先比较渠道表现，再核对商品与库存变化。`,
-    ).join("\n");
-    const csv = "product,amount\n示例商品,120\n";
-    const events = [
-      { type: "run.started", payload: {} },
-      {
-        type: "run.routed",
-        payload: {
-          providerId,
-          modelLabel: "DeepSeek V4 Pro",
-          sceneId: "SC-02",
-          toolsEnabled: true,
-        },
-      },
-      {
-        type: "step.started",
-        payload: { stepId: channelStepId, stepIndex: 1, modelCallId: channelModelCallId },
-      },
-      {
-        type: "tool.started",
-        payload: {
-          stepId: channelStepId,
-          toolCallId: "channel_query",
-          toolIndex: 1,
-          toolKind: "retail_sales",
-          params: {
-            dimension: "channel",
-            period: { start: "2025-11-24", end: "2025-11-30" },
-            compareTo: { start: "2025-11-17", end: "2025-11-23" },
-          },
-        },
-      },
-      {
-        type: "tool.finished",
-        payload: {
-          stepId: channelStepId,
-          toolCallId: "channel_query",
-          toolIndex: 1,
-          status: "ok",
-          rowCount: 2,
-        },
-      },
-      { type: "step.finished", payload: { stepId: channelStepId, status: "completed" } },
-      {
-        type: "step.started",
-        payload: { stepId: productStepId, stepIndex: 2, modelCallId: productModelCallId },
-      },
-      {
-        type: "tool.started",
-        payload: {
-          stepId: productStepId,
-          toolCallId: "product_query",
-          toolIndex: 1,
-          toolKind: "retail_sales",
-          params: {
-            dimension: "product",
-            channelCode: "POS",
-            period: { start: "2025-11-24", end: "2025-11-30" },
-            compareTo: { start: "2025-11-17", end: "2025-11-23" },
-          },
-        },
-      },
-      {
-        type: "tool.finished",
-        payload: {
-          stepId: productStepId,
-          toolCallId: "product_query",
-          toolIndex: 1,
-          status: "ok",
-          rowCount: 1,
-        },
-      },
-      { type: "step.finished", payload: { stepId: productStepId, status: "completed" } },
-      {
-        type: "step.started",
-        payload: { stepId: answerStepId, stepIndex: 3, modelCallId: answerModelCallId },
-      },
-      { type: "step.finished", payload: { stepId: answerStepId, status: "completed" } },
-      {
-        type: "run.finished",
-        payload: {
-          status: "completed",
-          finalAnswer: text,
-          file: {
-            status: "ready",
-            stepId: productStepId,
-            toolCallId: "product_query",
-            filename: `retail-products-${runId}.csv`,
-            mediaType: "text/csv; charset=utf-8",
-            rowCount: 1,
-            byteLength: Buffer.byteLength(csv),
-            contentBase64: Buffer.from(csv).toString("base64"),
-          },
-        },
-      },
-    ];
-    await route.fulfill({
-      headers: {
-        "Content-Type": "text/event-stream",
-        "X-Compass-View-Revision": revision,
-        "Cache-Control": "no-store",
-      },
-      body: events
-        .map(
-          (event, index) =>
-            `data: ${JSON.stringify({
-              protocol: "compass.run",
-              version: 1,
-              requestId: request.requestId,
-              runId,
-              seq: index + 1,
-              event,
-            })}\n\n`,
-        )
-        .join(""),
-    });
-  });
+    }),
+  );
+  const fixture = new DurableAnalysisFixture(page, revision);
+  await fixture.install();
   await page.goto(analysisPath);
   await expect(page.locator("[data-protected-root]")).toBeVisible();
   await expect(page.getByLabel("选择 Chat 主模型")).toBeEnabled();
-  return {
-    revision,
-    requests,
-    holdNext() {
-      hold = true;
-    },
-    release() {
-      release?.();
-      release = undefined;
-    },
-  };
-}
-
-async function installInteractiveRunFixture(
-  page: Page,
-  revision: string,
-  scenario: InteractiveRunScenario,
-) {
-  await page.evaluate(
-    ({ providerId, revision, scenario }) => {
-      const nativeFetch = window.fetch.bind(window);
-      const runId = "98900000-0000-4000-8000-000000000901";
-      const stepId = "98900000-0000-4000-8000-000000000902";
-      const modelCallId = "98900000-0000-4000-8000-000000000903";
-      const toolCallId = "interactive_channel_query";
-      const stats: { cancelCount: number; releaseTerminal: () => void } = {
-        cancelCount: 0,
-        releaseTerminal: () => undefined,
-      };
-      let notifyCancel!: () => void;
-      const cancelSeen = new Promise<void>((resolve) => {
-        notifyCancel = resolve;
-      });
-      let notifyTerminal!: () => void;
-      const terminalReleased = new Promise<void>((resolve) => {
-        notifyTerminal = resolve;
-      });
-      stats.releaseTerminal = notifyTerminal;
-      Reflect.set(window, "__compassAnalysisFixtureStats", stats);
-
-      window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = new URL(
-          input instanceof Request ? input.url : String(input),
-          window.location.href,
-        );
-        if (/\/api\/web\/v1\/analysis\/runs\/[a-f0-9-]{36}\/cancel$/.test(url.pathname)) {
-          stats.cancelCount += 1;
-          notifyCancel();
-          const alreadyTerminal = scenario.startsWith("already_terminal");
-          return Response.json(
-            alreadyTerminal
-              ? { runId, status: "already_terminal", terminalStatus: "completed" }
-              : { runId, status: "accepted" },
-            {
-              status: alreadyTerminal ? 200 : 202,
-              headers: {
-                "Cache-Control": "private, no-store",
-                "X-Compass-View-Revision": revision,
-              },
-            },
-          );
-        }
-        if (url.pathname !== "/api/web/v1/analysis/runs" || init?.method !== "POST")
-          return nativeFetch(input, init);
-
-        const raw = typeof init.body === "string" ? init.body : "{}";
-        const request = JSON.parse(raw) as { requestId: string };
-        const encoder = new TextEncoder();
-        let sequence = 0;
-        const stream = new ReadableStream<Uint8Array>({
-          async start(controller) {
-            const send = (event: { type: string; payload: unknown }) => {
-              sequence += 1;
-              controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({
-                    protocol: "compass.run",
-                    version: 1,
-                    requestId: request.requestId,
-                    runId,
-                    seq: sequence,
-                    event,
-                  })}\n\n`,
-                ),
-              );
-            };
-            const finishToolAndStep = () => {
-              send({
-                type: "tool.finished",
-                payload: {
-                  stepId,
-                  toolCallId,
-                  toolIndex: 1,
-                  status: "ok",
-                  rowCount: 1,
-                },
-              });
-              send({ type: "step.finished", payload: { stepId, status: "completed" } });
-            };
-            try {
-              send({ type: "run.started", payload: {} });
-              send({
-                type: "run.routed",
-                payload: {
-                  providerId,
-                  modelLabel: "DeepSeek V4 Pro",
-                  sceneId: "SC-02",
-                  toolsEnabled: true,
-                },
-              });
-              send({
-                type: "step.started",
-                payload: { stepId, stepIndex: 1, modelCallId },
-              });
-              send({
-                type: "tool.started",
-                payload: {
-                  stepId,
-                  toolCallId,
-                  toolIndex: 1,
-                  toolKind: "retail_sales",
-                  params: {
-                    dimension: "channel",
-                    period: { start: "2025-11-24", end: "2025-11-30" },
-                    compareTo: null,
-                  },
-                },
-              });
-              await cancelSeen;
-              if (scenario === "canceled_confirmed") {
-                send({ type: "step.finished", payload: { stepId, status: "canceled" } });
-                await terminalReleased;
-                send({
-                  type: "run.finished",
-                  payload: { status: "canceled", reason: "user", cleanup: "confirmed" },
-                });
-              } else if (scenario === "cleanup_unconfirmed") {
-                send({ type: "step.finished", payload: { stepId, status: "canceled" } });
-                await terminalReleased;
-                send({
-                  type: "run.finished",
-                  payload: {
-                    status: "cleanup_unconfirmed",
-                    reason: "execution_error",
-                    cleanup: "unconfirmed",
-                  },
-                });
-              } else if (scenario === "already_terminal_completed") {
-                finishToolAndStep();
-                await terminalReleased;
-                send({
-                  type: "run.finished",
-                  payload: {
-                    status: "completed",
-                    finalAnswer: "原结果流确认后的完整回答。",
-                    file: { status: "none" },
-                  },
-                });
-              } else {
-                finishToolAndStep();
-                await terminalReleased;
-              }
-              controller.close();
-            } catch (error) {
-              controller.error(error);
-            }
-          },
-        });
-        return new Response(stream, {
-          status: 200,
-          headers: {
-            "Content-Type": "text/event-stream; charset=utf-8",
-            "Cache-Control": "private, no-store",
-            "X-Compass-View-Revision": revision,
-          },
-        });
-      };
-    },
-    { providerId, revision, scenario },
-  );
-}
-
-async function fixtureCancelCount(page: Page) {
-  return page.evaluate(
-    () =>
-      (Reflect.get(window, "__compassAnalysisFixtureStats") as { cancelCount: number }).cancelCount,
-  );
-}
-
-async function releaseFixtureTerminal(page: Page) {
-  await page.evaluate(() => {
-    const fixture = Reflect.get(window, "__compassAnalysisFixtureStats") as {
-      releaseTerminal: () => void;
-    };
-    fixture.releaseTerminal();
-  });
+  return fixture;
 }
 
 async function expectNoOverflow(page: Page) {
@@ -433,7 +94,10 @@ test("composer starts centered, docks on the first send, keeps history scrolling
   expect(initial!.y + initial!.height).toBeLessThan(page.viewportSize()!.height - 80);
   await expect(page.getByRole("button", { name: "发送消息", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: /深度思考|智能搜索/ })).toHaveCount(0);
-  await page.getByLabel("选择 Chat 主模型").selectOption(providerId);
+  const select = page.getByLabel("选择 Chat 主模型");
+  await expect(select).toHaveValue("auto");
+  await expect(select.locator("option:checked")).toHaveText("Auto");
+  await select.selectOption(providerId);
   await input.fill("分析销售趋势");
   await input.press("Shift+Enter");
   await expect(input).toHaveValue("分析销售趋势\n");
@@ -449,39 +113,74 @@ test("composer starts centered, docks on the first send, keeps history scrolling
       tenantId,
       workspaceId,
       question: "分析销售趋势",
-      history: [],
+      sessionId: null,
       selection: { mode: "fixed", provider_id: providerId },
     });
+    expect(model.requests[0]).not.toHaveProperty("history");
     await expect(state).toHaveAttribute("data-chat-state", "started");
     await expect(page.getByRole("button", { name: "停止任务", exact: true })).toBeVisible();
+    await expect(page.locator(".analysis-process .analysis-loading-spinner:visible")).toBeVisible();
     const pending = await form.boundingBox();
     expect(pending!.y).toBeGreaterThan(initial!.y);
     expect(pending!.height).toBeLessThan(initial!.height);
-    expect(page.viewportSize()!.height - (pending!.y + pending!.height)).toBeLessThan(80);
+    const dock = await page.locator(".analysis-composer-dock").boundingBox();
+    expect(page.viewportSize()!.height - (dock!.y + dock!.height)).toBeLessThan(80);
   } finally {
     model.release();
   }
-  await expect(page.locator(".model-chat-history")).toContainText("55. 销售分析示例");
+  const answer = page.getByRole("region", { name: "最终回答" });
+  await expect(answer.locator(".analysis-markdown")).toHaveAttribute("data-revealing", "false");
+  await expect(answer.getByRole("heading", { name: "销售表现", level: 2 })).toBeVisible();
+  await expect(answer.getByRole("table").getByRole("cell", { name: "120 元" })).toBeVisible();
+  await expect(answer.getByRole("link", { name: "分析说明" })).toHaveAttribute(
+    "href",
+    "https://example.com/analysis",
+  );
+  await expect(answer.getByRole("checkbox", { checked: true })).toBeDisabled();
+  await expect(answer.locator("strong").first()).toHaveText("120 元");
+  await expect(answer.locator("blockquote")).toContainText("按实付金额汇总。");
+  await expect(answer.locator("pre code")).toContainText("paid_cent FROM sales;");
+  await expect(answer.locator("ol > li")).toHaveCount(55);
+  await expect(answer.locator(".analysis-markdown")).toHaveAttribute("data-revealing", "false");
+  await expect(answer.locator("#answer-script")).toHaveCount(0);
+  await expect(answer.locator('a[href^="javascript:"]')).toHaveCount(0);
   await expect(page.getByRole("button", { name: "停止任务", exact: true })).toHaveCount(0);
-  const process = page.getByRole("button", { name: /分析过程/ });
+  const process = page.locator(".analysis-process-toggle");
   await expect(process).toHaveAttribute("aria-expanded", "false");
+  await expect(process.locator(".analysis-loading-spinner")).toHaveCount(0);
   await process.click();
   await expect(process).toHaveAttribute("aria-expanded", "true");
-  await expect(page.locator(".analysis-tool-card")).toHaveCount(2);
-  await expect(page.locator(".analysis-step .model-call-trace")).toHaveCount(2);
-  await expect(page.locator(".analysis-model-step .model-call-trace")).toHaveCount(1);
-  await expect(page.locator(".model-call-trace")).toHaveCount(3);
-  await page.locator(".analysis-step .model-call-trace summary").first().click();
-  await expect(page.getByRole("button", { name: "复制调用编号" }).first()).toBeVisible();
-  await expect(page.locator(".analysis-final-answer")).toContainText("55. 销售分析示例");
-  await expect(page.locator(".analysis-file-card")).toContainText(`retail-products-`);
+  const toolCards = page.locator('.ui-execution-timeline > [data-kind="tool"]');
+  await expect(toolCards.locator(".ui-timeline-text")).toHaveText([
+    /比较渠道实付金额/,
+    /查询 POS 渠道商品明细/,
+  ]);
+  await toolCards
+    .first()
+    .getByRole("button", { name: /比较渠道实付金额/ })
+    .click();
+  await expect(toolCards.first()).toContainText("返回 2 条记录。");
+  await expect(toolCards.first()).toContainText("调用入参");
+  await expect(toolCards.first()).toContainText('"paidCent":"12000"');
+  await expect(page.locator(".model-chat-turn")).not.toContainText(
+    /模型调用|调用信息|调用编号|轮工具调用|channel_query/,
+  );
+  await expect(page.getByRole("link", { name: /^下载数据 · retail-products-/ })).toBeVisible();
   const history = page.locator(".model-chat-history");
+  await expect(page.getByText("我的工作流", { exact: true })).toHaveCount(0);
+  await expect(form).toHaveCSS("backdrop-filter", /blur\(16px\)/);
+  await expect(history).toHaveCSS("scrollbar-width", "none");
   expect(await history.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(
     true,
   );
   const docked = await form.boundingBox();
+  const historyBounds = await history.boundingBox();
+  expect(historyBounds!.y + historyBounds!.height).toBeGreaterThan(docked!.y + 40);
   await history.evaluate((element) => element.scrollTo({ top: 0 }));
   await expect.poll(() => history.evaluate((element) => element.scrollTop)).toBe(0);
+  await history.focus();
+  await history.press("PageDown");
+  await expect.poll(() => history.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   const afterScroll = await form.boundingBox();
   expect(Math.abs(afterScroll!.y - docked!.y)).toBeLessThan(2);
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
@@ -490,10 +189,10 @@ test("composer starts centered, docks on the first send, keeps history scrolling
   await expect(state).toHaveAttribute("data-chat-state", "empty");
   await expect(history).toHaveCount(0);
   await expect(input).toHaveValue("");
-  await expect(page.getByLabel("选择 Chat 主模型")).toHaveValue("");
+  await expect(select).toHaveValue("auto");
 });
 
-test("completed answers enter follow-up history and delivered CSV files download by server filename", async ({
+test("completed answers remain in server history and durable CSV downloads retain server bytes and filename", async ({
   page,
   context,
 }) => {
@@ -504,10 +203,23 @@ test("completed answers enter follow-up history and delivered CSV files download
   await page.getByRole("button", { name: "发送消息", exact: true }).click();
   await expect(page.locator(".analysis-final-answer")).toHaveCount(1);
 
+  const downloadLink = page.getByRole("link", { name: /^下载数据 · retail-products-/ });
+  await expect(downloadLink).toHaveAttribute("download", /^retail-products-[a-f0-9-]{36}\.csv$/);
+  await expect(downloadLink).toHaveAttribute("href", /\/analysis\/runs\/[^/]+\/artifacts\/[^?]+\?/);
+  // Chromium's native download attribute bypasses Playwright routing. Preserve its contract
+  // above, then let the fixture's Content-Disposition deliver the same filename and bytes.
+  // The unchanged native link is exercised separately against the real Agent artifact API.
+  await downloadLink.evaluate((link) => link.removeAttribute("download"));
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "下载", exact: true }).click();
+  await downloadLink.click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/^retail-products-[a-f0-9-]{36}\.csv$/);
+  await expect.poll(() => model.artifactDownloads).toBe(1);
+  expect(await download.failure()).toBeNull();
+  expect(await readFile((await download.path())!, "utf8")).toBe("product,amount\n示例商品,120\n");
+  const firstSessionId = new URL(page.url()).searchParams.get("session");
+  await page.reload();
+  await expect(page.locator(".analysis-final-answer")).toHaveCount(1);
 
   await input.fill("第二问：继续解释商品贡献");
   await page.getByRole("button", { name: "发送消息", exact: true }).click();
@@ -515,9 +227,11 @@ test("completed answers enter follow-up history and delivered CSV files download
   expect(model.requests).toHaveLength(2);
   expect(model.requests[1]).toMatchObject({
     question: "第二问：继续解释商品贡献",
-    history: [{ question: "第一问：比较渠道" }],
+    sessionId: firstSessionId,
   });
-  expect(model.requests[1].history[0].answer).toContain("55. 销售分析示例");
+  expect(model.requests[1]).not.toHaveProperty("history");
+  expect(model.histories[1]).toMatchObject([{ question: "第一问：比较渠道" }]);
+  expect(model.histories[1][0].answer).toContain("55. 销售分析示例");
 });
 
 test("stop keeps unfinished tools uncertain until the canceled terminal confirms cleanup", async ({
@@ -525,86 +239,457 @@ test("stop keeps unfinished tools uncertain until the canceled terminal confirms
   context,
 }) => {
   const fixture = await enter(page, context);
-  await installInteractiveRunFixture(page, fixture.revision, "canceled_confirmed");
+  fixture.scenario("canceled_confirmed");
   await page.getByLabel("选择 Chat 主模型").selectOption(providerId);
   await page.getByLabel("分析问题").fill("停止这次分析");
   await page.getByRole("button", { name: "发送消息", exact: true }).click();
-  const toolStatus = page.locator(".analysis-tool-card .analysis-status-chip");
+  const toolStatus = page.locator(
+    '.ui-execution-timeline > [data-kind="tool"] .ui-timeline-status',
+  );
   await expect(toolStatus).toHaveText("执行中");
 
   await page.getByRole("button", { name: "停止任务", exact: true }).click();
-  await expect.poll(() => fixtureCancelCount(page)).toBe(1);
+  await expect.poll(() => fixture.cancelCount).toBe(1);
   await expect(toolStatus).toHaveText("结果待确认");
   await expect(toolStatus).not.toHaveText("已终止");
 
-  await releaseFixtureTerminal(page);
+  fixture.releaseTerminal();
   await expect(page.locator(".analysis-run-notice")).toContainText("任务已终止");
   await expect(toolStatus).toHaveText("已终止");
 });
 
 test("cleanup_unconfirmed leaves unfinished tool cards uncertain", async ({ page, context }) => {
   const fixture = await enter(page, context);
-  await installInteractiveRunFixture(page, fixture.revision, "cleanup_unconfirmed");
+  fixture.scenario("cleanup_unconfirmed");
   await page.getByLabel("选择 Chat 主模型").selectOption(providerId);
   await page.getByLabel("分析问题").fill("触发清理待确认");
   await page.getByRole("button", { name: "发送消息", exact: true }).click();
-  await expect(page.locator(".analysis-tool-card")).toHaveCount(1);
+  const preparing = page.locator('.ui-execution-timeline > [data-status="preparing"]');
+  const process = page.locator(".analysis-process-toggle");
+  await expect(process).toContainText("准备工具调用 1");
+  await expect(process).toHaveAttribute("aria-expanded", "false");
+  const progressSpinner = process.locator(".analysis-loading-spinner");
+  await expect(progressSpinner).toBeVisible();
+  await process.press("Enter");
+  await expect(preparing).toBeVisible();
+  fixture.releaseTool();
+  await expect(preparing).toHaveCount(0);
+  const running = page.locator(
+    '.ui-execution-timeline > [data-kind="tool"][data-status="running"]',
+  );
+  await expect(running).toHaveCount(1);
+  await expect(running.locator(".analysis-loading-spinner")).toBeVisible();
+  await process.press("Enter");
+  await expect(progressSpinner).toBeVisible();
+  await expect(page.locator(".analysis-process-toggle")).toContainText("执行中");
   await page.getByRole("button", { name: "停止任务", exact: true }).click();
 
-  await expect(page.locator(".analysis-tool-card .analysis-status-chip")).toHaveText("结果待确认");
-  await releaseFixtureTerminal(page);
-  await expect(page.locator(".analysis-run-notice")).toContainText("终止清理失败");
-  await expect(page.locator(".analysis-tool-card .analysis-status-chip")).toHaveText("结果待确认");
-  await expect(page.locator(".analysis-tool-card .analysis-status-chip")).not.toHaveText("已终止");
+  await expect(
+    page.locator('.ui-execution-timeline > [data-kind="tool"] .ui-timeline-status'),
+  ).toHaveText("结果待确认");
+  fixture.releaseTerminal();
+  await expect(page.locator(".model-chat-turn")).toContainText("执行资源正在核对");
+  await expect(page.getByRole("button", { name: "继续任务", exact: true })).toBeDisabled();
+  await expect(progressSpinner).toHaveCount(0);
+  await expect(
+    page.locator('.ui-execution-timeline > [data-kind="tool"] .ui-timeline-status'),
+  ).toHaveText("结果待确认");
+  await expect(
+    page.locator('.ui-execution-timeline > [data-kind="tool"] .ui-timeline-status'),
+  ).not.toHaveText("已终止");
 });
 
-test("already_terminal waits for the original clean stream before committing the answer", async ({
+test("lost active stream reloads blocked Message without resubmitting or reconnecting", async ({
   page,
   context,
 }) => {
   const fixture = await enter(page, context);
-  await installInteractiveRunFixture(page, fixture.revision, "already_terminal_completed");
+  fixture.loseFirstStream();
+  await page.getByLabel("分析问题").fill("增量丢失后恢复已提交分析");
+  await page.getByRole("button", { name: "发送消息", exact: true }).click();
+  await expect.poll(() => fixture.lostStreamResponses).toBe(1);
+  const status = page.getByRole("region", { name: "分析过程" });
+  await expect(page.locator(".model-chat-turn")).toContainText(
+    "增量记录不可用，请保留当前会话并联系管理员。",
+  );
+  await expect(status).toContainText("已暂停");
+  await expect(status.getByRole("button", { name: "继续任务", exact: true })).toBeDisabled();
+  await expect(page.locator(".model-chat-turn")).toHaveCount(1);
+  const runId = [...fixture.runs.keys()][0];
+  await expect(page.locator(".model-chat-turn")).toHaveAttribute("data-run-id", runId);
+  await expect(page.locator(".model-chat-turn")).toContainText("增量丢失后恢复已提交分析");
+  await expect(page.locator(".model-chat-turn")).toContainText(
+    "已核对 POS 渠道，后续商品分析尚未完成。",
+  );
+  expect(fixture.snapshotReads).toBeGreaterThanOrEqual(2);
+  const process = page.locator(".analysis-process-toggle");
+  if ((await process.getAttribute("aria-expanded")) === "false") await process.click();
+  await expect(page.locator('.ui-execution-timeline > [data-kind="tool"]')).toHaveCount(1);
+  await expect(
+    page.locator('.ui-execution-timeline > [data-kind="tool"] .ui-timeline-status'),
+  ).toHaveText("成功");
+  const reads = fixture.snapshotReads;
+  // Move beyond multiple reconnect intervals after blocked history is restored.
+  await page.clock.install();
+  await page.clock.fastForward(6500);
+  await expect(page.locator(".model-chat-turn")).toContainText("增量记录不可用");
+  expect(fixture.snapshotReads).toBe(reads);
+  expect(fixture.streamRequests).toBe(1);
+  expect(fixture.requests).toHaveLength(1);
+  expect(fixture.cancelCount).toBe(0);
+});
+
+test("model changes keep sending disabled until the persisted context reset completes", async ({
+  page,
+  context,
+}) => {
+  const fixture = await enter(page, context);
+  const input = page.getByLabel("分析问题");
+  const select = page.getByLabel("选择 Chat 主模型");
+  await input.fill("切换前的分析");
+  await page.getByRole("button", { name: "发送消息", exact: true }).click();
+  await expect(page.getByRole("region", { name: "最终回答" })).toContainText("销售分析示例");
+  await input.fill("切换后保留的草稿");
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let resets = 0;
+  await page.route("**/api/web/v1/analysis/sessions/*/context-reset", async (route) => {
+    resets++;
+    await gate;
+    const body = route.request().postDataJSON();
+    const sessionId = new URL(route.request().url()).pathname.split("/").at(-2);
+    await route.fulfill({
+      headers: { "X-Compass-View-Revision": fixture.revision, "Cache-Control": "no-store" },
+      json: {
+        runId: null,
+        sessionId,
+        version: body.expectedVersion + 1,
+        status: "active",
+        code: null,
+      },
+    });
+  });
+  page.once("dialog", (dialog) => dialog.accept());
+  try {
+    await select.selectOption(providerId);
+    await expect.poll(() => resets).toBe(1);
+    await expect(select).toBeDisabled();
+    await expect(input).toBeDisabled();
+    await expect(page.getByRole("button", { name: "发送消息", exact: true })).toHaveCount(0);
+    expect(fixture.requests).toHaveLength(1);
+  } finally {
+    release();
+  }
+  await expect(select).toHaveValue(providerId);
+  await expect(input).toHaveValue("切换后保留的草稿");
+  await expect(page.getByRole("button", { name: "发送消息", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "发送消息", exact: true }).click();
+  await expect.poll(() => fixture.requests.length).toBe(2);
+  expect(fixture.requests[1]).toMatchObject({
+    selection: { mode: "fixed", provider_id: providerId },
+  });
+});
+
+test("cancel retries a conflicting version from Message and terminates the original run", async ({
+  page,
+  context,
+}) => {
+  const fixture = await enter(page, context);
+  fixture.scenario("cancel_conflict");
+  await page.getByLabel("分析问题").fill("状态更新期间停止任务");
+  await page.getByRole("button", { name: "发送消息", exact: true }).click();
+  await expect(
+    page.locator('.ui-execution-timeline > [data-kind="tool"] .ui-timeline-status'),
+  ).toHaveText("执行中");
+  const originalRun = await page.locator(".model-chat-turn").getAttribute("data-run-id");
+  const beforeReads = fixture.snapshotReads;
+  await page.getByRole("button", { name: "停止任务", exact: true }).click();
+  await expect.poll(() => fixture.cancelCount).toBe(2);
+  expect(fixture.snapshotReads).toBeGreaterThan(beforeReads);
+  expect(fixture.controls.map((control) => control.runId)).toEqual([originalRun, originalRun]);
+  expect(fixture.controls.map((control) => control.body.expectedVersion)).toEqual([1, 2]);
+  expect(fixture.controls[0].body.requestId).not.toBe(fixture.controls[1].body.requestId);
+  fixture.releaseTerminal();
+  await expect(page.locator(".analysis-run-notice")).toContainText("任务已终止");
+  await expect(
+    page.locator('.ui-execution-timeline > [data-kind="tool"] .ui-timeline-status'),
+  ).toHaveText("已终止");
+  expect(fixture.requests).toHaveLength(1);
+  await page.reload();
+  await expect(page.locator(".model-chat-turn")).toHaveAttribute("data-run-id", originalRun!);
+  await expect(page.locator(".analysis-run-notice")).toContainText("任务已终止");
+});
+
+test("saved and expired workflow cards restore their persisted state after refresh", async ({
+  page,
+  context,
+}) => {
+  const fixture = await enter(page, context);
+  const send = async (question: string) => {
+    await page.getByLabel("分析问题").fill(question);
+    await page.getByRole("button", { name: "发送消息", exact: true }).click();
+    await expect(page.getByRole("region", { name: "最终回答" })).toContainText("销售分析示例");
+  };
+  const card = page.getByRole("region", { name: "保存工作流", exact: true });
+  await send("恢复已保存的工作流");
+  fixture.publishWorkflow("saved", "每周渠道核对 · 自定义名称");
+  await page.reload();
+  await expect(card.getByRole("status")).toContainText("已保存「每周渠道核对 · 自定义名称」");
+  await expect(card.getByRole("button", { name: "查看工作流详情" })).toHaveCount(0);
+  expect(fixture.workflowReads).toBe(0);
+
+  await page.getByRole("button", { name: "新建对话", exact: true }).click();
+  await send("恢复已到期的保存邀请");
+  fixture.publishWorkflow("offered", "过期草稿", {
+    expiresAt: new Date(Date.now() - 60_000).toISOString(),
+  });
+  await page.reload();
+  await expect(card.getByRole("status")).toHaveText("保存邀请已失效，分析结果与编排脚本已保留。");
+  await expect(card.getByRole("button")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "最终回答" })).toContainText("销售分析示例");
+
+  await page.getByRole("button", { name: "新建对话", exact: true }).click();
+  await send("服务端已过期的保存邀请");
+  fixture.publishWorkflow("offered", "旧保存邀请", { unavailable: true });
+  await page.reload();
+  await card.getByRole("button", { name: "查看工作流详情" }).click();
+  await expect(card.getByRole("alert")).toHaveText("保存邀请已失效，请重新运行分析。");
+  expect(fixture.workflowReads).toBe(1);
+  expect(fixture.workflowConfirmations).toBe(0);
+  expect(fixture.requests).toHaveLength(3);
+});
+
+test("dynamic workflow save offer displays the script and function arguments", async ({
+  page,
+  context,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  const fixture = await enter(page, context);
+  await page.getByRole("button", { name: "对比渠道实付并保存", exact: true }).click();
+  await page.getByRole("button", { name: "发送消息", exact: true }).click();
+  await expect(page.getByRole("region", { name: "最终回答" })).toBeVisible();
+  const source = 'return await agent("sub_agent", { prompt: args.window });';
+  fixture.publishWorkflow("offered", "渠道复盘", {
+    definition: {
+      entryContract: "agent_workflow@1",
+      description: "比较输入日期范围内的渠道",
+      parameters: { type: "object", properties: { window: { type: "string" } } },
+      args: { window: "2025-11-17" },
+      scriptSource: source,
+    },
+  });
+  await page.reload();
+  const card = page.getByRole("region", { name: "保存工作流", exact: true });
+  await card.getByRole("button", { name: "查看工作流详情" }).press("Enter");
+  await expect(card.getByLabel("工作流名称")).toBeFocused();
+  await expect(card.getByText(source, { exact: true })).toBeVisible();
+  await card.locator("summary").filter({ hasText: "查看工具参数" }).press("Enter");
+  await expect(card.getByRole("region", { name: "试跑入参" })).toContainText("2025-11-17");
+  await expect(card.getByRole("region", { name: "函数参数契约" })).toContainText("window");
+  await expectNoOverflow(page);
+});
+
+test("the Workflow page preserves viewing and export of retired assets", async ({
+  page,
+  context,
+}) => {
+  const fixture = await enter(page, context);
+  const asset = {
+    assetId: "98700000-0000-4000-8000-000000000004",
+    name: "门店每周复盘",
+    status: "active",
+    definitionVersion: 1,
+    entryContract: "channel_attribution@1",
+    metadataRevision: 1,
+  };
+  await page.route("**/api/web/v1/analysis/workflows**", async (route) => {
+    const url = new URL(route.request().url());
+    const headers = { "X-Compass-View-Revision": fixture.revision, "Cache-Control": "no-store" };
+    await route.fulfill({
+      headers,
+      json: url.pathname.endsWith(asset.assetId)
+        ? { ...asset, scriptSource: "return await parallel([]);" }
+        : { items: [asset], nextCursor: null },
+    });
+  });
+  await page.goto(`/t/${tenantId}/w/${workspaceId}/plugins/workflows`);
+  await page.getByRole("button", { name: /门店每周复盘 · v1 · 已启用/ }).click();
+  await expect(page.getByRole("heading", { name: asset.name, exact: true })).toBeFocused();
+  await expect(page.getByText(/当前保留查看和导出/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "使用", exact: true })).toHaveCount(0);
+  const downloadEvent = page.waitForEvent("download");
+  const exportButton = page.getByRole("button", { name: "导出脚本" });
+  await exportButton.focus();
+  await exportButton.press("Enter");
+  const download = await downloadEvent;
+  expect(download.suggestedFilename()).toBe(`workflow-${asset.assetId}.js`);
+  expect(await readFile((await download.path())!, "utf8")).toBe("return await parallel([]);");
+  expect(fixture.requests).toHaveLength(0);
+});
+
+test("deletes a workflow after confirmation and keeps the list in sync", async ({
+  page,
+  context,
+}) => {
+  const fixture = await enter(page, context);
+  const asset = {
+    assetId: "98700000-0000-4000-8000-000000000004",
+    name: "门店每周复盘",
+    status: "disabled",
+    definitionVersion: 1,
+    entryContract: "agent_workflow@1",
+    metadataRevision: 2,
+  };
+  let deleteRequests = 0;
+  let deleted = false;
+  await page.route("**/api/web/v1/analysis/workflows**", async (route) => {
+    const request = route.request();
+    const headers = { "X-Compass-View-Revision": fixture.revision, "Cache-Control": "no-store" };
+    if (request.method() === "DELETE") {
+      expect(request.postDataJSON()).toEqual({ metadataRevision: 2 });
+      deleteRequests += 1;
+      if (deleteRequests === 1) {
+        return route.fulfill({ status: 503, headers, json: { error: { message: "请重试。" } } });
+      }
+      deleted = true;
+      return route.fulfill({ status: 204, headers });
+    }
+    return route.fulfill({
+      headers,
+      json: new URL(request.url()).pathname.endsWith(asset.assetId)
+        ? asset
+        : { items: deleted ? [] : [asset], nextCursor: null },
+    });
+  });
+  await page.goto(`/t/${tenantId}/w/${workspaceId}/plugins/workflows`);
+  const row = page.getByRole("button", { name: /门店每周复盘 · v1 · 已停用/ });
+  await row.press("Enter");
+  const remove = page.getByRole("button", { name: "删除", exact: true });
+  await remove.press("Enter");
+  const dialog = page.getByRole("dialog", { name: "删除工作流" });
+  const cancel = dialog.getByRole("button", { name: "取消" });
+  await expect(cancel).toBeFocused();
+  await cancel.press("Escape");
+  await expect(remove).toBeFocused();
+  expect(deleteRequests).toBe(0);
+
+  await page.setViewportSize({ width: 390, height: 820 });
+  await remove.press("Enter");
+  await expect(dialog).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(
+    true,
+  );
+  const bounds = (await dialog.boundingBox())!;
+  expect(bounds.x).toBeGreaterThanOrEqual(0);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(390);
+  const confirm = dialog.getByRole("button", { name: "确认删除" });
+  await confirm.click();
+  await expect(dialog.getByRole("alert")).toHaveText("请重试。");
+  await expect(dialog).toBeVisible();
+  await confirm.click();
+  await expect(dialog).toBeHidden();
+  await expect(row).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "已保存工作流" })).toBeFocused();
+  await expect(page.getByText("工作流已删除。", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("还没有保存的工作流。", { exact: true })).toBeVisible();
+});
+
+test("cancel racing completion reads the committed result from Message and preserves the original run", async ({
+  page,
+  context,
+}) => {
+  const fixture = await enter(page, context);
+  fixture.scenario("already_terminal_completed");
   await page.getByLabel("选择 Chat 主模型").selectOption(providerId);
   await page.getByLabel("分析问题").fill("完成态竞态");
   await page.getByRole("button", { name: "发送消息", exact: true }).click();
-  await expect(page.locator(".analysis-tool-card")).toHaveCount(1);
+  await expect(page.locator('.ui-execution-timeline > [data-kind="tool"]')).toHaveCount(1);
   await page.getByRole("button", { name: "停止任务", exact: true }).click();
 
-  await expect(page.locator(".analysis-run-header > .analysis-status-chip")).toHaveText(
-    "已结束，等待结果",
-  );
-  await expect(page.locator(".analysis-final-answer")).toHaveCount(0);
-  const processToggle = page.getByRole("button", { name: /分析过程/ });
-  await page.locator(".analysis-step .model-call-trace summary").click();
-  await page.getByRole("button", { name: "复制调用编号" }).focus();
-  await expect(page.getByRole("button", { name: "复制调用编号" })).toBeFocused();
-  await releaseFixtureTerminal(page);
-  await expect(page.locator(".analysis-final-answer")).toContainText("原结果流确认后的完整回答。");
+  await expect(page.locator(".analysis-final-answer")).toContainText("已持久保存的完整回答。");
+  const processToggle = page.locator(".analysis-process-toggle");
   await expect(processToggle).toHaveAttribute("aria-expanded", "false");
-  await expect(processToggle).toBeFocused();
+  expect(fixture.cancelCount).toBe(1);
+  expect(fixture.requests).toHaveLength(1);
+  expect(fixture.controls[0].body).toMatchObject({ expectedVersion: 1 });
+  await page.reload();
+  await expect(page.locator(".analysis-final-answer")).toHaveCount(1);
+  await expect(page.getByRole("region", { name: "分析过程" })).toContainText("已完成");
 });
 
-test("already_terminal with a broken original stream withholds results and explains the gap", async ({
+test("broken stream and unavailable Message withhold unconfirmed content until history reload recovers it", async ({
   page,
   context,
 }) => {
   const fixture = await enter(page, context);
-  await installInteractiveRunFixture(page, fixture.revision, "already_terminal_disconnected");
+  fixture.scenario("already_terminal_disconnected");
   await page.getByLabel("选择 Chat 主模型").selectOption(providerId);
   await page.getByLabel("分析问题").fill("终态结果流断开");
   await page.getByRole("button", { name: "发送消息", exact: true }).click();
-  await expect(page.locator(".analysis-tool-card")).toHaveCount(1);
+  await expect(page.locator('.ui-execution-timeline > [data-kind="tool"]')).toHaveCount(1);
   await page.getByRole("button", { name: "停止任务", exact: true }).click();
 
-  await expect(page.locator(".analysis-run-header > .analysis-status-chip")).toHaveText(
-    "已结束，等待结果",
+  await expect(page.locator("section[data-chat-state]").getByRole("alert")).toContainText(
+    "会话读取暂时不可用",
   );
-  await releaseFixtureTerminal(page);
-  await expect(page.locator(".analysis-run-notice")).toContainText(
-    "服务端终态已确认，但结果流不完整",
-  );
-  await expect(page.locator(".analysis-run-notice")).toContainText("无法安全提交最终回答或文件");
   await expect(page.locator(".analysis-final-answer")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /^下载数据/ })).toHaveCount(0);
+  fixture.releaseTerminal();
+  await expect(page.getByRole("button", { name: "重新加载会话", exact: true })).toHaveCount(0);
+  await expect(page.locator(".analysis-error-toast")).toHaveCount(0, { timeout: 7000 });
+  await page.reload();
+  await expect(page.locator(".analysis-final-answer")).toContainText("已持久保存的完整回答。");
+  expect(fixture.requests).toHaveLength(1);
+  expect(fixture.cancelCount).toBe(1);
+});
+
+test("stream completion collapses the process and returns focus from a tool to its disclosure", async ({
+  page,
+  context,
+}) => {
+  const fixture = await enter(page, context);
+  fixture.scenario("canceled_confirmed");
+  await page.getByLabel("分析问题").fill("完成后返回过程焦点");
+  await page.getByRole("button", { name: "发送消息", exact: true }).click();
+  const toggle = page.locator(".analysis-process-toggle");
+  await toggle.press("Enter");
+  const summary = page.locator('.ui-execution-timeline > [data-kind="tool"] .ui-timeline-row');
+  await summary.focus();
+  await expect(summary).toBeFocused();
+  fixture.finishInteractive();
+  await expect(page.locator(".analysis-final-answer")).toContainText("已持久保存的完整回答。");
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(toggle).toBeFocused();
+});
+
+test("leaving a running session keeps background execution and restores its result without cancellation", async ({
+  page,
+  context,
+}) => {
+  const fixture = await enter(page, context);
+  fixture.holdNext();
+  await page.getByLabel("分析问题").fill("在后台继续分析");
+  await page.getByRole("button", { name: "发送消息", exact: true }).click();
+  await expect(page.locator("section[data-chat-state]")).toHaveAttribute(
+    "data-chat-state",
+    "started",
+  );
+  const originalUrl = page.url();
+  await page.getByRole("button", { name: "新建对话", exact: true }).click();
+  await expect(page.locator("section[data-chat-state]")).toHaveAttribute(
+    "data-chat-state",
+    "empty",
+  );
+  expect(fixture.cancelCount).toBe(0);
+  fixture.release();
+  await page.goto(originalUrl);
+  await expect(page.getByRole("region", { name: "最终回答" }).locator("ol > li")).toHaveCount(55);
+  await expect(page.locator(".analysis-markdown")).toHaveAttribute("data-revealing", "false");
+  expect(fixture.requests).toHaveLength(1);
+  expect(fixture.cancelCount).toBe(0);
 });
 
 test("attachment rail accepts ten local files, scrolls in one row, removes and reselects without sending files", async ({
@@ -666,6 +751,7 @@ test("attachment rail accepts ten local files, scrolls in one row, removes and r
   expect(model.requests[0]).not.toHaveProperty("attachments");
   await chooser.setInputFiles(file(1));
   await cards.first().getByRole("button").click();
+  await page.getByLabel("分析问题").fill("尚未发送的补充问题");
   const navigationDialog = page.waitForEvent("dialog");
   const navigating = page.getByRole("link", { name: "报告空间", exact: true }).click();
   const confirmation = await navigationDialog;
@@ -700,17 +786,25 @@ for (const width of [375, 768, 1440]) {
     const selectBox = await select.boundingBox();
     const attachBox = await attach.boundingBox();
     const sendBox = await send.boundingBox();
+    const main = await page.locator(".analysis-main").boundingBox();
+    const composer = await page.locator(".analysis-composer").boundingBox();
+    expect(composer!.y + composer!.height - (sendBox!.y + sendBox!.height)).toBeLessThanOrEqual(11);
+    expect(main!.width - composer!.width).toBeLessThanOrEqual(54);
+    await expect(page.locator(".analysis-welcome")).toHaveCSS("scrollbar-width", "none");
     expect(selectBox!.x).toBeLessThan(attachBox!.x);
     expect(attachBox!.x).toBeLessThan(sendBox!.x);
     expect(Math.abs(selectBox!.y - sendBox!.y)).toBeLessThan(14);
-    await page.screenshot({ path: `../../work/993/composer-empty-${width}.png`, fullPage: true });
+    await page.screenshot({
+      path: `../../work/lesson-19/composer-empty-${width}.png`,
+      fullPage: true,
+    });
     await page
       .locator("input[type=file]")
       .setInputFiles(Array.from({ length: 10 }, (_, index) => file(index + 1)));
     await expect(page.locator(".composer-attachment")).toHaveCount(10);
     await expectNoOverflow(page);
     await page.screenshot({
-      path: `../../work/993/composer-attachments-${width}.png`,
+      path: `../../work/lesson-19/composer-attachments-${width}.png`,
       fullPage: true,
     });
     const cards = page.locator(".composer-attachment");
@@ -718,11 +812,26 @@ for (const width of [375, 768, 1440]) {
     await select.selectOption(providerId);
     await page.getByLabel("分析问题").fill("分析本月销售趋势");
     await send.click();
-    await expect(page.locator(".model-chat-history")).toContainText("55. 销售分析示例");
+    const answer = page.getByRole("region", { name: "最终回答" });
+    await expect(answer.locator("ol > li")).toHaveCount(55);
     await expectNoOverflow(page);
-    const form = await page.locator(".analysis-composer").boundingBox();
-    expect(page.viewportSize()!.height - (form!.y + form!.height)).toBeLessThan(90);
-    await page.screenshot({ path: `../../work/993/composer-started-${width}.png`, fullPage: true });
+    if (width === 375) {
+      for (const content of [
+        answer.getByRole("region", { name: "数据表格" }),
+        answer.locator("pre"),
+      ]) {
+        expect(await content.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(
+          true,
+        );
+      }
+    }
+    const dock = await page.locator(".analysis-composer-dock").boundingBox();
+    expect(main!.width - dock!.width).toBeLessThanOrEqual(48);
+    expect(page.viewportSize()!.height - (dock!.y + dock!.height)).toBeLessThan(90);
+    await page.screenshot({
+      path: `../../work/lesson-19/composer-started-${width}.png`,
+      fullPage: true,
+    });
   });
 }
 
@@ -775,8 +884,142 @@ test("docked composer keeps attachment removal and send reachable in short mobil
     expect(noticeBox!.y + noticeBox!.height).toBeLessThanOrEqual(height + 1);
     await expectNoOverflow(page);
     await page.screenshot({
-      path: `../../work/993/composer-started-short-${height}.png`,
+      path: `../../work/lesson-19/composer-started-short-${height}.png`,
       fullPage: true,
     });
   }
 });
+
+test("planned Retail preset updates only the dock and hides completed tasks", async ({
+  page,
+  context,
+}) => {
+  const fixture = await enter(page, context);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  fixture.scenario("plan");
+
+  const input = page.getByRole("textbox", { name: "分析问题" });
+  await page.getByRole("button", { name: "先列计划 · 渠道与商品诊断" }).click();
+  await expect(input).toHaveValue(/^比较 2025-11-17/);
+  await expect(page.getByRole("checkbox", { name: "先列计划" })).toBeChecked();
+  await expect(page.getByLabel("选择 Chat 主模型")).toHaveValue("auto");
+  await page.getByRole("button", { name: "发送消息" }).click();
+  await expect.poll(() => fixture.requests[0]?.constraints).toEqual({ plan: "required" });
+  const panel = page.getByRole("region", { name: "分析计划" });
+  const disclosure = panel.getByRole("button");
+  const list = panel.getByRole("list", { name: "计划事项" });
+  const composer = page.locator(".analysis-composer");
+  const ring = panel.locator(".analysis-todo-ring-progress");
+  await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+  await expect(disclosure).toHaveText("第 1 / 2 步·比较渠道实付金额");
+  await expect(ring).toHaveAttribute("stroke-dashoffset", "1");
+  await expect(list).toBeHidden();
+  await expect(page.locator(".analysis-todo + .analysis-composer-dock")).toBeVisible();
+  const composerBox = await composer.boundingBox();
+
+  await disclosure.hover();
+  await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+  await expect(list.getByRole("listitem")).toHaveCount(2);
+  await expect(list.getByText("待处理", { exact: true })).toBeVisible();
+  await expect(
+    list.locator('[aria-current="step"]').getByText("进行中", { exact: true }),
+  ).toBeVisible();
+  await expect(list.locator('[aria-current="step"]')).toHaveCSS("animation-name", "none");
+  expect((await list.boundingBox())!.y).toBeLessThan((await disclosure.boundingBox())!.y);
+  expect(await composer.boundingBox()).toEqual(composerBox);
+  await list.hover();
+  await expect(list).toBeVisible();
+  await page.getByRole("button", { name: "新建对话" }).hover();
+  await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+  await expect(list).toBeHidden();
+
+  await disclosure.focus();
+  await page.keyboard.press("Enter");
+  await expect(list).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(list).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(disclosure).toBeFocused();
+  await expect(list).toBeHidden();
+
+  fixture.advancePlan();
+  await expect(disclosure).toHaveText("第 2 / 2 步·分析商品贡献");
+  await expect(ring).toHaveAttribute("stroke-dashoffset", "0.5");
+  await expect(list).toBeHidden();
+  await page.setViewportSize({ width: 390, height: 520 });
+  await disclosure.click();
+  await expect(list.getByRole("listitem")).toHaveCount(2);
+  await expect(list.locator('[data-status="verified"] .analysis-todo-label')).toHaveCSS(
+    "text-decoration-line",
+    "line-through",
+  );
+  await expect(list.locator('[aria-current="step"]')).toContainText("分析商品贡献");
+  await expectNoOverflow(page);
+  expect((await list.boundingBox())!.y).toBeGreaterThanOrEqual(0);
+  await page.setViewportSize({ width: 667, height: 320 });
+  const shortListBox = (await list.boundingBox())!;
+  expect(shortListBox.y).toBeGreaterThan((await disclosure.boundingBox())!.y);
+  expect(shortListBox.y + shortListBox.height).toBeLessThanOrEqual(320);
+  await disclosure.click();
+  await expect(list).toBeHidden();
+  await expect(page.locator(".model-chat-turn")).not.toContainText("分析商品贡献");
+
+  fixture.finishPlan();
+  await expect(panel.getByRole("status")).toContainText("计划已完成");
+  await expect(page.getByLabel("最终回答")).toContainText("已核对两周渠道变化与商品贡献。");
+  await expect(panel).toBeHidden();
+});
+
+for (const [label, field, initial, edited, constraints] of [
+  ["最多两轮 · 渠道与商品诊断", "最多轮次", "2", "3", { plan: "required", maxSteps: 3 }],
+  ["5 秒超时 · 渠道与商品诊断", "时限（秒）", "5", "8", { timeoutSeconds: 8 }],
+] as const) {
+  test(`${label} sends the edited question and constraints`, async ({ page, context }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const fixture = await enter(page, context);
+    const preset = page.getByRole("button", { name: label });
+    await preset.focus();
+    await page.keyboard.press("Enter");
+    const control = page.getByRole("spinbutton", { name: field });
+    await expect(control).toHaveValue(initial);
+    await control.fill(edited);
+    await page.getByRole("textbox", { name: "分析问题" }).fill("对比渠道数据并解释变化");
+    await expectNoOverflow(page);
+    await page.getByRole("button", { name: "发送消息" }).click();
+    await expect
+      .poll(() => fixture.requests[0])
+      .toMatchObject({
+        question: "对比渠道数据并解释变化",
+        constraints,
+      });
+  });
+}
+
+for (const width of [1440, 390]) {
+  test(`generic examples send ordinary questions with keyboard at ${width}px`, async ({
+    page,
+    context,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    const fixture = await enter(page, context);
+    const example = page.getByRole("button", {
+      name: width === 1440 ? "对比渠道实付并保存" : "换两周对比渠道实付",
+      exact: true,
+    });
+    await example.focus();
+    await example.press("Enter");
+    const input = page.getByLabel("分析问题");
+    await expect(input).toBeFocused();
+    const question = await input.inputValue();
+    await expectNoOverflow(page);
+    await input.press("Enter");
+    await expect.poll(() => fixture.requests.length).toBe(1);
+    expect(fixture.requests[0]).toMatchObject({ question, sessionId: null });
+    expect(fixture.requests[0]).not.toHaveProperty("showcase");
+    expect(fixture.requests[0]).not.toHaveProperty("workflowAssetRef");
+    expect(fixture.requests[0]).not.toHaveProperty("constraints.verification");
+    await expect(page.getByRole("region", { name: "最终回答" })).toBeVisible();
+    await page.screenshot({ path: `../../work/978-composer-${width}.png`, fullPage: true });
+    await expectNoOverflow(page);
+  });
+}

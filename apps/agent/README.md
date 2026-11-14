@@ -5,10 +5,10 @@
 从工程根运行 `pnpm dev -F agent`，统一加载根 `.env`。本目录 `turbo.json` 为构建和静态检查声明 Python 工具链缓存指纹；开发、迁移及 seed 不缓存。
 
 - `/healthz`：进程存活，无数据库依赖。
-- `/readyz`：数据库连接、演示表与模型配置表可用性，未迁移至 0004 时返回 503。
+- `/readyz`：数据库连接、演示、模型、数据连接和工作流资产表可用性，未迁移至 0014、Runtime 密钥/Redis/执行权不可用时返回 503。
 - `/v1/demo/overview`：固定合成数据聚合；默认关闭，启用后仍只读。空数据或数据库故障返回 503。
 
-Feature 993 增加进程内 LLM Runtime、平台模型 Provider 配置、能力测试和 Chat 调用。`models/` 拥有配置与元记录，`llm/` 统一参数、适配器、结果和错误；`model_api.py` 提供内部 HTTP 入口。账户、租户与权限由 Web / BFF 拥有，每次调用先完成短事务鉴权，再携服务令牌及可信上下文调用 Agent。Agent 校验上下文与 Provider 状态，不访问 Web 业务表。Feature 989 在此基础上增加进程内 Run / Step、顺序 ReAct、固定 Retail 查询、SSE 进度、CSV 与在途终止；计划预算、并行工具、Sandbox 和持久恢复仍属于后续课程。
+Feature 993 增加进程内 LLM Runtime、平台模型 Provider 配置、能力测试和 Chat 调用。`models/` 拥有配置与元记录，`llm/` 统一参数、适配器、结果和错误；`api/models.py` 提供内部 HTTP 入口。账户、租户与权限由 Web / BFF 拥有，每次调用先完成短事务鉴权，再携服务令牌及可信上下文调用 Agent。Agent 校验上下文与 Provider 状态，不访问 Web 业务表。Feature 989 在此基础上增加进程内 Run / Step、顺序 ReAct、固定 Retail 查询、SSE 进度、CSV 与在途终止；第 16～18 课补充计划预算、Workflow、统一工具调度、MCP 与独立 Sandbox；第 19 课接入持久 Session/Run、Redis 投影与人工确认，见 [运行说明](../../docs/lesson-19-durable-runtime.md)。
 
 数据库迁移唯一源为 `migrations/`，受管入口和 SQL 交付见 [agent/main](db/main/README.md)。首次运行 `pnpm db:provision -F agent`，再执行 `pnpm db:migrate -F agent`。供应、迁移与运行凭据分离；`pnpm db:seed -F agent` 使用运行账号幂等写入三天虚构数据。
 
@@ -32,16 +32,15 @@ V2 按 [Runtime 目录说明](src/compass_agent/llm/README.md)和[模型应用�
 
 完整零售业务数据由独立的 [tools/data-seed](../../tools/data-seed/README.md) 生成、校验和发布，使用 `pnpm data:seed`。工具及其零售迁移、测试已移出 Agent；Agent 包和运行镜像只携带自身代码。
 
-`AGENT_API_URL` 为 Web 的内部 HTTP 接口地址配置，Compose 内服务地址为 `http://agent:8102`。统一 Dispatcher、Sandbox 控制与 Memory Tools 按后续切片接入。
+`AGENT_API_URL` 为 Web 的内部 HTTP 接口地址配置，Compose 内服务地址为 `http://agent:8102`。统一 Dispatcher、个人 MCP 与本地 Sandbox 控制见下文第 18 课；Memory Tools 按后续切片接入。
 
-本期顺序执行内核位于 `src/compass_agent/runtime/`；已交付的单次模型调用仍位于 `src/compass_agent/llm/runtime.py`。工作流、调度与持久恢复按后续切片扩展；模块职责和目录规则见 [LLM Runtime 说明](src/compass_agent/llm/README.md#目录演进)。
+本期顺序执行内核位于 `src/compass_agent/runtime/`；已交付的单次模型调用仍位于 `src/compass_agent/llm/runtime.py`。持久任务、状态、恢复与人工确认由 runtime 内部模块分工管理；模块职责和目录规则见 [LLM Runtime 说明](src/compass_agent/llm/README.md#目录演进)。
 
 ## 第 15 课 Agent Run
 
-`POST /v1/analysis/runs` 返回 `compass.run` v1 SSE，首包在任何外部派发前提供 Run ID；`POST /v1/analysis/runs/{run_id}/cancel` 受理同一所有者的停止请求。执行内核位于 `src/compass_agent/runtime/`，最多 6 个模型 Step、每步 4 条顺序工具调用，Run 总期限 180 秒。原模型管理、诊断和单次 Chat API 保持原契约。
+`POST /v1/analysis/runs` 返回 `compass.run` v1 SSE，首包在任何外部派发前提供 Run ID；`POST /v1/analysis/runs/{run_id}/cancel` 受理同一所有者的停止请求。执行内核位于 `src/compass_agent/runtime/`，最多 20 个模型 Step、每步 4 条顺序工具调用，Run 总期限 180 秒。原模型管理、诊断和单次 Chat API 保持原契约。
 
-固定 `retail_sales` 工具只接受日期、`channel | product` 维度及商品维度的渠道编码，不接受 SQL 或连接信息。启用工具时成对配置 `COMPASS_RETAIL_RUN_SCOPE` 与 `COMPASS_RETAIL_RUN_READONLY_DSN`；前者绑定唯一 Web tenant/workspace、发布版本、摘要、角色和 Retail tenant，后者只使用发布工具生成的受限只读账号。全空时正常保留零工具 Chat，部分配置或 libpq 取消能力不满足时禁用 Retail。
-
+默认工具为 `todo_write`、授权连接可用时的 `database_query` 和沙箱可用时的 `python_analysis`，另按个人配置发现 MCP。模型通过表、字段和只读 SQL 自主查数，按需执行 Python。数据连接仓储位于 `data_connections/`，保留已有配置、凭据、租户限制和默认连接初始化。普通 PostgreSQL 连接通过 `COMPASS_DATA_ALLOWED_ENDPOINTS` 配置允许端点，历史 Retail 连接沿用专用端点和只读身份。当前 MySQL 仅支持配置与连通性测试。
 开发配置、课堂问题、对照数字、终止与真实 PostgreSQL 验收见 [课堂复现](../../docs/lesson-15-agent-run.md)。执行内核选择与后续边界见 [ADR 0002](../../docs/adr/0002-agent-execution-kernel.md)。
 
 ## 供应商协议与连接配置
@@ -54,18 +53,58 @@ Base URL 可留空使用 SDK 默认端点；自定义端点须在 `COMPASS_MODEL
 
 ## 两级意图与模型路由
 
-`POST /v1/models/calls` 统一执行两级分类、字典特征提取、选模与单次推理，返回 `RoutedCallResponse`。兼容顶层 `provider_id` 的静态主模型输入；自动模式使用 `main_model={mode:"auto"}`。两种输入互斥，分类始终在服务端完成。Provider 诊断继续使用原单次协议。
+`POST /v1/analysis/runs` 是业务推理入口，根据场景与任务特征选模，再通过 Agent Runtime 推进模型和工具。请求通过 `selection` 选择固定 Provider 或自动路由，服务端通过 `run.routed` 返回实际模型、场景和工具可用状态。旧 `POST /v1/models/calls` 已下线，Provider 诊断和 `GET /v1/models/calls/{call_id}` 继续可用。
 
-[路由模块说明](src/compass_agent/routing/README.md) 登记角色配置、字典派生和次数/时限；闲聊 `SC-39` 固定用 Flash 的独立 prompt 婉拒并引导业务数据任务。本期无新数据库迁移、Harness或Runtime可靠性执行器。
+业务问题使用同一通用工具装配。Agent 在执行时检查当前工作区的授权连接，以及实际选中的模型是否支持工具调用。连接在 Web 的「数据连接」管理，模型工具能力在「平台模型管理」查看。纯闲聊仍引导回经营分析，明确的经营问题可执行已授权查询。
+
+[路由模块说明](src/compass_agent/routing/README.md) 登记角色配置、字典派生和次数/时限。`SC-39` 仍使用 Flash。路由模块沿用既有模型与调用表。
 
 ## 第 13 课可靠执行
 
 主生成最多两次尝试，分类/诊断/决策各一次；整轮 Chat 共用 180 秒父期限。进程默认 K=8、N=32。已输出片段的中断不自动重试，失败片段不进入后续上下文；取槽后到期正常形成超时摘要，关闭未确认时隔离执行槽。
 
-平台管理员的 `/v1/models/reliability/scenarios` 和 `/v1/models/reliability/runs` 提供固定模拟演示，运行真实 SDK/Runtime/执行器，无真实供应商出站或业务表写入。入口由 BFF 平台权限及可信上下文保护；运行每进程最多一个、最多 20 条调用/20 秒。详见 [演示模块](src/compass_agent/reliability/README.md)。数据库当前 0004，升级和恢复见 [agent/main](db/main/README.md)。
+平台管理员的 `/v1/models/reliability/scenarios` 和 `/v1/models/reliability/runs` 提供固定模拟演示，运行真实 SDK/Runtime/执行器，无真实供应商出站或业务表写入。入口由 BFF 平台权限及可信上下文保护；运行每进程最多一个、最多 20 条调用/20 秒。详见 [演示模块](src/compass_agent/reliability/README.md)。可靠性摘要由 0004 引入，当前数据库版本为 0013，升级和恢复见 [agent/main](db/main/README.md)。
 
 ## 第 14 课调用观测
 
 Agent 使用 OTel 1.45.2 显式关联请求、分类、路由、逻辑调用、排队、尝试和收尾；观测为可选的进程内异步路径。服务鉴权后提取 W3C carrier，多实例通过唯一 instance_id 和同一项目/Trace 关联，Provider 请求不透传内部上下文。状态与固定模型聚合接口执行平台 manage 权限，普通用户只通过响应头获取本轮编号。
 
-模块、采集边界和测试见 [observability](src/compass_agent/observability/README.md)，本地后端、凭据和持久卷见 [运行说明](../../deploy/observability/README.md)。调用记录保持既有表结构与 0004 迁移版本；观测样本不承担正式账单或强审计职责。
+模块、采集边界和测试见 [observability](src/compass_agent/observability/README.md)，本地后端、凭据和持久卷见 [运行说明](../../deploy/observability/README.md)。调用记录由 0009 扩展持久尝试与加密内容；观测样本不承担正式账单或强审计职责。
+
+## 第 16 课受控分析
+
+分析 Run 支持进程内 Todo、逐次模型预算和停止策略。启用与课堂演示步骤见 [第 16 课运行说明](../../docs/lesson-16-controlled-autonomy.md)。
+
+通用 Todo、数据库查询与 Python 分别位于 `tools/builtin/` 下各自的同名目录。`harness/AgentExecutor` 统一推进模型循环、调用工具和回填消息；`runtime/RunService` 装配路由、工具、运行状态与结果检查。可选核验钩子由调用方注册。最终分析正文来自模型回答，工具结果和下载产物独立发布。
+
+服务端装配 `RunService` 时，可用 `verifiers` 注册全局检查，用 `task_verifiers` 按展示任务或场景 ID 注册检查。代码调用 `run(..., verifiers=(check,))` 可追加单次检查。钩子接收候选结果的副本和可信调用上下文，可抛出 `VerificationRejected` 拒绝。钩子应只读且可重复执行，持久 Run 恢复时可再次核验。默认钩子列表为空。
+
+## 第 17 课混合工作流
+
+第 17 课的两个 Chat 预置分别用于探索并保存、换周期复盘。模型调用 `create_workflow` 提交 JavaScript 编排、函数参数 JSON Schema 和试跑入参。QuickJS 运行脚本，`sub_agent` 在独立进程内使用自己的上下文和授权只读查询。用户确认后源码与工具契约写入个人资产库，新的 Run 按当前主体加载可用资产，由模型决定是否调用并生成新参数。
+
+在「插件 → Workflow」查看源码、改名、启停或导出。旧零售契约资产保留管理和导出。课程场景资料见 [Showcase 目录](../../examples/showcases/README.md)。
+
+切换版本前运行 `uv run --env-file .env --package compass-agent python apps/agent/scripts/check_runtime_upgrade.py`。有受影响的非终态 Run 时，该只读检查退出 1；先在旧版本完成或通过现有控制接口明确取消，再切换。该脚本不修改 Run 或用户资产。
+
+## 执行过程公开投影
+
+`runtime/execution_trace.py` 持有本次 Run 的统一执行节点，将主循环、现有工具、Workflow、Skill 和临时 SubAgent 的安全状态发布为 `compass.execution.node@1`。来源、环境和并行关系有独立字段，完整参数、私有推理与工具观察仍留在执行侧。QuickJS 任务函数的派发可携并行 groupId；完整工具执行及异步调度上下文在第 18 课完善。当前节点无需新增迁移，节点由第 19 课共享事件协议保存并恢复。
+
+## 第 18 课统一工具执行
+
+运行与配置见 [工具执行说明](../../docs/lesson-18-tool-runtime.md)。`routing/` 管意图、模型和确定性任务分流，`runtime/` 管 Run 生命周期及应用装配，`harness/` 管通用模型循环、上下文、系统提示词和核验钩子，`workflows/` 管理动态编排、执行与资产。[工具目录](src/compass_agent/tools/README.md)区分 `tools/builtin/` 通用工具与 `tools/business/` 业务工具，每个工具独立目录并在 `tools/catalog.py` 统一注册；`tools/mcp/`、`tools/sandbox/` 拥有远端连接和执行后端。
+
+0008 增加个人 MCP 配置与 Sandbox 分配租约。OpenSandbox + NFS-Ganesha 本地启动入口为 `pnpm sandbox up`。工具的环境、副作用、审批和批次策略分别配置；审批与原 Run 接续由第 19 课持久服务处理。
+
+第 20 课队列、两个独立 Worker、0010 迁移与恢复入口见 [运行说明](../../docs/lesson-20-production-runtime.md)。
+
+会话首次受理时保存由首条消息生成的临时标题。Agent 后台用已选模型或 Auto 的 Flash 模型生成短标题，持久化到会话。手动改名优先，已结束会话支持软删除。数据库升级与恢复见 [agent/main](db/main/README.md)。
+
+## 通用 Agent 装配
+
+目录边界见 [Harness](src/compass_agent/harness/README.md) 和 [Runtime](src/compass_agent/runtime/README.md)。当前执行入口统一为 `runtime/service.py`；HTTP 路径中的 `/analysis/` 保持兼容。
+
+`AgentDefinition` 提供系统提示词、`RegisteredTool` 集合和启用的内置能力。Runtime 默认定义为空工具集；产品 HTTP 入口通过 `compass_definition()` 显式装配 Todo、数据库、Python 与 Workflow 能力。任务可以提供自己的提示词与工具，个人 MCP 工具继续通过同一 Registry 加载。单纯使用自定义工具的 Agent 不加载 Retail 连接。
+
+课程案例与手输问题使用同一请求结构和模型循环。新请求拒绝 showcase 和 constraints.verification。已受理的旧请求由仅回读回执的兼容边界处理；旧历史解码不重新启用已移除能力。通用工具策略、审批、预算和持久恢复继续共用 Runtime。

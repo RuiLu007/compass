@@ -15,6 +15,21 @@ export const MODEL_ERRORS = {
   model_unavailable_upstream: { message: "模型服务暂不可用。", status: 503 },
   provider_protocol_error: { message: "模型响应格式异常。", status: 503 },
   stream_interrupted: { message: "输出中断，当前结果不完整。", status: 503 },
+  input_token_limit_exceeded: {
+    message: "模型拒绝了超出输入或上下文窗口限制的请求。",
+    status: 422,
+  },
+  output_token_limit_exceeded: { message: "模型拒绝了请求的输出 token 上限。", status: 422 },
+  invalid_model_input: { message: "模型拒绝了本次请求的输入或生成参数。", status: 422 },
+  catalog_token_limits_unavailable: {
+    message: "当前模型目录没有可导入的 token 上限。",
+    status: 422,
+  },
+  invalid_generation_defaults: { message: "默认输出 token 超过配置允许的范围。", status: 422 },
+  generation_profile_review_required: {
+    message: "更换型号或端点时，请重新提交或清空生成配置。",
+    status: 422,
+  },
   output_truncated: { message: "输出达到长度限制，当前结果不完整。", status: 422 },
   model_refused: { message: "模型拒绝了本次请求。", status: 422 },
   empty_output: { message: "模型未返回有效内容。", status: 503 },

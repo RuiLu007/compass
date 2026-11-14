@@ -10,6 +10,7 @@ from typing import Literal, TypeVar
 from uuid import UUID, uuid4
 
 from compass_agent.schemas import (
+    DEFAULT_RUN_TIMEOUT_SECONDS,
     AnalysisCancelAccepted,
     AnalysisCancelAlreadyTerminal,
     RunCanceled,
@@ -19,6 +20,7 @@ from compass_agent.schemas import (
     RunTerminalStatus,
     TrustedContext,
 )
+from compass_agent.tools.contracts import PhaseCanceled, StopRequested
 
 T = TypeVar("T")
 StopReason = Literal["user", "disconnected", "shutdown", "deadline"]
@@ -29,20 +31,6 @@ class RunCapacityExceeded(Exception):
 
 
 class RunRegistryClosed(Exception):
-    pass
-
-
-class StopRequested(Exception):
-    pass
-
-
-class PhaseCanceled(asyncio.CancelledError):
-    def __init__(self, *, cleanup_confirmed: bool):
-        self.cleanup_confirmed = cleanup_confirmed
-        super().__init__("run phase canceled")
-
-
-class ResourceUnconfirmed(Exception):
     pass
 
 
@@ -86,14 +74,22 @@ class RunRegistry:
         self.terminal: OrderedDict[UUID, TerminalRunSummary] = OrderedDict()
         self.closing = False
 
-    def register(self, owner: OwnerKey, *, lifetime_s: float = 180) -> RunControl:
+    def register(
+        self,
+        owner: OwnerKey,
+        *,
+        lifetime_s: float = DEFAULT_RUN_TIMEOUT_SECONDS,
+        run_id: UUID | None = None,
+    ) -> RunControl:
         if self.closing:
             raise RunRegistryClosed()
         self._purge()
         if len(self.active) >= self.max_active:
             raise RunCapacityExceeded()
         loop = asyncio.get_running_loop()
-        run_id = uuid4()
+        run_id = run_id or uuid4()
+        if run_id in self.active:
+            raise RunCapacityExceeded()
         control = RunControl(
             run_id=run_id,
             owner=owner,
@@ -159,6 +155,7 @@ class RunControl:
         self.registry = registry
         self.stop_reason: StopReason | None = None
         self.phase: asyncio.Task | None = None
+        self.phase_deadline: float | None = None
         self.cleanup_confirmed = True
         self.terminal: RunResult | None = None
         self.finished = asyncio.Event()
@@ -192,33 +189,47 @@ class RunControl:
         if self.stop_reason is None:
             self._mark_deadline()
             self.stop_reason = self.stop_reason or reason
-            if self.phase is not None and not self.phase.done():
+            if self.phase is not None and not self.phase.done() and not self.phase.cancelling():
                 self.phase.cancel()
         return AnalysisCancelAccepted(runId=str(self.id), status="accepted")
 
-    async def perform(self, operation: Callable[[], Awaitable[T]]) -> T:
+    async def perform(
+        self, operation: Callable[[], Awaitable[T]], *, timeout_s: float | None = None
+    ) -> T:
         """Run one phase after an atomic dispatch check and retain its cleanup receipt."""
 
         self.require_running()
+        loop = asyncio.get_running_loop()
+        deadline = (
+            self.deadline_at
+            if timeout_s is None
+            else min(self.deadline_at, loop.time() + timeout_s)
+        )
+        self.phase_deadline = deadline
         phase_started = False
 
         async def start_phase() -> T:
             nonlocal phase_started
             self.require_running()
+            if loop.time() >= deadline:
+                raise TimeoutError
             phase_started = True
             return await operation()
 
         phase = asyncio.create_task(start_phase())
         self.phase = phase
         try:
-            done, _ = await asyncio.wait({phase}, timeout=self.remaining)
+            done, _ = await asyncio.wait({phase}, timeout=max(0, deadline - loop.time()))
             if phase not in done:
-                if self.stop_reason is None:
+                if deadline == self.deadline_at and self.stop_reason is None:
                     self.stop_reason = "deadline"
                 await self._cancel_phase(phase, phase_started=phase_started)
-                raise StopRequested()
+                self.require_running()
+                raise TimeoutError
             result = phase.result()
             self.require_running()
+            if timeout_s is not None and loop.time() >= deadline:
+                raise TimeoutError
             return result
         except PhaseCanceled as error:
             self.cleanup_confirmed &= error.cleanup_confirmed
@@ -228,11 +239,13 @@ class RunControl:
             raise StopRequested() from None
         finally:
             self.phase = None
+            self.phase_deadline = None
 
     async def _cancel_phase(self, phase: asyncio.Task, *, phase_started: bool) -> None:
         """Cancel and settle a phase without losing its explicit cleanup receipt."""
 
-        phase.cancel()
+        if not phase.done() and not phase.cancelling():
+            phase.cancel()
         try:
             await phase
         except PhaseCanceled as error:

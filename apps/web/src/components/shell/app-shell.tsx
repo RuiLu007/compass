@@ -1,4 +1,5 @@
 "use client";
+import { ConversationList } from "./conversation-list";
 import { AppLink } from "./app-link";
 import {
   useEffect,
@@ -332,7 +333,7 @@ export function AppShell({
             {pinError}
           </p>
         )}
-        <div className="secondary-content">
+        <div className="secondary-content" data-section={section}>
           {section === "automations" && entries.some((entry) => entry.id === "automations-new") && (
             <AppLink
               className="sidebar-create-button"
@@ -379,7 +380,7 @@ export function AppShell({
                   const target = entries.find((entry) => entry.id === "analysis-new")?.href;
                   if (!target) return;
                   if (page.id === "analysis-new") {
-                    if (api.confirmNavigation()) api.reload();
+                    api.navigate(target);
                   } else api.navigate(target);
                 }}
               >
@@ -400,15 +401,11 @@ export function AppShell({
                   按主题
                 </button>
               </div>
-              <div
-                className="conversation-list"
-                aria-live="polite"
-                data-group-by={conversationOrder}
-              >
-                <p className="conversation-empty">
-                  {conversationOrder === "time" ? "暂无分析会话" : "暂无主题会话"}
-                </p>
-              </div>
+              <ConversationList
+                key={JSON.stringify(payload.session.scope)}
+                payload={payload}
+                order={conversationOrder === "topic" ? "topic" : "time"}
+              />
             </>
           )}
           {section === "reports" && (
@@ -418,7 +415,7 @@ export function AppShell({
               <small>暂无已生成的报告。</small>
             </p>
           )}
-          <div className="sidebar-spacer" />
+          {section !== "analysis" && <div className="sidebar-spacer" />}
           <AppLink className="nav-item" href="/workspaces">
             <NavigationIcon name="grid" />
             <span>切换工作空间</span>
@@ -519,7 +516,10 @@ export function AppShell({
           tabIndex={-1}
           aria-busy={busy}
         >
-          <div className={page.section === "analysis" ? "sr-only" : "page-heading"}>
+          <div
+            className={page.section === "analysis" ? "sr-only" : "page-heading"}
+            hidden={page.id === "guide"}
+          >
             <div>
               <p className="eyebrow">
                 {isAdmin ? "工作台管理" : (session.workspace?.name ?? "COMPASS")}
@@ -528,7 +528,9 @@ export function AppShell({
               <p className="muted">
                 {isAdmin
                   ? "管理当前访问范围内的工作空间、配置与协作。"
-                  : "从经营数据出发，看清每一步。"}
+                  : page.id === "plugins-workflows"
+                    ? "查看和管理从分析对话保存的工作流。"
+                    : "从经营数据出发，看清每一步。"}
               </p>
             </div>
             {session.workspace?.status === "archived" && (
