@@ -10,7 +10,10 @@ export async function prepareLessonResources(app) {
   const useReference = existsSync(reference);
   const files = lessons.flatMap((lesson) => {
     const links = new Map(
-      lesson.artifacts.map((item) => [path.posix.basename(item.source ?? item.href), item.href]),
+      lesson.artifacts.map((item) => [
+        path.posix.basename(item.source ?? item.href),
+        path.posix.basename(item.href),
+      ]),
     );
     return lesson.artifacts.flatMap((artifact) => {
       const editions = artifact.markdown ? [artifact, artifact.markdown] : [artifact];

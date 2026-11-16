@@ -1,5 +1,6 @@
 "use client";
 
+import { assetUrl } from "@/lib/asset-url";
 import { ArrowRight, ArrowUpRight, Check, CircleHelp, GitBranch, Search } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -86,7 +87,9 @@ export function Investigation() {
               <p>{step.description}</p>
               <a
                 className={styles.textLink}
-                href={`/prototype/index.html#scenario/${step.id === "follow" ? "S11" : "S05"}`}
+                href={assetUrl(
+                  `/prototype/index.html#scenario/${step.id === "follow" ? "S11" : "S05"}`,
+                )}
                 target="_blank"
                 rel="noreferrer"
               >

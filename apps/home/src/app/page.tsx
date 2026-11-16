@@ -1,3 +1,4 @@
+import { assetUrl, prototypeUrl } from "@/lib/asset-url";
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
@@ -20,7 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { HeroBackground } from "@/components/hero-background";
-import { courseName, prototypeUrl } from "@/lib/content";
+import { courseName } from "@/lib/content";
 import { Investigation } from "./investigation";
 import styles from "./home.module.css";
 
@@ -226,7 +227,7 @@ export default function Home() {
               </div>
               <a
                 className={styles.textLink}
-                href="/prototype/index.html#scenario/S05"
+                href={assetUrl("/prototype/index.html#scenario/S05")}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -290,7 +291,7 @@ export default function Home() {
                 </div>
                 <a
                   className={styles.methodLink}
-                  href={`/prototype/index.html#scenario/${method.scenario}`}
+                  href={assetUrl(`/prototype/index.html#scenario/${method.scenario}`)}
                   target="_blank"
                   rel="noreferrer"
                   aria-label={`查看${method.name}原型`}
@@ -365,7 +366,7 @@ export default function Home() {
               </p>
               <a
                 className={styles.textLink}
-                href="/prototype/index.html#reports"
+                href={assetUrl("/prototype/index.html#reports")}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -403,7 +404,7 @@ export default function Home() {
               </ol>
               <a
                 className={styles.textLink}
-                href="/prototype/index.html#scenario/S11"
+                href={assetUrl("/prototype/index.html#scenario/S11")}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -472,7 +473,7 @@ export default function Home() {
               </p>
               <a
                 className={styles.textLink}
-                href="/prototype/index.html#scenario/S10"
+                href={assetUrl("/prototype/index.html#scenario/S10")}
                 target="_blank"
                 rel="noreferrer"
               >

@@ -1,3 +1,4 @@
+import { assetUrl } from "@/lib/asset-url";
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
@@ -425,7 +426,7 @@ export default function ScaffoldPage() {
             <Link href="/course">
               查看课程任务 <ArrowRight size={18} aria-hidden="true" />
             </Link>
-            <a href="/prototype/index.html#design" target="_blank" rel="noreferrer">
+            <a href={assetUrl("/prototype/index.html#design")} target="_blank" rel="noreferrer">
               产品设计规范 <ArrowUpRight size={16} aria-hidden="true" />
             </a>
           </div>

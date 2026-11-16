@@ -1,3 +1,4 @@
+import { assetUrl } from "@/lib/asset-url";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -245,13 +246,13 @@ export default function ArchitecturePage() {
           </header>
           <figure className={s.architectureFigure}>
             <a
-              href="/resources/system-architecture.png"
+              href={assetUrl("/resources/system-architecture.png")}
               target="_blank"
               rel="noreferrer"
               aria-label="查看完整系统架构图（新窗口）"
             >
               <Image
-                src="/resources/system-architecture.png"
+                src={assetUrl("/resources/system-architecture.png")}
                 width={1402}
                 height={1122}
                 unoptimized
@@ -260,7 +261,11 @@ export default function ArchitecturePage() {
             </a>
             <figcaption>
               <span>目标系统架构 · 分阶段建设</span>
-              <a href="/resources/system-architecture.png" target="_blank" rel="noreferrer">
+              <a
+                href={assetUrl("/resources/system-architecture.png")}
+                target="_blank"
+                rel="noreferrer"
+              >
                 查看原图 <ArrowUpRight size={16} aria-hidden="true" />
               </a>
             </figcaption>

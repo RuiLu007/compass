@@ -9,7 +9,6 @@ export const navigation = [
 ] as const;
 
 export const courseName = "企业级Agent工程架构实战营";
-export const prototypeUrl = "/prototype/index.html#analysis";
 
 export const roles = [
   {

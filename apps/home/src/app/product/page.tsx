@@ -1,3 +1,4 @@
+import { assetUrl } from "@/lib/asset-url";
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
@@ -390,7 +391,7 @@ export default function ProductPage() {
               {analysisCases.map(([number, title, description]) => (
                 <a
                   key={number}
-                  href={`/prototype/index.html#scenario/S${number}`}
+                  href={assetUrl(`/prototype/index.html#scenario/S${number}`)}
                   target="_blank"
                   rel="noreferrer"
                 >

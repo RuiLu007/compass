@@ -84,6 +84,10 @@ Docker 入口先从规范源准备 public 素材，再在镜像内以 `HOME_STAN
 
 覆盖首页分析过程与依据、产品案例、架构数据规模、脚手架选型与启动步骤、工程规范、课程任务与统计、学习及排障 FAQ。
 
+## GitHub Pages
+
+[Compass Home](https://shanggqm.github.io/compass/) 由 [Home Pages workflow](../../.github/workflows/home-pages.yml) 发布。推送到 `main` 后自动构建，也可以在 Actions 中手动运行 Deploy Compass Home。工作流从 GitHub Pages 读取站点路径，通过 `NEXT_PUBLIC_HOME_BASE_PATH` 传给静态构建，发布 `apps/home/out/`。
+
 ## 静态预览分发
 
 ```bash

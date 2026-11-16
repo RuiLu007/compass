@@ -4,6 +4,7 @@ import { useState, useSyncExternalStore } from "react";
 import type { MouseEvent as ReactMouseEvent, SyntheticEvent } from "react";
 import { ChevronRight, FileText, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useSearchParams } from "next/navigation";
+import { assetUrl } from "@/lib/asset-url";
 import lessons from "@/lib/lesson-resources.json";
 import styles from "./resources.module.css";
 
@@ -47,7 +48,8 @@ export function ResourceReader() {
   const activeDocument: LessonArtifact = selectedArtifact ?? lesson.artifacts[0];
   const { markdown } = activeDocument;
   const section = selectedArtifact ? params.get("section") : null;
-  const frameSrc = section ? `${activeDocument.href}#${section}` : activeDocument.href;
+  const documentUrl = assetUrl(activeDocument.href);
+  const frameSrc = section ? `${documentUrl}#${section}` : documentUrl;
   const title = `第 ${lesson.number} 课 · ${lesson.title}`;
   const narrow = useSyncExternalStore(
     subscribeViewport,
@@ -71,11 +73,13 @@ export function ResourceReader() {
       const link = (click.target as Element | null)?.closest?.<HTMLAnchorElement>("a[href]");
       if (!link || link.hasAttribute("download") || (link.target && link.target !== "_self"))
         return;
-      if (link.origin !== window.location.origin || link.pathname === activeDocument.href) return;
+      if (link.origin !== window.location.origin || link.pathname === documentUrl) return;
       const nextLesson = lessons.find((item) =>
-        item.artifacts.some(({ href }) => href === link.pathname),
+        item.artifacts.some(({ href }) => assetUrl(href) === link.pathname),
       );
-      const nextArtifact = nextLesson?.artifacts.find(({ href }) => href === link.pathname);
+      const nextArtifact = nextLesson?.artifacts.find(
+        ({ href }) => assetUrl(href) === link.pathname,
+      );
       if (!nextLesson || !nextArtifact) return;
       click.preventDefault();
       navigate(resourceHref(nextLesson.number, nextArtifact.id, link.hash.slice(1)));
@@ -131,14 +135,14 @@ export function ResourceReader() {
           <a href={frameSrc} target="_blank" rel="noreferrer">
             新窗口
           </a>
-          <a
-            href={activeDocument.href}
-            download={`Compass-L${lesson.number}-${activeDocument.id}.html`}
-          >
+          <a href={documentUrl} download={`Compass-L${lesson.number}-${activeDocument.id}.html`}>
             {markdown ? "下载 HTML" : "下载"}
           </a>
           {markdown && (
-            <a href={markdown.href} download={`Compass-L${lesson.number}-${activeDocument.id}.md`}>
+            <a
+              href={assetUrl(markdown.href)}
+              download={`Compass-L${lesson.number}-${activeDocument.id}.md`}
+            >
               下载 Markdown
             </a>
           )}

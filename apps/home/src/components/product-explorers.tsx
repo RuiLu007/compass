@@ -1,12 +1,13 @@
 "use client";
 
+import { assetUrl, prototypeUrl } from "@/lib/asset-url";
 import { useState } from "react";
 import { ArrowRight, Check, FileText, ShieldCheck } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Disclosure } from "@/components/ui/disclosure";
 import { Button } from "@/components/ui/button";
-import { roles, journey, prototypeUrl } from "@/lib/content";
+import { roles, journey } from "@/lib/content";
 import { CompassMark } from "@/components/site-shell";
 
 export function RoleExplorer() {
@@ -216,7 +217,7 @@ export function ConversationPreview() {
             </Disclosure>
             <a
               className="artifact-preview"
-              href={`/prototype/index.html#scenario/${item.scenario}`}
+              href={assetUrl(`/prototype/index.html#scenario/${item.scenario}`)}
               target="_blank"
               rel="noreferrer"
             >

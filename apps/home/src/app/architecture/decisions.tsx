@@ -1,3 +1,4 @@
+import { assetUrl } from "@/lib/asset-url";
 import Image from "next/image";
 import { ArrowRight, Lightbulb, ArrowUpRight, GitBranch, Layers3 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -67,13 +68,13 @@ function AuthorityDiagram() {
   return (
     <figure className={s.architectureFigure}>
       <a
-        href="/resources/agent-authority-architecture.png"
+        href={assetUrl("/resources/agent-authority-architecture.png")}
         target="_blank"
         rel="noreferrer"
         aria-label="查看 Agent 决策权架构原图（新窗口）"
       >
         <Image
-          src="/resources/agent-authority-architecture.png"
+          src={assetUrl("/resources/agent-authority-architecture.png")}
           width={1672}
           height={941}
           unoptimized
@@ -82,7 +83,11 @@ function AuthorityDiagram() {
       </a>
       <figcaption>
         <span>自主主控 · 混合执行 · 稳定能力复用</span>
-        <a href="/resources/agent-authority-architecture.png" target="_blank" rel="noreferrer">
+        <a
+          href={assetUrl("/resources/agent-authority-architecture.png")}
+          target="_blank"
+          rel="noreferrer"
+        >
           查看原图 <ArrowUpRight size={16} aria-hidden="true" />
         </a>
       </figcaption>
@@ -170,7 +175,7 @@ export function ArchitectureDecisions() {
                 <article key={reason.tag}>
                   <Image
                     className={d.reasonArt}
-                    src={`/resources/architecture-reason-${reason.image}.png`}
+                    src={assetUrl(`/resources/architecture-reason-${reason.image}.png`)}
                     width={1254}
                     height={1254}
                     alt=""

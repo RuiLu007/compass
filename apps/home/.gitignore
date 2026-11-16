@@ -1,5 +1,7 @@
 public/prototype/
-public/resources/
+public/resources/*
+!public/resources/agent-authority-architecture.png
+!public/resources/architecture-reason-*.png
 out/
 .next/
 next-env.d.ts

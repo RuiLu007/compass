@@ -34,7 +34,7 @@
         "public/resources/system-data-model.md",
         "public/resources/lessons/**"
       ],
-      "env": ["HOME_STATIC_EXPORT", "HOME_STANDALONE"]
+      "env": ["HOME_STATIC_EXPORT", "HOME_STANDALONE", "NEXT_PUBLIC_HOME_BASE_PATH"]
     },
     "test": {
       "inputs": [

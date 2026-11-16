@@ -64,7 +64,7 @@ test("distribution preserves multiple artifacts per lesson and rejects missing s
     for (const artifact of artifacts)
       assert.match(
         await readFile(path.join(fixture, "public", artifact.href), "utf8"),
-        /href="\/resources\/lessons\/11\/appendix\.html#details"/,
+        /href="appendix\.html#details"/,
       );
     assert.equal(await readFile(markdownDestination, "utf8"), markdown);
     await rm(markdownSource);

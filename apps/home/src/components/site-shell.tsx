@@ -1,12 +1,13 @@
 "use client";
 
+import { prototypeUrl } from "@/lib/asset-url";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
 import { ArrowUpRight, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { courseName, navigation, prototypeUrl } from "@/lib/content";
+import { courseName, navigation } from "@/lib/content";
 import { cn } from "@/lib/utils";
 
 export function CompassMark({ className }: { className?: string }) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { assetUrl, prototypeUrl } from "@/lib/asset-url";
 import { useState } from "react";
 import {
   ArrowRight,
@@ -18,7 +19,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { prototypeUrl } from "@/lib/content";
 import { StoryPage } from "@/components/story-page";
 import styles from "./product.module.css";
 
@@ -362,7 +362,7 @@ export function CourseStories() {
             ))}
           </ol>
           <a
-            href={`/prototype/index.html#scenario/${story.scene}`}
+            href={assetUrl(`/prototype/index.html#scenario/${story.scene}`)}
             target="_blank"
             rel="noreferrer"
           >
