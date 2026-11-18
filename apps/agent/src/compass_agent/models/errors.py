@@ -1,8 +1,24 @@
 """Stable public failures. Upstream bodies and exceptions never become messages."""
 
 MESSAGES = {
+    "runtime_policy_mismatch": "运行配置与当前集群不一致。",
+    "runtime_version_mismatch": "运行数据库版本不匹配。",
+    "runtime_mode_mismatch": "运行协议尚未切换。",
+    "schedule_not_found": "定时任务不存在，或当前账号无权访问。",
+    "schedule_invalid_timezone": "请输入有效的 IANA 时区，例如 Asia/Shanghai。",
+    "schedule_invalid_cron": "请输入可触发的五段 Cron 表达式。",
+    "schedule_invalid_cursor": "列表已更新，请重新加载。",
+    "schedule_revision_changed": "定时任务已更新，请读取新版本后再提交。",
+    "schedule_permission_revoked": "计划所有者的定时任务或分析权限已失效。",
+    "schedule_delivery_rejected": "本次定时触发已被拒绝。",
+    "schedule_delivery_unavailable": "交付服务暂不可用。",
+    "scheduler_delivery_stale": "本次交付凭据已失效。",
+    "scheduler_lease_lost": "调度实例的执行权已失效。",
     "runtime_backpressure": "当前任务已满，请稍后重试。",
     "lease_lost": "本次执行权已失效。",
+    "runtime_cluster_backpressure": "集群任务积压已满，请稍后重试。",
+    "runtime_tenant_backpressure": "当前租户任务积压已满，请稍后重试。",
+    "run_budget_exhausted": "本次运行预算已耗尽。",
     "runtime_overloaded": "当前模型调用较多，请稍后重试。",
     "resource_cleanup_failed": "本次模型连接未能正常结束，请稍后重试。",
     "intent_invalid": "意图分类结果不符合场景字典。",
@@ -49,10 +65,18 @@ MESSAGES = {
 
 
 class ModelError(Exception):
-    def __init__(self, code: str, status: int = 422, current_version: int | None = None):
+    def __init__(
+        self,
+        code: str,
+        status: int = 422,
+        current_version: int | None = None,
+        *,
+        reason_code: str | None = None,
+    ):
         self.code = code
         self.status = status
         self.current_version = current_version
+        self.reason_code = reason_code
         super().__init__(code)
 
 

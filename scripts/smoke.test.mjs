@@ -53,24 +53,21 @@ for (const [app, port] of [
   ["web", 8100],
   ["agent", 8102],
   ["memory", 8103],
-  ["worker", null],
 ]) {
   test(`local smoke for ${app} requests only its fixed local endpoints`, (t) => {
     const result = smoke(t, ["--local", "--apps", app]);
     assert.equal(result.status, 0, result.stderr);
     const requests = result.stdout.split("\n").filter((line) => line.startsWith("REQUEST "));
-    if (port) {
-      assert.ok(requests.length);
-      for (const line of requests)
-        assert.ok(line.startsWith(`REQUEST http://127.0.0.1:${port}/`), line);
-    } else assert.deepEqual(requests, []);
+    assert.ok(requests.length);
+    for (const line of requests)
+      assert.ok(line.startsWith(`REQUEST http://127.0.0.1:${port}/`), line);
     if (app === "home") assert.match(result.stdout, /\/resources\/system-schema.json/);
     if (app === "web") assert.match(result.stdout, /\/api\/web\/v1\/session/);
   });
 }
 
 test("full local smoke includes BFF data path and authentication", (t) => {
-  const result = smoke(t, ["--local", "--apps", "home,web,agent,memory,worker"]);
+  const result = smoke(t, ["--local", "--apps", "home,web,agent,memory"]);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /\/api\/demo\/overview/);
   assert.match(result.stdout, /\/api\/web\/v1\/session/);
@@ -78,5 +75,6 @@ test("full local smoke includes BFF data path and authentication", (t) => {
 
 test("failed readiness and unknown application return nonzero", (t) => {
   assert.notEqual(smoke(t, ["--local", "--apps", "agent"], "/readyz").status, 0);
+  assert.notEqual(smoke(t, ["--local", "--apps", "worker"]).status, 0);
   assert.notEqual(smoke(t, ["--local", "--apps", "unknown"]).status, 0);
 });

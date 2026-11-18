@@ -7,6 +7,7 @@ import { AnalysisWorkflows } from "./analysis-workflows";
 import { UiGuide } from "./ui/guide";
 import { Blocks, CircleAlert } from "lucide-react";
 import { RetailConnectionPage } from "@/features/data/retail-connection-page";
+import { AutomationsPage } from "@/features/automations/page";
 import { ModelsPages } from "@/features/models/pages";
 import type { WorkflowAssetRef } from "@/client/analysis-run";
 import { isModelContract } from "@/contracts/model-contract";
@@ -35,6 +36,8 @@ export function ProductContent({ payload }: { payload: PagePayload }) {
   const content =
     page.section === "analysis" ? (
       <AnalysisComposer payload={payload} workflow={workflowSelection(payload.viewKey)} />
+    ) : page.section === "automations" && tenantId && workspaceId ? (
+      <AutomationsPage payload={payload} scope={{ tenantId, workspaceId }} />
     ) : page.id === "plugins-workflows" ? (
       <section className="workflow-library" aria-label="Workflow">
         {tenantId &&

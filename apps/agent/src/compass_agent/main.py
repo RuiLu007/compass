@@ -12,11 +12,13 @@ from compass_agent.api.mcp import router as mcp_router
 from compass_agent.api.models import ModelBoundaryMiddleware, create_model_service, error_response
 from compass_agent.api.models import router as model_router
 from compass_agent.api.retail import router as retail_connection_router
+from compass_agent.api.runs import build_agent_executor
 from compass_agent.api.runs import router as run_router
 from compass_agent.api.runtime_diagnostics import router as runtime_diagnostics_router
+from compass_agent.api.scheduler_triggers import router as scheduler_triggers_router
+from compass_agent.api.schedules import router as schedules_router
 from compass_agent.api.sessions import internal_router
 from compass_agent.api.sessions import router as session_router
-from compass_agent.api.worker_runs import router as worker_runtime_router
 from compass_agent.api.workflows import router as workflow_asset_router
 from compass_agent.data_connections.entities import DataConnection
 from compass_agent.database import Base, DemoSale, get_engine, get_session
@@ -26,6 +28,7 @@ from compass_agent.models.errors import ModelError
 from compass_agent.models.lifecycle import ExecutionTasks
 from compass_agent.observability.observer import Observer
 from compass_agent.runtime.control import RunRegistry
+from compass_agent.runtime.deployment import REVISION
 from compass_agent.runtime.durable_service import DurableRuntime
 from compass_agent.runtime.session_management import process_titles
 from compass_agent.schemas import DemoOverview, Health
@@ -54,7 +57,7 @@ async def lifespan(app):
     app.state.durable_runtime = None
     try:
         app.state.durable_runtime = DurableRuntime(
-            get_engine(), settings, app.state.run_registry, schedule_jobs=True
+            get_engine(), settings, app.state.run_registry, schedule_jobs=True, distributed=True
         )
         await app.state.durable_runtime.start()
         from compass_agent.runtime.resources import RuntimeResources
@@ -107,6 +110,16 @@ async def lifespan(app):
 
     reconciler = asyncio.create_task(reconcile_sandboxes()) if sandbox else None
     runtime = app.state.durable_runtime
+    if runtime and runtime.store.distributed:
+        runtime.start_consumers(
+            lambda budget: build_agent_executor(
+                settings,
+                get_engine(),
+                app.state,
+                create_model_service(app.state.execution_gate),
+                budget=budget,
+            )
+        )
     title_worker = (
         asyncio.create_task(
             process_titles(
@@ -158,7 +171,7 @@ def readiness(request: Request) -> Health:
     try:
         with get_engine().connect() as connection:
             revisions = connection.scalars(text("SELECT version_num FROM alembic_version")).all()
-            if revisions != ["0014"]:
+            if revisions != [REVISION]:
                 raise HTTPException(status_code=503, detail="Database or migration unavailable")
             # Resolve required columns without fetching configuration, credentials or call data.
             for model in (
@@ -220,7 +233,8 @@ app.include_router(run_router)
 app.include_router(session_router)
 
 app.include_router(internal_router)
-app.include_router(worker_runtime_router)
+app.include_router(schedules_router)
+app.include_router(scheduler_triggers_router)
 app.include_router(runtime_diagnostics_router)
 app.include_router(retail_connection_router)
 

@@ -97,6 +97,9 @@ export function turnFromRun(view: RunView): AnalysisTurnView {
   turn.workflowDraft = objects.find((object) => object.kind === "workflow")?.value;
   const status = view.run?.status;
   turn.runStatus = status === "paused" && view.run?.reasonCode === "queued" ? "created" : status;
+  turn.cancellationBlocked =
+    status === "cancelling" &&
+    (view.run?.recoveryStatus === "blocked" || view.run?.cleanupStatus === "unconfirmed");
   turn.submittedAtMs = view.submittedAtMs;
   if (view.finishedAtMs !== undefined && view.submittedAtMs !== undefined)
     turn.durationMs = Math.max(0, view.finishedAtMs - view.submittedAtMs);
@@ -164,25 +167,37 @@ export function useDurableConversation(
         setLoading(false);
         while (!controller.signal.aborted) {
           const active = Object.values(current.current!.runs).find((r) => !terminalRun(r));
-          if (!active || active.run?.recoveryStatus === "blocked") return;
+          if (!active) return;
+          const blocked = active.run?.recoveryStatus === "blocked";
+          if (blocked && active.run?.status !== "cancelling") return;
           subscribed = true;
           try {
-            await api.streamRequest(
-              `analysis/runs/${active.runId}/events?${scopeQuery}&after=${active.cursor}`,
-              {},
-              {
-                method: "GET",
-                signal: controller.signal,
-                timeoutMs: 70000,
-                retainOnNotFound: true,
-                consume: async (body, signal) => {
-                  for await (const response of readAgentResponses(body, signal)) {
-                    accept(response);
-                    setError("");
-                  }
+            if (blocked) {
+              accept(
+                await api.request(path, "GET", undefined, {
+                  signal: controller.signal,
+                  retainOnNotFound: true,
+                }),
+              );
+              setError("");
+            } else {
+              await api.streamRequest(
+                `analysis/runs/${active.runId}/events?${scopeQuery}&after=${active.cursor}`,
+                {},
+                {
+                  method: "GET",
+                  signal: controller.signal,
+                  timeoutMs: 70000,
+                  retainOnNotFound: true,
+                  consume: async (body, signal) => {
+                    for await (const response of readAgentResponses(body, signal)) {
+                      accept(response);
+                      setError("");
+                    }
+                  },
                 },
-              },
-            );
+              );
+            }
           } catch (failure) {
             if (controller.signal.aborted) return;
             if (failure instanceof ApiError && [409, 410].includes(failure.status)) {
@@ -197,15 +212,14 @@ export function useDurableConversation(
             }
           }
           await new Promise<void>((resolve) => {
-            const timer = setTimeout(resolve, 1500);
-            controller.signal.addEventListener(
-              "abort",
-              () => {
-                clearTimeout(timer);
-                resolve();
-              },
-              { once: true },
-            );
+            if (controller.signal.aborted) return resolve();
+            const finish = () => {
+              clearTimeout(timer);
+              controller.signal.removeEventListener("abort", finish);
+              resolve();
+            };
+            const timer = setTimeout(finish, 1500);
+            controller.signal.addEventListener("abort", finish, { once: true });
           });
         }
       } catch (failure) {

@@ -1,9 +1,9 @@
 {
   "owner": "agent",
   "databaseKey": "main",
-  "feature": "977",
+  "feature": "984",
   "from": "empty",
-  "to": "0014",
+  "to": "0015",
   "engine": "PostgreSQL 17",
   "tool": "Alembic 1.20.0",
   "sourceRevision": "working-tree; fixed by source SHA-256",
@@ -63,10 +63,14 @@
     {
       "source": "../../migrations/versions/0014_workflow_asset_deletion.py",
       "sha256": "26a9d717852a4670de56ec5f8fb87a894b0952831f7b5dc5cfaa8d37046e4059"
+    },
+    {
+      "source": "../../migrations/versions/0015_scheduled_tasks.py",
+      "sha256": "74ebf595a7953b7cb74b6d10017e0cbeea7b757761f79d73fdf1952e76fe0d0b"
     }
   ],
   "files": {
-    "bootstrap.sql": "1f793b7670b2f8109eaa2d3a720313506e1ef23b8817a8459094d7c2b20f4158",
+    "bootstrap.sql": "d65b8483a488cb568247a74d2289a07ead487e3b8288e79ee121db51a91b30e1",
     "upgrades/0001__0002.sql": "471825e3af6e2d456e1973e62bd3545a5fc47fa4a84a6e599df86173753772ea",
     "upgrades/0001__0003.sql": "80d749841c34b3567a5d085892068d7de4e273c92c2248ebb7f99e173ae77565",
     "upgrades/0002__0003.sql": "fbc8e5d4c434c7d06c4326a697b62789ea959ee8d1df59bb26cbd2b1daaf96e1",
@@ -149,12 +153,26 @@
     "upgrades/0010__0014.sql": "6765bdbb93132e224df1f9e56bcef40022916ea03bb0e82b195386418a62f37a",
     "upgrades/0011__0014.sql": "67e84795a210e7d1779339e87249e6fc3d73b9ccc2e9a05c832a4142d4036105",
     "upgrades/0012__0014.sql": "82c2d8d4bc43e248deb5f578794b6b31b8dd1f91bf48398bd749ec0886720b88",
-    "upgrades/0013__0014.sql": "588d78d938b0d94e2d58770d99f0634ec7c87969946e54fad46633b028dfaf8a"
+    "upgrades/0013__0014.sql": "588d78d938b0d94e2d58770d99f0634ec7c87969946e54fad46633b028dfaf8a",
+    "upgrades/0001__0015.sql": "a800daa7b74c5024e3583ee406dc8e3b2e816c08edc84370ea94bb15ba8a4bb8",
+    "upgrades/0002__0015.sql": "0425ee808d727097a336e340672b62bfc92e9fd91ef95a937e090ea333be2042",
+    "upgrades/0003__0015.sql": "a752f9f759a63cd55b60093c90606c5054d859025555c97ec79f5e96e727b6ea",
+    "upgrades/0004__0015.sql": "f4e081a92af65dfc332a3a497a7b093a25755a90c76ce038fb82c7a8124c71f7",
+    "upgrades/0005__0015.sql": "bee6c5440ee2c236a6fc999eec4fb24415a7a6a34c227af3572e4bc52e92572f",
+    "upgrades/0006__0015.sql": "dd6b432e0d811cd0bcd1613b2ffe568e99320cfb708d0341cc880efeb43037fc",
+    "upgrades/0007__0015.sql": "a91437650ce63dd4e16bb46f8b988f1059113ec0a1721df3585972301e2a89a8",
+    "upgrades/0008__0015.sql": "8dc1b7fd0b2c1b1cd2526517fefe8a2e7d9908dc183d2640faa2178ca8051925",
+    "upgrades/0009__0015.sql": "89889ce8248eb6070e50eccda7ddfe9678ce202320d6efb20aa803cb63983d9a",
+    "upgrades/0010__0015.sql": "69c599388d46c8610db0a7af0c764a8e7a75abb80808ccbe43afbb03312e8a8c",
+    "upgrades/0011__0015.sql": "51fda50b26bb6e65995e18f0f8d5abbd4ca3ab89f961401435891b5bce344e5b",
+    "upgrades/0012__0015.sql": "2e909f342d6425f6be93e0d08771c386ea4e496fb6534192edc2d799e0a2ec3d",
+    "upgrades/0013__0015.sql": "b762ef7e3cfc836d40a8803072703866dce7b69810b986fd8dcbc5582978b7cb",
+    "upgrades/0014__0015.sql": "3f5e30251a0d61ae989a5039db7dfa0b0b2c5ebebe9a77bedf88bbe83587b67d"
   },
   "generate": "pnpm db:sql -F agent",
-  "apply": "pnpm db:apply-sql -F agent -- --from empty --to 0014",
+  "apply": "pnpm db:apply-sql -F agent -- --from empty --to 0015",
   "transaction": "single transaction with advisory lock",
   "prerequisites": "Provisioned Agent-owned database; expected start and source checksums",
-  "dataImpact": "Adds model configuration and metadata; renames decision adapter; adds execution summaries and multi-engine workspace connections; adds durable runs, checkpoints, HITL and immutable artifacts; adds asynchronous session titles, session deletion metadata and workflow tool contracts and soft deletion; backfills historical model attempt metadata without raw content; preserves existing Retail configuration, credentials and revisions",
+  "dataImpact": "Adds model configuration and metadata; renames decision adapter; adds execution summaries and multi-engine workspace connections; adds durable runs, checkpoints, HITL and immutable artifacts; adds asynchronous session titles, session deletion metadata and workflow tool contracts and soft deletion; adds plans, triggers and replica execution and publication leases; backfills historical model attempt metadata without raw content; preserves existing Retail configuration, credentials and revisions",
   "recovery": "Restore verified backup to new owned database with original encryption key"
 }

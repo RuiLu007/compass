@@ -114,6 +114,32 @@ class HumanDecisions:
             run.status, run.execution_epoch, run.cleanup_status = "waiting", None, "confirmed"
             self.store.outbox(tx, session, run, [approval_event(wait)])
 
+    def is_schedule_approval(self, wait):
+        if wait.kind != "approval" or not wait.private_proposal:
+            return False
+        snapshot = self.store.private.open(wait.run_id, "proposal", wait.private_proposal)
+        return snapshot.get("kind") == "schedule_owner"
+
+    def assert_confirmation_scope(self, session, wait, context):
+        if self.is_schedule_approval(wait):
+            if session.owner_user_id != context.actor_user_id or session.deleted_at:
+                raise ModelError("not_found", 404)
+            return True
+        return False
+
+    def authorization_kind(self, run_id, wait_id, context):
+        with self.store.transaction() as tx:
+            session, run = self.store.lock(tx, run_id)
+            if context.scope.kind != "tenant" or (session.tenant_id, session.workspace_id) != (
+                context.scope.tenant_id,
+                context.scope.workspace_id,
+            ):
+                raise ModelError("not_found", 404)
+            wait = tx.get(AgentWait, wait_id)
+            if wait is None or wait.run_id != run.id:
+                raise ModelError("not_found", 404)
+            return self.assert_confirmation_scope(session, wait, context)
+
     def get(self, run_id, wait_id, context, *, may_approve=False):
         with self.store.transaction() as tx:
             session, run = self.store.lock(tx, run_id, None if may_approve else context)
@@ -125,6 +151,7 @@ class HumanDecisions:
             wait = tx.get(AgentWait, wait_id)
             if wait is None or wait.run_id != run_id:
                 raise ModelError("not_found", 404)
+            self.assert_confirmation_scope(session, wait, context)
             actions = []
             if wait.status == "pending" and (
                 wait.expires_at is None
@@ -207,6 +234,7 @@ class HumanDecisions:
             )
             if wait is None:
                 raise ModelError("not_found", 404)
+            self.assert_confirmation_scope(session, wait, context)
             if (wait.proposal_id, wait.proposal_revision, wait.proposal_sha256) != (
                 command.proposal_id,
                 command.proposal_revision,

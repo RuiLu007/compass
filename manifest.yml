@@ -2,7 +2,7 @@ id: compass
 title: Compass 电商经营分析 Agent
 status: active
 version: 0.0.1
-updated: 2026-11-14
+updated: 2026-11-16
 scope: cross-course-learner-project
 implementation_stage: lesson-20-production-runtime-implementation
 repository_url: https://github.com/shanggqm/compass
@@ -66,16 +66,11 @@ related_apps:
     status: review
   agent:
     path: apps/agent
-    responsibility: agent-runtime-and-inference-business
+    responsibility: replica-agent-runtime-and-durable-schedule-delivery
     port: 8102
     status: review
   memory:
     path: apps/memory
     responsibility: independent-python-memory-service-scaffold
     port: 8103
-    status: review
-  worker:
-    path: apps/worker
-    responsibility: http-run-queue-consumer
-    port: null
     status: review

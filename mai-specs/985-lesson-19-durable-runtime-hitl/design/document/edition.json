@@ -3,49 +3,15 @@
   "subtitle": "从同一 Run 的步骤、图表和审批状态，读到事务提交、重启接续与动作核对。",
   "brand": "Compass",
   "label": "《企业级Agent工程架构实战营》 · 第 19 课 · 架构设计与代码导读",
-  "topics": ["Durable Runtime", "Checkpoint", "Artifact", "HITL"],
+  "topics": [
+    "Durable Runtime",
+    "Checkpoint",
+    "Artifact",
+    "HITL"
+  ],
   "source": "../TECH_DESIGN.md",
   "guide": "guide.md",
   "output": "../TECH_DESIGN.html",
-  "metrics": [
-    {
-      "value": "1",
-      "label": "个事务 / 步骤边界",
-      "detail": "步骤、文件、Checkpoint 和事件一致提交"
-    },
-    {
-      "value": "15",
-      "label": "分钟 / 审批等待",
-      "detail": "课堂初始有效期"
-    },
-    {
-      "value": "≤1",
-      "label": "次效果 / Action ID",
-      "detail": "已生效时按原标识补记回执"
-    }
-  ],
-  "code": {
-    "architecture": {
-      "file": "../TECH_DESIGN.md",
-      "contains": "flowchart LR",
-      "language": "mermaid"
-    },
-    "states": {
-      "file": "../TECH_DESIGN.md",
-      "contains": "C[\"Created\"] --> R[\"Running\"]",
-      "language": "mermaid"
-    },
-    "commit": {
-      "file": "../CODE_DESIGN.md",
-      "contains": "def commit_step",
-      "language": "python"
-    },
-    "action": {
-      "file": "../CODE_DESIGN.md",
-      "contains": "async def continue_approved_action",
-      "language": "python"
-    }
-  },
   "cover": {
     "file": "cover.png",
     "alt": "第 19 课 · 持久运行与人工确认：Checkpoint、审批、PostgreSQL 与 Redis Streams。"

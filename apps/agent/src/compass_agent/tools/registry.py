@@ -104,7 +104,9 @@ class ToolRegistry:
         for entry in entries:
             if entry.name in tools:
                 raise ToolRejected("tool_name_conflict")
-            if entry.policy.approval == "required" and entry.prepare_proposal is None:
+            if entry.policy.approval == "required" and (
+                entry.prepare_proposal is None and entry.prepare_approval is None
+            ):
                 raise ToolRejected("invalid_tool_policy")
             if entry.policy.approval == "none" and entry.binding is None:
                 raise ToolRejected("invalid_tool_binding")

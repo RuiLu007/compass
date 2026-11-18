@@ -732,8 +732,31 @@ button.ui-timeline-row {
 }
 .durable-approval {
   margin-top: var(--space-3);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--border);
+  padding: var(--space-4);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+.durable-approval-summary {
+  white-space: pre-line;
+}
+.durable-approval-detail {
+  margin-block: var(--space-3);
+  padding-block: var(--space-2);
+  border-block: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.durable-approval-detail > summary {
+  display: list-item;
+  align-content: center;
+  min-height: 44px;
+  cursor: pointer;
+}
+.durable-approval-expiry {
+  color: var(--muted);
+  font-size: 0.875rem;
 }
 .durable-approval p {
   margin: var(--space-2) 0;
@@ -747,4 +770,93 @@ button.ui-timeline-row {
 }
 .durable-approval button {
   min-height: 44px;
+}
+
+.schedule-page,
+.schedule-results,
+.schedule-form {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.schedule-bar,
+.schedule-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.schedule-bar {
+  justify-content: space-between;
+}
+
+.schedule-page :is(.ui-button, .ui-link-button, .ui-input),
+.schedule-form :is(.ui-button, .ui-link-button, .ui-input) {
+  min-height: 44px;
+}
+
+.schedule-table-scroll {
+  overflow-x: auto;
+}
+
+.schedule-table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: start;
+}
+
+.schedule-table-scroll th,
+.schedule-table-scroll td {
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-3);
+  text-align: start;
+  vertical-align: top;
+  min-width: 8rem;
+}
+
+.schedule-table-scroll th {
+  font-weight: 600;
+  color: var(--muted);
+  font-size: var(--text-control);
+}
+
+.schedule-table-scroll small {
+  display: block;
+  margin-block-start: var(--space-1);
+  color: var(--muted);
+}
+
+.schedule-table-scroll .schedule-row-actions {
+  flex-wrap: nowrap;
+}
+
+.schedule-form {
+  max-width: 50rem;
+}
+
+.schedule-form textarea {
+  resize: vertical;
+}
+
+.schedule-rule-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: var(--space-4);
+}
+
+.schedule-enabled {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+}
+
+.schedule-preview ul {
+  padding-inline-start: 1.25rem;
+}
+
+.schedule-results > .ui-button {
+  justify-self: start;
 }

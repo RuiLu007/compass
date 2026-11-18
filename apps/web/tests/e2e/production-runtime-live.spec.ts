@@ -17,7 +17,7 @@ import { parseModelContract } from "../../src/contracts/model-contract";
 import type { components } from "../../src/generated/api";
 
 // The model catalog is fixed for the controlled provider. Every analysis operation uses
-// the isolated BFF, Agent, PostgreSQL, Redis and separately running Worker processes.
+// the isolated BFF, Agent, PostgreSQL, Redis and Agent's in-process consumer.
 const tenantId = "99500000-0000-4000-8000-000000000010";
 const workspaceId = "99500000-0000-4000-8000-000000000020";
 const scope = new URLSearchParams({ tenantId, workspaceId });
@@ -30,11 +30,11 @@ type Scheduling = components["schemas"]["SchedulingPublic"];
 
 test.skip(
   process.env.WEB_TEST_WORKFLOW !== "true",
-  "Isolated Workflow provider and Workers required",
+  "Isolated Workflow provider and Agent consumer required",
 );
 test.use({ storageState: process.env.WEB_TEST_STORAGE_STATE });
 
-async function enter(page: Page, context: BrowserContext) {
+async function enter(page: Page, context: BrowserContext, entry = analysisPath) {
   const login = await context.request.post("/api/web/v1/auth/login", {
     headers: { origin },
     data: {
@@ -80,13 +80,13 @@ async function enter(page: Page, context: BrowserContext) {
     )
       mutations.push(new URL(request.url()).pathname);
   });
-  await page.goto(analysisPath);
-  await expect(page.getByLabel("选择 Chat 主模型")).toBeEnabled();
+  await page.goto(entry);
+  if (entry === analysisPath) await expect(page.getByLabel("选择 Chat 主模型")).toBeEnabled();
   return mutations;
 }
 
-async function submit(page: Page, suggestion: string): Promise<Accepted> {
-  await page.getByRole("button", { name: suggestion, exact: true }).click();
+async function submit(page: Page, question: string): Promise<Accepted> {
+  await page.getByRole("textbox", { name: "分析问题" }).fill(question);
   const accepted = page.waitForResponse(
     (response) =>
       response.request().method() === "POST" &&
@@ -206,20 +206,19 @@ async function replay(context: BrowserContext, receipt: Accepted, history: Agent
   return frames;
 }
 
-test("真实 Worker 完成周报，受理后刷新恢复原 Run，历史读取保持执行次数", async ({
+test("真实 Agent 槽位接单，刷新恢复同一运行及执行历史", async ({
   page,
   context,
   request,
 }, testInfo) => {
   const mutations = await enter(page, context);
   await platform(request);
-  const receipt = await submit(page, "每周经营复盘");
+  const receipt = await submit(page, "汇总本周经营数据并说明主要变化。");
   await page.reload();
   const answer = page.getByRole("region", { name: "最终回答" });
-  await expect(answer).toContainText("下周跟踪");
+  await expect(answer).toContainText("查询与分析完成。");
   await expect(page.locator(`[data-run-id="${receipt.runId}"]`)).toBeVisible();
   await expect(page.locator("[data-run-id]")).toHaveCount(1);
-  await expect(page.locator(".analysis-process-toggle")).toHaveAttribute("aria-expanded", "false");
   const before = await snapshot(context, receipt);
   const schedule = scheduling(before);
   expect(schedule.map((event) => event.reasonCode)).toEqual(["queued", "claimed", "done"]);
@@ -242,7 +241,7 @@ test("真实 Worker 完成周报，受理后刷新恢复原 Run，历史读取�
   ).toBeGreaterThan(0);
   const sse = await replay(context, receipt, before);
   await page.reload();
-  await expect(answer).toContainText("下周跟踪");
+  await expect(answer).toContainText("查询与分析完成。");
   await expect(answer).toHaveCount(1);
   expect(await snapshot(context, receipt)).toEqual(before);
   expect(await timeline(request, receipt.runId)).toEqual(diagnostic);
@@ -274,4 +273,43 @@ test("预算问题由模型回答且无需课堂审批", async ({ page, context 
   await expect(page.getByLabel("执行确认", { exact: true })).toHaveCount(0);
   const state = reduceAgentResponse(null, await snapshot(context, receipt));
   expect(state.runs[receipt.runId].run?.status).toBe("completed");
+});
+
+test("定时任务真实预览、保存与键盘删除，保留授权历史", async ({ page, context }) => {
+  const automations = `/t/${tenantId}/w/${workspaceId}/automations`;
+  const name = `定时验收 ${crypto.randomUUID()}`;
+  await page.setViewportSize({ width: 390, height: 820 });
+  await enter(page, context, `${automations}/new`);
+  await page.getByLabel("任务名称").fill(name);
+  await page.getByLabel("分析内容").fill("汇总本周经营数据并说明主要变化。");
+  await page.getByRole("button", { name: "预览触发时间" }).click();
+  await expect(page.getByText(/预计触发时间 · Asia\/Shanghai/)).toBeVisible();
+  await expect(page.getByText(/自动选模在运行时选择路由。/)).toBeVisible();
+  const saved = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/api/web/v1/analysis/schedules",
+  );
+  await page.getByRole("button", { name: "保存任务", exact: true }).click();
+  const receipt = await saved;
+  expect(receipt.status()).toBe(201);
+  const { id } = parseModelContract<components["schemas"]["ScheduleWriteReceipt"]>(
+    "ScheduleWriteReceipt",
+    await receipt.json(),
+  );
+  await page.getByRole("link", { name: "返回全部任务" }).click();
+  const remove = page.getByRole("row").filter({ hasText: name }).getByRole("button", {
+    name: "删除",
+    exact: true,
+  });
+  await remove.click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("button", { name: "取消", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(remove).toBeFocused();
+  await remove.press("Enter");
+  await dialog.getByRole("button", { name: "确认删除", exact: true }).click();
+  await expect(remove).toHaveCount(0);
+  await page.goto(`${automations}/history?schedule=${id}`);
+  await expect(page.getByText("此任务暂无执行记录。")).toBeVisible();
 });

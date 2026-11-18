@@ -1,4 +1,4 @@
-"""Single-owner durable tasks; a browser connection only subscribes to committed state."""
+"""Durable Run supervision and shared progress publication."""
 
 import asyncio
 import logging
@@ -16,6 +16,12 @@ from compass_agent.execution_context import current_execution
 from compass_agent.models.errors import ModelError
 from compass_agent.observability.observer import Observation, Observer
 from compass_agent.runtime.control import OwnerKey, RunRegistry
+from compass_agent.runtime.deployment import (
+    LEGACY_OWNER_LOCK,
+    policy_fingerprint,
+    require_database_revision,
+    verify_policy,
+)
 from compass_agent.runtime.entities import AgentRun
 from compass_agent.runtime.hitl import HumanDecisions
 from compass_agent.runtime.journal import BoundaryYield, ExecutionJournal, RecoveryStop
@@ -33,7 +39,9 @@ class CurrentAccess:
     def __init__(self, settings):
         self.url, self.token = settings.compass_web_authz_url, settings.compass_agent_service_token
 
-    async def check(self, context, *, approval=False):
+    async def check(self, context, *, approval=False, purpose=None):
+        if purpose:
+            context = context.model_copy(update={"purpose": purpose})
         await self.authorize(context, approval=approval)
 
     async def visibility(self, context):
@@ -150,9 +158,12 @@ class ProgressSink:
 
 
 class DurableRuntime:
-    def __init__(self, engine, settings, registry: RunRegistry, *, schedule_jobs=False):
+    def __init__(
+        self, engine, settings, registry: RunRegistry, *, schedule_jobs=False, distributed=False
+    ):
         self.settings, self.registry = settings, registry
         self.store = RuntimeStore(engine, settings.compass_runtime_state_key.get_secret_value())
+        self.store.distributed = distributed
         self.streams = RedisStream(
             settings.compass_redis_url, settings.compass_redis_password.get_secret_value()
         )
@@ -161,17 +172,20 @@ class DurableRuntime:
         self.reader, self.hitl = MessageReader(self.store), HumanDecisions(self.store)
         self.access = CurrentAccess(settings)
         self.boot_id = uuid4()
-        if schedule_jobs:
+        if schedule_jobs or distributed:
             from compass_agent.runtime.run_scheduler import RunScheduler
 
             self.store.scheduler = RunScheduler(self.store, settings)
             self.store.scheduler.owner_boot_id = self.boot_id
+            self.policy = policy_fingerprint(settings, self.store.scheduler.overrides)
         self.owner = None
         self.tasks: dict[UUID, asyncio.Task] = {}
         self.pending_starts = {}
         self.controls = {}
         self.sinks: dict[UUID, ProgressSink] = {}
         self.closing = False
+        self.stop_consumers = asyncio.Event()
+        self.consumers: list[asyncio.Task] = []
         self.ticker = None
         self.progress_ticker = None
         self.owner_healthy = False
@@ -180,13 +194,30 @@ class DurableRuntime:
         self.observer: Observer | None = None
         self.observations: dict[UUID, Observation] = {}
         self.observation_lock = Lock()
+        self.publisher.fault = self.publish_fault
 
-    def begin_observation(self, run_id, context, executor, carrier=None, *, execution=False):
+    async def publish_fault(self, stage, run_id):
+        if self.fault:
+            await self.fault(stage, run_id)
+
+    def start_consumers(self, build_executor):
+        from compass_agent.runtime.run_consumer import run_slot
+
+        self.consumers = [
+            asyncio.create_task(run_slot(self, number, build_executor, self.stop_consumers))
+            for number in range(self.settings.compass_runtime_consumer_slots)
+        ]
+
+    def begin_observation(
+        self, run_id, context, executor, carrier=None, *, execution=False, epoch=None
+    ):
         with self.observation_lock:
             with self.store.transaction() as tx:
                 _, run = self.store.lock(tx, run_id)
+                if execution and self.store.distributed:
+                    self.store.require_epoch(run, epoch)
                 saved = run.config_snapshot.get("observability", {})
-                if run.status in TERMINAL or (run.status != "created" and not execution):
+                if run.status in TERMINAL or (not execution and (run.status != "created" or saved)):
                     return saved.get("headers", {})
                 root = self.observations.get(run_id)
                 if root is None and self.observer and self.observer.tracer:
@@ -196,7 +227,16 @@ class DurableRuntime:
                         saved.get("carrier") or carrier,
                         capture_content=False,
                     )
-                    self.observations[run_id] = root
+                    root.set(run_id=str(run_id))
+                    if schedule := run.config_snapshot.get("schedule"):
+                        root.set(
+                            schedule_id=schedule["scheduleId"], trigger_id=schedule["triggerId"]
+                        )
+                    if self.store.distributed and not execution:
+                        root.complete("accepted", None)
+                        root.end()
+                    else:
+                        self.observations[run_id] = root
                     run.config_snapshot = {
                         **run.config_snapshot,
                         "observability": {"headers": root.headers(), "carrier": root.carrier()},
@@ -206,19 +246,37 @@ class DurableRuntime:
                     return root.headers()
                 return saved.get("headers", {})
 
+    async def wait_access(self, context, run_id, wait_id, *, approval):
+        scheduled = await asyncio.to_thread(self.hitl.authorization_kind, run_id, wait_id, context)
+        if scheduled:
+            await self.access.check(context, purpose="schedule_owner")
+        else:
+            await self.access.check(context, approval=approval)
+
     def require_owner(self):
         if not self.owner_healthy or self.closing:
             raise ModelError("runtime_owner_unavailable", 503)
 
     def acquire_owner(self):
         connection = self.store.engine.connect().execution_options(isolation_level="AUTOCOMMIT")
-        if not connection.scalar(text("SELECT pg_try_advisory_lock(985001)")):
+        lock = "pg_try_advisory_lock_shared" if self.store.distributed else "pg_try_advisory_lock"
+        if not connection.scalar(text(f"SELECT {lock}({LEGACY_OWNER_LOCK})")):
             connection.close()
             raise ModelError("runtime_owner_unavailable", 503)
         self.owner = connection
-        self.owner_healthy = True
+        self.owner_healthy = not self.store.distributed
+
+    def check_policy(self):
+        with self.store.engine.begin() as tx:
+            require_database_revision(tx)
+        with Session(self.store.engine) as tx, tx.begin():
+            verify_policy(tx, self.policy, register=True)
 
     async def recover(self):
+        if self.store.distributed:
+            await self.recover_distributed()
+            self.recovered = True
+            return
         with Session(self.store.engine) as tx:
             runs = tx.scalars(select(AgentRun)).all()
         for run in runs:
@@ -248,12 +306,17 @@ class DurableRuntime:
             self.store.private.seal(self.boot_id, "readiness", {})
             await asyncio.to_thread(self.acquire_owner)
             await self.streams.ready()
+            if self.store.distributed:
+                await asyncio.to_thread(self.check_policy)
+                self.owner_healthy = True
             await self.recover()
             await asyncio.to_thread(self.hitl.expire)
             await self.publisher.tick()
             self.store.ready = True
-        except Exception:
+        except Exception as error:
             self.store.ready = False
+            code = error.code if isinstance(error, ModelError) else type(error).__name__
+            logger.warning("runtime.readiness_unavailable reason=%s", code)
         self.ticker = asyncio.create_task(self.maintain())
         self.progress_ticker = asyncio.create_task(self.publish_progress())
 
@@ -283,11 +346,15 @@ class DurableRuntime:
                     await asyncio.to_thread(self.acquire_owner)
                 assert self.owner is not None
                 await asyncio.to_thread(self.owner.execute, text("SELECT 1"))
-                self.owner_healthy = True
                 await self.streams.ready()
+                if self.store.distributed:
+                    await asyncio.to_thread(self.check_policy)
+                self.owner_healthy = True
                 if not self.recovered:
                     await self.recover()
-                if self.store.scheduler:
+                if self.store.distributed:
+                    await self.recover_distributed()
+                elif self.store.scheduler:
                     await self.recover_scheduled()
                 await asyncio.to_thread(self.hitl.expire)
                 await self.publisher.tick()
@@ -338,8 +405,9 @@ class DurableRuntime:
             if task and not task.done():
                 control = self.controls.get(run_id)
                 if control:
-                    control.request_stop("shutdown")
-                task.cancel()
+                    control.request_stop("user" if previous.status == "cancelling" else "shutdown")
+                if not task.cancelling():
+                    task.cancel()
                 # Drain old callbacks before admitting a new execution epoch.
                 done, _ = await asyncio.wait((task,), timeout=0.1)
                 if not done:
@@ -356,6 +424,40 @@ class DurableRuntime:
                 except (ModelError, RecoveryStop) as failure:
                     error = failure.code if isinstance(failure, ModelError) else failure.reason
             await asyncio.to_thread(scheduler.settle_reclaimed, run_id, recovery_error=error)
+
+    async def recover_distributed(self):
+        scheduler = self.store.scheduler
+        assert scheduler is not None
+        candidates = await asyncio.to_thread(scheduler.reclaim_candidates)
+
+        async def recover(run_id):
+            recovery_token = await asyncio.to_thread(scheduler.claim_recovery, run_id)
+            if recovery_token is None:
+                return
+            if self.fault:
+                await self.fault("run_recovery_claimed", run_id)
+            run = await asyncio.to_thread(self.store.read_run, run_id)
+            error = None
+            if run.reason_code in {"schedule_permission_revoked", "budget_policy_mismatch"}:
+                error = run.reason_code
+            elif run.status != "cancelling":
+                try:
+                    await self.access.check(
+                        TrustedContext.model_validate(run.config_snapshot["context"])
+                    )
+                    journal = ExecutionJournal(self.store, self.publisher, run_id, None)
+                    await asyncio.to_thread(journal.validate_checkpoint)
+                except (ModelError, RecoveryStop) as failure:
+                    error = failure.code if isinstance(failure, ModelError) else failure.reason
+            await asyncio.to_thread(
+                scheduler.settle_reclaimed,
+                run_id,
+                recovery_error=error,
+                recovery_token=recovery_token,
+            )
+
+        for index in range(0, len(candidates), 4):
+            await asyncio.gather(*(recover(run_id) for run_id in candidates[index : index + 4]))
 
     def schedule(self, run_id, executor, context):
         if self.store.scheduler:
@@ -396,12 +498,16 @@ class DurableRuntime:
                 expected_epoch is None or run.execution_epoch != expected_epoch
             ):
                 return
+            if self.store.distributed:
+                if run.owner_boot_id != self.boot_id:
+                    return
+                epoch = expected_epoch
             active_base = run.active_ms
             context = TrustedContext.model_validate(run.config_snapshot["context"])
             if run.status in TERMINAL:
                 return
             await asyncio.to_thread(
-                self.begin_observation, run_id, context, executor, execution=True
+                self.begin_observation, run_id, context, executor, execution=True, epoch=epoch
             )
             await self.access.check(context)
             self.require_owner()
@@ -451,7 +557,14 @@ class DurableRuntime:
             ]
             if approved:
                 approver = context.model_copy(update={"actor_user_id": approved[1].decider_user_id})
-                await self.access.check(approver, approval=True)
+                action, wait = approved
+                if action.state != "applied" or not self.hitl.is_schedule_approval(wait):
+                    try:
+                        await self.wait_access(approver, run_id, wait.id, approval=True)
+                    except ModelError as error:
+                        if error.status == 403 and self.hitl.is_schedule_approval(wait):
+                            raise RecoveryStop("schedule_permission_revoked") from None
+                        raise
                 journal.approved_proposal = self.store.private.open(
                     run_id, "proposal", approved[1].private_proposal
                 )
@@ -528,10 +641,10 @@ class DurableRuntime:
             )
             if epoch:
                 await self.pause_interrupted(run_id, epoch, reason)
-            elif run is not None:
+            elif run is not None and not self.store.distributed:
                 await self.pause_before_dispatch(run_id, run.version, reason)
         finally:
-            if control and epoch:
+            if control and epoch and not self.store.distributed:
                 await asyncio.to_thread(
                     self.store.record_active_time,
                     run_id,
@@ -581,6 +694,12 @@ class DurableRuntime:
                 session, run = self.store.lock(tx, run_id)
                 if run.execution_epoch != epoch or run.status in TERMINAL:
                     return
+                if self.store.distributed and self.store.scheduler:
+                    try:
+                        job = self.store.scheduler.require_execution(tx, run, epoch)
+                    except ModelError:
+                        return
+                    self.store.scheduler.settle_active(tx, run, job)
                 if run.status != "cancelling":
                     run.status = "paused"
                 if self.store.scheduler:
@@ -602,6 +721,12 @@ class DurableRuntime:
             pass
 
     async def close(self):
+        self.stop_consumers.set()
+        if self.consumers:
+            _, pending = await asyncio.wait(self.consumers, timeout=8)
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*self.consumers, return_exceptions=True)
         self.closing = True
         self.store.ready = False
         tickers = [task for task in (self.ticker, self.progress_ticker) if task]
@@ -618,8 +743,11 @@ class DurableRuntime:
         await self.streams.close()
         if self.owner is not None:
             if not self.owner.invalidated:
+                unlock = (
+                    "pg_advisory_unlock_shared" if self.store.distributed else "pg_advisory_unlock"
+                )
                 await asyncio.to_thread(
-                    self.owner.execute, text("SELECT pg_advisory_unlock(985001)")
+                    self.owner.execute, text(f"SELECT {unlock}({LEGACY_OWNER_LOCK})")
                 )
             await asyncio.to_thread(self.owner.close)
             self.owner = None

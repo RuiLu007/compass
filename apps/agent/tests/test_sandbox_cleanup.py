@@ -1,10 +1,12 @@
 """Deletion response loss must still allow bounded remote-state confirmation."""
 
 import asyncio
+from threading import Event
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+from compass_agent.tools.contracts import PhaseCanceled
 from compass_agent.tools.sandbox.client import SandboxBackend
 from opensandbox import SandboxManager
 from opensandbox.exceptions import SandboxApiException
@@ -13,6 +15,31 @@ from opensandbox.exceptions import SandboxApiException
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.mark.anyio
+async def test_canceled_local_reservation_releases_the_uncreated_sandbox():
+    entered, release = Event(), Event()
+    allocation = object()
+    returned = []
+
+    def reserve():
+        entered.set()
+        assert release.wait(5)
+        return allocation
+
+    store = SimpleNamespace(cancel_before_create=returned.append)
+    backend = SandboxBackend(cast(Any, store), domain="unused", api_key="unit", image="unit")
+    task = asyncio.create_task(backend._begin_phase(reserve))
+    try:
+        assert await asyncio.to_thread(entered.wait, 5)
+        task.cancel()
+        await asyncio.sleep(0)
+    finally:
+        release.set()
+    with pytest.raises(PhaseCanceled) as stopped:
+        await task
+    assert stopped.value.cleanup_confirmed and returned == [allocation]
 
 
 @pytest.mark.anyio

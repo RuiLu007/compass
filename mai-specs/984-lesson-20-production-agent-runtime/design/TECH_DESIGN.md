@@ -1,214 +1,421 @@
-# 第 20 课 · 异步 Run、Worker 接管与过程展示技术方案
+# 第 20 课 · 定时任务与 Agent 异步执行技术方案
 
-[需求简报](../BRIEF.md) · [有效 PRD](../spec/PRD.md) · [标准模板](../../_templates/TECH_DESIGN.tmpl.md) · [第 19 课持久运行](../../985-lesson-19-durable-runtime-hitl/design/TECH_DESIGN.md) · [代码设计](CODE_DESIGN.md)
+[需求简报](../BRIEF.md) · [产品需求](../spec/PRD.md) · [标准模板](../../_templates/TECH_DESIGN.tmpl.md) · [代码设计](CODE_DESIGN.md)
 
-> Feature 984 · Profile `standard` · 2026-11-12 修订 · 代码基线 `9b6220525f25` 及当前未提交工作区。沿用标准模板增量维护；[评审与复核](../review/design_review.md)记录本次修正。方案有条件通过，实施依赖 M5 交付；本轮仅评审和修订设计。
+> Feature 984 · Profile `standard` · 2026-11-16 修订。依据本轮会话确认的部署边界与 PRD AC-01～AC-21。此版待评审和实施。既有实施、评审和验收记录对应双 Worker 基线。
 
-## 需求依据与验收
+## 本课目标
 
-以 [FR-01～FR-09、BR-01～BR-11、NFR-01～NFR-04 和 AC-01～AC-11](../spec/PRD.md) 为准。现有 [Worker 入口](../../../apps/worker/src/compass_worker/main.py) 只支持进程生命周期和信号退出；[Run API](../../../apps/agent/src/compass_agent/api/runs.py)与 [BFF](../../../apps/web/src/server/http/analysis-run-handler.ts)仍使用进程内 v1 链路，断开会请求取消。当前迁移源到 0008，M5 的 0009、持久 Session/Run、Redis 发布投影及 HITL 尚未实现。
+从单进程 Agent 改为**支持多副本的分布式 Agent**，并在这套执行底座上接入定时任务。将执行所有权从整库单进程锁改为每条 Run 的租约。各副本都能接单、执行、查询和续流；发生故障时，其他实例接续原 Run。用相同配额和可控依赖验证从一个执行槽扩展到两个副本并行，覆盖 AC-04、AC-18、AC-19。
 
-M6 的前置合同采用第 19 课 2026-11-12 修订版：[双接口与执行生命周期](../../985-lesson-19-durable-runtime-hitl/design/TECH_DESIGN.md)、[数据结构](../../985-lesson-19-durable-runtime-hitl/design/DATA_DESIGN.md)、[Redis](../../985-lesson-19-durable-runtime-hitl/design/REDIS_DESIGN.md)及 [HITL](../../985-lesson-19-durable-runtime-hitl/design/HITL_DESIGN.md)。M5 已负责 202 接单、连接解耦、Message 快照和 Run 续流；M6 增加队列准入、Worker 执行权、自动接管及相应展示。T0 验证前置实现后才进入 M6 开发，不在本课复制一套持久化底座。
+定时任务由 Web 和自然语言双入口管理。同一 `apps/agent` 部署单实例 Scheduler 角色，负责把到期计划可靠地变成 Run，覆盖 AC-12～AC-17。
 
-## 1. 方案概述
+## 1. 同 App 双部署角色
 
-Agent 在 M5 的同一 PostgreSQL 受理事务中增加 job。Worker 经 Agent 专用接口领取、续租和请求推进到下一持久边界；Agent 执行模型、工作流和工具。复用 M5 的 SQL 状态/Outbox、Redis 短期流与 SQL 完整投影，通过同一 AgentResponse v2 向 Chat 展示结果。Worker 失联时，Agent 收回其驱动权，清理对应执行任务，另一 Worker 从有效 Checkpoint 继续。
+同一个 `apps/agent`、同一构建与镜像，部署两个运行角色。计划、触发和 Run 同属 `agent/main`，由 PostgreSQL 持久化。角色使用不同入口、服务凭据与权限。Scheduler 的数据库权限限于计划扫描/下次时间、触发的交付和摘要、调度租约及安全 Run 摘要。Agent 的内部 HTTP 收口负责真正创建 Run 和关联触发。
+
+| 角色          | 规模与启动边界                                                             | 职责                                                                                                                              |
+| ------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Agent**     | 多副本，负载均衡暴露 HTTP。每副本配置内部 Run 消费槽。                     | Web/Chat/API 计划管理；即时与定时 Run 的统一授权、准入、配额、公平领取、执行、接管和结果查询。                                    |
+| **Scheduler** | 单实例，同镜像以独立常驻进程启动。启动和滚动切换用数据库调度租约保护写入。 | 到期扫描、持久触发、通过 HTTP 交付、退避、交付状态及运行摘要同步。按记录就绪时间作有界处理，Run 准入和租户公平规则由 Agent 决定。 |
+
+Scheduler 停机仅延迟新的定时交付。Agent 保持即时受理、既有队列执行和订阅，Scheduler 恢复后补扫描和交付。两个角色由同一应用发布，可分别启动、停止、重启。独立 Worker App 在消费迁回后移除。
+
+### 执行和测试容量
+
+| 门禁         | 集群 | 每租户 |
+| ------------ | ---: | -----: |
+| Run 执行上限 | 1000 |    200 |
+| Run 积压上限 | 3000 |     20 |
+
+根 `.env` 与 `.env.example` 通过运行环境提供这些测试值。目标方案允许租户覆盖降低积压上限，超过 20 的覆盖在配置校验阶段拒绝。所有副本使用同一集群策略。目标双 Agent 的本地槽数由部署配置决定。1000/200 是策略上限，运行中计入积压，标准配置下同租户先受积压 20 约束。实际并行仍受本地槽、模型执行、数据连接和 Sandbox 容量约束。现有两个单槽 Worker 最多同时推进两个 Run，迁移后以真实 Agent 消费槽为准。
+
+小配额场景在隔离测试中显式覆盖 2/1 执行与 12/4 积压，保留背压和公平行为测试。另用合成待执行记录验证 3000/20 边界和锁等待。单/双副本对比保持同一集群配额与依赖。积压按现有 ready/leased/reclaiming 与可继续的 parked 口径计数，已阻塞 parked 不占积压，reclaiming 占执行槽直至安全释放。
 
 ### 整体架构
 
+![Compass 16:9 异步任务架构选型](async-architecture-choices.svg)
+
+[详细架构图](architecture.svg)
+
 ```mermaid
 flowchart LR
-    C["分析 Chat"] --> B["Web BFF"]
-    B --> A["Agent Run API"]
-    A --> P[("Agent 主库 · Run / job / Outbox / 完整投影")]
-    W["独立 Worker"] --> O["Agent 内部领取与推进"]
-    O --> P
-    O --> E["M3 / M4 / M5 执行与提交"]
-    E --> P
-    P --> V["M5 Publisher / Projector"]
-    V --> R[("Redis 短期 Run 流")]
-    R --> V
-    V --> P
-    R --> S["Run SSE · AgentResponse delta"]
-    P --> M["Message JSON · AgentResponse snapshot"]
-    S --> B
-    M --> B
+    accTitle: Compass 定时任务与 Agent 异步执行
+    WEB["Web 定时任务 / 授权 API"] --> PLAN
+    CHAT["Chat 自然语言"] --> PLAN
+    NOW["即时 Run HTTP"] --> ACCEPT
+    subgraph APP["同一个 apps/agent 与镜像"]
+        subgraph T["Scheduler 角色 · 单实例"]
+            TIMER["到期扫描 / 触发交付 / 退避 / 状态同步"]
+        end
+        subgraph AGENT["Agent 角色 · 多副本"]
+            PLAN["共用计划服务"]
+            ACCEPT["统一授权、准入与配额"]
+            QUEUE["公平领取与 Run 租约"]
+            RUNTIME["Agent A / B / N 执行模型和工具"]
+            ACCEPT --> QUEUE --> RUNTIME
+        end
+    end
+    PLAN --> DB[("PostgreSQL · 计划 / 触发 / Run / job / Checkpoint / Outbox")]
+    TIMER <-->|"调度租约 / 到期记录 / 状态摘要"| DB
+    TIMER -->|"内部 HTTP · triggerId + 交付令牌"| ACCEPT
+    ACCEPT -->|"原子受理与关联触发"| DB
+    RUNTIME --> DB
+    DB --> STREAM["Redis Streams · SSE / Timeline"]
 ```
 
-### 关键决策
+| 现有能力                                                                    | 本次接入                                                                                                                                                          |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /v1/analysis/sessions/submit`、`RuntimeStore.submit`、`agent_command` | 复用 202、作用域 + requestId 幂等。命令回执、Session、Run、初始投影、Outbox 和 job 同事务受理。内部交付路由调用同一授权、受理和观测服务，并在受理事务中关联触发。 |
+| `RunScheduler`、`agent_run_job`、`agent_tenant_schedule`                    | 复用公平领取、租户配额、Lease/epoch、advance 回执与回收。迁回 Worker 消费循环。                                                                                   |
+| `DurableRuntime`、`ExecutionJournal`、模型和工具装配                        | 复用 Checkpoint、工具/模型预算、Sandbox/MCP、人工确认、动作核对和取消。提取与 HTTP Request 解耦的 Runtime 装配入口。                                              |
+| PostgreSQL、Redis Streams、Outbox、公开投影                                 | 增加计划和触发两张表。Run 恢复、消息、产物和实时 SSE 沿用原路径。                                                                                                 |
+| Timeline、用量、模型 Trace、Web/BFF 权限                                    | 复用 Run 诊断、授权和脱敏。新增计划、触发的关联与调度指标。                                                                                                       |
 
-| 决策                              | 取舍                                                                                                                                                                                         |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 同库队列与状态                    | Queue 只在 Agent 内。提交 Session/Run、消息、命令回执、关键 Outbox 和 job 同事务写入；复用 M5 幂等。课堂以短调度事务执行公平选择，省去独立 Scheduler 和任务 Broker。Redis 继续只承载运行流。 |
-| Worker 驱动、Agent 拥有业务执行   | Worker 领任务并通过内部 HTTP 驱动一个个 Step，独立协程发心跳。它持有不透明执行权，业务上下文、SQL 凭据、模型与持久事务都留在 Agent。引入一次内部往返，保留项目应用边界和唯一数据所有者。     |
-| 租约负责接管，Checkpoint 决定位置 | 只在有效 Lease、正确 epoch 和 Step 边界下推进。失效先停止旧执行，核对资源和动作效果，再按 M5 最近有效边界接管。重发同一 Step 命令可取回原回执。                                              |
-| 复用完整展示投影与短期流          | 在 M5 的公开业务包里增加调度 Timeline；所有读取复用当前权限过滤和 reducer。基线采用确定性旁白、成功边界一次发布完整回答，省去可选模型摘要及新增分段回答分支。                                |
+## 2. 定时任务增删改查
 
-部署保持一个 Agent 执行所有者、一个 PostgreSQL、M5 已引入的一个 Redis，以及两个独立 Worker 进程。M5 的 Agent 所有者锁、Publisher 和 Projector 生命周期继续保留。Worker 扩展的是驱动与调度槽；模型、工具执行仍占用 Agent 资源。Agent 多副本、独立计算 Worker、独立 Scheduler 和租户专属进程池留给实测后的拓扑调整。
+Web、Chat 与 API 共用 Agent 内的计划服务。对话按统一工具目录登记 `schedule_read` 与 `schedule_write`。读工具支持列表、详情和历史，写工具的参数分支为创建、修改（含启停）和删除。分开登记可直接沿用现有工具级审批策略。定时 Run 只启用读工具，写操作仍在执行校验处拒绝。Run 的服务端私有快照在受理时记录定时来源及 ID。
 
-## 2. 调度、接管与数据边界
+| 请求            | 授权与确认                                                                                                                                                                                                                                                                                |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web / 授权 API  | 绑定当前可信用户、租户和工作区。校验 `module.automations` 与计划归属。创建与变更执行内容还校验分析权限。                                                                                                                                                                                  |
+| Chat 查询和提案 | 同一计划权限及归属规则。计划所有者可确认自己发起的计划提案。等待查询、确认提交和任何副本的恢复执行均从同一持久提案抽取种类与确认主体。服务端选择所有者确认分支。业务类提案继续使用现有管理员审批。                                                                                        |
+| Chat 实际写入   | 在边界前重新校验现行权限，以已批准提案绑定原作用域、计划版本、规范化参数和稳定 Action ID。数据库事务验证 Run 当前租约、epoch、未取消且 Action 批准，随后同事务写入计划、命令、Action 效果回执、已接受的工具 Attempt 输出、Checkpoint 和必要 Outbox。已有受理结果沿持久 Journal 只读复用。 |
+| Scheduler 交付  | 专用内部凭据限定交付接口。请求只传触发 ID 和交付令牌。Agent 从主库加载归属与冻结输入，使用专用授权用途复核计划权限、分析权限和用户/工作区有效性。撤权后拒绝尚未受理的交付。已受理 Run 沿用原运行权限规则。                                                                                |
 
-### 新增数据
+Web 权限保留在 Web 的授权服务中。Agent 扩展现有回调的服务端用途，分列计划管理、计划所有者确认及定时执行所需检查。调用方在进入 Agent 写事务前重新授权，事务内使用绑定的已核验上下文与持久归属核验。定时服务凭据不提供用户身份、任意 Run 输入、计划管理和执行权限。普通用户和工具只读取当前授权范围的 DTO。
 
-现有 M5 的 Run、Step、Attempt、Wait、Artifact、Checkpoint、Outbox 与公开投影结构沿用第 19 课。以下是本次新增的所有持久对象。队列只存调度所需标识与状态，实际恢复数据仍由原 Checkpoint 持有。
+| 拟议 Agent API                                                  | 语义                                                                                         |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `POST /v1/analysis/schedules`                                   | 提交名称、分析输入、模型选择、Cron、IANA 时区和启用状态，返回计划 ID、版本、状态和下次触发。 |
+| `GET /v1/analysis/schedules`、`GET /v1/analysis/schedules/{id}` | 分页列表或按 ID 查看，支持查询已删除计划的历史。                                             |
+| `PATCH /v1/analysis/schedules/{id}`                             | 按 `expectedRevision` 更新。变更规则或重新启用时按当前数据库时间计算下一次触发。             |
+| `DELETE /v1/analysis/schedules/{id}`                            | 按 `expectedRevision` 软删除，保留触发历史。                                                 |
+| `POST /v1/analysis/schedules/preview`                           | 校验 Cron 与时区，返回预览触发时间。                                                         |
+| `GET /v1/analysis/schedules/{id}/triggers`                      | 按计划时刻和触发 ID 分页，返回交付状态、运行摘要、原因和授权可见的 Session/Run 引用。        |
 
-```mermaid
-erDiagram
-    AGENT_RUN ||--o| AGENT_RUN_JOB : schedules
-    AGENT_TENANT_SCHEDULE ||--o{ AGENT_RUN_JOB : selects
-    AGENT_RUN {
-        uuid id PK "M5 原 Run"
-        uuid execution_epoch "复用M5唯一执行世代 可空"
-    }
-    AGENT_RUN_JOB {
-        uuid run_id PK,FK "唯一调度记录"
-        uuid tenant_id FK "租户调度范围"
-        text status "任务调度状态"
-        timestamptz ready_at "可领取时间 可空"
-        timestamptz first_claimed_at "首次领取时间 可空"
-        text worker_id "当前 Worker 可空"
-        uuid worker_boot_id "Worker进程实例 可空"
-        timestamptz lease_expires_at "到期时间 可空"
-        int claim_count "有效领取次数"
-    }
-    AGENT_TENANT_SCHEDULE {
-        uuid tenant_id PK "逻辑租户标识"
-        timestamptz last_claimed_at "最近获调度时间 可空"
-    }
-```
+计划服务在所有读写中限定可信 tenant/workspace/owner，Web/BFF 核验当前用户及作用域。授权 API 直接提交管理命令。写命令复用 `agent_command` 的作用域、requestId、摘要与回执机制，迁移将 command.session_id 调整为可空，约束仅计划命令允许 Session/Run 引用同时为空，回执只保存 ID、版本、状态及下次触发。相同键和请求返回原回执，摘要或版本冲突返回 409。
 
-图中 Run 只列调度关联字段，完整定义沿用 M5。仅新增 `agent_run_job`、`agent_tenant_schedule` 两张表；后者只保存租户最近获调度时间，配置使用 Agent 受信任的默认值和按 tenant ID 覆盖值，不建配置管理页面或配置表。
+计划保存允许的 Run 输入模板，包括问题、模型选择、可选工作流引用和约束。问题与触发快照按用途加密。临时授权故障重试，明确撤权记录为交付拒绝。每次触发提交使用新 Session，权限与结果可见性沿用原 Run。
 
-- `run_id` 是 job 的主键及 Agent 本库 FK；`tenant_id` 从 Run 的 Session 归属读取，入库时核验，FK 只指向本库 `agent_tenant_schedule`。默认不删除调度记录。`status` 初值 ready，`claim_count` 初值 0 且非负；其余可空字段按图声明。
-- `ready` 必须有 `ready_at`；`leased` 必须有 Worker/boot/expiry，且 Run 有 execution_epoch；`reclaiming` 保留原 Worker/boot/expiry 供清理，Run epoch 已撤销。`parked/done` 清空当前租约字段；旧执行权在持久命令和 Attempt 中保留。跨表不变量由同一事务维护。
-- 就绪索引 `(tenant_id,ready_at,run_id) WHERE status='ready'`、过期索引 `(lease_expires_at) WHERE status='leased'`；Worker 部分唯一索引覆盖 `leased/reclaiming`，保证同一配置 Worker 槽最多占用一个 Run。占用统计包含 reclaiming，租约到期本身不释放资源。
-- 首次提交和控制继续使用 `agent_command` 的作用域/requestId/摘要。内部 advance 扩展 `kind=worker_advance`，复用该表记录派发中与最终回执；规范键、绑定和读取限制见代码设计。job 不重复保存提交键、请求摘要或第二份 execution_epoch。
-- 旧 M5 终态直接读取。旧 created/waiting/paused 无 job 时，在首次 Resume 或有效批准的事务中按容量补建；满额返回 429，保留原状态、决定和 requestId 可重试。新版本已受理的 parked job 持有积压位置，批准/恢复无需再次占位。暂停、等待和终态只在实际资源已确认释放后转 parked/done。
+### Web 页面与 Chat 接入
 
-### 受理、配额与公平
+- 复用 `apps/web/src/lib/page-catalog.ts` 中的 `automations` 模块，接通 `/automations`、`/automations/new`、`/automations/history`。列表行打开编辑表单或任务历史。执行记录页先选择计划，历史筛选可以选已删除计划。共用现有表单、状态反馈和确认弹窗。
+- 在现有 Web API 分发下接入 `/api/web/v1/analysis/schedules` 及其详情、触发历史。按当前用户、租户和工作区构造可信上下文，复用 `module.automations` 入口授权及分析权限检查。BFF 校验输入与生成的 Agent 响应契约，权限拒绝、版本冲突和服务不可用保留现有错误语义。计划和触发仍由 Agent 持有。
+- Agent 列表接口增加 `q`（名称）、`status` 和游标参数，作用域过滤后再分页。普通列表默认只查启用与停用计划。历史页显式查询已删除计划。列表和历史标明同步摘要的更新时间。`POST /v1/analysis/schedules/preview` 使用同一 Cron 和时区校验规则预览下次触发，保存以服务器当前时间重新计算。
+- 表单提交为一次用户操作生成一个 requestId，同一请求重试复用该键。编辑与删除携带已读 revision，冲突后获取最新数据并让用户复核。写入成功局部刷新列表、详情及相关历史。页面加载和切回时重新请求，能读取 Chat 已提交的变更。
+- Chat 从模型自然语言意图调用读工具或写工具。先按当前作用域查询用以消歧，再用计划 ID 和版本构造写提案。所有者确认后经当前执行权门禁调用同一计划服务。查询直接返回当前持久数据，写入结果以服务回执为准。历史链接走现有会话访问权限。
 
-- 接单沿用 M5 的 `POST /v1/analysis/sessions/submit`。当前授权通过后，复用 `agent_command` 查重，先返回有效旧回执，再检查新接单容量。同键不同命令 409；新 Session/Run、消息、初始投影、Outbox、命令与 job 同事务提交，返回 202 的 sessionId/runId/streamUrl。数据库接收成功后即使进程中断，ready job 仍可领取；Redis 发布依照 M5 补发，领取/派发等待必要投影就绪。
-- 初始课堂档为两个 Worker 槽、全局最多 2 个在途执行、每租户最多 1 个在途执行、每租户最多 4 个已受理未结束 Run、全局 12 个。受理上限涵盖队列、执行和已接受的待恢复任务，后者保留再入队位置。等待和暂停在安全边界确认资源释放后立即归还执行槽，其他租户仍可获调度。取消中的实际资源占用直到清理确认。超限返回 429 和可重试提示，拒绝不创建 Run。容量和耗时阈值是课堂档位，待实际负载确认。
-- 受理、领取及可能为旧 Run 新增 job 的 Resume/批准共用事务级调度锁。全局锁序为 **调度锁（需要时）→ Session → Run → job → Step/Attempt → Wait/Action**。控制、提交及清理不反向获取调度锁；操作如果可能增加积压，必须从事务起点先取调度锁。Projector 只取 Run 并写其投影，不反向锁 Session。所有事务保持短小，权限、模型、Sandbox 和 Redis 调用在事务外。
-- 领取先过滤无容量租户，按 `last_claimed_at NULLS FIRST, tenant_id`，再按 `ready_at,run_id` 选择。逐候选先锁 Session、再锁 Run，使用 `SKIP LOCKED`；跳过争用候选后继续扫描其他有容量租户。拿到 job 后重验状态与容量；成功领取才更新 `last_claimed_at`。仅以数据库当前占用判断，避免并发双领和单租户阻塞其他候选。[PostgreSQL 锁与跳过规则](https://www.postgresql.org/docs/17/sql-select.html)用于这一短事务；[统一加锁顺序](https://www.postgresql.org/docs/17/explicit-locking.html)覆盖 M5/M6 共同写入路径。
+### 自然语言内置工具
 
-### Worker 交互与状态
+模型根据用户意图选择工具，业务参数使用服务端校验后的 DTO。写操作先生成可审阅提案，再经已有 HITL 回到原 Run 执行。公共视图只显示可公开的摘要和引用，批准依据使用持久私有快照。
+
+| 工具             | 分支与入参                                                                                                                                                       | 成功结果                                                                                                 |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `schedule_read`  | `list` 支持 `q/status/cursor`；`get` 按 `scheduleId`；`history` 按 `scheduleId/cursor` 分页。                                                                    | 列表含计划 ID、版本、规则与时区、启停状态、下次触发和最近执行。历史返回交付/Run 状态及授权可见的原会话。 |
+| `schedule_write` | `create` 传名称、分析输入、现有模型选择、Cron、IANA 时区与启用状态；`update` 传 `scheduleId/expectedRevision/patch`；`delete` 传 `scheduleId/expectedRevision`。 | 确认前为等待确认；批准写入成功后回传 ID、版本、状态及下次触发。删除回传软删除状态，原历史保留。          |
+
+按名修改或删除时先读取并绑定唯一任务 ID 和版本。多个同名结果由用户选择。缺输入或时间含糊时先澄清。更新只改用户给出的字段，时区沿用原计划，模型选择按现有有权配置校验。工具参数不包含租户、工作区、用户、Action ID、审批决定或执行权。
 
 ```mermaid
 sequenceDiagram
-    participant C as Chat / BFF
-    participant A as Agent
-    participant D as PostgreSQL
-    participant W as Worker
-    C->>A: Submit with request ID
-    A->>D: M5 submit + job + Outbox 同事务
-    A-->>C: 202 and run ID
-    W->>A: Claim
-    A->>D: Check quota and set Run execution_epoch
-    A-->>W: Execution grant
-    par While executing
-        W->>A: Heartbeat
-    and Step advancement
-        W->>A: Advance with epoch and step command ID
-        A-->>W: Running receipt, repeat same command to poll
-        A->>D: Commit outcome + checkpoint + Outbox
-        A-->>W: Continue, parked, or done
+    accTitle: Chat 定时任务工具和所有者确认
+    participant U as 用户
+    participant M as Chat 模型
+    participant T as 内置工具与 HITL
+    participant P as 计划服务
+    U->>M: 把周报分析改到周二上午九点
+    M->>T: schedule_read 查询计划
+    T->>P: 按当前用户归属读取
+    P-->>T: 计划 ID、版本与规则
+    T-->>M: 返回查询结果
+    M->>T: schedule_write 更新计划
+    T->>P: 校验并预览变更
+    T-->>U: 显示确认卡，保存批准依据
+    U->>T: 计划所有者确认
+    T->>P: 校验批准、租约和版本
+    P-->>T: 原子提交计划与回执
+    T-->>U: 确认修改与下次触发时间
+```
+
+计划版本竞争时返回冲突，重新读取并询问用户是否提交新提案。拒绝、超期、取消、撤权或旧执行权均无新写入。复用现有确认卡和 `allowedActions`，决策、待确认查询以及换副本恢复执行都按已存提案种类选择所有者授权分支。审批回执和计划效果回执分别展示。工具类型、登记和执行设计见[附录](CODE_DESIGN.md#内置定时任务工具契约)。
+
+### 工具容量与崩溃恢复边界
+
+- 在支持工具的普通 Chat Run 中，先装配必要内建工具并给可授权的计划工具保留目录名额，再按目录既有顺序填充可选 MCP 和 Workflow 声明。沿用 16 个工具、总计 64 KiB、厂商 Schema 上限。可选工具被跳过时记录原因；显式依赖的工具缺失应明确返回。按 Run 冻结同一份定义和绑定；旧 Run 的快照恢复不补进新增工具。无工具能力的模型使用 Web 管理回退提示。
+- `schedule_write` 即使在全局 parallel 模式也通过专用串行单次派发。与多条调用混发时回传需独立重发，未进入审批或产生写入。审批恢复按原已冻结调用串行派发，与通用不安全工具的并行拒绝规则独立。
+- 采用本地同库效果适配器。在有效 Run epoch 和已批准 Action 下，同一事务提交计划写入和 Journal 完成边界。通用工具的「先记派发未知、调用外部服务、再提交」路径继续负责外部工具。本地计划写入走专用回执路径。读到已接受 Attempt 时复用工具输出和 Checkpoint；无提交且租约过期时，在验证当前权限及批准后可重新派发。拒绝取消后新写、旧版本及旧 epoch。故障点见 AC-20。
+
+## 3. 状态持久化和到期交付
+
+```mermaid
+erDiagram
+    accTitle: 计划、触发记录与 Run
+    AGENT_SCHEDULE ||--o{ AGENT_SCHEDULE_TRIGGER : produces
+    AGENT_SCHEDULE_TRIGGER o|--o| AGENT_RUN : links
+    AGENT_SCHEDULE {
+        uuid id PK "计划 ID"
+        uuid tenant_id "租户"
+        uuid workspace_id "工作区"
+        uuid owner_user_id "归属用户"
+        text name "计划名称"
+        text cron "五段 Cron"
+        text timezone "IANA 时区"
+        text input_ciphertext "Run 输入密文"
+        text status "enabled / disabled / deleted"
+        bigint revision "并发修改版本"
+        timestamptz next_fire_at "下次触发，可空"
+        timestamptz created_at "创建时间"
+        timestamptz updated_at "更新时间"
+    }
+    AGENT_SCHEDULE_TRIGGER {
+        uuid id PK "触发 ID，兼作 requestId"
+        uuid schedule_id FK "本库计划 ID"
+        bigint schedule_revision "触发时计划版本"
+        timestamptz scheduled_at "约定触发时刻"
+        timestamptz detected_at "实际发现时刻"
+        timestamptz coalesced_from_at "漏跑合并起点，可空"
+        text input_ciphertext "触发快照密文，可空"
+        text delivery_status "交付状态"
+        text reason_code "安全原因码，可空"
+        int delivery_attempts "交付尝试次数"
+        timestamptz delivery_deadline_at "交付截止，可空"
+        timestamptz next_attempt_at "下次交付或核对，可空"
+        uuid delivery_token "交付领取令牌，可空"
+        bigint delivery_generation "所属 Scheduler 世代，可空"
+        timestamptz delivery_expires_at "领取期限，可空"
+        uuid run_id FK,UK "关联 Run，可空"
+        timestamptz accepted_at "Run 受理时刻，可空"
+        text observed_run_status "运行摘要，可空"
+        bigint observed_run_version "摘要版本，可空"
+        timestamptz observed_at "同步时刻，可空"
+        timestamptz finished_at "运行结束时刻，可空"
+    }
+    AGENT_RUN {
+        uuid id PK "既有 Run ID"
+    }
+```
+
+### Scheduler 内部架构
+
+同一镜像的 Scheduler 入口只组装数据库、租约和内部 HTTP 客户端。一个受监督的进程负责以下循环。计划管理服务和 Run 受理继续在 Agent 角色运行。
+
+```mermaid
+flowchart LR
+    accTitle: Scheduler 进程内部组件
+    BOOT["scheduler/main.py"] --> RUN["SchedulerRunner · 监督与停机"]
+    RUN --> LEASE["LeaseStore · 获取、续租、失权"]
+    RUN --> SCAN["DueScanner · 到期与漏跑"]
+    RUN --> SEND["TriggerDispatcher · 领取与有界交付"]
+    RUN --> SYNC["RunStatusSync · 状态追踪"]
+    SCAN --> CRON["CronCalculator · 墙钟与时区"]
+    SCAN --> STORE["ScheduleRepository"]
+    SEND --> STORE
+    SYNC --> STORE
+    LEASE --> DB[("agent/main")]
+    STORE --> DB
+    SEND --> CLIENT["RunAdmissionClient · 带超时"]
+    CLIENT --> AGENT["Agent 多副本 · 统一 Run 受理"]
+```
+
+| 模块                                        | 职责与边界                                                                                                                                                                  |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scheduler/main.py`、`runner.py`            | 检查迁移及写模式，获取角色租约后启动扫描、交付、同步和独立心跳。停机先停止领取并限时等待在途 HTTP，未完成触发由下次启动回收。失权后停止写入，Agent 内部受理也会拒绝旧令牌。 |
+| `scheduler/lease.py`                        | 以数据库时钟维护进程 boot ID、世代和租约到期。每个写事务锁定当前租约并比较令牌和到期时间。                                                                                  |
+| `scheduler/scan.py`、`cron.py`              | Cron 计算只接收规则、时区和参考时刻。扫描按到期索引批量选取，锁计划后写本次触发及下次时点。                                                                                 |
+| `scheduler/delivery.py`、`client.py`        | 领取可交付触发，提交数据库事务后发 HTTP，按响应安排退避或核对。收到 202 时接受 Agent 已写好的关联。                                                                         |
+| `scheduler/status_sync.py`、`repository.py` | 批量读取已关联 Run 安全摘要，以当前角色租约和 Run 版本更新触发视图，保留终态与历史。                                                                                        |
+
+同步和心跳不会等交付循环处理完当前批次。空闲或短时依赖失败按有界间隔重试；未持租约时不生成、领取或更新触发。只有 Agent 内部受理在准入事务中创建 Run 和 job 并关联触发。原始结果和工具输出继续走 Run 权限。
+
+### Scheduler UML 类型设计
+
+```mermaid
+classDiagram
+    accTitle: Scheduler 内部 UML 类型
+    direction LR
+    class SchedulerRunner {
+        +run() Awaitable
+        +requestStop()
+    }
+    class SchedulerLeaseStore {
+        +acquire(bootId) SchedulerLease
+        +renew(lease) SchedulerLease
+    }
+    class SchedulerLease {
+        +UUID bootId
+        +int generation
+        +datetime expiresAt
+    }
+    class DueScanner {
+        +scan(lease, limit) int
+    }
+    class CronCalculator {
+        +mostRecentDue(rule, timezone, now) datetime
+        +firstAfter(rule, timezone, now) datetime
+    }
+    class TriggerDispatcher {
+        +dispatchDue(lease, maxInflight) Awaitable
+        +deliver(claim) Awaitable
+    }
+    class DeliveryClaim {
+        +UUID triggerId
+        +UUID token
+        +int schedulerGeneration
+        +datetime expiresAt
+        +datetime deadlineAt
+        +int attempt
+    }
+    class RunAdmissionClient {
+        +submit(triggerId, token) AdmissionResult
+        +reconcile(triggerId, token) AdmissionResult
+    }
+    class RunStatusSync {
+        +sync(lease, limit) int
+    }
+    class ScheduleRepository {
+        +recordDue(lease, planId)
+        +claimDelivery(lease, limit) DeliveryClaim
+        +recordRetry(lease, claim, retryAt)
+        +claimReconciliation(lease, limit) DeliveryClaim
+        +updateRunSummary(lease, snapshot)
+    }
+    SchedulerRunner --> SchedulerLeaseStore
+    SchedulerRunner --> DueScanner
+    SchedulerRunner --> TriggerDispatcher
+    SchedulerRunner --> RunStatusSync
+    SchedulerLeaseStore --> SchedulerLease : issues
+    DueScanner --> CronCalculator
+    DueScanner --> ScheduleRepository
+    TriggerDispatcher --> ScheduleRepository
+    TriggerDispatcher --> RunAdmissionClient
+    TriggerDispatcher ..> DeliveryClaim : consumes
+    ScheduleRepository --> DeliveryClaim : issues
+    RunStatusSync --> ScheduleRepository
+```
+
+`SchedulerLease` 约束整个 Scheduler 角色的写入，`DeliveryClaim` 约束一条触发的一次交付。Agent 的 `RunLease` 属于执行层，Run 被受理后由不同副本独立持有。Scheduler 只以持久记录和安全摘要恢复，不持有执行期上下文。字段定义和控制分支见[代码设计](CODE_DESIGN.md)。
+
+### 到期与交付合同
+
+- `agent_schedule` 按归属索引，启用计划按 `(next_fire_at,id)` 建部分索引。触发唯一键 `(schedule_id,scheduled_at)`，`run_id` 非空时唯一。触发索引支持可交付时间、历史分页和待同步关联。
+- Scheduler 持有 `agent_runtime_control` 的 Scheduler 租约行（持有者 boot ID、单调令牌、到期时间），用数据库时钟续租。课堂初值心跳 3 秒、TTL 15 秒。扫描、领取、重试更新及状态同步只允许当前未过期持有者；独立控制行记录运行协议模式。第二实例拿不到租约时退出或等待，并报告未就绪。Agent 的可用性独立于 Scheduler 租约。
+- 五段 Cron 分钟粒度，按 IANA 墙钟计算并存 UTC。夏令时缺失跳过、重复墙钟取较早 UTC。停机漏跑仅补最近一次，记录合并区间起点。每个计划最多一个未收口交付或非终态 Run，包括排队、等待人工、暂停及取消中。重叠的时点写跳过记录。用户从历史查看原因并通过原 Run 继续或取消。
+- 持计划行锁复查状态与版本，在一个事务写触发及更新下次时间。规则变更、停用和删除与首次领取以「计划 → 触发」取锁。未领取的旧触发记跳过；已开始交付的使用原快照在交付期限内收口。要停止已受理 Run，走原控制 API。显式重试已失败 Run 使用原会话入口，原触发历史保存其原关联与结果。
+- 交付状态包含 `pending / dispatching / retry_wait / reconcile_pending / submitted / delivery_failed / skipped`。Scheduler 对可就绪记录按 `next_attempt_at, scheduled_at, id` 取有界批次，同时限制 HTTP 在途数。Agent 统一决定租户配额、公平领取和执行预算。429 延后该记录，其余记录继续推进。延迟取 `max(Retry-After, 有界指数退避 + 抖动)`。
+- 课堂初值每次扫描最多 32 条、HTTP 在途最多 4；交付最多 8 次尝试，且自发现起至多 30 分钟受理。网络故障、429 和暂态 5xx 按有上界退避，Retry-After 作为最早可重试时间。第 8 次已领取的尝试可以在截止前完成。该尝试失败或到达时间上限后只核对回执；若 Retry-After 超过截止，直接安排到期核对。明确撤权或永久拒绝可直接收口。待交付容量由每计划一条、有界批次和期限约束，执行积压额度始终由 Agent 控制。
+- `POST /internal/scheduler/triggers/{id}/submit` 验证专用凭据、当前调度租约和交付令牌。Agent 使用触发 ID 作为稳定 requestId，在受理事务查找原回执并校验请求种类和归属，核对令牌及交付截止。新受理原子写 Session、Run、job、Outbox、回执与触发 `run_id/submitted/accepted_at`，校验并持有触发行锁至事务结束。现有锁顺序扩展为运行模式、安全调度租约、准入锁、命令键、Session/Run/job、计划/触发，按所需取锁。首次领取事务释放计划和触发行锁后再发 HTTP。
+- 超时、丢响应或调度进程失联后，同一触发重放原 requestId。Agent 通过内部命令回执核对已受理事实。已提交的触发即使清除交付令牌或会话软删，仍可返回原回执。预算耗尽时按同一锁序读取回执并关闭受理窗口，确认无受理回执才标记 `delivery_failed`。数据库暂不可用时维持待核对，期间禁止新增此触发的 Run。
+- `submitted` 和 Run 的运行状态分别维护。Scheduler 批量读授权边界内的 Run 安全摘要，按权威版本和 `observed_at` 条件同步状态。结果正文和产物走原会话权限。更新只在当前调度租约下生效，调度进程故障不会影响 Agent 的权威 Run 状态。
+
+| 当前状态或结果                                              | 裁决与下一步                                                                                                                                                                                |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pending` / `retry_wait` 到期且有预算                       | 领取并写 `dispatching`、交付令牌、Scheduler 世代、令牌期限和尝试次数。预算到限直接进入 `reconcile_pending`。                                                                                |
+| Agent 202 / 已有该触发回执                                  | Agent 受理事务已置 `submitted`。按同触发归属取得原 Run ID。                                                                                                                                 |
+| 429、网络超时、暂态 5xx                                     | 仍可尝试时置 `retry_wait` 并保存下次时间；耗尽预算转 `reconcile_pending`。                                                                                                                  |
+| 已明确拒绝的 403 / 无法执行的永久错误                       | 锁后确认无受理回执时写 `delivery_failed`；保留可公开原因。                                                                                                                                  |
+| 当前调用收到旧令牌 409 / `dispatching` 的令牌过期或世代失效 | 旧调用退出。现任 Scheduler 领取原记录；先核对账本，若仍可提交则分配新令牌。                                                                                                                 |
+| `reconcile_pending`                                         | 交付循环用单独的就绪索引查询按时、有界领取。调用 `POST /internal/scheduler/triggers/{id}/reconcile`，在与受理相同的锁序下只读原回执或确认关闭，绝不创建 Run。暂时无法查库时安排下一次核对。 |
+| 计划停用、修改、删除早于首次领取，或已有运行/交付重叠       | 标记 `skipped` 并记录原因。已开始的交付在截止内按快照收口。                                                                                                                                 |
+
+角色和交付令牌共存于主库，交付令牌与领取时的 Scheduler 世代绑定。按固定顺序锁运行模式、角色租约、准入与命令键（如需）、计划及触发相关行，再读取数据库实际时间作最终校验。持锁到提交，租约过期或世代不符禁止第一次写入。Scheduler 本身的扫描和同步同样在业务锁后复查角色租约。只核对模式也要使用当前领取令牌；已受理的原回执允许只读重取。
+
+```mermaid
+stateDiagram-v2
+    accTitle: Scheduler 触发交付状态
+    [*] --> pending
+    pending --> dispatching: 锁后校验，生成令牌
+    pending --> skipped: 未领取时失效或重叠
+    pending --> reconcile_pending: 截止已到
+    dispatching --> submitted: Agent 原子接单
+    dispatching --> retry_wait: 暂时失败
+    dispatching --> reconcile_pending: 预算耗尽或交付令牌失效
+    dispatching --> delivery_failed: 明确永久拒绝
+    retry_wait --> dispatching: 到期且仍有预算
+    retry_wait --> reconcile_pending: 截止已到
+    reconcile_pending --> submitted: 找回受理回执
+    reconcile_pending --> retry_wait: 无回执且仍可交付
+    reconcile_pending --> delivery_failed: 证实未受理且关闭窗口
+    reconcile_pending --> reconcile_pending: 仍无法核对
+    submitted --> [*]
+    skipped --> [*]
+    delivery_failed --> [*]
+```
+
+```mermaid
+sequenceDiagram
+    accTitle: 到期触发与幂等交付
+    participant S as scheduler 角色
+    participant DB as Agent PostgreSQL
+    participant A as Agent 统一受理
+    participant C as Agent 多副本消费者
+    S->>DB: 校验调度租约，原子写触发和下次时间
+    S->>DB: 领取触发，记录交付令牌
+    S->>A: 内部 HTTP，传触发 ID 与令牌
+    alt 受理
+        A->>DB: 原子写 Run、job、回执、Outbox 与触发关联
+        A-->>S: 202 与 Run ID，重复请求返回原回执
+    else Agent 返回 429
+        A-->>S: Retry-After
+        S->>DB: 延后该触发直到可再交付
     end
-    C->>A: Stream events after cursor
-    A-->>C: M5 Redis stream + SQL projection, AgentResponse v2
+    C->>DB: 按 Run 租约领取执行，提交 Checkpoint
+    S->>DB: 读 Run 版本并同步触发历史
 ```
 
-- job 使用 `ready / leased / reclaiming / parked / done`；Run 保持 M5 的小写状态。首次领取将 created 转 running。Resume/批准事务只把 job 设 ready、保存原 Run 的可恢复状态及控制回执；ready 阶段公开 reasonCode=queued，Chat 显示“等待执行”；清除已满足的 pause 意图，重复新恢复命令按既有状态冲突返回。只有 claim 能授予新 epoch 并转 running。所有 M5 直接创建执行任务的 submit、Resume、审批/外部事件及 v1 适配器均改走此路径。Agent 根据任务回执推进一段执行，禁止这些入口绕过配额自行启动。
-- 内部路由统一为 `/internal/runtime/jobs/{claim,heartbeat,advance,release}`。Agent 配置两份独立 Worker 凭据，凭据绑定 workerId；进程启动生成 bootId，绑定本次 grant。grant 含 runId、workerId、bootId、epoch、expiresAt、checkpointNo，不含用户输入或数据源凭据。BFF 用户凭据与 Worker 凭据互不通用。claim 响应丢失后，同一身份/boot 重试返回仍有效的原 grant；不同 boot 等待旧 grant 清理。无任务返回 204 和建议重试间隔。
-- 心跳每 3 秒，TTL 15 秒；Agent 监督与 Worker 空队列轮询上界各 1 秒。续租、派发和提交均在取得行锁后读取 PostgreSQL `clock_timestamp()`，比较 `expiry > now`；过期心跳返回 409 `lease_lost`，不复活旧 epoch。心跳只更新 expiry，不增加 Run.version、不写逐次 Outbox。Worker 收到 lease_lost 或无法在本地保守截止前确认续租时停止 advance。租约校验采用[实际当前时间](https://www.postgresql.org/docs/17/functions-datetime.html#FUNCTIONS-DATETIME-CURRENT)，避免事务开始时间在等锁期间保持不变。
-- advance 只接收 grant 和 expectedCheckpoint；服务端按 Run/epoch/边界生成稳定内部命令 ID，Worker 持同一命令重试。Agent 先持久登记运行中回执，再启动独立于 HTTP 的单 Run 任务，立即返回 running；同一命令轮询返回 running 或最终 continue/parked/done 回执。每次只推进到下一个可恢复边界，内部 Workflow 子步骤仍按 M5 独立落盘。HTTP 超时不新建 Attempt，不更换命令；原回执带原 grant，旧 grant 只可读自己的已提交回执，新推进仍返回 lease_lost。
-- 每次实际模型/工具派发、业务提交及公开 delta 回调都经过当前 epoch/状态门禁。批准后真实效果仍用 M5 演示适配器的独立短事务，按共同锁序复查租约、取消、权限与 Action ID。正常 Worker 退出先停 claim，保持心跳直到有界当前步骤完成或清理收口；release 仅提交释放意图，由 Agent 确认边界和资源后转 ready/parked/done。请求结束不直接清空租约。
-- 到期扫描先撤销 Run.execution_epoch、job 转 reclaiming，并保存接管原因和旧 Attempt。进程内监督任务中止对应执行及流写入；接管前等待旧回调排空，已确认输出沿 M5 保存为完整结果或 incomplete，未决写入按 M5 核对。已提交的合法 Outbox 仍可补发，新 epoch 不接收旧回调。资源和外部效果未确认时保留隔离占用；单凭到期不把 job 改 ready。清理确认后才检查 Checkpoint、权限、版本、预算与原 Action 回执，再排队。取消优先收口、人工暂停/等待保持 parked，可安全重试的中断步骤才生成新 Attempt。
-- Agent 重启先恢复 M5 所有者锁、Redis/Outbox/投影，关闭 claim/advance。对原 leased/reclaiming job 撤销旧 epoch并核对资源；其余 ready、parked 和 done 保留语义。仅故障中断且满足 M5 恢复条件的 Run 自动进入 ready；显式暂停、未决审批、未知远端效果继续等待。启动复核完成后开放调度。两个 Worker 的接管测试包含真实进程退出；Agent 重启另验所有者和旧回调隔离。
+## 4. 从单进程 Agent 到多副本分布式 Agent
 
-MCP 接管继续使用 M4 的原目录快照和 M5 的配置版本核对规则。凭据按当前授权重新取得，不跨用户复用会话；旧 Attempt 的远端结局未知时保持待核对，禁止因租约过期自动重放 tools/call。批次策略随节点定义恢复，已提交结果继续复用。
+1. 从 `api/worker_runs.py` 提取进程内领取、续租、推进和释放接缝。复用 `RunScheduler.claim/heartbeat/prepare_advance/release`、advance 回执和 `DurableRuntime.start_boundary`。推进前从持久 Run 加载可信上下文、重新授权，通过脱离 HTTP Request 的工厂构造执行器。实际派发、提交和回调仍校验 epoch。
+2. 每个 Agent 副本通过主库、Redis、迁移和配置就绪检查后启动本地消费槽。槽身份由全局唯一 boot ID 与本地槽号组成。沿用 3 秒心跳、15 秒租约和逐 Checkpoint 回执。推进、外部派发、持久提交均校验当前 Run 租约和 epoch。
+3. 停机先停新领取，让在途边界有界收口。失联时由健康副本回收过期租约，从 Checkpoint 接续。启动保留其他副本有效租约。暂停与取消写共享状态，当前持租者在不超过 1 秒的控制轮询及派发边界观察共享意图，停止后继派发并确认清理后释放。其他实例不得根据本地无任务强制撤权，只能走过期回收。未决审批和未知外部效果沿用既有处理。
+4. 迁移后移除 Worker 的应用注册、源码入口、凭据、容器、Compose 与 CI 接线。同步 workspace、启动/部署脚本、工具测试、运行文档及 manifest。
 
-## 3. 对话事件与可观测
+### 4.1 多副本共享状态
 
-### HTTP 接口与同一展示协议
+| 边界                 | 设计                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Run 领取与配额       | 保留数据库短事务准入锁和既有 Session → Run → job 锁序。按租户公平排序、复查集群与租户占用后授予 epoch。模型和工具在事务外并行。验收同时测量准入锁等待。                                                                                                                                                                                                                                                                                                                                                                    |
+| 跨实例回收           | 删除启动时全局强制撤权。健康副本按行锁和数据库时间确认租约过期，撤销旧 epoch 并持久化限时回收令牌。清理、效果核对和 Checkpoint 校验完成后按令牌收口。回收者失联时可重领令牌，未确认资源继续占槽。旧实例续租失败后停止派发，迟到写入受 epoch 拦截。                                                                                                                                                                                                                                                                         |
+| 状态维护             | Scheduler 角色独自扫描计划和同步触发状态。Agent 的审批到期和资源回收按记录协调，避免重复收口。                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Outbox、Redis 和投影 | 补齐跨进程发布互斥。公开 delta 先在 SQL 中校验执行 epoch 并持久登记，与其他 Outbox 包进入同一有序发布路径。每 Run 持久发布租约使用单调世代。Redis 原子脚本校验发布世代、按稳定 packetId 去重并追加，投影按游标条件更新。发布者失联可重领，Redis Stream、去重索引和发布世代作为同一生命周期处理。活跃流缺失或游标超前时暂停发布并按既有安全路径重载或标记恢复受阻，禁止空索引继续追加。终态且投影完成后共同清理，过期游标回到 Message 快照。公开增量按既有内容上限与刷新节拍批量落 Outbox，验收同时测发布延迟和领取锁等待。 |
+| 路由与容量           | 所有就绪副本可接单、查询和续流，无须粘性会话。副本共用 Runtime 密钥、配置和对应 Sandbox 资源池身份。进程内 Provider 限流仍按实例生效，课堂按共享上游额度分配各副本额度，测量聚合容量。                                                                                                                                                                                                                                                                                                                                     |
 
-- 完整沿用 M5 的 sessions/submit、sessions 列表、sessions/{id}/messages、runs/{id}/events、pause/resume/cancel、decisions 和 artifacts 路由。Get Status 通过 Message `runId` 过滤返回该 Run 的已提交公开状态、结果和恢复信息。新增内部 Worker API、只读运行诊断和租户用量查询；BFF 使用已有同类鉴权、CSRF 和 Schema 校验。v1 `POST /v1/analysis/runs` 继续作为 M5 适配器，内部进入同一 job 队列，保留它自己的断线取消行为；Web 全部使用 v2。
-- Message 从 SQL 一致快照返回 `AgentResponse(mode=snapshot)`，Run 从 Redis 返回 `AgentResponse(mode=delta)`。沿用 `message.upsert/message.delta/run.upsert/view.upsert`，复用同一 validator/reducer；调度变化编码为公开 `timeline` 对象及必要 run.upsert，经现有 Outbox/Projector 提交。对象 ID/revision、父子节点和用户展开状态保持 M5 规则。
-- 游标使用原 Redis Stream ID 字符串，按两段整数比较；SSE id 为 `runId:seq`。刷新先加载 Message 与 projected_seq，再续接该 Run。终态流过期返回 409 `history_reload_required`，重新加载完整 Message；活跃流丢失返回 410 `stream_data_lost` 并保持 recovery_required；依赖暂不可用返回 503，历史 SQL 读取仍可用。连接 60 秒轮转，权限最长 5 秒复查，慢连接仅断开订阅。M5 的批次投影门禁与流保留规则保持原样。
-- 公共流只写通过展示白名单的业务字段，读取 Message、SSE 与重连继续复查当前范围。Retail 摘要允许日期、维度、成功状态和行数，渠道名称按当前数据权限决定；工具正文和私有执行输入留在其原受控记录。既有获准的 Workflow 源码沿 M5 原展示策略，不另扩展权限。旁白使用确定性模板。运维 Worker/租约详情由独立授权查询从 job、命令及 Attempt 关联，不混入用户流。
-- 为兼容 M5 的整帧校验，筛选后保留包的 packetId/seq/revision；被隐藏的整个 `view.upsert` 编码为相同身份和 revision 的安全占位对象，去掉详情、只保留可见状态。一个请求的全部流包仍有对应位置，cursors 等于最后包 seq，无需新增纯游标帧。权限变化或视图范围变更后清除旧视图并重载 Message；不可见整个 Run 时直接拒绝。快照和增量共用这套过滤，严格维护有序 delta 和消息 revision。
-- 最终回答基线一次提交：同一关键批次包含助手 `message.upsert(status=completed)` 和 `run.upsert(status=completed)`；SQL 完整投影提交后才向用户公开。客户端整帧应用后，看到同一 Run 的完整助手消息与 completed 才自动折叠一次。旁白与工具文本只更新 view 对象。失败/取消沿 M5 保留 incomplete 消息且不当作成功答案；重连与快照使用同一判断。PRD 的 finalAnswer 是该完整答案的业务称谓，v1 适配器继续输出原字段。本期不启用可选分段回答与模型旁白。
+### 4.2 共享策略和跨世代记账
 
-### Timeline 与度量
+- 新 Agent 的就绪检查比对当前部署的策略指纹。包含集群/租户的准入和覆盖值、预算档案版本及协议配置。比较字段限于非敏感配置，凭据只比较部署指定版本。副本本地槽数和分配给它的 Provider 并发可独立设置。同一 Run 从受理快照恢复预算上限、档案版本与生效的绑定，配置漂移导致无匹配策略时标明恢复受阻，禁止换大额度继续。凭据与权限仍按当前状态复核。
+- Run 期限和已消耗活动时间按已接受边界与 Attempt 的持久记账恢复。每次根执行边界在事务释放执行权前结算已确认时间和工具/步骤计数。进程失联时用数据库记录的最后活动区间至最后有效租约时刻保守补记在途尾段，避免把队列、人工等待计入活动时长。物理模型 Attempt 的已结算成本和未知预留按唯一尝试 ID 只扣一次；接管不得因重新创建内存计数器补发未知动作。
+- 3000 积压档位下，Agent 领取使用有序的就绪/租户索引和有界候选扫描。在短准入锁内校验集群及租户状态并授予执行权，按候选页继续跳过租满和争用租户。使用合成积压检查锁等待和领取吞吐。Scheduler 交付仍只读取按时间就绪的触发记录。当前 ready job 依赖初始 Outbox 已投影，发布端按 Run 选取有界批次并做受控跨 Run 并发，维持单 Run 的发布世代与顺序。移除旧的逐 Run 固定等待在大积压下形成的串行节流，验收测量从已受理到首次可领取的延迟、最老未发布时长及数据库压力。
 
-- 调度/接管的必要 Timeline 作为 M5 `public_view` 中独立稳定 ID 的 timeline 对象持久保存，Redis 过期后仍能读取。Run/Step/Attempt/Tool/Workflow 与 modelCallId/Trace 沿用已有字段。Heartbeat 不生成 Timeline。运维查询要求当前 isPlatformAdmin；租户统计要求当前 tenantRole=admin 与有效成员身份，单个工作区授权不开放整个租户统计。Agent 通过 M5 Web 核验接口确认，不接受浏览器指定租户扩大范围。
-- 拟新增 `GET /v1/analysis/runs/{id}/timeline` 供平台运维读取该 Run 的安全阶段、时间、原因及关联 ID，通过既有持久 Timeline、内部命令和 Attempt 拼合；返回有类型只读诊断 DTO，按稳定条目 ID 去重，不返回消息正文、工具原文、凭据或 Checkpoint 密文。用户过程仍通过原 Message/Run 接口读取，不新增诊断页面。
-- 拟新增 `GET /v1/analysis/runtime/usage`，只返回当前授权租户的限额、ready/leased/reclaiming/parked 数、积压和占用、已结算 token/成本与未知保守占额。租户明细从 job 与 M5 预算/Attempt 聚合，无新计费账本或管理页；预算沿用 M2 StopPolicy 与 M5 Checkpoint，恢复时保留已用额度。未知成本保留 null 和占额，不记作零成本。
-- Retry 新建 Attempt，Resume 接续原 Run，Replay 只读历史。记录正常与 Worker Crash、重复投递、超时、取消竞态。恢复成功率以需接管 Run 为分母，受阻项单列且计入总数；排队时间为 Run.created_at 到 job.first_claimed_at，报告按租户 p50/p95/最大值；槽位利用率按 Timeline 的领取到确认释放区间累计除以观察窗×有效容量，清理隔离占用单列。费用与实际效果计数分别报告，外部观测出口失败不影响这些持久查询。
+### 4.3 Worker 依赖迁移与退出
 
-课堂基线设计目标：两个租户、两个真实 Worker，各用 4 个独立 Session 受理任务；夹具在边界保持 A 的积压，再提交额外请求验证 429，B 在可用槽下推进。对无未决远端效果的可恢复夹具，恢复成功率要求全部成功，旧 epoch 新提交和重复业务效果均为 0；另逐项列出未知效果/清理受阻夹具。固定夹具清理上界 2 秒、监督和轮询上界各 1 秒、HTTP 往返与本机抖动总预留 2 秒时，停止心跳到新合法领取目标 ≤21 秒（15+2+1+1+2）；有空闲槽的无故障 B 任务首次领取目标 ≤3 秒（轮询 1 秒+预留 2 秒）。这是待测的本机课堂目标，运行报告记录实际值和失败项，不改变未知效果的阻塞规则，也不作生产 SLA。
+| 领域              | 现状依赖与目标处理                                                                                                                                                                                                                                                                                                                                                              |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 运行入口和管理    | `scripts/start.mjs` 的双 Worker 拉起和环境前置校验，`scripts/deploy.mjs` 的 worker 选择、第二副本、状态/日志/下线，改为 Agent 多副本和单 Scheduler 进程。校验实际领取和调度就绪。根 start/dev 的角色与端口必须可重复启停。Agent 档部署按应用统一管理两角色，状态和日志按角色区分；扩容只调整 Agent 副本。Scheduler 用租约/循环状态报告就绪，不把其就绪作为 Agent 接单前置条件。 |
+| 工作区与镜像      | 移除 `apps/worker` 包、Worker Dockerfile 和 Compose 两个 Worker 服务。同步 `manifest.yml`、pnpm/uv workspace、`pyproject.toml` 的测试/类型路径、锁文件及 Turbo 任务和变量，保留 Agent 同镜像双入口。                                                                                                                                                                            |
+| 旧执行 API 和凭据 | 切换阶段保留受协议模式限制的 `/internal/runtime/jobs/*` 与 Worker 凭据，停止旧消费者且确认无旧写权后移除安装和发布入口。清理 Agent worker router/配置和 Turbo 环境，按真实 DTO/路由重新生成 OpenAPI 及 Web 类型。旧鉴权只存在于回退构建。                                                                                                                                       |
+| 持久队列与恢复    | 继续使用原 job、租约历史、`worker_id/worker_boot_id` 和已有 advance 回执字段，按兼容方式解释为消费槽和实例身份，避免为命名重写存量。切换期间保留 parked/ready/未确认资源、已发布游标及人工审批。关闭旧启动时全量撤权，未过期的新副本不被启动扫描修改。                                                                                                                          |
+| CI、脚本和 E2E    | 迁移 Worker 信号、续租和消费合同用例到 Agent 的进程测试。更新 `.github/workflows/compass.yml`、`scripts/start.test.mjs`、`scripts/deploy.test.mjs`、`scripts/tasks.test.mjs` 和浏览器真实队列夹具。用两个 Agent、一个 Scheduler 替代旧双 Worker。保留旧数据回归、health/readiness/主动消费的区别、原环境变量移除边界及跨副本 SSE。                                              |
+| 文档与回退        | 同步根与各 App/部署 README、运行说明和项目规则中的五应用/Worker 条目。历史验收仍归原拓扑。会话标题后台循环、Outbox 和 Sandbox 回收继续由 Agent 角色承担，随多副本按记录协作。                                                                                                                                                                                                   |
 
-## 4. 迁移、发布与回退
+## 5. 可观测与验收
 
-归属 **agent/main**，规划 **0009 → 0010**；0009 目前为 M5 待实施版本，实际编码前核对单一 head 和前置交付。拟新增 `apps/agent/migrations/versions/0010_run_scheduler.py`，包含两张调度表、索引和 `agent_command.kind` 的内部 worker_advance 枚举/约束扩展。epoch 继续使用原 Run 字段。同步 ORM、Alembic、受管版本与运行角色授权；Worker 无数据库凭据。生成完整 bootstrap、支持起点到 0010 的升级 SQL 和 manifest，保留已共享 revision 与历史交付。Web、Worker、Retail 无业务库迁移。
+- 串起 `scheduleId → triggerId/requestId → runId → step/attempt/modelCall`。管理员 Timeline 增加授权后的触发关联，用户从触发历史跳转至原会话。SSE 沿用 AgentResponse v2。
+- 持久化交付阶段与最新结果，通过结构化日志记录到期、领取、背压、重试、跳过、关联及同步。指标覆盖发现延迟、受理延迟、待交付量与最老等待、重试/失败/跳过计数、结果同步滞后。复用 Run 排队耗时、执行槽占用、预算和恢复指标。聚合指标使用有限结果码，ID 留在授权诊断和结构化日志中，任务正文、凭据和原始工具输出排除在遥测之外。
+- Web 保存计划和预览时检查可提前确认的权限、规则与固定模型当前资格。自动模式展示可同时验证的路由配置，实际分类和模型选择仍在执行时决定。到期交付重查权限，执行时重查 Provider、预算和数据连接。保存成功仅显示计划与预计触发时间。
+- 接单、交付和运行历史使用稳定的阶段与安全原因码。至少区分授权、全局/租户积压 429、已入队等待执行、Provider/模型容量或上游限流、单 Run 预算、数据/工具、等待确认和恢复待核对。BFF 保留实际安全错误码和 Retry-After；前端根据阶段给出换模型、等待、刷新、核对权限或打开原会话等动作。计划已提交后失败保留 Run ID，SSE 断开优先续接；用户无权时隐藏敏感详情。具体配置见[失败配置盘点](../review/runtime-failure-config.md)。
+- 使用真实 PostgreSQL、Redis 和两租户工作负载，分别在生成触发后、Run 与触发关联已提交但 HTTP 响应未收到、Checkpoint 已提交和 Run 结束未同步时中断。核对幂等、权限、结果状态和外部效果。既有 [Failure Matrix](../test/FAILURE_MATRIX.md) 作为基线，实施时按 AC-12～AC-21 新增案例，用真实 Agent 副本强杀及跨实例接续替换原 Worker 崩溃用例，另验收双副本同时执行、不同副本启动与跨副本续流。
 
-发布按「停接并排空 M5 活动执行 → 按 M5 保存主库、Redis 卷与加密材料 → 迁移至 0010 → 发布保留单所有者的 Agent → 启动双 Worker 并确认领取 → 切换 Web」进行。旧 waiting/paused/created 无 job 的状态保留，首次显式恢复走容量准入；升级不自动派发全部遗留 Run。Agent 就绪检查覆盖主库版本、Redis/投影和所有者；Worker 启动日志需区分依赖不可用、空队列和真正领取，进程存活不作为消费验收。
+## 6. 数据迁移、发布与实施任务
 
-迁移验证空库、0009 含 waiting/completed/created 数据的旧库、SQL 一致性、权限及协调恢复。回退先停接与 Worker，保留 0010 的 Run/job/流；优先用兼容 0010 的构建恢复读取。回到只接受 0009 的构建时恢复对应备份到独立库及隔离 Redis 命名空间/卷，核对 projected_seq、Outbox、原 Action ID 与效果；保留原库和卷。无法核对的活跃流保持 recovery_required。完整 SQL 和增量的实际生成与验收留在实施阶段。
+- Owner 为 `agent/main`，当前 head 为 `0014`。拟新增 `0015_scheduled_tasks.py`，登记计划与触发实体、命令 Session 可空约束、Run job 回收令牌、Run 发布租约与世代、触发世代/核对状态、共享策略指纹及 Run 预算快照、运行协议模式、Scheduler 租约控制行、相关索引和权限。沿用 `0010` 队列与既有 Run 数据。以 Agent Alembic 为真源，通过 `pnpm db:sql -F agent` 生成完整及 `0014 → 0015` 增量 SQL，用 `pnpm db:sql:check -F agent` 校验。实施前复核并行迁移是否占用版本。
+- 发布前备份主库、Redis 卷和 Runtime 密钥。先迁移并部署可识别互斥协议模式的过渡构建。撤下旧受理入口，停旧 Worker 和单所有者，排空或受控回收。切模式前关闭旧 PostgreSQL 与 Redis 写凭据并断开旧连接，再给新模式实例启用写凭据。健康检查和新写事务同时校验持久模式；旧构建即使误启动也无共享写权。先验证双 Agent 的受理、消费、审批、跨副本续流及旧 Run 读写，再单独启动 Scheduler 并开放定时管理。
+- 回退先停 Scheduler，保留未交付触发，排空或回收内部执行槽。按相反顺序隔离新协议的写凭据，再切互斥模式。停止所有副本的执行和发布后，优先用兼容 0015 的过渡构建恢复单所有者与 external 模式，并核对事件游标。若回到仅支持 0014 的构建，恢复对应备份至隔离环境，保留 0015 数据，并核对备份后已受理 Run 与副作用再开放消费。验收空库、旧库、权限、SQL 一致性与恢复。
 
-## 5. 实施任务与验证
+| 顺序 | 拟议改动                                                                                                        | 验收                                                       |
+| ---- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| 1    | Agent `runtime/`、`api/worker_runs.py`、`main.py` 提取消费和装配，接入内部槽                                    | AC-01～AC-11、AC-17～AC-19                                 |
+| 2    | 新增同 App 的 Scheduler 入口与迁移，内部 HTTP 接入统一 Run 受理                                                 | AC-13～AC-16                                               |
+| 3    | 增加 `api/schedules.py`、`tools/builtin/schedule_read/` 与 `schedule_write/`、Web 管理页面、BFF、DTO 和派生契约 | AC-12、AC-15～AC-16、AC-20，覆盖 Web/Chat 双入口与交叉读取 |
+| 4    | 接入 Timeline 和指标，调整 Compose、workspace、CI 为双角色，移除独立 Worker                                     | AC-16～AC-21 及全链路回归                                  |
 
-```diff
-+ apps/agent/src/compass_agent/runtime/run_scheduler.py  受理、配额、租约与接管
-+ apps/agent/src/compass_agent/api/worker_runs.py  Worker专用鉴权与领取/续租/推进/释放
-! apps/agent/src/compass_agent/api/{sessions,runs}.py  复用M5接口，所有可运行入口入队
-! apps/agent/src/compass_agent/runtime/{entities,store,checkpoints,hitl}.py  M5前置：原子job、回执与租约约束
-! apps/agent/src/compass_agent/runtime/{service,control}.py  M5前置：一次推进边界、停止及回收
-! apps/agent/src/compass_agent/runtime/{message_reader,run_events,public_projection,outbox_publisher}.py  M5前置：调度视图、权限与过期epoch门禁
-! apps/agent/src/compass_agent/tools/dispatcher.py  每次实际派发复查执行权
-! apps/agent/src/compass_agent/{schemas,settings,main}.py  运行 DTO、配置与路由
-+ apps/agent/migrations/versions/0010_run_scheduler.py  主库队列增量
-! apps/agent/{migrations/env.py,scripts/database.py,db/main/README.md,db/main/sql/}  受管迁移与派生 SQL
-! apps/worker/src/compass_worker/main.py  消费者与信号收口
-+ apps/worker/src/compass_worker/run_consumer.py  HTTP 驱动与心跳
-! apps/worker/{pyproject.toml,README.md}  HTTP 依赖和消费运行说明
-! apps/worker/package.json  保持独立lint/typecheck/test入口
-! apps/agent/package.json  新真库测试接入test:integration
-! apps/web/src/server/http/analysis-run-handler.ts  诊断/用量授权、v1及v2代理
-! apps/web/src/server/modules/models/application/authorize.ts  显式诊断/租户统计用途，沿用现有管理员身份
-+ apps/web/src/app/api/analysis/ 下对应运行诊断与用量路由  接入已有handler
-! apps/web/src/server/analysis-agent-client.ts  HTTP 契约校验和游标
-! apps/web/src/client/analysis-run.ts  断线续接和事件去重
-! apps/web/src/components/{analysis-composer,analysis-run-turn}.tsx  进度与最终回答
-! deploy/compose/compose.yaml  Worker 配置、接管与验证环境
-! deploy/README.md  运行与故障演练
-! .env.example  分离 Worker 连接与授权配置
-! scripts/export-contracts.py  派生M5 v2及新增调度契约
-! contracts/ 与 apps/web/src/generated/  只由生成入口更新
-! apps/agent/README.md 与 manifest.yml  对齐调度职责与运行入口
-! uv.lock  工作区 HTTP 依赖锁定
-+ apps/agent/tests/test_run_scheduler_integration.py  配额、重启与有效租约
-+ apps/worker/tests/test_run_consumer.py  续租、信号和重复回执
-! apps/web/tests/e2e/analysis-composer.spec.ts  重连、权限与折叠
-+ docs/adr/0005-async-runtime.md  部署拓扑和扩展触发条件
-+ mai-specs/984-lesson-20-production-agent-runtime/test/FAILURE_MATRIX.md  按故障记录实际结果
-+ mai-specs/984-lesson-20-production-agent-runtime/IMPLEMENTATION.md  实际交付与运行恢复报告
-```
-
-| 任务                            | 顺序   | 验收                                                                                                                                     |
-| ------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| T0 M5 前置接缝核验              | 实施前 | 0009、Session/Run/Checkpoint/HITL、Redis/Outbox/投影、当前授权及v1适配器已实现；确认一次执行边界入口、锁序和已有验收可复跑。当前待交付。 |
-| T1 受管迁移、原子受理与租户准入 | T0 后  | AC-01、AC-03、AC-07、AC-09。重复受理、所有控制入口入队、旧Run容量与M5数据兼容。                                                          |
-| T2 Worker、租约与恢复           | T1 后  | AC-03～AC-06。实际终止 Worker 并接管，验证重复领取、旧 epoch、超时、取消及动作只执行一次。                                               |
-| T3 用户事件与 Chat              | T2 后  | AC-02、AC-08、AC-10、AC-11。注入受限字段，验证实时、历史、撤权及重连，回归 M1 同步路径。                                                 |
-| T4 验收报告与部署               | T3 后  | AC-07～AC-09。测两个租户实际延迟、恢复和利用率，形成 Failure Matrix、运行与恢复报告及拓扑 ADR。                                          |
-
-实施验证须运行 Agent、Worker 和 Web 的 lint/typecheck/test，生成并校验网络契约，执行 Agent PostgreSQL 的空库、0009 升级、权限、派生 SQL 和备份恢复，跑真实双 Worker 进程与 Web 浏览器验证。按跨应用规范运行 `pnpm check`、`pnpm build`、相关 Compose profiles 和 smoke。课堂 Lease 档位及延迟由实测确认，当前设计未运行服务或迁移。
-
-针对本次修正补充验收输入：claim 响应丢失后的重试、advance 受理和结果提交各自的断连、等行锁跨越租约到期、过期心跳、批准/Resume/v1 的配额绕过、取消与批准/接管交错、旧 delta 回调与新 epoch 交错、Redis 终态流过期后 Message 重载、M5 的 Session 锁与新调度路径并发。新用例接入已有测试入口，代码和浏览器验收由后续实施执行。本轮只验证文档、链接、设计片段及阅读版。
-
-## 统一执行过程的前置交接
-
-生产展示沿用第 17 课的统一执行节点及 UiExecutionTree，第 18 课补齐真实工具元数据，第 19 课负责统一协议和持久展示。M6 续接沿用 Run/Redis Stream ID 与对象 revision，保留父子关系、并行组和展开状态；最终回答采用本方案第 3 节的完整消息与成功状态判断。
-
-字段真源与本课前置交互见[第 17 课统一执行过程](../../987-lesson-17-hybrid-workflow/design/TECH_DESIGN.md#7-统一执行过程节点)。本节不改变本课原有工具、存储和生产执行的交付范围。
+实施时执行契约生成/检查、Agent 与 Web 应用检查、真库与浏览器验收，以及跨应用 `pnpm check`、`pnpm build`、容器 smoke。具体场景见[业务测试计划](../test/TEST_PLAN.md)及[故障矩阵](../test/FAILURE_MATRIX.md)。当前阶段只更新文档与图。

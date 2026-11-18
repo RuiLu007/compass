@@ -17,7 +17,7 @@ from compass_agent.models.secrets import SecretStore
 from compass_agent.models.service import ModelService, create_runtime
 from compass_agent.runtime.diagnostics import RuntimeDiagnostics
 from compass_agent.runtime.entities import AgentAttempt, AgentCheckpoint, AgentStep, ModelAttempt
-from compass_agent.runtime.run_scheduler import WorkerIdentity
+from compass_agent.runtime.run_scheduler import ConsumerSlot
 from compass_agent.schemas import CallResponse, RunAutonomyResult, RunFailed, TenantScope
 from compass_agent.settings import AutonomyModelProfile
 from sqlalchemy import select
@@ -77,7 +77,7 @@ def test_m6_tool_budget_stops_after_one_real_sql_and_releases_slot(engine, monke
             executor, models, request = generic_case("tool-budget", trusted=context)
             run_id = UUID(runtime.store.submit(request, context)["runId"])
             await runtime.publisher.flush(run_id)
-            worker = WorkerIdentity("budget-worker", uuid4())
+            worker = ConsumerSlot("budget-worker", uuid4())
             grant = await claim(runtime, worker, run_id)
             result, checkpoints = await advance_to_boundary_stop(
                 runtime, worker, grant, executor, context
@@ -216,7 +216,7 @@ def test_m6_model_timeout_retains_unknown_usage_without_retry_and_releases_clean
         async with runtime_service(engine, compass_runtime_max_active=1) as runtime:
             run_id = UUID(runtime.store.submit(command(), context)["runId"])
             await runtime.publisher.flush(run_id)
-            worker = WorkerIdentity("timeout-worker", uuid4())
+            worker = ConsumerSlot("timeout-worker", uuid4())
             grant = await claim(runtime, worker, run_id)
             result, checkpoints = await advance_to_boundary_stop(
                 runtime, worker, grant, TimeoutRunner(), context

@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="480" viewBox="0 0 1440 480" role="img" aria-labelledby="title desc">
+  <title id="title">Compass 异步任务部署架构</title>
+  <desc id="desc">第 20 课目标架构。同一个 apps/agent 与镜像部署两个角色，Scheduler 单实例扫描到期，通过 HTTP 交付给 Agent，定时和即时 Run 共用统一准入、配额和公平领取。多个 Agent 副本按 Run 租约执行，使用 Checkpoint 恢复。Outbox 通过 Redis Streams 提供跨副本 SSE 续流，计划、触发和 Run 可关联追踪。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6.5" refY="4" orient="auto">
+      <path d="M0 0L8 4L0 8Z" fill="#668075"/>
+    </marker>
+  </defs>
+  <rect width="1440" height="480" rx="24" fill="#f8faf7"/>
+  <g font-family="PingFang SC, Microsoft YaHei, Noto Sans CJK SC, sans-serif">
+
+    <text x="44" y="32" font-size="15" fill="#285e4a" font-weight="700" text-anchor="start">COMPASS  /  第 20 课</text>
+    <text x="44" y="68" font-size="35" fill="#17382b" font-weight="700" text-anchor="start">异步任务部署架构</text>
+    <text x="44" y="92" font-size="16" fill="#405d51" font-weight="400" text-anchor="start">同一 apps/agent · Scheduler 单实例交付 · Agent 多副本统一准入与执行</text>
+    <rect x="1125" y="25" width="269" height="34" rx="17" fill="#e9f2ec" stroke="#c3d6c9"/>
+    <text x="1259" y="47" font-size="14" fill="#305447" font-weight="650" text-anchor="middle">目标方案 · 课堂双副本验收</text>
+    <rect x="36" y="186" width="1368" height="275" rx="16" fill="#edf4ee" stroke="#a5bdad"/>
+    <text x="56" y="214" font-size="19" fill="#17382b" font-weight="700" text-anchor="start">Scheduler 角色 · 单实例</text>
+    <text x="516" y="214" font-size="19" fill="#17382b" font-weight="700" text-anchor="start">Agent 角色 · 多副本</text>
+    <text x="1381" y="212" font-size="14" fill="#405d51" font-weight="550" text-anchor="end">独立部署进程 · 共享 Agent 主库</text>
+    <rect x="516" y="109" width="408" height="57" rx="12" fill="#ffffff" stroke="#cad8d0"/>
+    <text x="532" y="132" font-size="17" fill="#243e35" font-weight="650" text-anchor="start">Web 定时任务页 / 自然语言对话</text>
+    <text x="532" y="152" font-size="13" fill="#4c655a" font-weight="400" text-anchor="start">计划查改删、创建和执行记录经 Agent 计划服务</text>
+    <rect x="976" y="109" width="408" height="57" rx="12" fill="#ffffff" stroke="#cad8d0"/>
+    <text x="992" y="132" font-size="17" fill="#243e35" font-weight="650" text-anchor="start">Web BFF / API 即时提交</text>
+    <text x="992" y="152" font-size="13" fill="#4c655a" font-weight="400" text-anchor="start">通过负载均衡调用同一 Run 受理入口</text>
+    <rect x="56" y="230" width="408" height="94" rx="12" fill="#f0f6e8" stroke="#a6bd8a"/>
+    <text x="73" y="250" font-size="13" fill="#4c655a" font-weight="550" text-anchor="start">持久调度租约</text>
+    <text x="73" y="274" font-size="22" fill="#243e35" font-weight="700" text-anchor="start">到期与交付</text>
+    <text x="73" y="296" font-size="14" fill="#405d51" font-weight="400" text-anchor="start">扫描到期、推进下次时间、同步状态</text>
+    <text x="73" y="314" font-size="14" fill="#405d51" font-weight="400" text-anchor="start">按触发 ID 发内部 HTTP，退避重试</text>
+    <rect x="516" y="230" width="408" height="94" rx="12" fill="#e6f3eb" stroke="#99bfa9"/>
+    <text x="533" y="250" font-size="13" fill="#4c655a" font-weight="550" text-anchor="start">统一授权与租户配额</text>
+    <text x="533" y="274" font-size="22" fill="#243e35" font-weight="700" text-anchor="start">计划管理 / Run 受理</text>
+    <text x="533" y="296" font-size="14" fill="#405d51" font-weight="400" text-anchor="start">Web 与 Chat 共用计划服务</text>
+    <text x="533" y="314" font-size="14" fill="#405d51" font-weight="400" text-anchor="start">即时和定时 Run 共用幂等受理与公平领取</text>
+    <rect x="976" y="230" width="408" height="94" rx="12" fill="#dceee1" stroke="#8bb79a"/>
+    <text x="993" y="250" font-size="13" fill="#4c655a" font-weight="550" text-anchor="start">各副本进程内执行</text>
+    <text x="993" y="274" font-size="22" fill="#243e35" font-weight="700" text-anchor="start">Agent 副本 A / B / N</text>
+    <text x="993" y="296" font-size="14" fill="#405d51" font-weight="400" text-anchor="start">按 Run 租约领取，执行模型、工具和审批</text>
+    <text x="993" y="314" font-size="14" fill="#405d51" font-weight="400" text-anchor="start">逐 Checkpoint 提交，过期后由健康副本接续</text>
+    <path d="M720 166V230" fill="none" stroke="#668075" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+    <path d="M1180 166V177H862V230" fill="none" stroke="#668075" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+    <path d="M464 277H516" fill="none" stroke="#668075" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+    <path d="M924 277H976" fill="none" stroke="#668075" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+    <rect x="56" y="375" width="408" height="72" rx="12" fill="#ffffff" stroke="#c0cfc6"/>
+    <text x="72" y="398" font-size="17" fill="#243e35" font-weight="650" text-anchor="start">PostgreSQL · 权威持久化</text>
+    <text x="72" y="420" font-size="13" fill="#456056" font-weight="400" text-anchor="start">计划、触发、Run、队列、租约和 Checkpoint</text>
+    <text x="72" y="436" font-size="13" fill="#456056" font-weight="400" text-anchor="start">计划、触发与 Run 关联，受理时原子落库</text>
+    <rect x="516" y="375" width="408" height="72" rx="12" fill="#ffffff" stroke="#c0cfc6"/>
+    <text x="532" y="398" font-size="17" fill="#243e35" font-weight="650" text-anchor="start">Outbox → Redis Streams → SSE</text>
+    <text x="532" y="420" font-size="13" fill="#456056" font-weight="400" text-anchor="start">按 Run 发布世代，按 packetId 原子去重</text>
+    <text x="532" y="436" font-size="13" fill="#456056" font-weight="400" text-anchor="start">SQL 投影与 Redis 游标共同支撑跨副本续流</text>
+    <rect x="976" y="375" width="408" height="72" rx="12" fill="#ffffff" stroke="#c0cfc6"/>
+    <text x="992" y="398" font-size="17" fill="#243e35" font-weight="650" text-anchor="start">Timeline / Trace / Metrics</text>
+    <text x="992" y="420" font-size="13" fill="#456056" font-weight="400" text-anchor="start">计划 → 触发 → Run → Attempt / 模型调用</text>
+    <text x="992" y="436" font-size="13" fill="#456056" font-weight="400" text-anchor="start">观测触发延迟、积压、重试、排队与接管</text>
+    <path d="M260 324V375" fill="none" stroke="#668075" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+    <path d="M720 324V375" fill="none" stroke="#668075" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+    <path d="M1180 324V375" fill="none" stroke="#668075" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+    <path d="M464 411H516" fill="none" stroke="#668075" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5 5" marker-end="url(#arrow)"/>
+    <path d="M924 411H976" fill="none" stroke="#668075" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5 5" marker-end="url(#arrow)"/>
+    <text x="490" y="264" font-size="11" fill="#4c655a" font-weight="550" text-anchor="middle">HTTP</text>
+  </g>
+</svg>

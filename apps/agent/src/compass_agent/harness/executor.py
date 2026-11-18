@@ -158,8 +158,8 @@ class AgentLoop:
     ):
         raise NotImplementedError
 
-    @staticmethod
-    def _require_complete(result) -> None:
+    @classmethod
+    def _require_complete(cls, result) -> None:
         if result.error_code == "resource_cleanup_failed":
             raise ResourceUnconfirmed("model cleanup unconfirmed")
         if result.status != "completed":
@@ -171,7 +171,7 @@ class AgentLoop:
                 raise RunFailure(result.error_code)
             if result.status == "incomplete":
                 raise RunFailure("model_incomplete", reason=result.error_code)
-            raise RunFailure("model_failed", reason=result.error_code)
+            raise RunFailure(cls._model_error(result.error_code or ""), reason=result.error_code)
         expected = "tool_calls" if result.tool_calls else "stop"
         if result.finish_reason != expected:
             raise RunFailure("model_incomplete")
@@ -185,6 +185,10 @@ class AgentLoop:
 
     @staticmethod
     def _model_error(code: str) -> RunError:
+        if code == "model_rate_limited":
+            return "model_rate_limited"
+        if code == "runtime_overloaded":
+            return "runtime_overloaded"
         if code in {
             "model_unavailable",
             "route_binding_missing",

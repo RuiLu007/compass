@@ -154,25 +154,36 @@ def get_agent_executor(
     _context: RunContext,
     service: Annotated[ModelService, Depends(get_model_service)],
 ) -> RunService:
-    settings = get_settings()
-    engine = get_engine()
+    return build_agent_executor(get_settings(), get_engine(), request.app.state, service)
+
+
+def build_agent_executor(settings, engine, app_state, model_service, *, budget=None):
+    from compass_agent.runtime.deployment import budget_snapshot
+    from compass_agent.scheduler.service import ScheduleService
+    from compass_agent.settings import AutonomyModelProfile
+
+    config = budget if budget is not None else budget_snapshot(settings)
     connections = DataConnections(engine, settings)
-    return RunService(
-        service,
-        RoutingService(service),
+    executor = RunService(
+        model_service,
+        RoutingService(model_service, settings),
         tools_provider=provider(connections),
-        tool_loader=request.app.state.tool_loader,
-        autonomy_profiles=tuple(settings.compass_autonomy_model_profiles)
-        if settings.compass_controlled_autonomy_enabled
+        tool_loader=app_state.tool_loader,
+        autonomy_profiles=tuple(AutonomyModelProfile.model_validate(p) for p in config["profiles"])
+        if config["controlled"]
         else None,
         autonomy_limits=AutonomyLimits(
-            tokens=settings.compass_autonomy_token_budget,
-            cost_microusd=settings.compass_autonomy_cost_budget_microusd,
+            tokens=config["tokens"],
+            cost_microusd=config["costMicrousd"],
         ),
         definition=compass_definition(),
         workflow_assets=WorkflowAssets(engine),
-        workflow_drafts=request.app.state.workflow_drafts,
+        workflow_drafts=app_state.workflow_drafts,
     )
+    runtime = getattr(app_state, "durable_runtime", None)
+    if runtime and runtime.store.distributed:
+        executor.schedules = ScheduleService(runtime.store, runtime.access, model_service, settings)
+    return executor
 
 
 Executor = Annotated[RunService, Depends(get_agent_executor)]

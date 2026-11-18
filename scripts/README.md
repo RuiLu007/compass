@@ -17,7 +17,7 @@
 - `tasks.mjs`：透传任务和筛选参数至 Turbo；运行时任务加载根 `.env` 并跳过版本探测，构建和检查不加载本地密钥。缓存使用 Node / pnpm 指纹及独立的 Python 指纹；缺少 Python 工具时记录 `unavailable`，由实际 Python 任务报告缺失，home 可独立运行。
 - `workspace-filters.mjs`：将 `-F home` 等简单短名解析为完整包名；通过 `pnpm --recursive list --depth -1 --json` 自动发现成员，遵循 workspace 的 glob 与排除规则，无需维护 app 列表。完整包名、目录、复合 Turbo 选择器及 `--` 后的应用参数保持原样；未知短名和重名均明确报错。
 - `workspace-filters.test.mjs`：验证各类筛选参数、排除、冲突与新增 app 自动发现；自动遍历真实 app 检查 [应用准入规范](../apps/README.md)，覆盖原始命令 `pnpm dev -F <短名>`。
-- `tasks.test.mjs`：用无 Python 的隔离目录验证参数透传、环境加载与工具链指纹，并通过真实 Turbo dry-run 验证 home / Web 任务依赖及 agent / memory / worker 独立构建与检查。运行 `pnpm test:tooling`，根 `pnpm check` 自动包含此检查。
+- `tasks.test.mjs`：用无 Python 的隔离目录验证参数透传、环境加载与工具链指纹，并通过真实 Turbo dry-run 验证 home / Web 任务依赖及 agent / memory 独立构建与检查。运行 `pnpm test:tooling`，根 `pnpm check` 自动包含此检查。
 - `export-contracts.py` / `contracts.mjs`：串行生成及检查网络契约。
 - `check-workspace.py`：检查 Python / pnpm 内部依赖图与 Python 跨 app 导入。
 - `doctor.mjs`：检查 Node、pnpm、uv、Docker Compose 和 Docker daemon。

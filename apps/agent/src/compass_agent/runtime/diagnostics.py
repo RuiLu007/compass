@@ -20,7 +20,8 @@ class RuntimeDiagnostics:
         self.store = store
 
     def timeline(self, run_id):
-        self.store.read_run(run_id)
+        run = self.store.read_run(run_id)
+        schedule = run.config_snapshot.get("schedule", {})
         entries = []
         with Session(self.store.engine) as tx:
             for box in tx.scalars(
@@ -101,7 +102,12 @@ class RuntimeDiagnostics:
                     )
                 )
         entries.sort(key=lambda item: (item.occurred_at, item.id))
-        return RuntimeTimeline(runId=run_id, entries=entries[:4096])
+        return RuntimeTimeline(
+            runId=run_id,
+            scheduleId=schedule.get("scheduleId"),
+            triggerId=schedule.get("triggerId"),
+            entries=entries[:4096],
+        )
 
     def usage(self, tenant_id):
         scheduler = self.store.scheduler

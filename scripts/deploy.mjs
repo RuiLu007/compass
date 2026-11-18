@@ -6,14 +6,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-export const apps = ["home", "web", "agent", "memory", "worker"];
+export const apps = ["home", "web", "agent", "memory"];
 const actions = ["up", "status", "logs", "down"];
 
 export function parseArgs(args) {
   if (args.includes("--help") || args.includes("-h")) return { help: true };
   const [action = "up", app, ...extra] = args;
   if (!actions.includes(action) || extra.length || (app && !apps.includes(app)))
-    throw new Error("Usage: pnpm run deploy [home|web|agent|memory|worker]");
+    throw new Error("Usage: pnpm run deploy [home|web|agent|memory]");
   if (action === "down" && app)
     throw new Error("deploy:down stops the whole project; it does not accept an app.");
   return { action, selected: app ? [app] : [...apps] };
@@ -51,9 +51,14 @@ export function deploymentPlan(selected) {
     ...(selected.includes("agent") ? ["migrate"] : []),
     ...(selected.includes("web") ? ["web-migrate"] : []),
   ];
+  const running = [
+    ...selected,
+    ...(selected.includes("agent") ? ["agent-gateway", "scheduler"] : []),
+  ];
   return {
     migrations,
-    services: [...selected, ...(selected.includes("worker") ? ["worker-2"] : []), ...migrations],
+    running,
+    services: [...running, ...migrations],
     database: migrations.length > 0,
     infrastructure: [
       ...(migrations.length ? ["postgres"] : []),
@@ -95,7 +100,7 @@ export async function deploy(
   const options = parseArgs(args);
   if (options.help) {
     console.log(
-      "pnpm run deploy [home|web|agent|memory|worker]\npnpm deploy:status [app]\npnpm deploy:logs [app]\npnpm deploy:down\nNo app selects all five apps. down preserves volumes and images.",
+      "pnpm run deploy [home|web|agent|memory]\npnpm deploy:status [app]\npnpm deploy:logs [app]\npnpm deploy:down\nNo app selects all four apps. down preserves volumes and images.",
     );
     return;
   }
@@ -134,8 +139,6 @@ export async function deploy(
     "home",
     "--profile",
     "memory",
-    "--profile",
-    "worker",
   ];
   const compose = (params, settings = {}) => docker([...prefix, ...params], settings);
   docker(["info", "--format", "{{.OSType}}"], capture);
@@ -185,14 +188,15 @@ export async function deploy(
       throw new Error(
         "Agent deployment requires COMPASS_RUNTIME_STATE_KEY; preserve it with backups.",
       );
-    for (const service of [...selected, ...plan.infrastructure]) {
+    for (const service of [...plan.running, ...plan.infrastructure]) {
       if (!config.services[service]) throw new Error(`Missing Compose service: ${service}`);
       for (const port of config.services[service].ports ?? []) {
         if (port.host_ip !== "127.0.0.1")
           throw new Error(`Service ${service} must bind only to 127.0.0.1.`);
         const owned = containers.some(
           (item) =>
-            item.Service === service &&
+            (item.Service === service ||
+              (service === "agent-gateway" && item.Service === "agent")) &&
             item.State === "running" &&
             item.Publishers?.some(
               (entry) =>
@@ -206,30 +210,42 @@ export async function deploy(
     if (selected.includes("home"))
       run(process.execPath, ["apps/home/scripts/prepare-assets.mjs"], { env });
     console.log(`Deploying locally: ${selected.join(", ")}`);
-    compose(["build", ...plan.services]);
+    compose(["build", ...plan.services.filter((service) => config.services[service]?.build)]);
     if (plan.infrastructure.length)
       compose(["up", "--detach", "--wait", "--wait-timeout", "120", ...plan.infrastructure]);
-    const runningServices = [...selected, ...(selected.includes("worker") ? ["worker-2"] : [])];
-    compose(["stop", "--timeout", "15", ...runningServices]);
+    const agent = selected.includes("agent");
+    if (agent) compose(["stop", "--timeout", "12", "scheduler"]);
+    const serving = plan.running.filter((service) => service !== "scheduler");
+    compose(["stop", "--timeout", "15", ...serving]);
     for (const migration of plan.migrations) compose(["run", "--rm", "--no-deps", "-T", migration]);
-    compose([
-      "up",
-      "--detach",
-      "--no-deps",
-      "--no-build",
-      "--force-recreate",
-      "--wait",
-      "--wait-timeout",
-      "120",
-      ...runningServices,
-    ]);
+    const up = (services) =>
+      compose([
+        "up",
+        "--detach",
+        "--no-deps",
+        "--no-build",
+        "--force-recreate",
+        "--wait",
+        "--wait-timeout",
+        "120",
+        ...services,
+      ]);
+    up(serving);
     run(process.execPath, ["scripts/smoke.mjs", "--local", "--apps", selected.join(",")], { env });
-    if (selected.includes("worker")) {
-      const workers = parseContainers(
-        compose(["ps", "--all", "--format", "json", "worker", "worker-2"], capture),
+    if (agent) {
+      up(["scheduler"]);
+      const roles = parseContainers(
+        compose(["ps", "--all", "--format", "json", "agent", "scheduler"], capture),
       );
-      if (workers.length !== 2 || workers.some((worker) => worker.State !== "running"))
-        throw new Error("Both Worker consumers must be running.");
+      const agents = roles.filter((role) => role.Service === "agent");
+      const schedulers = roles.filter((role) => role.Service === "scheduler");
+      const expected = Number(config.services.agent.scale ?? 2);
+      if (
+        agents.length !== expected ||
+        schedulers.length !== 1 ||
+        roles.some((role) => role.State !== "running" || role.Health !== "healthy")
+      )
+        throw new Error("Agent replicas and the Scheduler must be healthy.");
     }
     console.log(`Local deployment passed: ${selected.join(", ")}.`);
   } finally {

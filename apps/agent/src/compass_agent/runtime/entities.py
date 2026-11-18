@@ -77,6 +77,9 @@ class AgentRunJob(Base):
     worker_id: Mapped[str | None] = mapped_column(String(64))
     worker_boot_id: Mapped[UUID | None] = mapped_column(Uuid)
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    recovery_token: Mapped[UUID | None] = mapped_column(Uuid)
+    recovery_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    active_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     claim_count: Mapped[int] = mapped_column(Integer, default=0)
 
 
@@ -194,6 +197,10 @@ class AgentRun(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    publish_token: Mapped[UUID | None] = mapped_column(Uuid)
+    publish_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    publish_initialized: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    publish_generation: Mapped[int] = mapped_column(BigInteger, server_default="0")
     active_ms: Mapped[int] = mapped_column(BigInteger, default=0)
 
 
@@ -433,6 +440,11 @@ class AgentCheckpoint(Base):
 class AgentCommand(Base):
     __tablename__ = "agent_command"
     __table_args__ = (
+        CheckConstraint(
+            "(kind = 'schedule' AND session_id IS NULL AND run_id IS NULL)"
+            " OR (kind <> 'schedule' AND session_id IS NOT NULL)",
+            name="ck_agent_command_schedule_scope",
+        ),
         UniqueConstraint(
             "tenant_id",
             "workspace_id",
@@ -451,7 +463,7 @@ class AgentCommand(Base):
     workspace_id: Mapped[UUID] = mapped_column(Uuid)
     actor_user_id: Mapped[UUID] = mapped_column(Uuid)
     request_id: Mapped[UUID] = mapped_column(Uuid)
-    session_id: Mapped[UUID] = mapped_column(ForeignKey("agent_session.id"))
+    session_id: Mapped[UUID | None] = mapped_column(ForeignKey("agent_session.id"))
     run_id: Mapped[UUID | None] = mapped_column(Uuid)
     kind: Mapped[str] = mapped_column(String(16))
     request_sha256: Mapped[str] = mapped_column(String(64))

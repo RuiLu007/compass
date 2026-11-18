@@ -2370,52 +2370,6 @@
         "title": "ExecutionEnvironment",
         "type": "object"
       },
-      "ExecutionGrant": {
-        "additionalProperties": false,
-        "properties": {
-          "bootId": {
-            "format": "uuid",
-            "title": "Bootid",
-            "type": "string"
-          },
-          "checkpointNo": {
-            "minimum": 0,
-            "title": "Checkpointno",
-            "type": "integer"
-          },
-          "epoch": {
-            "format": "uuid",
-            "title": "Epoch",
-            "type": "string"
-          },
-          "expiresAt": {
-            "format": "date-time",
-            "title": "Expiresat",
-            "type": "string"
-          },
-          "runId": {
-            "format": "uuid",
-            "title": "Runid",
-            "type": "string"
-          },
-          "workerId": {
-            "maxLength": 64,
-            "minLength": 1,
-            "title": "Workerid",
-            "type": "string"
-          }
-        },
-        "required": [
-          "runId",
-          "workerId",
-          "bootId",
-          "epoch",
-          "expiresAt",
-          "checkpointNo"
-        ],
-        "title": "ExecutionGrant",
-        "type": "object"
-      },
       "ExecutionOrigin": {
         "additionalProperties": false,
         "properties": {
@@ -4096,6 +4050,18 @@
           "message": {
             "title": "Message",
             "type": "string"
+          },
+          "reasonCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reasoncode"
           },
           "requestId": {
             "title": "Requestid",
@@ -6411,6 +6377,9 @@
               "output_token_limit_exceeded",
               "invalid_model_input",
               "model_failed",
+              "model_rate_limited",
+              "runtime_overloaded",
+              "run_budget_exhausted",
               "model_incomplete",
               "model_unavailable",
               "run_timeout",
@@ -7132,6 +7101,32 @@
             "format": "uuid",
             "title": "Runid",
             "type": "string"
+          },
+          "scheduleId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Scheduleid"
+          },
+          "triggerId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Triggerid"
           }
         },
         "required": [
@@ -7432,6 +7427,619 @@
           "operation_id"
         ],
         "title": "SavedProvider",
+        "type": "object"
+      },
+      "ScheduleAutoRouting": {
+        "additionalProperties": false,
+        "properties": {
+          "flash": {
+            "title": "Flash",
+            "type": "boolean"
+          },
+          "pro": {
+            "title": "Pro",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "flash",
+          "pro"
+        ],
+        "title": "ScheduleAutoRouting",
+        "type": "object"
+      },
+      "ScheduleCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "constraints": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunConstraints"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "cron": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Cron",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "question": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "requestId": {
+            "format": "uuid",
+            "title": "Requestid",
+            "type": "string"
+          },
+          "selection": {
+            "$ref": "#/components/schemas/MainModelSelection"
+          },
+          "timezone": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Timezone",
+            "type": "string"
+          },
+          "workflowAssetRef": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowAssetRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "question",
+          "selection",
+          "name",
+          "cron",
+          "timezone",
+          "requestId"
+        ],
+        "title": "ScheduleCreate",
+        "type": "object"
+      },
+      "ScheduleDelete": {
+        "additionalProperties": false,
+        "properties": {
+          "expectedRevision": {
+            "minimum": 1,
+            "title": "Expectedrevision",
+            "type": "integer"
+          },
+          "requestId": {
+            "format": "uuid",
+            "title": "Requestid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requestId",
+          "expectedRevision"
+        ],
+        "title": "ScheduleDelete",
+        "type": "object"
+      },
+      "ScheduleFields": {
+        "additionalProperties": false,
+        "properties": {
+          "constraints": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunConstraints"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "cron": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Cron",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "question": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "selection": {
+            "$ref": "#/components/schemas/MainModelSelection"
+          },
+          "timezone": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Timezone",
+            "type": "string"
+          },
+          "workflowAssetRef": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowAssetRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "question",
+          "selection",
+          "name",
+          "cron",
+          "timezone"
+        ],
+        "title": "ScheduleFields",
+        "type": "object"
+      },
+      "ScheduleInput": {
+        "additionalProperties": false,
+        "properties": {
+          "constraints": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunConstraints"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "question": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "selection": {
+            "$ref": "#/components/schemas/MainModelSelection"
+          },
+          "workflowAssetRef": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowAssetRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "question",
+          "selection"
+        ],
+        "title": "ScheduleInput",
+        "type": "object"
+      },
+      "SchedulePage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ScheduleView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcursor"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "title": "SchedulePage",
+        "type": "object"
+      },
+      "SchedulePatch": {
+        "additionalProperties": false,
+        "properties": {
+          "constraints": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunConstraints"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "cron": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cron"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Enabled"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Question"
+          },
+          "selection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MainModelSelection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Timezone"
+          },
+          "workflowAssetRef": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowAssetRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "title": "SchedulePatch",
+        "type": "object"
+      },
+      "SchedulePreview": {
+        "additionalProperties": false,
+        "properties": {
+          "cron": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Cron",
+            "type": "string"
+          },
+          "selection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MainModelSelection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "timezone": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cron",
+          "timezone"
+        ],
+        "title": "SchedulePreview",
+        "type": "object"
+      },
+      "SchedulePreviewResult": {
+        "additionalProperties": false,
+        "properties": {
+          "autoRouting": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScheduleAutoRouting"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "times": {
+            "items": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "title": "Times",
+            "type": "array"
+          },
+          "warningCode": {
+            "anyOf": [
+              {
+                "const": "capability_not_supported",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Warningcode"
+          }
+        },
+        "required": [
+          "times"
+        ],
+        "title": "SchedulePreviewResult",
+        "type": "object"
+      },
+      "ScheduleUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "expectedRevision": {
+            "minimum": 1,
+            "title": "Expectedrevision",
+            "type": "integer"
+          },
+          "patch": {
+            "$ref": "#/components/schemas/SchedulePatch"
+          },
+          "requestId": {
+            "format": "uuid",
+            "title": "Requestid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requestId",
+          "expectedRevision",
+          "patch"
+        ],
+        "title": "ScheduleUpdate",
+        "type": "object"
+      },
+      "ScheduleView": {
+        "additionalProperties": false,
+        "properties": {
+          "constraints": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunConstraints"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "cron": {
+            "title": "Cron",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "latestTrigger": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TriggerView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "nextFireAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextfireat"
+          },
+          "question": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "selection": {
+            "$ref": "#/components/schemas/MainModelSelection"
+          },
+          "status": {
+            "enum": [
+              "enabled",
+              "disabled",
+              "deleted"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "title": "Updatedat",
+            "type": "string"
+          },
+          "workflowAssetRef": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowAssetRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "question",
+          "selection",
+          "id",
+          "revision",
+          "status",
+          "nextFireAt",
+          "name",
+          "cron",
+          "timezone",
+          "updatedAt",
+          "latestTrigger"
+        ],
+        "title": "ScheduleView",
+        "type": "object"
+      },
+      "ScheduleWriteReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "nextFireAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextfireat"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "enabled",
+              "disabled",
+              "deleted"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "status",
+          "nextFireAt"
+        ],
+        "title": "ScheduleWriteReceipt",
         "type": "object"
       },
       "SchedulingPublic": {
@@ -9063,6 +9671,263 @@
         "title": "ToolSucceededPayload",
         "type": "object"
       },
+      "TriggerAdmission": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "enum": [
+              "accepted",
+              "closed",
+              "ready"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "runId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Runid"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "TriggerAdmission",
+        "type": "object"
+      },
+      "TriggerDelivery": {
+        "additionalProperties": false,
+        "properties": {
+          "deliveryToken": {
+            "format": "uuid",
+            "title": "Deliverytoken",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deliveryToken"
+        ],
+        "title": "TriggerDelivery",
+        "type": "object"
+      },
+      "TriggerPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TriggerView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcursor"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "title": "TriggerPage",
+        "type": "object"
+      },
+      "TriggerView": {
+        "additionalProperties": false,
+        "properties": {
+          "coalescedFromAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coalescedfromat"
+          },
+          "deliveryAttempts": {
+            "title": "Deliveryattempts",
+            "type": "integer"
+          },
+          "deliveryStatus": {
+            "enum": [
+              "pending",
+              "dispatching",
+              "retry_wait",
+              "reconcile_pending",
+              "submitted",
+              "delivery_failed",
+              "skipped"
+            ],
+            "title": "Deliverystatus",
+            "type": "string"
+          },
+          "detectedAt": {
+            "format": "date-time",
+            "title": "Detectedat",
+            "type": "string"
+          },
+          "finishedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finishedat"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "nextAttemptAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextattemptat"
+          },
+          "observedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observedat"
+          },
+          "reasonCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoncode"
+          },
+          "runId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runid"
+          },
+          "runReasonCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runreasoncode"
+          },
+          "runStatus": {
+            "anyOf": [
+              {
+                "enum": [
+                  "created",
+                  "running",
+                  "waiting",
+                  "paused",
+                  "cancelling",
+                  "completed",
+                  "failed",
+                  "canceled"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runstatus"
+          },
+          "scheduleId": {
+            "format": "uuid",
+            "title": "Scheduleid",
+            "type": "string"
+          },
+          "scheduleRevision": {
+            "title": "Schedulerevision",
+            "type": "integer"
+          },
+          "scheduledAt": {
+            "format": "date-time",
+            "title": "Scheduledat",
+            "type": "string"
+          },
+          "sessionId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sessionid"
+          }
+        },
+        "required": [
+          "id",
+          "scheduleId",
+          "scheduleRevision",
+          "scheduledAt",
+          "detectedAt",
+          "coalescedFromAt",
+          "deliveryStatus",
+          "reasonCode",
+          "deliveryAttempts",
+          "nextAttemptAt",
+          "runId",
+          "sessionId",
+          "runStatus",
+          "runReasonCode",
+          "observedAt",
+          "finishedAt"
+        ],
+        "title": "TriggerView",
+        "type": "object"
+      },
       "TrustedContext": {
         "additionalProperties": false,
         "properties": {
@@ -9080,7 +9945,10 @@
               "data_manage",
               "mcp_manage",
               "runtime_diagnostics",
-              "runtime_usage"
+              "runtime_usage",
+              "schedule_manage",
+              "schedule_owner",
+              "schedule_run"
             ],
             "title": "Purpose",
             "type": "string"
@@ -9350,99 +10218,6 @@
           "allowedActions"
         ],
         "title": "WaitView",
-        "type": "object"
-      },
-      "WorkerAdvanceAck": {
-        "additionalProperties": false,
-        "properties": {
-          "checkpointNo": {
-            "minimum": 0,
-            "title": "Checkpointno",
-            "type": "integer"
-          },
-          "commandId": {
-            "format": "uuid",
-            "title": "Commandid",
-            "type": "string"
-          },
-          "reasonCode": {
-            "anyOf": [
-              {
-                "maxLength": 80,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reasoncode"
-          },
-          "status": {
-            "enum": [
-              "running",
-              "continue",
-              "parked",
-              "done",
-              "interrupted"
-            ],
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "commandId",
-          "status",
-          "checkpointNo",
-          "reasonCode"
-        ],
-        "title": "WorkerAdvanceAck",
-        "type": "object"
-      },
-      "WorkerAdvanceCommand": {
-        "additionalProperties": false,
-        "properties": {
-          "expectedCheckpoint": {
-            "minimum": 0,
-            "title": "Expectedcheckpoint",
-            "type": "integer"
-          },
-          "grant": {
-            "$ref": "#/components/schemas/ExecutionGrant"
-          }
-        },
-        "required": [
-          "grant",
-          "expectedCheckpoint"
-        ],
-        "title": "WorkerAdvanceCommand",
-        "type": "object"
-      },
-      "WorkerBoot": {
-        "additionalProperties": false,
-        "properties": {
-          "bootId": {
-            "format": "uuid",
-            "title": "Bootid",
-            "type": "string"
-          }
-        },
-        "required": [
-          "bootId"
-        ],
-        "title": "WorkerBoot",
-        "type": "object"
-      },
-      "WorkerLeaseCommand": {
-        "additionalProperties": false,
-        "properties": {
-          "grant": {
-            "$ref": "#/components/schemas/ExecutionGrant"
-          }
-        },
-        "required": [
-          "grant"
-        ],
-        "title": "WorkerLeaseCommand",
         "type": "object"
       },
       "WorkflowAssetDelete": {
@@ -9807,14 +10582,42 @@
         "summary": "Health"
       }
     },
-    "/internal/runtime/jobs/advance": {
+    "/internal/scheduler/triggers/{trigger_id}/reconcile": {
       "post": {
-        "operationId": "advance_internal_runtime_jobs_advance_post",
+        "operationId": "reconcile_trigger_internal_scheduler_triggers__trigger_id__reconcile_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trigger_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Trigger Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/WorkerAdvanceCommand"
+                "$ref": "#/components/schemas/TriggerDelivery"
               }
             }
           },
@@ -9825,7 +10628,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/WorkerAdvanceAck"
+                  "$ref": "#/components/schemas/TriggerAdmission"
                 }
               }
             },
@@ -9842,75 +10645,59 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Advance",
+        "summary": "Reconcile Trigger",
         "tags": [
-          "worker-runtime"
+          "scheduler-delivery"
         ]
       }
     },
-    "/internal/runtime/jobs/claim": {
+    "/internal/scheduler/triggers/{trigger_id}/submit": {
       "post": {
-        "operationId": "claim_internal_runtime_jobs_claim_post",
+        "operationId": "submit_trigger_internal_scheduler_triggers__trigger_id__submit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trigger_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Trigger Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/WorkerBoot"
+                "$ref": "#/components/schemas/TriggerDelivery"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ExecutionGrant"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "204": {
-            "description": "No available job"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Claim",
-        "tags": [
-          "worker-runtime"
-        ]
-      }
-    },
-    "/internal/runtime/jobs/heartbeat": {
-      "post": {
-        "operationId": "heartbeat_internal_runtime_jobs_heartbeat_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WorkerLeaseCommand"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ExecutionGrant"
+                  "$ref": "#/components/schemas/TriggerAdmission"
                 }
               }
             },
@@ -9927,43 +10714,9 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Heartbeat",
+        "summary": "Submit Trigger",
         "tags": [
-          "worker-runtime"
-        ]
-      }
-    },
-    "/internal/runtime/jobs/release": {
-      "post": {
-        "operationId": "release_internal_runtime_jobs_release_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WorkerLeaseCommand"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Release",
-        "tags": [
-          "worker-runtime"
+          "scheduler-delivery"
         ]
       }
     },
@@ -11171,6 +11924,607 @@
         "summary": "Usage",
         "tags": [
           "runtime-diagnostics"
+        ]
+      }
+    },
+    "/v1/analysis/schedules": {
+      "get": {
+        "operationId": "list_schedules_v1_analysis_schedules_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "enabled",
+                    "disabled",
+                    "deleted"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Schedules",
+        "tags": [
+          "schedules"
+        ]
+      },
+      "post": {
+        "operationId": "create_schedule_v1_analysis_schedules_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleWriteReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Schedule",
+        "tags": [
+          "schedules"
+        ]
+      }
+    },
+    "/v1/analysis/schedules/preview": {
+      "post": {
+        "operationId": "preview_schedule_v1_analysis_schedules_preview_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchedulePreview"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePreviewResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Schedule",
+        "tags": [
+          "schedules"
+        ]
+      }
+    },
+    "/v1/analysis/schedules/{schedule_id}": {
+      "delete": {
+        "operationId": "delete_schedule_v1_analysis_schedules__schedule_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "schedule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Schedule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleDelete"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleWriteReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Schedule",
+        "tags": [
+          "schedules"
+        ]
+      },
+      "get": {
+        "operationId": "get_schedule_v1_analysis_schedules__schedule_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "schedule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Schedule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Schedule",
+        "tags": [
+          "schedules"
+        ]
+      },
+      "patch": {
+        "operationId": "update_schedule_v1_analysis_schedules__schedule_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "schedule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Schedule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleWriteReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Schedule",
+        "tags": [
+          "schedules"
+        ]
+      }
+    },
+    "/v1/analysis/schedules/{schedule_id}/triggers": {
+      "get": {
+        "operationId": "schedule_triggers_v1_analysis_schedules__schedule_id__triggers_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "schedule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Schedule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriggerPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Schedule Triggers",
+        "tags": [
+          "schedules"
         ]
       }
     },

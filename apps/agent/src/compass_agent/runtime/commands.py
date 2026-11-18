@@ -4,15 +4,16 @@ from sqlalchemy import select
 
 from compass_agent.models.errors import ModelError
 from compass_agent.runtime.entities import (
+    AgentAction,
     AgentAttempt,
-    AgentMessage,
     AgentRun,
     AgentSession,
     AgentStep,
     AgentWait,
 )
 from compass_agent.runtime.hitl import approval_event
-from compass_agent.runtime.store import TERMINAL, message_snapshot, now, owner_filter, settled_nodes
+from compass_agent.runtime.run_scheduler import ACTIVE_JOBS
+from compass_agent.runtime.store import TERMINAL, canceled_execution, now, owner_filter
 
 
 def control(store, run_id, kind, command, context):
@@ -52,51 +53,60 @@ def control(store, run_id, kind, command, context):
                 events.append(store.scheduler.enqueue(tx, session, run))
         elif kind == "cancel":
             run.status, run.control_intent = "cancelling", None
+            job = store.scheduler.job(tx, run.id) if store.scheduler else None
+            reclaiming = job is not None and job.status in ACTIVE_JOBS
             unknown = tx.scalar(
                 select(AgentAttempt.id)
+                .join(AgentStep, AgentStep.id == AgentAttempt.step_id)
                 .where(
                     AgentAttempt.run_id == run.id,
                     AgentAttempt.status.in_(["dispatched", "unknown", "incomplete"]),
+                    AgentStep.kind != "workflow_host",
                 )
                 .limit(1)
             )
-            if unknown and run.execution_epoch is None:
-                run.cleanup_status, run.reason_code = "unconfirmed", "cleanup_unconfirmed"
+            if unknown and run.execution_epoch is None and not reclaiming:
+                if job is not None and job.status == "parked":
+                    if run.recovery_status != "blocked":
+                        run.recovery_status, run.reason_code = "blocked", "execution_unknown"
+                else:
+                    run.cleanup_status, run.reason_code = "unconfirmed", "cleanup_unconfirmed"
             pending = tx.scalars(
-                select(AgentWait).where(AgentWait.run_id == run.id, AgentWait.status == "pending")
+                select(AgentWait).where(
+                    AgentWait.run_id == run.id,
+                    AgentWait.status == "pending",
+                    AgentWait.kind != "reconciliation",
+                )
             ).all()
             for wait in pending:
                 wait.status, wait.decided_at = "canceled", now()
                 events.append(approval_event(wait, reason="user_canceled"))
-            if run.execution_epoch is None and run.cleanup_status != "unconfirmed":
+            # Dispatch moves an approved action to unknown under the same Run lock.
+            for action in tx.scalars(
+                select(AgentAction).where(
+                    AgentAction.run_id == run.id, AgentAction.state == "pending"
+                )
+            ):
+                action.state, action.updated_at = "denied", now()
+            if (
+                run.execution_epoch is None
+                and run.cleanup_status != "unconfirmed"
+                and not reclaiming
+                and not unknown
+            ):
                 run.status, run.finished_at, run.cleanup_status = "canceled", now(), "confirmed"
-                for step in tx.scalars(
-                    select(AgentStep).where(
-                        AgentStep.run_id == run.id,
-                        AgentStep.status.in_(["waiting", "running"]),
-                    )
-                ):
-                    step.status, step.finished_at = "canceled", now()
-                    step.revision += 1
-                events.extend(settled_nodes(run, "canceled"))
-                message = tx.scalars(
-                    select(AgentMessage).where(
-                        AgentMessage.run_id == run.id,
-                        AgentMessage.role == "assistant",
-                        AgentMessage.channel == "conversation",
-                    )
-                ).one()
-                value = message_snapshot(message)
-                value["revision"] += 1
-                value["status"] = "incomplete"
-                events.append({"type": "message.upsert", "payload": value})
-        else:
-            raise ModelError("validation_failed", 422)
-        if store.scheduler and kind == "cancel":
-            job = store.scheduler.job(tx, run.id)
-            if job and job.status in {"leased", "reclaiming"}:
+                run.reason_code, run.recovery_status = "user_canceled", "ready"
+                events.extend(canceled_execution(tx, run))
+            if (
+                store.scheduler
+                and not store.distributed
+                and job is not None
+                and job.status == "leased"
+            ):
                 job.status, run.execution_epoch = "reclaiming", None
                 store.scheduler.acknowledge(tx, run, "interrupted", "user_canceled")
+        else:
+            raise ModelError("validation_failed", 422)
         store.outbox(tx, session, run, events)
         result = {
             "sessionId": str(session.id),

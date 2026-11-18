@@ -16,20 +16,42 @@ export function options(args) {
     throw new Error("Usage: pnpm start [--langfuse]");
   return { langfuse: args.includes("--langfuse") };
 }
-export function workerEnvironments(env) {
-  const credentials = JSON.parse(env.COMPASS_WORKER_CREDENTIALS || "{}");
-  return ["worker-1", "worker-2"].map((id) => {
-    if (typeof credentials[id] !== "string" || !credentials[id])
-      throw new Error(`Configure COMPASS_WORKER_CREDENTIALS for ${id} in .env`);
-    return { ...env, COMPASS_WORKER_ID: id, COMPASS_WORKER_TOKEN: credentials[id] };
-  });
+export function agentCommand(env) {
+  const replicas = Number(env.COMPASS_AGENT_REPLICAS || "2");
+  if (!Number.isSafeInteger(replicas) || replicas < 1)
+    throw new Error("COMPASS_AGENT_REPLICAS must be a positive integer");
+  return [
+    "run",
+    "--locked",
+    "--package",
+    "compass-agent",
+    "uvicorn",
+    "compass_agent.main:app",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "8102",
+    "--workers",
+    String(replicas),
+    "--timeout-graceful-shutdown",
+    "5",
+  ];
 }
+const schedulerCommand = [
+  "run",
+  "--locked",
+  "--package",
+  "compass-agent",
+  "python",
+  "-m",
+  "compass_agent.scheduler.main",
+];
 export async function main(args) {
   const { langfuse } = options(args);
   if (!existsSync(path.join(root, ".env"))) throw new Error("Create .env first; see README.md");
   const readEnv = (file) => parseEnv(readFileSync(path.join(root, file), "utf8"));
   const env = { ...readEnv(".env"), ...process.env };
-  workerEnvironments(env);
+  const agentArgs = agentCommand(env);
   // Never terminate an unrelated listener (the Web dev command otherwise replaces it).
   for (const port of [8100, 8101, 8102, 8103]) {
     await new Promise((resolve, reject) => {
@@ -80,14 +102,12 @@ export async function main(args) {
       });
     });
   }
-  const background = (filters, childEnv = env) => {
-    void run("pnpm", ["dev", ...filters.flatMap((name) => ["-F", name])], childEnv, true).catch(
-      (error) => {
-        console.error(error.message);
-        process.exitCode = 1;
-        stop();
-      },
-    );
+  const background = (command, commandArgs) => {
+    void run(command, commandArgs, env, true).catch((error) => {
+      console.error(error.message);
+      process.exitCode = 1;
+      stop();
+    });
   };
   try {
     await ensureDocker({
@@ -125,8 +145,10 @@ export async function main(args) {
       env.COMPASS_LANGFUSE_BASE_URL = "http://127.0.0.1:8104";
     }
     env.COMPASS_OBSERVABILITY_ENABLED = String(langfuse);
+    await run("pnpm", ["db:provision", "-F", "agent"]);
     await run("pnpm", ["db:migrate", "-F", "web", "-F", "agent"]);
-    background(["web", "agent", "home", "memory"]);
+    background("pnpm", ["dev", "-F", "web", "-F", "home", "-F", "memory"]);
+    background("uv", agentArgs);
     for (const port of [8100, 8101, 8102, 8103]) {
       const deadline = Date.now() + 120000;
       while (true) {
@@ -144,7 +166,23 @@ export async function main(args) {
         await delay(500, undefined, { signal: abort.signal });
       }
     }
-    for (const workerEnv of workerEnvironments(env)) background(["worker"], workerEnv);
+    if (env.COMPASS_SCHEDULER_DATABASE_URL && env.COMPASS_SCHEDULER_TOKEN) {
+      void (async () => {
+        while (!stopping) {
+          try {
+            await run("uv", schedulerCommand, env, true);
+          } catch (error) {
+            if (stopping) return;
+            console.warn(`${error.message}. Scheduler will retry in 3 seconds.`);
+            await delay(3000, undefined, { signal: abort.signal }).catch(() => {});
+          }
+        }
+      })();
+    } else {
+      console.warn(
+        "Scheduler requires COMPASS_SCHEDULER_DATABASE_URL and COMPASS_SCHEDULER_TOKEN.",
+      );
+    }
     console.log(
       `\nCompass ready: Web http://127.0.0.1:8100 | Home http://127.0.0.1:8101 | Agent http://127.0.0.1:8102/docs\nLangfuse ${langfuse ? "http://127.0.0.1:8104" : "disabled"}. Ctrl+C stops apps; dependency containers and data are retained.`,
     );

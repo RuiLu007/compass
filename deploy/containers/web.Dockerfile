@@ -6,7 +6,6 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY apps/web/package.json apps/web/package.json
 COPY apps/agent/package.json apps/agent/package.json
 COPY apps/memory/package.json apps/memory/package.json
-COPY apps/worker/package.json apps/worker/package.json
 ARG COMPASS_NPM_REGISTRY=https://registry.npmjs.org/
 RUN --mount=type=cache,id=compass-pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --store-dir=/pnpm/store --fetch-timeout=300000 --network-concurrency=8 --registry=${COMPASS_NPM_REGISTRY}

@@ -3,12 +3,15 @@
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Annotated, Literal
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
-from sqlalchemy import func, select, text
+from pydantic import Field
+from sqlalchemy import and_, case, func, or_, select, text, tuple_
 from sqlalchemy.orm import Session
 
 from compass_agent.models.errors import ModelError
+from compass_agent.runtime.deployment import budget_snapshot
 from compass_agent.runtime.entities import (
     AgentCommand,
     AgentOutbox,
@@ -18,15 +21,36 @@ from compass_agent.runtime.entities import (
     AgentTenantSchedule,
 )
 from compass_agent.runtime.private_state import digest
-from compass_agent.schemas import ExecutionGrant, SchedulingPublic, WorkerAdvanceAck
+from compass_agent.schemas import RunContractModel, SchedulingPublic
 
 ACTIVE_JOBS = ("leased", "reclaiming")
 TERMINAL = {"completed", "failed", "canceled"}
 ADVANCE_NAMESPACE = uuid5(NAMESPACE_URL, "compass.runtime.worker.advance.v1")
 
 
+class ExecutionGrant(RunContractModel):
+    run_id: Annotated[UUID, Field(strict=False)] = Field(alias="runId")
+    worker_id: str = Field(alias="workerId", min_length=1, max_length=64)
+    boot_id: Annotated[UUID, Field(strict=False)] = Field(alias="bootId")
+    epoch: Annotated[UUID, Field(strict=False)]
+    expires_at: Annotated[datetime, Field(strict=False)] = Field(alias="expiresAt")
+    checkpoint_no: int = Field(alias="checkpointNo", ge=0)
+
+
+class AdvanceCommand(RunContractModel):
+    grant: ExecutionGrant
+    expected_checkpoint: int = Field(alias="expectedCheckpoint", ge=0)
+
+
+class AdvanceAck(RunContractModel):
+    command_id: Annotated[UUID, Field(strict=False)] = Field(alias="commandId")
+    status: Literal["running", "continue", "parked", "done", "interrupted"]
+    checkpoint_no: int = Field(alias="checkpointNo", ge=0)
+    reason_code: str | None = Field(alias="reasonCode", max_length=80)
+
+
 @dataclass(frozen=True)
-class WorkerIdentity:
+class ConsumerSlot:
     worker_id: str
     boot_id: UUID
 
@@ -38,12 +62,18 @@ class RunScheduler:
         if not isinstance(raw, dict):
             raise ValueError("Runtime tenant overrides must be an object")
         self.overrides = {}
+        self.budget = budget_snapshot(settings)
         for tenant, limits in raw.items():
-            UUID(tenant)
+            tenant = str(UUID(tenant))
             if not isinstance(limits, dict) or set(limits) - {"active", "backlog"}:
                 raise ValueError("Invalid runtime tenant limits")
-            if any(type(v) is not int or not 1 <= v <= 10000 for v in limits.values()):
+            if any(
+                type(v) is not int or not 1 <= v <= (20 if kind == "backlog" else 200)
+                for kind, v in limits.items()
+            ):
                 raise ValueError("Invalid runtime tenant capacity")
+            if limits.get("backlog", 0) > settings.compass_runtime_tenant_backlog:
+                raise ValueError("Tenant backlog overrides may only lower the configured limit")
             self.overrides[tenant] = limits
         self.owner_boot_id: UUID | None = None
 
@@ -84,10 +114,15 @@ class RunScheduler:
         if (
             self.count(tx, pending, exclude_blocked=True)
             >= self.settings.compass_runtime_max_backlog
-            or self.count(tx, pending, tenant_id, exclude_blocked=True)
+        ):
+            raise ModelError(
+                "runtime_backpressure", 429, reason_code="runtime_cluster_backpressure"
+            )
+        if (
+            self.count(tx, pending, tenant_id, exclude_blocked=True)
             >= self.limits(tenant_id)["backlog"]
         ):
-            raise ModelError("runtime_backpressure", 429)
+            raise ModelError("runtime_backpressure", 429, reason_code="runtime_tenant_backpressure")
 
     def enqueue(self, tx, session, run, *, initial=False):
         job = self.job(tx, run.id)
@@ -162,6 +197,7 @@ class RunScheduler:
     @staticmethod
     def clear_lease(job):
         job.worker_id = job.worker_boot_id = job.lease_expires_at = None
+        job.active_since = job.recovery_token = job.recovery_expires_at = None
 
     def grant(self, run, job):
         return ExecutionGrant(
@@ -220,23 +256,7 @@ class RunScheduler:
                 return None
             if self.count(tx, ACTIVE_JOBS) >= self.settings.compass_runtime_max_active:
                 return None
-            candidates = tx.execute(
-                select(AgentRunJob.run_id, AgentRun.session_id, AgentRunJob.tenant_id)
-                .join(AgentRun, AgentRun.id == AgentRunJob.run_id)
-                .join(AgentTenantSchedule, AgentTenantSchedule.tenant_id == AgentRunJob.tenant_id)
-                .where(
-                    AgentRunJob.status == "ready", AgentRunJob.ready_at <= func.clock_timestamp()
-                )
-                .order_by(
-                    AgentTenantSchedule.last_claimed_at.asc().nullsfirst(),
-                    AgentRunJob.tenant_id,
-                    AgentRunJob.ready_at,
-                    AgentRunJob.run_id,
-                )
-            ).all()
-            for run_id, session_id, tenant_id in candidates:
-                if self.count(tx, ACTIVE_JOBS, tenant_id) >= self.limits(tenant_id)["active"]:
-                    continue
+            for run_id, session_id, tenant_id in self.ready_candidates(tx):
                 session = tx.scalar(
                     select(AgentSession)
                     .where(AgentSession.id == session_id)
@@ -264,7 +284,8 @@ class RunScheduler:
                 ):
                     continue
                 clock = self.clock(tx)
-                run.execution_epoch, run.owner_boot_id = uuid4(), self.owner_boot_id
+                run.execution_epoch = uuid4()
+                run.owner_boot_id = worker.boot_id if self.store.distributed else self.owner_boot_id
                 run.status, run.reason_code, run.recovery_status = "running", None, "ready"
                 run.started_at = run.started_at or clock
                 job.status, job.worker_id, job.worker_boot_id = (
@@ -282,11 +303,78 @@ class RunScheduler:
                 return self.grant(run, job)
             return None
 
+    def ready_candidates(self, tx):
+        job = AgentRunJob
+        occupied = (
+            select(job.tenant_id, func.count().label("active"))
+            .where(job.status.in_(ACTIVE_JOBS))
+            .group_by(job.tenant_id)
+            .subquery()
+        )
+        limits = {
+            UUID(tenant): value["active"]
+            for tenant, value in self.overrides.items()
+            if "active" in value
+        }
+        capacity = (
+            case(limits, value=job.tenant_id, else_=self.settings.compass_runtime_tenant_active)
+            if limits
+            else self.settings.compass_runtime_tenant_active
+        )
+        last = func.coalesce(AgentTenantSchedule.last_claimed_at, datetime(1970, 1, 1, tzinfo=UTC))
+        order = (last, job.tenant_id, job.ready_at, job.run_id)
+        query = (
+            select(job.run_id, AgentRun.session_id, job.tenant_id, last, job.ready_at)
+            .join(AgentRun, AgentRun.id == job.run_id)
+            .join(AgentTenantSchedule, AgentTenantSchedule.tenant_id == job.tenant_id)
+            .outerjoin(occupied, occupied.c.tenant_id == job.tenant_id)
+            .where(
+                job.status == "ready",
+                job.ready_at <= func.statement_timestamp(),
+                func.coalesce(occupied.c.active, 0) < capacity,
+                AgentRun.status.in_(("created", "paused")),
+                AgentRun.recovery_status != "blocked",
+                AgentRun.control_intent.is_(None),
+                AgentRun.cleanup_status != "unconfirmed",
+                ~select(AgentOutbox.id)
+                .where(AgentOutbox.run_id == job.run_id, AgentOutbox.delivered_at.is_(None))
+                .exists(),
+            )
+            .order_by(*order)
+            .limit(32)
+        )
+        page = query
+        for _ in range(4):
+            rows = tx.execute(page).all()
+            for run_id, session_id, tenant_id, _, _ in rows:
+                yield run_id, session_id, tenant_id
+            if len(rows) < 32:
+                return
+            run_id, _, tenant_id, last_claim, ready_at = rows[-1]
+            page = query.where(tuple_(*order) > tuple_(last_claim, tenant_id, ready_at, run_id))
+
+    def settle_active(self, tx, run, job):
+        if job.active_since is not None:
+            until = min(self.clock(tx), job.lease_expires_at)
+            run.active_ms += max(0, int((until - job.active_since).total_seconds() * 1000))
+            job.active_since = None
+
+    def active_at_boundary(self, tx, run, root_boundary):
+        job = self.job(tx, run.id)
+        if root_boundary:
+            self.settle_active(tx, run, job)
+        if job.active_since is None:
+            return run.active_ms
+        until = min(self.clock(tx), job.lease_expires_at)
+        return run.active_ms + max(0, int((until - job.active_since).total_seconds() * 1000))
+
     def heartbeat(self, worker, grant):
         with self.store.transaction() as tx:
             _, run = self.store.lock(tx, grant.run_id)
             job = self.require_grant(tx, run, worker, grant)
-            if run.status != "running":
+            if run.status != "running" and not (
+                self.store.distributed and run.status == "cancelling"
+            ):
                 raise ModelError("lease_lost", 409)
             job.lease_expires_at = self.clock(tx) + timedelta(
                 seconds=self.settings.compass_runtime_lease_seconds
@@ -326,19 +414,21 @@ class RunScheduler:
                 ):
                     raise ModelError("request_conflict", 409)
                 if previous.response["state"] == "committed":
-                    return WorkerAdvanceAck.model_validate(previous.response["ack"]), False
+                    return AdvanceAck.model_validate(previous.response["ack"]), False
             if not self.store.ready:
                 raise ModelError("runtime_unavailable", 503)
-            self.require_grant(tx, run, worker, command.grant)
+            job = self.require_grant(tx, run, worker, command.grant)
             if previous:
                 if previous.response["state"] != "running":
                     raise ModelError("command_interrupted", 409)
-                return WorkerAdvanceAck.model_validate(previous.response["ack"]), False
+                return AdvanceAck.model_validate(previous.response["ack"]), False
             if run.status != "running" or run.control_intent:
                 raise ModelError("run_not_runnable", 409)
             if (run.checkpoint_no or 0) != command.expected_checkpoint:
                 raise ModelError("checkpoint_conflict", 409)
-            ack = WorkerAdvanceAck(
+            if self.store.distributed:
+                job.active_since = self.clock(tx)
+            ack = AdvanceAck(
                 commandId=key,
                 status="running",
                 checkpointNo=run.checkpoint_no or 0,
@@ -378,7 +468,7 @@ class RunScheduler:
                 continue
             response = dict(row.response)
             response["state"] = "interrupted" if status == "interrupted" else "committed"
-            response["ack"] = WorkerAdvanceAck(
+            response["ack"] = AdvanceAck(
                 commandId=row.request_id,
                 status=status,
                 checkpointNo=run.checkpoint_no or 0,
@@ -403,7 +493,13 @@ class RunScheduler:
                 self.clear_lease(job)
                 return [*events, self.event(run, job, "done")]
             return events
-        if run.status in TERMINAL or run.status in {"waiting", "paused"}:
+        if (
+            run.status in TERMINAL
+            or run.status in {"waiting", "paused"}
+            or (self.store.distributed and run.cleanup_status == "unconfirmed")
+        ):
+            if self.store.distributed:
+                self.settle_active(tx, run, job)
             if run.cleanup_status == "unconfirmed":
                 job.status = "reclaiming"
                 self.acknowledge(tx, run, "interrupted", "cleanup_unconfirmed")
@@ -438,40 +534,172 @@ class RunScheduler:
         with self.store.transaction() as tx:
             session, run = self.store.lock(tx, grant.run_id)
             job = self.require_grant(tx, run, worker, grant)
+            reason = "user_paused" if run.control_intent else "worker_released"
+            if self.store.distributed:
+                self.settle_active(tx, run, job)
             job.status = "reclaiming"
-            run.execution_epoch, run.reason_code = None, "worker_released"
-            self.acknowledge(tx, run, "interrupted", "worker_released")
-            self.store.outbox(tx, session, run, [self.event(run, job, "worker_released")])
+            run.execution_epoch, run.reason_code = None, reason
+            self.acknowledge(tx, run, "interrupted", reason)
+            self.store.outbox(tx, session, run, [self.event(run, job, reason)])
 
     def reclaim_candidates(self, *, boot=False):
         with Session(self.store.engine) as tx:
+            leased = AgentRunJob.status.in_(ACTIVE_JOBS)
+            if not boot:
+                leased = and_(
+                    leased,
+                    or_(
+                        AgentRunJob.status == "reclaiming",
+                        AgentRunJob.lease_expires_at <= func.clock_timestamp(),
+                    ),
+                )
             query = (
                 select(AgentRunJob.run_id)
                 .join(AgentRun, AgentRun.id == AgentRunJob.run_id)
-                .where(AgentRunJob.status.in_(ACTIVE_JOBS))
+                .where(
+                    or_(
+                        leased,
+                        and_(
+                            AgentRunJob.status == "parked",
+                            AgentRun.status == "cancelling",
+                            AgentRun.execution_epoch.is_(None),
+                            AgentRun.cleanup_status != "unconfirmed",
+                            AgentRun.reason_code.in_(("execution_unknown", "cleanup_unconfirmed")),
+                        ),
+                    )
+                )
             )
-            if not boot:
-                query = query.where(
-                    (AgentRunJob.status == "reclaiming")
-                    | (AgentRunJob.lease_expires_at <= func.clock_timestamp())
+            if self.store.distributed:
+                query = (
+                    query.where(
+                        or_(
+                            AgentRunJob.recovery_token.is_(None),
+                            AgentRunJob.recovery_expires_at <= func.clock_timestamp(),
+                        )
+                    )
+                    .order_by(AgentRunJob.lease_expires_at, AgentRunJob.run_id)
+                    .limit(16)
                 )
             return list(tx.scalars(query))
 
-    def settle_reclaimed(self, run_id, *, recovery_error=None):
+    def claim_recovery(self, run_id):
+        with self.store.transaction() as tx:
+            session, run = self.store.lock(tx, run_id)
+            job = self.job(tx, run_id)
+            now = self.clock(tx)
+            if job is None or (job.recovery_expires_at and job.recovery_expires_at > now):
+                return None
+            if job.status == "leased":
+                if job.lease_expires_at > now:
+                    return None
+                self.settle_active(tx, run, job)
+                job.status = "reclaiming"
+                run.execution_epoch = None
+                run.recovery_status, run.reason_code = "required", "lease_expired"
+                self.acknowledge(tx, run, "interrupted", "lease_expired")
+                self.store.outbox(tx, session, run, [self.event(run, job, "lease_expired")])
+            if job.status != "reclaiming" and not (
+                job.status == "parked" and run.status == "cancelling"
+            ):
+                return None
+            job.recovery_token = uuid4()
+            job.recovery_expires_at = now + timedelta(
+                seconds=max(5, self.settings.compass_runtime_lease_seconds)
+            )
+            return job.recovery_token
+
+    def settle_canceled_model_attempts(self, tx, run_id, unresolved):
+        from compass_agent.models.entities import ModelCall
+        from compass_agent.runtime.entities import AgentStep, ModelAttempt
+
+        # Model dispatch requires a physical receipt written under the live epoch.
+        # Cleanup may arrive after fencing, when logical output can no longer commit.
+        for attempt in tx.scalars(unresolved.where(AgentStep.kind.in_(("model", "routing")))):
+            receipts = tx.scalars(
+                select(ModelAttempt)
+                .join(ModelCall, ModelCall.call_id == ModelAttempt.call_id)
+                .where(
+                    ModelCall.run_id == run_id,
+                    ModelCall.agent_attempt_id == attempt.id,
+                    ModelAttempt.origin == "live",
+                )
+            ).all()
+            undispatched = [
+                receipt
+                for receipt in receipts
+                if receipt.status == "prepared"
+                and not receipt.sent
+                and receipt.dispatched_at is None
+            ]
+            if any(
+                not (
+                    receipt.status in {"canceled", "completed", "failed", "incomplete"}
+                    and receipt.finished_at is not None
+                    and receipt.cleanup_confirmed
+                )
+                for receipt in receipts
+                if receipt not in undispatched
+            ):
+                continue
+            finished = self.clock(tx)
+            for receipt in undispatched:
+                receipt.status, receipt.finished_at = "canceled", finished
+                receipt.cleanup_confirmed = True
+                receipt.error_code = "user_canceled"
+            attempt.status, attempt.finished_at = "canceled", finished
+            attempt.error_code = "user_canceled"
+        tx.flush()
+
+    def settle_canceled_sandbox_attempts(self, tx, run_id, unresolved):
+        from compass_agent.runtime.entities import AgentAttempt
+        from compass_agent.tools.sandbox.entities import SandboxAllocation
+
+        for attempt in tx.scalars(
+            unresolved.where(AgentAttempt.receipt["sandboxExecutionId"].as_string().is_not(None))
+        ):
+            identifier = attempt.receipt["sandboxExecutionId"]
+            try:
+                allocation = tx.get(SandboxAllocation, UUID(identifier))
+            except (ValueError, TypeError):
+                continue
+            if (
+                allocation
+                and allocation.run_id == run_id
+                and allocation.state in {"retained", "released"}
+                and not attempt.receipt.get("actionId")
+            ):
+                attempt.status, attempt.finished_at = "canceled", self.clock(tx)
+                attempt.error_code = "user_canceled"
+        tx.flush()
+
+    def settle_reclaimed(self, run_id, *, recovery_error=None, recovery_token=None):
         from compass_agent.runtime.entities import (
             AgentAction,
             AgentAttempt,
-            AgentMessage,
             AgentStep,
             AgentWait,
         )
-        from compass_agent.runtime.store import message_snapshot, settled_nodes
+        from compass_agent.runtime.store import canceled_execution
         from compass_agent.tools.sandbox.entities import SandboxAllocation
 
         with self.store.transaction() as tx:
             session, run = self.store.lock(tx, run_id)
             job = self.job(tx, run_id)
-            if job is None or job.status != "reclaiming":
+            if job is None or run.execution_epoch is not None:
+                return
+            if self.store.distributed and (
+                recovery_token is None
+                or job.recovery_token != recovery_token
+                or job.recovery_expires_at <= self.clock(tx)
+            ):
+                return
+            parked_cancel = (
+                job.status == "parked"
+                and run.status == "cancelling"
+                and run.reason_code in {"execution_unknown", "cleanup_unconfirmed"}
+                and run.cleanup_status != "unconfirmed"
+            )
+            if job.status != "reclaiming" and not parked_cancel:
                 return
             allocation = tx.scalar(
                 select(SandboxAllocation.id)
@@ -481,30 +709,26 @@ class RunScheduler:
                 )
                 .limit(1)
             )
-            unknown = tx.scalar(
-                select(AgentAttempt.id)
+            unresolved = (
+                select(AgentAttempt)
                 .join(AgentStep, AgentStep.id == AgentAttempt.step_id)
                 .where(
                     AgentAttempt.run_id == run_id,
                     AgentAttempt.status.in_(("dispatched", "unknown", "incomplete")),
                     AgentStep.kind != "workflow_host",
                 )
-                .limit(1)
             )
             effect = tx.scalar(
                 select(AgentAction.id)
                 .where(AgentAction.run_id == run_id, AgentAction.state == "unknown")
                 .limit(1)
             )
+            if run.status == "cancelling":
+                self.settle_canceled_model_attempts(tx, run_id, unresolved)
+                if not allocation:
+                    self.settle_canceled_sandbox_attempts(tx, run_id, unresolved)
             unknown_tool = tx.scalar(
-                select(AgentAttempt.id)
-                .join(AgentStep, AgentStep.id == AgentAttempt.step_id)
-                .where(
-                    AgentAttempt.run_id == run_id,
-                    AgentAttempt.status.in_(("dispatched", "unknown", "incomplete")),
-                    AgentStep.kind.in_(("tool", "mcp", "sandbox")),
-                )
-                .limit(1)
+                unresolved.where(AgentStep.kind.in_(("tool", "mcp", "sandbox"))).limit(1)
             )
             if allocation or effect or unknown_tool or run.cleanup_status == "unconfirmed":
                 if run.recovery_status != "blocked" or run.reason_code != "cleanup_unconfirmed":
@@ -512,6 +736,9 @@ class RunScheduler:
                     self.store.outbox(
                         tx, session, run, [self.event(run, job, "cleanup_unconfirmed")]
                     )
+                return
+            unknown = tx.scalar(unresolved.limit(1))
+            if parked_cancel and unknown:
                 return
             events = []
             wait = tx.scalar(
@@ -526,20 +753,8 @@ class RunScheduler:
                     "confirmed",
                 )
                 run.reason_code, run.recovery_status = "user_canceled", "ready"
+                events.extend(canceled_execution(tx, run))
                 job.status = "done"
-                self.clear_lease(job)
-                events.extend(settled_nodes(run, "canceled"))
-                assistant = tx.scalar(
-                    select(AgentMessage).where(
-                        AgentMessage.run_id == run_id,
-                        AgentMessage.channel == "conversation",
-                        AgentMessage.role == "assistant",
-                    )
-                )
-                value = message_snapshot(assistant)
-                value["revision"] += 1
-                value["status"] = "incomplete"
-                events.append({"type": "message.upsert", "payload": value})
             elif unknown or recovery_error or run.recovery_status == "blocked":
                 run.status = "paused" if run.status != "cancelling" else "cancelling"
                 run.recovery_status, run.reason_code = (

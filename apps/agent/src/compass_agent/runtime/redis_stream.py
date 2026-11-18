@@ -2,7 +2,9 @@
 
 import asyncio
 import json
+from collections.abc import Awaitable, Callable
 from uuid import UUID
+from weakref import WeakValueDictionary
 
 from redis.asyncio import Redis
 from redis.asyncio.retry import Retry
@@ -13,6 +15,12 @@ from compass_agent.llm.continuation import canonical
 from compass_agent.models.errors import ModelError
 from compass_agent.runtime.public_projection import stream_position
 from compass_agent.runtime.store import TERMINAL
+from compass_agent.runtime.stream_publication import (
+    RETAIN,
+    VALIDATE,
+    append_batches,
+    publication_keys,
+)
 
 PREFIX = "compass:agent:run:"
 
@@ -89,9 +97,19 @@ class RedisStream:
                 raise ModelError("stream_data_lost", 410)
             if stream_position(redis_text(tail[0][0])) < stream_position(run.projected_seq):
                 raise ModelError("stream_data_lost", 410)
+            projected = run.projected_seq
+            if getattr(run, "publish_initialized", False):
+                keys = publication_keys(key)
+                integrity = await self.reader.eval(VALIDATE, len(keys), *keys)
+                if (
+                    integrity != 1
+                    or projected != "0-0"
+                    and not await self.reader.xrange(key, min=projected, max=projected, count=1)
+                ):
+                    raise ModelError("stream_data_lost", 410)
             if after != "0-0" and not await self.reader.xrange(key, min=after, max=after, count=1):
                 raise ModelError("cursor_invalid", 422)
-            self.confirmed.setdefault(run.id, redis_text(tail[0][0]))
+            self.confirmed[run.id] = redis_text(tail[0][0])
         except RedisError:
             raise ModelError("runtime_unavailable", 503) from None
 
@@ -163,16 +181,22 @@ def complete_prefix(rows):
 class OutboxPublisher:
     def __init__(self, store, streams):
         self.store, self.streams = store, streams
-        self.locks: dict[UUID, asyncio.Lock] = {}
+        self.locks: WeakValueDictionary[UUID, asyncio.Lock] = WeakValueDictionary()
         self.last_projected: dict[UUID, float] = {}
         self.dirty: set[UUID] = set()
         self.unprojected_bytes: dict[UUID, int] = {}
         self.require_owner = lambda: None
+        self.concurrency = asyncio.Semaphore(8)
+        self.fault: Callable[[str, UUID], Awaitable[None]] | None = None
 
     def channel(self, run_id):
         return self.locks.setdefault(run_id, asyncio.Lock())
 
     async def flush(self, run_id):
+        if self.store.distributed:
+            async with self.concurrency:
+                await self.flush_shared(run_id)
+            return
         async with self.channel(run_id):
             self.require_owner()
             run = await asyncio.to_thread(self.store.read_run, run_id)
@@ -189,6 +213,42 @@ class OutboxPublisher:
             await self.streams.retain_terminal(
                 run, await asyncio.to_thread(self.store.pending, run_id)
             )
+
+    async def flush_shared(self, run_id):
+        self.require_owner()
+        if not await asyncio.to_thread(self.store.pending, run_id, limit=1):
+            return
+        lease = await asyncio.to_thread(self.store.publication, run_id)
+        if lease is None:
+            return
+        try:
+            # Re-read under the publish lease so no prior publisher can hide a partially sent batch.
+            pending = await asyncio.to_thread(self.store.pending, run_id, limit=32)
+            if not pending:
+                return
+            await self.streams.validate(lease)
+            keys = publication_keys(self.streams.key(run_id))
+            await append_batches(self.streams.writer, keys, lease, pending)
+            if self.fault:
+                await self.fault("outbox_appended", run_id)
+            rows = complete_prefix(await self.streams.rows(run_id, lease.projected_seq))
+            await asyncio.to_thread(self.store.project, run_id, rows, lease)
+            run = await asyncio.to_thread(self.store.read_run, run_id)
+            if run.status in TERMINAL and not await asyncio.to_thread(
+                self.store.pending, run_id, limit=1
+            ):
+                await self.streams.writer.eval(
+                    RETAIN, len(keys), *keys, str(lease.publish_generation), run.projected_seq
+                )
+        except RedisError:
+            raise ModelError("runtime_unavailable", 503) from None
+        except ModelError as error:
+            if error.code in {"stream_data_lost", "stream_batch_invalid", "packet_conflict"}:
+                await asyncio.to_thread(self.store.blocked, run_id, error.code)
+            if error.code != "publish_lease_lost":
+                raise
+        finally:
+            await asyncio.to_thread(self.store.end_publication, lease)
 
     async def _project(self, run_id):
         run = await asyncio.to_thread(self.store.read_run, run_id)
@@ -216,6 +276,12 @@ class OutboxPublisher:
                 await self._project(run_id)
 
     async def tick(self):
+        if self.store.distributed:
+            identifiers = await asyncio.to_thread(self.store.pending_runs)
+            await asyncio.gather(
+                *(self.flush(run_id) for run_id in identifiers), return_exceptions=True
+            )
+            return
         identifiers = {
             box.run_id for box in await asyncio.to_thread(self.store.pending)
         } | self.dirty

@@ -161,25 +161,38 @@ class ToolDispatcher:
         tool = prepared.tool
         tool.authorize(prepared.args, context)
         if tool.policy.approval == "required":
-            assert tool.prepare_proposal is not None
             journal = current_execution.get()
+            if journal and journal.approves(prepared, context.step_id):
+                return None
+            if prepared.approval:
+                proposal, private = prepared.approval.proposal, prepared.approval.private
+            elif tool.prepare_proposal:
+                proposal, private = tool.prepare_proposal(prepared.args, context), {}
+            else:
+                raise ToolRejected("tool_approval_unavailable")
             if journal:
-                proposal = tool.prepare_proposal(prepared.args, context)
                 journal.pending_proposal = {
+                    **private,
                     "toolName": tool.name,
                     "callId": prepared.call_id,
                     "stepId": str(context.step_id),
                     "args": prepared.args,
                     "proposal": proposal.model_dump(mode="json", by_alias=True),
                 }
-                if journal.approves(prepared, context.step_id):
-                    return None
-            return ToolExecutionResult(
-                prepared.call_id, "waiting", proposal=tool.prepare_proposal(prepared.args, context)
-            )
+            return ToolExecutionResult(prepared.call_id, "waiting", proposal=proposal)
         if tool.binding is None:
             return ToolExecutionResult(prepared.call_id, "rejected", reason_code="tool_unavailable")
         return None
+
+    async def prepare_approval(self, prepared, context):
+        prepare = prepared.tool.prepare_approval
+        if prepare is None or prepared.approval is not None:
+            return prepared
+        journal = current_execution.get()
+        if journal and journal.approves(prepared, context.step_id):
+            return prepared
+        approval = await prepare(prepared.args, replace(context, call_id=prepared.call_id))
+        return replace(prepared, approval=approval)
 
     async def revalidate(self, prepared, context):
         context.require_running()
@@ -197,6 +210,7 @@ class ToolDispatcher:
         result: ToolExecutionResult | None = None
         try:
             await self.revalidate(prepared, context)
+            prepared = await self.prepare_approval(prepared, context)
             result = self.admission(prepared, context)
             if result is not None:
                 return result
@@ -327,6 +341,8 @@ class ToolDispatcher:
                 )
 
     async def _invoke(self, prepared, context):
+        if prepared.tool.local_effect:
+            return await self._invoke_live(prepared, context)
         if not isinstance(
             prepared.tool.binding, InProcessBinding
         ) or prepared.tool.policy.effect in {"external_write", "unknown"}:

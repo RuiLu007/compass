@@ -1,7 +1,7 @@
 "use client";
 import { Dialog } from "radix-ui";
 import { X } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useState, type ReactNode, type RefObject } from "react";
 export function Modal({
   title,
   description,
@@ -9,6 +9,8 @@ export function Modal({
   onClose,
   children,
   wide = false,
+  initialFocus,
+  returnFocus,
 }: {
   title: string;
   description?: string;
@@ -16,6 +18,8 @@ export function Modal({
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
+  initialFocus?: RefObject<HTMLElement | null>;
+  returnFocus?: () => HTMLElement | null;
 }) {
   const [opener] = useState(() =>
     typeof document === "undefined" ? null : (document.activeElement as HTMLElement | null),
@@ -30,9 +34,16 @@ export function Modal({
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" data-sensitive-portal />
         <Dialog.Content
+          onOpenAutoFocus={(event) => {
+            if (initialFocus?.current) {
+              event.preventDefault();
+              initialFocus.current.focus();
+            }
+          }}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
-            if (opener?.isConnected && !opener.closest("[inert]")) opener.focus();
+            const target = returnFocus?.() ?? opener;
+            if (target?.isConnected && !target.closest("[inert]")) target.focus();
           }}
           className={`dialog ${wide ? "dialog-wide" : ""}`}
           data-sensitive-portal

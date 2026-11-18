@@ -1,300 +1,309 @@
-# 第 20 课 · 调度与用户事件代码设计
+# 第 20 课 · 定时任务与 Agent 内消费代码设计
 
-[返回技术方案](TECH_DESIGN.md) · [设计评审](../review/design_review.md)
+[需求简报](../BRIEF.md) · [技术方案](TECH_DESIGN.md)
 
-以下是拟议接口与伪代码，尚未实现。复用 M5 的 `runtime/store.py`、Checkpoint、HITL、Outbox 与公开投影；HTTP 编解码、ORM 和遥测样板省略。数据库操作都经 Agent，Worker 只消费 HTTP。共同锁序为调度锁（需要时）→ Session → Run → job → Step/Attempt → Wait/Action。
+以下为拟议 Python 伪代码，供设计评审。已有函数沿用其语义，新增符号仅用于说明接缝。
 
-## 1. 执行权与内部推进回执
+## 1. 模块和入口
 
-`api/worker_runs.py` 验证专用凭据，解析配置绑定的 workerId；`runtime/run_scheduler.py` 管理执行权及边界。类型由 Agent 的 DTO 与路由生成，Worker 不导入 Agent 源码。
+| 拟议模块                                                                            | 职责与边界                                                                          |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `scheduler/{entities,repository,service}.py`                                        | 计划管理、触发状态、持久记录和限时令牌。                                            |
+| `scheduler/main.py`、`scheduler/runner.py`                                          | 同一 Agent 镜像的单实例角色。数据库租约、到期扫描、有界 HTTP 交付、重试与状态同步。 |
+| `api/schedules.py`、`tools/builtin/schedule_read/`、`tools/builtin/schedule_write/` | 共用计划服务。读按实际作用域，写工具经计划所有者确认。                              |
+| `api/scheduler_triggers.py`、`runtime/submission.py`                                | 内部服务鉴权、按持久触发构造执行身份，在统一 Run 受理事务内关联触发。               |
+| Web `automations` 与 BFF                                                            | 列表、表单、执行记录，使用同一代理客户端和生成契约。                                |
+| `runtime/run_consumer.py`                                                           | 各 Agent 副本内迁入领取、续租、推进、控制意图与退出处理。                           |
+
+## 2. Web 与 Chat 计划写入
+
+### 内置定时任务工具契约
+
+模型入参由 Pydantic 判别联合生成严格 JSON Schema，并复用 HTTP 的 Cron、时区、模型选择和可编辑字段校验。只传业务字段，租户和操作者从 `ToolExecutionContext.trusted` 读取。
 
 ```python
-@dataclass(frozen=True)
-class WorkerIdentity:
-    worker_id: str  # 从服务凭据解析；不接受正文替换。
-    boot_id: UUID   # 每次启动一个值；同一运行过程持续复用。
+# 拟议输入类型；模型选择沿用现有 MainModelSelection。
+class ScheduleListArgs(StrictModel):
+    operation: Literal["list"]
+    q: str | None = None
+    status: Literal["enabled", "disabled"] | None = None
+    cursor: str | None = None
 
+class ScheduleGetArgs(StrictModel):
+    operation: Literal["get"]
+    scheduleId: UUID
 
-@dataclass(frozen=True)
-class ExecutionGrant:
-    run_id: UUID
-    worker_id: str
-    boot_id: UUID
-    epoch: UUID  # 唯一权威值是agent_run.execution_epoch。
-    expires_at: datetime
-    checkpoint_no: int  # 无检查点统一为0。
+class ScheduleHistoryArgs(StrictModel):
+    operation: Literal["history"]
+    scheduleId: UUID
+    cursor: str | None = None
 
+class ScheduleCreateArgs(StrictModel):
+    operation: Literal["create"]
+    name: str
+    question: str
+    selection: MainModelSelection
+    cron: str
+    timezone: str
+    enabled: bool = True
 
-@dataclass(frozen=True)
-class AdvanceCommand:
-    grant: ExecutionGrant
-    expected_checkpoint: int
+class ScheduleUpdateArgs(StrictModel):
+    operation: Literal["update"]
+    scheduleId: UUID
+    expectedRevision: PositiveInt
+    patch: SchedulePatch
 
+class ScheduleDeleteArgs(StrictModel):
+    operation: Literal["delete"]
+    scheduleId: UUID
+    expectedRevision: PositiveInt
 
-@dataclass(frozen=True)
-class AdvanceAck:
-    command_id: UUID
-    status: Literal["running", "continue", "parked", "done", "interrupted"]
-    checkpoint_no: int
-    reason_code: str | None
+ScheduleReadArgs = Annotated[
+    ScheduleListArgs | ScheduleGetArgs | ScheduleHistoryArgs,
+    Field(discriminator="operation"),
+]
+ScheduleWriteArgs = Annotated[
+    ScheduleCreateArgs | ScheduleUpdateArgs | ScheduleDeleteArgs,
+    Field(discriminator="operation"),
+]
 ```
 
-advance 的幂等键由服务端计算 `uuid5(worker_advance_namespace, runId + epoch + expectedCheckpoint)`，规范摘要再绑定 workerId、bootId、同一 Run 和 Checkpoint，忽略心跳会更新的 expiresAt；客户端不能用新的 requestId 反复派发同一边界。
+`SchedulePatch` 只能包含名称、分析内容、模型选择、Cron、时区和启用状态，至少提供一个字段。计划 ID、归属与当前版本由服务控制。使用计划服务原有边界校验字符串和游标，分页大小沿用管理 API 的上限。
 
-复用 `agent_command`，只扩展内部 `kind=worker_advance`。tenant/workspace/actor_user_id 从原 Run 的授权发起人取得，表示这次执行的委托归属；实际执行者另存于内部 `response` 的 grant 元数据。`response` 为有类型、有大小上限的 `{schemaVersion, grant, expectedCheckpoint, state, ack}`；state 先为 running，再单向收口 committed/interrupted。普通用户命令仍保存不可变原回执；只有此内部 kind 允许这一次状态更新。用户 API 拒绝该 kind，任何命令查重同时校验 kind/摘要，Worker 只得到 ack，不能读取其他用户命令。
+| 绑定             | 拟议设计                                                                                                                                                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 静态目录         | 在 `tools/builtin/schedule_read/` 和 `tools/builtin/schedule_write/` 分别登记 `SPEC`。能力分别为读和写。Agent 的产品装配明确启用，后台定时 Run 只声明读能力。                                                |
+| Runtime 装配     | `RunToolBindings` 注入计划服务和当前授权组件，以 `ToolSpec` 的同一启用条件生成定义、预检和实际注册。对需要依赖的两个 SPEC，在注册接缝传入每 Run 绑定；保留现有无参工厂和静态工具行为。                       |
+| `schedule_read`  | `InProcessBinding`，`effect=read_only, approval=none`。读取前校验当前管理权限与归属，成功载荷复用 `SchedulePage`、`ScheduleView` 或 `TriggerPage` 的安全视图。                                               |
+| `schedule_write` | `InProcessBinding`，复用 `effect=external_write, approval=required` 的有副作用门禁，`parallel_safe=False`。写入影响后续任务计划，使用串行调用和既有工具等待、续跑协议。                                      |
+| 确认             | 在形成提案时异步取计划快照和下一次时间。沿用 `ToolApprovalProposal` 的公开摘要；Run 服务端存储受保护的 `schedule_owner` 种类、归属、变更 DTO、当前版本与摘要。首次提案已落库后复用它，恢复时按批准内容执行。 |
+| 结果与错误       | 持久写入后返回 `ScheduleWriteReceipt`（ID、revision、状态、nextFireAt），Chat 依据成功回执表述完成。未找到或无权返回安全拒绝；过期版本提示重新查询和确认，已有提交按稳定 Action ID 读取。                    |
 
-原 grant 已释放后，可通过相同 Worker 凭据、boot、epoch 与命令内容读取其已提交回执。Run 已产生新 epoch 时，读取旧回执不授予后继执行权。运行中回执遇到旧 epoch 返回 lease_lost；Agent 恢复把未收口旧命令记 interrupted，后继 grant 使用新的命令 ID。
-
-## 2. 原子受理与公平领取
-
-同一实例内 M5 的 submit/Resume/decision/v1 适配器均通过调度入口，禁止这些路径直接启动执行。当前权限、配置和恢复材料预读在锁外完成，事务内重验版本和归属。
-
-```python
-def accept(tx, owner, command, current_access):
-    require_current_submit_access(current_access, owner)
-    tx.lock_dispatch_admission()
-    saved = tx.user_command(owner, command.request_id)
-    if saved:
-        return same_kind_and_input_or_conflict(saved, "submit", command)
-    tx.require_backlog_capacity(owner.tenant_id)  # 包含parked和reclaiming。
-    session = tx.lock_or_create_session(owner, command.session_id)
-    tx.require_no_nonterminal_run(session)
-    run = tx.create_m5_submission(session, owner, command)
-    tx.insert_ready_job(run.id, tenant_id=owner.tenant_id)
-    # Session/Run/消息/初始投影/Outbox/job/用户命令同事务提交。
-    return tx.save_submit_receipt(owner, command, run)
-
-
-def claim(tx, worker):
-    tx.require_agent_owner_and_streams_ready()
-    tx.lock_dispatch_admission()
-    existing = tx.job_for_worker_slot(worker.worker_id)
-    if existing:
-        session, run = tx.lock_session_then_run(existing.run_id)
-        job = tx.lock_job(run.id)
-        if job.worker_boot_id != worker.boot_id:
-            return NoWork(reason="previous_process_cleanup")
-        if job.status == "leased" and job.lease_expires_at > tx.clock_timestamp():
-            return grant_from(run, job)  # claim响应丢失，返回原grant。
-        return NoWork(reason="reclaim_pending")
-    tx.require_global_execution_capacity()  # leased+reclaiming。
-    for candidate in tx.fair_ready_candidates():
-        # 按租户last_claimed_at、job.ready_at排序，争用候选不挡住后面的租户。
-        locked = tx.try_lock_session_then_run(candidate, skip_locked=True)
-        if locked is None:
-            continue
-        session, run = locked
-        job = tx.lock_job(run.id)
-        now = tx.clock_timestamp()  # 行锁取得后重新读取实际时钟。
-        if not job.is_ready(now) or not tx.has_tenant_capacity(job.tenant_id):
-            continue
-        if not tx.recovery_and_projection_ready(run):
-            continue
-        run.execution_epoch = uuid4()
-        tx.set_running(run)
-        tx.lease(job, worker, expires_at=now + timedelta(seconds=15))
-        tx.mark_first_claim_and_increment_count(job, now)
-        tx.set_tenant_last_claimed(job.tenant_id, now)
-        tx.record_scheduling_boundary(session, run, job, "claimed")
-        return grant_from(run, job)
-    return NoWork()
-```
-
-`record_scheduling_boundary` 更新业务版本，并将安全 run/timeline 对象写入 M5 Outbox；后续派发仍等待关键投影完成。领取失败不更新公平排序。跨表 tenant 归属在创建 job 的事务核对；Worker 槽占用另有部分唯一索引兜底。
-
-## 3. 续租、受理推进与提交
-
-校验执行权时同时验证专用身份、boot、Run epoch、leased 状态及数据库当前时间。心跳不改用户控制版本；取消和回收不允许靠心跳恢复执行权。
+现有 `prepare_proposal` 回调是同步的。拟给登记增加可选异步提案准备钩子，由单次调用预检在数据库查询完成后把不可变预览挂到该次准备结果，再复用原摘要回调。批次预检、实际派发和续接使用同一预览或已批准快照，避免重复读取生成不同的确认内容。原有必需声明优先，随后为有权的计划工具保留名额，再填充可选 MCP/Workflow。并行模式下写工具单独串行派发，混批在生成提案前拒绝并提示独立重发。既有工具继续走原同步回调。等待查询的 `allowedActions`、批准接口与接管恢复入口共用 `authorize_wait_action(wait, phase, actor)`。种类和主体由服务端从同一持久 Wait 提取。恢复入口替换目前固定的 `approval=True` 检查。属于原业务审批的提案继续要求现有管理员权限。
 
 ```python
-def require_live_lease(run, job, worker, grant, now):
-    require(worker.worker_id == grant.worker_id == job.worker_id, "lease_lost")
-    require(worker.boot_id == grant.boot_id == job.worker_boot_id, "lease_lost")
-    require(run.id == grant.run_id, "lease_lost")
-    require(job.status == "leased", "lease_lost")
-    require(run.execution_epoch == grant.epoch, "lease_lost")
-    require(job.lease_expires_at > now, "lease_lost")
-
-
-def heartbeat(tx, worker, grant):
-    session, run = tx.lock_session_then_run(grant.run_id)
-    job = tx.lock_job(run.id)
-    now = tx.clock_timestamp()
-    require_live_lease(run, job, worker, grant, now)
-    require(run.status == "running", "lease_lost")
-    job.lease_expires_at = now + timedelta(seconds=15)
-    return grant_from(run, job)
-
-
-async def advance(worker, command):
-    await authz.recheck_run_execution(command.grant.run_id)
-    with database.transaction() as tx:
-        session, run = tx.lock_session_then_run(command.grant.run_id)
-        job = tx.lock_job(run.id)
-        key = internal_advance_key(command)
-        saved = tx.worker_command(run.owner, key)
-        if saved:
-            require_same_worker_grant_and_digest(saved, worker, command)
-            if saved.state == "committed":
-                return saved.ack  # 已提交旧回执可重读；此分支无新写入。
-        require_live_lease(run, job, worker, command.grant, tx.clock_timestamp())
-        if saved:
-            require(saved.state == "running", "command_interrupted")
-            return saved.ack  # 暂停意图不妨碍只读轮询正在收口的原命令。
-        require(run.status == "running" and run.control_intent is None, "run_not_runnable")
-        require((run.checkpoint_no or 0) == command.expected_checkpoint, "checkpoint_conflict")
-        saved = tx.prepare_worker_command(run, worker, command, key)
-    # 任务map按Run/command去重；任务归lifespan，HTTP结束不取消。
-    # 受理提交后尚未启动即崩溃，旧命令由启动回收处理，保持可诊断。
-    try:
-        tasks.ensure_boundary_task(saved.id, lambda: execute_one_boundary(worker, command))
-    except TaskStartError:
-        await scheduler.reclaim_unstarted_command(saved.id)
-        return interrupted_ack(saved, "execution_start_failed")
-    return saved.ack
-
-
-def commit_advance(tx, worker, command, outcome):
-    session, run = tx.lock_session_then_run(command.grant.run_id)
-    job = tx.lock_job(run.id)
-    saved = tx.worker_command(run.owner, internal_advance_key(command))
-    require_same_worker_grant_and_digest(saved, worker, command)
-    if saved.state == "committed":
-        return saved.ack
-    require_live_lease(run, job, worker, command.grant, tx.clock_timestamp())
-    require(run.status == "running", "run_not_runnable")
-    require((run.checkpoint_no or 0) == command.expected_checkpoint, "checkpoint_conflict")
-    result = tx.commit_m5_boundary(session, run, outcome)
-    # Outcome由Agent执行器产生，Worker不能上传模型输出、成本或业务结果。
-    if result.resources_confirmed and result.waiting_or_paused:
-        tx.park_and_clear_epoch(run, job)
-    elif result.resources_confirmed and result.terminal:
-        tx.finish_job_and_clear_epoch(run, job)
-    elif result.resources_unconfirmed:
-        tx.revoke_and_reclaim(run, job, reason="cleanup_unconfirmed")
-    if result.scheduling_changed:
-        # 扩充本事务刚创建、尚未发布的同一Outbox，保留一个run_version。
-        tx.append_scheduling_to_boundary(result.outbox_id, run, job)
-    return tx.commit_worker_ack(saved, result)
-```
-
-`execute_one_boundary` 复用 M5 持久执行器，先在锁外等待前序关键投影；每次模型/工具/动作派发前都经过调度门禁，内部子调用记录原 Step/Attempt。继续、等待或完成的回执与 M5 业务结果、Checkpoint、调度变化和 Outbox 同事务收口。公开调度变化同时记录领取及确认释放，供占用区间统计。对外工具和 Redis 操作全在业务锁外；等待投影完成后才允许下一命令的实际派发。已提交命令回执的只读返回不等待 Redis。
-
-取消或过期后的已返回结果走 Agent 清理/效果核对入口：只按原 Attempt/Action ID 补记结局、费用和清理回执，不覆盖新的 Checkpoint、成功消息或执行权。旧执行者无法调用它来派发新动作。已成功提交的效果保留；未知结果沿用 M5 的保守预算占额。
-
-## 4. 控制接续、回收和 Worker 循环
-
-```python
-def resume_or_approve(tx, owner, command, current_access):
-    # 可能为旧M5 Run补job，从事务起点取调度锁。
-    tx.lock_dispatch_admission()
-    session, run = tx.lock_session_then_run(command.run_id)
-    job = tx.lock_job_if_present(run.id)
-    previous = tx.user_command(owner, command.request_id)
-    if previous:
-        return same_kind_and_input_or_conflict(previous, command.kind, command)
-    tx.validate_m5_control(session, run, command, current_access)
-    tx.require_parked_or_legacy_job_for_new_resume(job, command)
-    if job is None:
-        tx.require_backlog_capacity(session.tenant_id)
-        job = tx.insert_parked_job(run.id, session.tenant_id)
-    ack = tx.apply_m5_decision_without_starting_executor(session, run, command)
-    if ack.can_resume:
-        tx.require_current_resources_settled(run)
-        tx.clear_satisfied_control_intent(run)
-        run.reason_code = "queued"
-        tx.make_ready(job)  # 保留waiting/paused，claim时才转running和授予epoch。
-    elif ack.terminal:
-        tx.finish_job_and_clear_epoch(run, job)
-    tx.record_control_outbox(session, run, ack)
-    return tx.save_user_command_receipt(owner, command, ack)
-
-
-async def reclaim(run_id):
-    with database.transaction() as tx:
-        session, run = tx.lock_session_then_run(run_id)
-        job = tx.lock_job(run_id)
-        now = tx.clock_timestamp()
-        if job.status == "leased" and job.lease_expires_at <= now:
-            tx.revoke_and_reclaim(run, job, reason="lease_expired")
-        if job.status != "reclaiming":
-            return
-    # 撤权先提交；执行句柄、旧流回调与效果核对在锁外完成。
-    receipt = await execution.stop_and_reconcile_original_attempts(run_id)
-    with database.transaction() as tx:
-        session, run = tx.lock_session_then_run(run_id)
-        job = tx.lock_job(run_id)
-        require(job.status == "reclaiming", "recovery_conflict")
-        tx.record_cleanup_receipt(run, receipt)
-        if not receipt.resources_confirmed:
-            tx.mark_recovery_blocked(run, receipt.reason)  # 仍占槽。
-        elif run.status == "cancelling":
-            tx.finish_canceled_if_effects_reconciled(run, job, receipt)
-        elif run.control_intent == "pause" or tx.has_pending_wait(run):
-            tx.park_and_clear_epoch(run, job)
-        elif tx.safe_checkpoint_and_effects_confirmed(run, receipt):
-            tx.interrupt_unfinished_worker_commands(run)
-            tx.make_ready_and_clear_lease(job)
-        else:
-            tx.park_recovery_blocked(run, job, receipt.reason)
-        tx.record_recovery_outbox(session, run, job)
-```
-
-取消事务复用 Session/Run/job 的锁顺序，先保存 cancelling 并撤销新派发许可。未领取且无资源的任务直接取消；在途任务转 reclaiming，清理/效果核对后才 done。批准与取消、claim 与取消按同一行锁裁决。暂停只在安全边界停下；已接受的当前步骤可以收口，后继派发须检查 pause 意图。
-
-Worker 每个进程只有一个配置槽。启动后生成 bootId；claim 无任务按 1 秒上界退避。拿到 grant 后并行运行心跳和 advance 轮询：同一边界一直使用相同命令；continue 才换 expectedCheckpoint；parked/done 结束本轮。心跳确认使用“发送时本地单调时钟 + TTL”作为保守截止，HTTP 超时按原命令重试；lease_lost、截止或取消意图立即停止新 advance。SIGTERM 停止 claim、请求 release，当前任务在有界清理内续租；超时退出由 Agent 继续回收。
-
-Agent 启动恢复先持有 M5 单执行所有者锁并补齐流和投影，再对旧 leased/reclaiming 撤权核对。持久命令 running 但没有本地任务的情况通过这个恢复入口处理。用户 waiting/paused、未知远端效果及显式暂停保留原控制语义。
-
-## 5. M5 公共协议扩展与最终回答
-
-保留 M5 `AgentResponse/AgentPacket/AgentEvent` 唯一联合，沿用 `runtime/public_projection.py` 和 `runtime/run_events.py`，不再新增第二个投影服务。调度事件转换为有类型 Timeline 对象，私有 Worker 身份留在内部回执。
-
-```python
-def scheduling_view(run, job, transition_id, reason, occurred_at):
-    return ViewUpsert(
-        object_id=f"timeline:{transition_id}", revision=1, kind="timeline",
-        value=PublicTimelineEntry(
-            run_id=run.id, phase="scheduling", status=job.status,
-            reason_code=public_reason(reason), claim_count=job.claim_count,
-            occurred_at=occurred_at,
+async def execute_schedule_write(args, tool_context):
+    # 只在现有 HITL 已确认并恢复原调用后进入执行绑定。
+    context = tool_context.trusted
+    binding = schedule_call_binding.from_execution(tool_context, args)
+    if binding.origin == "scheduled":
+        raise ToolRejected("schedule_write_disabled")
+    grant = action_ledger.approved_schedule_grant(
+        binding.run_id, binding.step_id, binding.call_id, binding.arguments_digest
+    )
+    if grant is None:
+        raise ToolRejected("schedule_confirmation_required")
+    command = grant.canonical_command(request_id=grant.action_id)
+    return await journal.execute_local_effect(
+        binding,
+        grant,
+        lambda attempt: asyncio.to_thread(
+            commit_schedule_effect, context, command, grant, attempt
         ),
     )
-
-
-def filter_public_response(body, access):
-    require_owned_session_and_runs(body, access)
-    packets = []
-    for packet in body.packets:
-        # snapshot/delta调用同一函数，保留身份、seq和revision。
-        if packet.event.type == "view.upsert":
-            event = allowlisted_view_or_safe_placeholder(packet.event, access)
-        else:
-            event = require_visible_message_or_run(packet.event, access)
-        packets.append(packet.with_event(event))
-    return body.with_packets(packets)
 ```
 
-`allowlisted_view_or_safe_placeholder` 复用原对象类型，只替换该 DTO 支持的安全标题/状态并去掉全部受限详情；对象本身不允许最低展示时拒绝对应 Run 读取。Message 正文当前权限不足时同样拒绝，避免删掉某个 message.delta 破坏后续 revision。不存在新的 cursor-only 包；整帧最后一个 seq 仍与外层 cursor 一致。授权范围变更时通过重新加载 Message 清除旧详情，所有预览均按同一白名单生成。
+Journal 的 execute_local_effect 负责冻结/重放 Attempt，并将准备好的 Attempt 交给以下事务；写入由共用计划服务执行业务校验。Web/API 使用其独立 HTTP 事务。Chat 调用专用 Journal 本地效果分支。批准后仍要即时复核当前管理权限，底层不向 Web、Provider 或其他服务发 I/O。
 
-```typescript
-function applyScheduledResponse(state: SessionView, response: unknown): SessionView {
-  const next = applyAgentResponse(state, response); // M5：整帧校验与原子应用。
-  for (const run of next.runs) {
-    const answer = next.completedAssistantMessage(run.id);
-    const completed = run.status === "completed" && answer !== undefined;
-    if (completed && !next.answerTransitionSeen.has(run.id)) {
-      next.answerTransitionSeen.add(run.id);
-      // 用户显式展开优先，重复快照与旧事件不改变这一选择。
-      if (!next.userProcessPreference.has(run.id)) next.collapseProcess(run.id);
-    }
-  }
-  return next;
-}
+```python
+def commit_schedule_effect(context, command, grant, attempt):
+    access.require_current_plan_permissions(context, command)
+    with store.transaction() as tx:
+        deployment.require_current_mode(tx)
+        previous = store.command(tx, context, command.request_id, command.canonical_payload)
+        if previous:
+            return journal.read_accepted_schedule_result(tx, grant, attempt, previous)
+        session, run, job = journal.lock_execution(tx, grant)
+        step, attempt, action = journal.lock_local_effect(tx, run, attempt, grant)
+        plan = repository.lock_owned_plan(tx, context, command.plan_id) if command.plan_id else None
+        journal.require_live_approved_local_effect(tx, run, job, action, grant, command)
+        if plan and plan.revision != command.expected_revision:
+            raise Conflict("schedule_revision_changed")
+        receipt = repository.apply(tx, context, command, plan, db_now(tx)).safe_receipt
+        if plan:
+            repository.skip_unclaimed_triggers_for_prior_revision(tx, plan.id)
+        store.record_schedule_command(tx, context, command, receipt)
+        return journal.accept_local_effect_in_transaction(
+            tx, session, run, step, attempt, action, receipt
+        )
 ```
 
-一次成功边界发布完整 message.upsert 和 completed run.upsert。两者完成 SQL 投影后才可见；工具旁白只影响 view 对象。失败/取消的 incomplete 消息不触发成功切换。Stream ID 比较、重连、409 历史重载与 410 活跃流丢失直接使用 M5 逻辑。
+锁顺序为运行模式 → 命令键 → Session/Run/job → Step/Attempt/Action → 计划/触发。准备阶段记录本地 Attempt，执行事务在锁取得后复核取消、当前租约/epoch、批准快照和计划版本，并原子写计划、命令、Action、已接受的 Attempt 执行结果、Checkpoint 与 Outbox。使用事务内 Journal 接缝生成 accepted attempt 和边界回执。通用外部工具的 `dispatched/unknown` 标记和第二次 `accept` 不用于这条本地分支。Root Checkpoint 写入后按现有 BoundaryYield 交还消费。
 
-## 6. 必要验证
+重放优先从 Journal 读取已接受结果，并校验原 Action、请求摘要和持久回执的一致性。进程失联时，事务未提交则效果和 Attempt 结果均不存在，可在新租约下重新授权并复用原批准；已提交则恢复原结果，计划只写一次。发现回执与 Journal 不一致时阻断并暴露诊断原因，避免补写重复效果。外部工具未知结果仍走原有保守核对路径。
 
-实施时验证：重复 submit/claim/advance、等锁跨越 TTL、过期心跳、boot 更换、所有恢复入口的配额、锁序争用、取消与效果写入、旧 delta 回调、真实双 Worker 接管、Agent 重启、Redis 过期后的完整 Message 与回答折叠。并核对每个租户占用、未知成本和本机恢复时间。这里的片段是设计示意，运行结果待实施阶段获取。
+## 3. 到期、HTTP 交付与受理
+
+### Scheduler 运行类型和循环
+
+```python
+@dataclass(frozen=True)
+class SchedulerLease:
+    boot_id: UUID
+    generation: int
+    expires_at: datetime
+
+@dataclass(frozen=True)
+class DeliveryClaim:
+    trigger_id: UUID
+    token: UUID
+    scheduler_generation: int
+    expires_at: datetime
+    deadline_at: datetime
+    attempt: int
+
+@dataclass(frozen=True)
+class AdmissionResult:
+    outcome: Literal["accepted", "retry", "rejected", "stale"]
+    run_id: UUID | None = None
+    retry_after: datetime | None = None
+    reason_code: str | None = None
+
+@dataclass(frozen=True)
+class RunStatusSnapshot:
+    run_id: UUID
+    version: int
+    status: DurableStatus
+    finished_at: datetime | None
+```
+
+`SchedulerRunner` 持有 `SchedulerLeaseStore`、`DueScanner`、`TriggerDispatcher`、`RunStatusSync`。扫描器使用无 I/O 的 `CronCalculator` 和仓储。交付器使用仓储与 `RunAdmissionClient`，HTTP 超时或 429 归并为带重试时刻的单条记录。同步器只读安全的 `RunStatusSnapshot` 并按版本更新。仓储对每次写入校验当前 `SchedulerLease`，交付更新额外校验 `DeliveryClaim`。
+
+```python
+async def run_scheduler(stop):
+    await deployment.require_scheduler_startup()
+    lease = await leases.acquire(boot_id)
+    if lease is None:
+        return ExitCode.SCHEDULER_LEASE_BUSY
+    async with supervised_lease(leases, lease) as session:
+        await supervise_until_stop_or_lease_lost(
+            stop,
+            session,
+            scan=lambda: scanner.scan(session.lease, batch_size),
+            deliver=lambda: dispatcher.dispatch_due(session.lease, max_inflight),
+            sync=lambda: status_sync.sync(session.lease, batch_size),
+        )
+```
+
+`supervised_lease` 独立续租，监督器分开运行扫描、交付、同步。短时错误按循环间隔收敛，循环失败上报并停止写入，交由进程管理器重启。退出时先停领取，在途 HTTP 只在有界截止内等待。未持久化收口的触发按交付租约恢复；确认不再写入后仅释放当代角色租约。请求可能已送达 Agent 时，以原触发回执判断结果。
+
+```python
+def record_due_occurrence(scheduler_grant, plan_id):
+    with store.transaction() as tx:
+        deployment.require_current_mode(tx)
+        scheduler_lease.lock_for_validation(tx, scheduler_grant)
+        plan = repository.lock_due_enabled_plan(tx, plan_id)
+        if plan is None:
+            return
+        scheduler_lease.require_current_after_locks(tx, scheduler_grant)
+        now = db_now(tx)
+        due = rules.most_recent_due(plan.rule, plan.next_fire_at, now)
+        if due is None:
+            return
+        overlap = repository.has_unfinished_trigger(tx, plan.id)
+        repository.insert_occurrence_once(
+            tx, plan, due, detected_at=now, skipped_reason="overlap" if overlap else None
+        )
+        plan.next_fire_at = rules.first_after(plan.rule, now)
+
+async def deliver_one(grant):
+    try:
+        result = await agent_http.submit_trigger(grant.trigger_id, grant.token)
+    except TransportError:
+        await triggers.defer_or_mark_for_reconciliation(grant)
+        return
+    if result.outcome == "retry":
+        await triggers.defer_or_mark_for_reconciliation(grant, result.retry_after)
+    elif result.outcome == "rejected":
+        await triggers.settle_rejection_if_current(grant, result.reason_code)
+    # accepted 已随 Agent 受理提交；stale 交给现任 Scheduler 按记录处理。
+```
+
+领取触发时持久化调度世代、交付令牌与期限，提交事务后才发 HTTP。429 采用 Retry-After 与有界指数退避加抖动的较晚时刻。失败耗尽尝试，或检查到截止已到时，把触发置为 `reconcile_pending`。有独立的就绪查询按批领取待核对记录并刷新令牌。旧世代或过期令牌的快照重领后先核对账本，只有仍可交付时才消耗新的尝试。
+
+```python
+def accept_trigger(service_identity, trigger_id, token, *, reconcile_only=False):
+    internal_auth.require_scheduler(service_identity)
+    saved = triggers.read_frozen_input(trigger_id)
+    context, command = build_trusted_submission(saved, request_id=trigger_id)
+    authorization = None if reconcile_only else access.check_scheduled_run(context)
+    with store.transaction() as tx:
+        deployment.require_current_mode(tx)
+        scheduler_lease.lock_for_validation(tx, saved.scheduler_grant)
+        queue.lock_admission(tx)
+        receipt = store.lock_and_find_submit_receipt(tx, context, command)
+        trigger = triggers.lock(tx, trigger_id)
+        scheduler_lease.require_current_after_locks(tx, saved.scheduler_grant)
+        if receipt:
+            return triggers.verified_submitted_receipt(trigger, receipt)
+        triggers.require_current_delivery_token(tx, trigger, saved, token, db_now(tx))
+        if reconcile_only:
+            return triggers.resolve_without_admission(tx, trigger)
+        if trigger.past_delivery_budget(db_now(tx)):
+            return triggers.close_unaccepted(tx, trigger, "delivery_budget_exhausted")
+        if authorization.permanently_denied:
+            return triggers.close_unaccepted(tx, trigger, "permission_revoked")
+        if not authorization.allowed:
+            raise AuthorizationTemporarilyUnavailable()
+        run = submission.admit_new_run(tx, context, command)
+        triggers.record_submitted(tx, trigger, run.id, accepted_at=db_now(tx))
+        return run.receipt
+```
+
+`submit` 与 `reconcile` 由固定内部分支选择，外部用户无法提交该布尔参数。两入口按同一顺序取锁，锁后再次读取实际数据库时间检查角色和交付令牌。已接受回执按同触发归属和摘要核验，交付令牌已清理或用户软删会话后仍可核对。若当前无回执，核对入口仅在交付关闭且不可再受理时标记失败；仍有预算的恢复记录返回继续交付，由 Scheduler 另起正式 submit。核对请求超时不触发 Run 或增加交付次数。Agent 提交时同时完成 Run、job、Outbox、回执和触发关联。
+
+## 4. Agent 内消费槽
+
+```python
+async def consume_slot(slot, driver, stop_claiming):
+    while not stop_claiming.is_set():
+        grant = await driver.claim(slot)
+        if grant is None:
+            await wait_for_next_poll(stop_claiming)
+            continue
+
+        async with driver.lease_heartbeat(slot, grant) as lease:
+            try:
+                while lease.valid and not stop_claiming.is_set():
+                    receipt = await driver.advance_until_receipt(slot, lease.grant)
+                    if receipt.status != "continue":
+                        break
+                    lease.accept_next_checkpoint(receipt)
+            finally:
+                await driver.request_release_if_still_owned(slot, lease.grant)
+```
+
+现有 advance 接口中的当前授权、可信 Run 上下文和 start_boundary 移入驱动服务。HTTP 过渡适配与 Agent 内驱动共用该接缝。续租必须保持同一 Run/epoch，失去 Run 租约或超过本地安全截止后停止推进，与既有租约规则一致。副本启动核对共享策略版本，为每条 Run 恢复其已记录的预算快照和已结算 Attempt。释放根执行边界前在原事务结算时间、步骤和工具次数；回收者从持久 Attempt 核对费用与尾段时长。持租者有界轮询共享暂停和取消意图，每次派发前再次检查。其他副本只记录请求，或在租约过期后进入回收。关闭时只让已在途的边界有界结束，release 以现有清理门禁为准。任一健康副本可在执行租约到期后领取回收令牌，核对持久状态并重排。
+
+## 5. 跨副本接管与发布
+
+```python
+async def recover_expired_run(run_id):
+    grant = await queue.revoke_expired_epoch_and_claim_recovery(run_id)
+    if grant is None:
+        return
+    async with queue.renew_recovery_lease(grant):
+        outcome = await runtime.reconcile_actions_resources_and_checkpoint(run_id)
+        await queue.settle_recovery_if_current(grant, outcome)
+
+async def publish_one_run(run_id):
+    grant = await outbox.claim_publish_lease(run_id)
+    if grant is None:
+        return
+    async with outbox.renew_publish_lease(grant):
+        await streams.register_generation_if_newer(run_id, grant.generation)
+        for batch in await outbox.read_ordered_pending(run_id, grant):
+            for packet in batch.packets:
+                await streams.append_atomic_once(run_id, grant.generation, packet)
+            await outbox.project_committed_prefix_if_current(run_id, grant)
+```
+
+回收写入先锁 Run/job，在数据库实际时间验证执行租约或上次回收租约确实过期。同一事务撤销旧 epoch 并持久生成回收令牌。提交结论必须匹配当前令牌；原 Attempt、Action 与资源记录用于核对，未决效果依旧阻止重放。审批恢复和其他控制路径写持久状态，避免根据另一实例缺少本地 task 的事实强制接管。
+
+每 Run 的 Outbox 按 SQL 分配的顺序发布，公开流式包在当前执行 epoch 的事务中登记。Redis 的世代登记只接受更高世代或同一世代重试。追加脚本同时验证世代、内容摘要与 packetId，重复包返回原游标。发布切换期间较早世代只能发送已提交的同序持久包；较新世代登记后，旧世代无法追加。SQL 投影在行锁下核对当前发布令牌及预期前一游标，只提交完整批次。发布失败保留 Outbox，从已提交游标恢复；Stream、世代与去重索引同一生命周期。活跃流或必要索引缺失、Stream 尾游标落后于 SQL 已投影游标时，暂停发布并按安全恢复契约处理。终态投影完成后统一清理，旧游标回到 Message 快照。消费者内存中的锁继续用于本地节流。
+
+## 6. 实施前核对
+
+- 同一触发的事务、令牌和 requestId 在进程中断、重复扫描和背压下应归并至一个 Run。
+- 删除和领取竞争按首次领取提交顺序裁决，终态收口时不存在迟到派发。
+- 进程内驱动沿用过期 epoch、等待释放和外部效果核对，回归现有 SSE、Timeline 及公开消息行为。

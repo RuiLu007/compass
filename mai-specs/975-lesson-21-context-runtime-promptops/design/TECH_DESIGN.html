@@ -1,0 +1,808 @@
+<!doctype html>
+<html lang="zh-CN" data-generated-by="my-render-design-html">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Context Runtime 与 PromptOps</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&amp;icon_names=account_tree,code,database,route&amp;display=block"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.11.1/styles/github.min.css"
+      media="(prefers-color-scheme: light)"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.11.1/styles/github-dark.min.css"
+      media="(prefers-color-scheme: dark)"
+    />
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.11.1/highlight.min.js"
+    ></script>
+    <!-- 下方样式和首屏 SVG 是示例，可按方案主题调整配色、字体与构图。 -->
+    <style>
+      :root {
+        color-scheme: light dark;
+        --system-accent: #315db6;
+        --accent: var(--project-accent, var(--system-accent));
+        --project-accent: #1c5145;
+        --page: #f8f9f6;
+        --panel: #fff;
+        --soft: #eff1f5;
+        --ink: #202b27;
+        --muted: #53655d;
+        --line: #d9dee7;
+        font-family: system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: var(--page);
+        color: var(--ink);
+      }
+      @supports (color: AccentColor) {
+        :root {
+          --system-accent: AccentColor;
+        }
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --project-accent: #89c9b7;
+          --page: #151c19;
+          --panel: #1a202b;
+          --soft: #222a38;
+          --ink: #edf0f5;
+          --muted: #b1bdd0;
+          --line: #384353;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        max-width: 76rem;
+        margin: 0 auto;
+        padding: 0 clamp(1rem, 4vw, 3.5rem);
+        line-height: 1.7;
+        accent-color: var(--accent);
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      a {
+        color: inherit;
+        text-decoration-color: var(--accent);
+        text-underline-offset: 0.25em;
+      }
+      p,
+      ul {
+        margin: 0.6rem 0 0;
+      }
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        line-height: 1.25;
+      }
+      h1 {
+        font-size: clamp(2.35rem, 4.4vw, 3.75rem);
+        letter-spacing: -0.045em;
+        text-wrap: balance;
+      }
+      h2 {
+        font-size: clamp(1.45rem, 3vw, 2rem);
+      }
+      h3 {
+        font-size: 1.12rem;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+        gap: clamp(1.25rem, 4vw, 3rem);
+        align-items: center;
+        padding-block: clamp(2.5rem, 8vw, 6rem) clamp(1.75rem, 5vw, 3.5rem);
+        border-top: 4px solid var(--accent);
+      }
+      .eyebrow {
+        margin: 0 0 0.8rem;
+        color: var(--muted);
+        font-size: 0.85rem;
+        font-weight: 650;
+      }
+      .lead {
+        max-width: 32em;
+        margin-top: 1rem;
+        color: var(--muted);
+        font-size: 1.1rem;
+      }
+      main,
+      section {
+        min-width: 0;
+      }
+      .hero-graphic,
+      .diagram,
+      .table-scroll {
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 1rem;
+        background: var(--panel);
+      }
+      .hero-graphic {
+        margin: 0;
+        padding: clamp(0.6rem, 1.6vw, 1.15rem);
+      }
+      .hero-graphic svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        color: var(--ink);
+      }
+      .hero-graphic .track {
+        fill: none;
+        stroke: var(--line);
+      }
+      .hero-graphic .route {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 2.5;
+      }
+      .hero-graphic .arrow {
+        fill: var(--accent);
+      }
+      .hero-graphic .node {
+        fill: var(--panel);
+        stroke: var(--line);
+        stroke-width: 1.5;
+      }
+      .hero-graphic .node-primary {
+        fill: var(--soft);
+        stroke: var(--accent);
+        stroke-width: 2;
+      }
+      .hero-graphic .node-kind {
+        fill: var(--muted);
+        font-size: 15px;
+      }
+      .hero-graphic .node-label {
+        fill: currentColor;
+        font-size: 21px;
+        font-weight: 650;
+      }
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem 1.25rem;
+        padding-block: 0.8rem;
+        border-block: 1px solid var(--line);
+        font-size: 0.92rem;
+      }
+      main {
+        padding-bottom: 4rem;
+      }
+      section {
+        padding-block: clamp(1.55rem, 4vw, 2.75rem);
+        border-bottom: 1px solid var(--line);
+      }
+      section > p,
+      section > ul {
+        max-width: 58em;
+      }
+      section > h3 {
+        margin-top: 1.4rem;
+      }
+      figure {
+        margin: 1rem 0 0;
+      }
+      .diagram,
+      .table-scroll {
+        padding: clamp(0.75rem, 2vw, 1.25rem);
+      }
+      .diagram-output,
+      .table-scroll,
+      pre {
+        overflow-x: auto;
+      }
+      .diagram-output > svg {
+        display: block;
+        width: clamp(calc(var(--diagram-width) * 0.85), 100%, var(--diagram-width));
+        max-width: none !important;
+        height: auto;
+        margin-inline: auto;
+      }
+      figcaption,
+      summary {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      .diagram-output:not([hidden]) + figcaption {
+        margin-top: 0.8rem;
+      }
+      summary {
+        cursor: pointer;
+        margin-top: 0.45rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+      }
+      th,
+      td {
+        padding: 0.5rem 0.7rem;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      pre,
+      code {
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      }
+      pre {
+        margin: 0.7rem 0 0;
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--line);
+        border-radius: 0.65rem;
+        background: var(--soft);
+        font-size: 0.88rem;
+        line-height: 1.6;
+        tab-size: 2;
+      }
+      pre > code.hljs {
+        padding: 0;
+        background: transparent;
+      }
+      :not(pre) > code {
+        overflow-wrap: anywhere;
+      }
+      .material-symbols-outlined {
+        display: none;
+      }
+      .symbols-ready .material-symbols-outlined {
+        display: inline-block;
+        margin-inline-end: 0.4rem;
+        vertical-align: -0.12em;
+        color: var(--muted);
+        font: normal 1.25rem/1 "Material Symbols Outlined";
+        font-feature-settings: "liga";
+        white-space: nowrap;
+      }
+      @media (max-width: 46rem) {
+        .hero {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="hero">
+      <div>
+        <p class="eyebrow">技术方案 · 开发者审阅</p>
+        <h1>Context Runtime 与 PromptOps</h1>
+        <p class="lead">
+          把系统提示词从草稿送到发布。每个 Run 固定配置版本，决策时按阶段装配权限范围内的上下文。
+        </p>
+      </div>
+      <figure class="hero-graphic">
+        <svg viewBox="0 0 530 230" role="img" aria-labelledby="hero-title hero-desc">
+          <title id="hero-title">从发布指针到模型输入</title>
+          <desc id="hero-desc">生效版本供新 Run 固定。每个 Step 依据 Run 的快照组装上下文。</desc>
+          <defs>
+            <marker
+              id="hero-arrow"
+              markerWidth="8"
+              markerHeight="8"
+              refX="7"
+              refY="4"
+              orient="auto"
+            >
+              <path class="arrow" d="M0 0 L8 4 L0 8 Z"></path>
+            </marker>
+          </defs>
+          <path class="track" d="M18 43H512 M18 187H512 M265 16V214" stroke-dasharray="4 5"></path>
+          <path class="route" d="M145 116H186" marker-end="url(#hero-arrow)"></path>
+          <path class="route" d="M342 116H382" marker-end="url(#hero-arrow)"></path>
+          <rect class="node" x="14" y="81" width="130" height="70" rx="10"></rect>
+          <rect class="node-primary" x="187" y="69" width="155" height="94" rx="12"></rect>
+          <rect class="node" x="384" y="81" width="132" height="70" rx="10"></rect>
+          <g text-anchor="middle">
+            <text class="node-kind" x="79" y="105">PromptOps</text>
+            <text class="node-label" x="79" y="131">生效版本</text>
+            <text class="node-kind" x="265" y="105">Agent 受理</text>
+            <text class="node-label" x="265" y="131">Run 固定快照</text>
+            <text class="node-kind" x="450" y="105">Context Runtime</text>
+            <text class="node-label" x="450" y="131">Step 装配</text>
+          </g>
+        </svg>
+        <figcaption>发布切换生效版本。已有 Run 继续使用受理时固定的快照。</figcaption>
+      </figure>
+    </header>
+    <nav aria-label="页内目录">
+      <a href="#architecture">整体架构</a> <a href="#registry">数据结构</a>
+      <a href="#release">治理与发布</a> <a href="#runtime">运行与恢复</a>
+      <a href="#interfaces">接口与代码</a> <a href="#summary">方案小结</a>
+    </nav>
+    <main>
+      <section id="architecture">
+        <h2>
+          <span class="material-symbols-outlined" aria-hidden="true">account_tree</span>整体架构
+        </h2>
+        <p>
+          治理和执行在 Agent 内分工，共享同库的不可变配置。Web
+          负责用户界面和当前授权，模型、工具和持久执行沿用现有运行链路。
+        </p>
+        <figure class="diagram" data-diagram>
+          <div class="diagram-output" tabindex="0" hidden></div>
+          <figcaption>发布将配置写入 Agent，Run 保存版本引用，模型输入按阶段组装。</figcaption>
+          <details>
+            <summary>查看图源</summary>
+            <pre data-mermaid>
+flowchart LR
+  accTitle: Compass PromptOps 与 Context Runtime
+  subgraph web[&quot;Web / BFF&quot;]
+    ops[&quot;PromptOps 管理&quot;]
+    chat[&quot;分析 Chat&quot;]
+    auth[&quot;身份、授权与作用域&quot;]
+    ops --&gt; auth
+    chat --&gt; auth
+  end
+  subgraph agent[&quot;Agent 进程&quot;]
+    gov[&quot;PromptOps 治理服务&quot;]
+    intake[&quot;Run 受理与版本固定&quot;]
+    route[&quot;意图路由与 Profile&quot;]
+    provider[&quot;Context Provider&quot;]
+    assembly[&quot;Policy + Assembler&quot;]
+    exec[&quot;LLM Runtime 与 Tool Dispatcher&quot;]
+    j[&quot;ExecutionJournal 与 Checkpoint&quot;]
+  end
+  db[(&quot;Agent PostgreSQL&quot;)]
+  auth --&gt; gov
+  auth --&gt; intake
+  gov --&gt;|&quot;不可变 Bundle + 发布指针&quot;| db
+  intake --&gt;|&quot;同事务写入 Run&quot;| db
+  intake --&gt; route
+  route --&gt; provider --&gt; assembly --&gt; exec
+  exec --&gt;|&quot;已确认观察&quot;| provider
+  assembly --&gt; j
+  j --&gt; db</pre>
+          </details>
+        </figure>
+      </section>
+      <section id="registry">
+        <h2><span class="material-symbols-outlined" aria-hidden="true">database</span>数据结构</h2>
+        <figure class="diagram" data-diagram>
+          <div class="diagram-output" tabindex="0" hidden></div>
+          <figcaption>
+            草稿可修改，候选由一次冻结生成。生效、审批和评测分别引用具体版本。
+          </figcaption>
+          <details>
+            <summary>查看图源</summary>
+            <pre data-mermaid>
+erDiagram
+  accTitle: PromptOps 治理数据
+  PROMPT_DRAFT o|--o{ PROMPT_BUNDLE : freezes
+  PROMPT_BUNDLE o|--o{ PROMPT_BUNDLE : supplies_parent
+  PROMPT_BUNDLE o|--o{ PROMPT_RELEASE_HEAD : stable_or_canary
+  PROMPT_BUNDLE ||--o{ PROMPT_EVALUATION : evaluates
+  PROMPT_EVALUATION ||--o{ PROMPT_EVALUATION_CASE : contains
+  PROMPT_DRAFT o|--o{ PROMPT_OPERATION : records
+  PROMPT_BUNDLE o|--o{ PROMPT_OPERATION : targets
+  PROMPT_DRAFT {
+    uuid id PK &quot;草稿编号&quot;
+    text scope_key &quot;治理范围&quot;
+    int revision &quot;编辑版本&quot;
+    text status &quot;审批状态&quot;
+    text title &quot;草稿名称&quot;
+    jsonb document &quot;可编辑配置&quot;
+    uuid parent_bundle_id FK &quot;固定父版本&quot;
+    uuid candidate_bundle_id FK &quot;当前候选&quot;
+    uuid current_evaluation_id FK &quot;当前评测&quot;
+    uuid editor_id &quot;该版编辑者&quot;
+    uuid submitter_id &quot;提交人&quot;
+    timestamptz created_at &quot;创建时间&quot;
+    timestamptz updated_at &quot;修改时间&quot;
+  }
+  PROMPT_BUNDLE {
+    uuid id PK &quot;不可变配置&quot;
+    uuid draft_id FK &quot;原草稿&quot;
+    int draft_revision &quot;原草稿版本&quot;
+    text scope_key &quot;归属范围&quot;
+    uuid parent_bundle_id FK &quot;父版本&quot;
+    int schema_version &quot;结构版本&quot;
+    text catalog_version &quot;路由目录版本&quot;
+    text policy_version &quot;兼容策略版本&quot;
+    jsonb document &quot;完整配置&quot;
+    text sha256 &quot;内容哈希&quot;
+    uuid created_by &quot;冻结操作者&quot;
+    timestamptz created_at &quot;冻结时间&quot;
+  }
+  PROMPT_RELEASE_HEAD {
+    text scope_key PK &quot;生效范围&quot;
+    bigint generation &quot;更新代次&quot;
+    uuid stable_bundle_id FK &quot;稳定版本&quot;
+    uuid canary_bundle_id FK &quot;灰度版本&quot;
+    int rollout_bps &quot;灰度基点&quot;
+    timestamptz updated_at &quot;生效时间&quot;
+  }
+  PROMPT_OPERATION {
+    uuid id PK &quot;操作编号&quot;
+    text scope_key &quot;目标范围&quot;
+    uuid draft_id FK &quot;关联草稿&quot;
+    uuid bundle_id FK &quot;关联版本&quot;
+    uuid evaluation_id FK &quot;关联评测&quot;
+    uuid actor_id &quot;操作者&quot;
+    uuid request_id &quot;幂等请求&quot;
+    text request_sha256 &quot;请求摘要&quot;
+    text kind &quot;操作类型&quot;
+    jsonb details &quot;审批或切换记录与回执&quot;
+    timestamptz created_at &quot;操作时间&quot;
+  }
+  PROMPT_EVALUATION {
+    uuid id PK &quot;评测编号&quot;
+    text scope_key &quot;测试范围&quot;
+    uuid draft_id FK &quot;关联草稿&quot;
+    uuid candidate_bundle_id FK &quot;待验证配置&quot;
+    uuid baseline_bundle_id FK &quot;稳定对照&quot;
+    text suite_version &quot;固定用例集&quot;
+    text data_digest &quot;样例摘要&quot;
+    jsonb model_binding &quot;模型绑定版本&quot;
+    text status &quot;评测状态&quot;
+    uuid created_by &quot;发起者&quot;
+    timestamptz created_at &quot;发起时间&quot;
+    timestamptz completed_at &quot;完成时间&quot;
+  }
+  PROMPT_EVALUATION_CASE {
+    uuid evaluation_id PK,FK &quot;评测编号&quot;
+    text case_id PK &quot;固定用例编号&quot;
+    text state &quot;执行状态&quot;
+    uuid claim_token &quot;领取令牌&quot;
+    timestamptz lease_until &quot;占用截止&quot;
+    text outcome &quot;判分结果&quot;
+    jsonb safe_details &quot;安全结果摘要&quot;
+    timestamptz updated_at &quot;最后更新&quot;
+  }</pre>
+          </details>
+        </figure>
+        <p>
+          发布头按作用域唯一。草稿与用例用版本和短占用控制并发；历史操作通过作用域、操作者和请求 ID
+          归并。
+        </p>
+        <figure class="diagram" data-diagram>
+          <div class="diagram-output" tabindex="0" hidden></div>
+          <figcaption>已有 Run 的版本字段可空，旧任务继续以历史模式恢复。</figcaption>
+          <details>
+            <summary>查看图源</summary>
+            <pre data-mermaid>
+erDiagram
+  accTitle: Run 与 Step 的绑定及私有装配记录
+  PROMPT_BUNDLE o|--o{ AGENT_RUN : pins
+  AGENT_RUN ||--o{ AGENT_STEP : governs
+  AGENT_STEP ||--o{ AGENT_ATTEMPT : records
+  AGENT_ATTEMPT ||--o{ AGENT_ARTIFACT : produces
+  PROMPT_BUNDLE {
+    uuid id PK &quot;固定配置版本&quot;
+    text sha256 &quot;编译内容校验&quot;
+  }
+  AGENT_RUN {
+    uuid id PK &quot;任务编号&quot;
+    uuid prompt_bundle_id FK &quot;可空版本绑定&quot;
+    jsonb config_snapshot &quot;版本摘要、范围、代次和命中分组&quot;
+    text prompt_feedback &quot;可空反馈枚举&quot;
+    timestamptz prompt_feedback_at &quot;反馈更新时间&quot;
+  }
+  AGENT_STEP {
+    uuid id PK &quot;逻辑步骤&quot;
+    uuid run_id FK &quot;任务归属&quot;
+    text node_key &quot;逻辑路径&quot;
+    jsonb definition_snapshot &quot;脱敏装配摘要&quot;
+    bytea context_state &quot;加密变量与重放字段&quot;
+    text input_sha256 &quot;输入校验&quot;
+  }
+  AGENT_ATTEMPT {
+    uuid id PK &quot;执行尝试&quot;
+    uuid step_id FK &quot;所在步骤&quot;
+    jsonb receipt &quot;已登记输入和回执&quot;
+  }
+  AGENT_ARTIFACT {
+    uuid id PK &quot;产物编号&quot;
+    uuid run_id FK &quot;任务归属&quot;
+    uuid attempt_id FK &quot;生成尝试&quot;
+    text media_type &quot;允许类型含看板 JSON 和报告 Markdown&quot;
+    jsonb scope &quot;读取权限与范围&quot;
+    bytea content &quot;产物字节&quot;
+    text sha256 &quot;产物摘要&quot;
+  }</pre>
+          </details>
+        </figure>
+        <p>装配摘要按授权开给诊断。变量、工具元数据及输入引用由私有状态加密保存。</p>
+      </section>
+      <section id="release">
+        <h2><span class="material-symbols-outlined" aria-hidden="true">route</span>治理与发布</h2>
+        <figure class="diagram" data-diagram>
+          <div class="diagram-output" tabindex="0" hidden></div>
+          <figcaption>两级审批锁定同一候选，发布与回切只更新生效指针。</figcaption>
+          <details>
+            <summary>查看图源</summary>
+            <pre data-mermaid>
+flowchart LR
+  accTitle: 编辑、分级审核和发布
+  D[&quot;草稿&quot;] --&gt; T[&quot;冻结候选并验证&quot;]
+  T --&gt;|通过| A[&quot;业务复核&quot;]
+  T --&gt;|失败| D
+  A --&gt;|通过| B[&quot;发布复核&quot;]
+  B --&gt;|通过| P[&quot;待发布&quot;]
+  A --&gt;|驳回| D
+  B --&gt;|驳回| D
+  P --&gt; G[&quot;按范围灰度或全量&quot;]
+  G --&gt; O[&quot;对照效果&quot;]
+  O --&gt; H[&quot;回切或恢复继承&quot;]
+  H --&gt; N[&quot;新 Run 读取当前指针&quot;]
+  G --&gt; N</pre>
+          </details>
+        </figure>
+        <p>
+          查找顺序为工作空间、租户及平台。首次局部灰度未命中走父级稳定链，回切保持旧 Run 固定版本。
+        </p>
+      </section>
+      <section id="runtime">
+        <h2><span class="material-symbols-outlined" aria-hidden="true">route</span>运行与恢复</h2>
+        <figure class="diagram" data-diagram>
+          <div class="diagram-output" tabindex="0" hidden></div>
+          <figcaption>受理事务一并登记 Run 和配置快照，执行阶段只读取原绑定。</figcaption>
+          <details>
+            <summary>查看图源</summary>
+            <pre data-mermaid>
+sequenceDiagram
+  accTitle: 同一 Run 固定版本并按阶段装配
+  participant B as Web BFF
+  participant S as RuntimeStore
+  participant D as Agent PostgreSQL
+  participant R as Agent 执行循环
+  participant J as ExecutionJournal
+  participant M as LLM Runtime
+  B-&gt;&gt;S: 受理经授权的请求
+  S-&gt;&gt;D: 查询 Head，写 Run 与绑定
+  D--&gt;&gt;B: 提交后返回 Run ID
+  R-&gt;&gt;D: 按 Run 绑定读取 Bundle
+  R-&gt;&gt;R: 路由与阶段决策
+  R-&gt;&gt;J: 按逻辑模型 Step 查收据
+  alt 已有输入快照
+    J--&gt;&gt;R: 读取原输入与已接受结果
+  else 首次准备
+    R-&gt;&gt;R: Provider 与 Policy 组装输入
+    R-&gt;&gt;J: 持久化输入引用与装配摘要
+  end
+  opt 未执行且当前授权有效
+    R-&gt;&gt;M: 发送已登记的模型输入
+    M--&gt;&gt;J: 结果经 Runtime 记账
+  end
+  J--&gt;&gt;R: 已确认事实推进下一阶段</pre>
+          </details>
+        </figure>
+        <figure class="diagram" data-diagram>
+          <div class="diagram-output" tabindex="0" hidden></div>
+          <figcaption>已接受的步骤复用结果，缺少完整工具回执时保持等待。</figcaption>
+          <details>
+            <summary>查看图源</summary>
+            <pre data-mermaid>
+flowchart LR
+  accTitle: 模型 Step 准备与重放
+  K[&quot;逻辑 Step&quot;] --&gt; S{&quot;有已保存输入&quot;}
+  S --&gt;|有| R[&quot;按原快照重建并核验&quot;]
+  S --&gt;|首次| L[&quot;当前授权与预算&quot;]
+  L --&gt; F{&quot;工具回合完整&quot;}
+  F --&gt;|同阶段续接| E[&quot;保留封存前缀&quot;]
+  F --&gt;|阶段改变且已结算| N[&quot;按新阶段建立消息帧&quot;]
+  E --&gt; W[&quot;事务内保存输入&quot;]
+  N --&gt; W
+  F --&gt;|等待或未知| X[&quot;按现有流程等待或核对&quot;]
+  W --&gt; G{&quot;准备回执与权限有效&quot;}
+  R --&gt; G
+  G --&gt;|已接受| A[&quot;复用结果&quot;]
+  G --&gt;|可派发| M[&quot;调用 LLM Runtime&quot;]
+  G --&gt;|异常| X</pre>
+          </details>
+        </figure>
+        <p>
+          同阶段续接保留供应商要求的消息前缀。完整工具回合结束后才切换阶段，以已验证观察建立新帧。任何新外部派发都复核当前授权。
+        </p>
+      </section>
+      <section id="interfaces">
+        <h2><span class="material-symbols-outlined" aria-hidden="true">code</span>接口与代码</h2>
+        <figure class="diagram" data-diagram>
+          <div class="diagram-output" tabindex="0" hidden></div>
+          <figcaption>
+            Context Provider 提供候选，Policy 验证来源、权限和预算，Journal 管理可重放的输入。
+          </figcaption>
+          <details>
+            <summary>查看图源</summary>
+            <pre data-mermaid>
+classDiagram
+  accTitle: 运行时装配接口
+  class RunService {
+    +run(command, context, control)
+    +select_profile(intent, binding)
+    +next_phase(execution_facts)
+  }
+  class PromptBinding {
+    +UUID bundle_id
+    +str bundle_sha256
+    +str scope_key
+    +int generation
+    +str lane
+    +str audience
+  }
+  class Provider {
+    +collect(scope, phase, facts) ContextItem[]
+  }
+  class ContextItem {
+    +str kind
+    +str source_ref
+    +str source_version
+    +AccessReference access_ref
+    +str trust
+    +datetime expires_at
+    +int estimated_tokens
+  }
+  class Assembler {
+    +assemble(bundle, profile, phase, items, tools) AssemblyReceipt
+  }
+  class Policy {
+    +filter_current_access(items, scope)
+    +apply_budget(required, optional)
+  }
+  class ExecutionJournal {
+    +load_model_context(step_key)
+    +prepare_model_context(step_key, receipt)
+    +restore_prepared_request(receipt)
+  }
+  RunService --&gt; PromptBinding
+  RunService --&gt; Assembler
+  Provider --&gt; ContextItem
+  Assembler --&gt; Provider
+  Assembler --&gt; Policy
+  RunService --&gt; ExecutionJournal</pre>
+          </details>
+        </figure>
+        <h3>文件变更</h3>
+        <p>目录新增 PromptOps 与上下文装配，运行和授权接入已有文件。</p>
+        <pre tabindex="0"><code class="language-diff">+ apps/agent/src/compass_agent/promptops/
++ apps/agent/src/compass_agent/context_runtime/
++ apps/agent/src/compass_agent/api/promptops.py
++ apps/agent/migrations/versions/&lt;L21_REV&gt;_prompt_context.py
+! apps/agent/src/compass_agent/runtime/{store,durable_service,service,journal,entities,diagnostics}.py
+! apps/agent/src/compass_agent/harness/{context,executor}.py
+! apps/agent/src/compass_agent/routing/{service.py,scenes.json}
+! apps/agent/src/compass_agent/api/runs.py
++ apps/web/src/features/promptops/
++ apps/web/src/server/http/promptops-handler.ts
+! apps/web/src/lib/page-catalog.ts
+! apps/web/src/components/analysis-run-turn.tsx</code></pre>
+        <h3>受理事务 · 拟议代码</h3>
+        <pre tabindex="0"><code class="language-python">@dataclass(frozen=True)
+class PromptBinding:
+    bundle_id: UUID
+    bundle_sha256: str
+    scope_key: str
+    generation: int
+    lane: Literal[&quot;stable&quot;, &quot;canary&quot;]
+    audience: str  # 已通过 Web 的成员与作用域检查
+
+
+def select_binding(tx, verified_scope, actor_id, audience):
+    scopes = ordered_scopes(verified_scope)  # workspace → tenant → global
+    heads = load_heads_in_one_select(tx, scopes)  # 读取主库的一致语句视图
+    stable_only = False
+    for scope in scopes:
+        head = heads.get(scope.key)
+        if head is None:
+            continue
+        if not stable_only and head.canary_bundle_id:
+            if bucket_0_to_9999(scope.key, actor_id) &lt; head.rollout_bps:
+                return checked_binding(tx, head, head.canary_bundle_id, &quot;canary&quot;, audience)
+            # 首次局部灰度未命中时走父级稳定链。
+            stable_only = head.stable_bundle_id is None
+        if head.stable_bundle_id:
+            return checked_binding(tx, head, head.stable_bundle_id, &quot;stable&quot;, audience)
+    raise PromptConfigUnavailable()
+
+
+</code></pre>
+        <h3>模型 Step · 拟议代码</h3>
+        <pre
+          tabindex="0"
+        ><code class="language-python">async def execute_managed_model_step(journal, step_key, run, facts, live_access):
+    bundle = open_pinned_bundle(run.prompt_binding)
+    existing = await journal.load_model_context(step_key)
+    if existing:
+        # 已接受结果可在当前权限下本地重放，未发送的请求额外复核有效期。
+        await live_access.check_references(existing.access_refs)
+        if existing.needs_dispatch:
+            require_fresh_before_dispatch(existing.required_items)
+        prepared = await journal.restore_prepared_request(existing)
+    else:
+        profile, phase = choose_profile_and_phase(bundle, run, facts)
+        candidates = await collect_context(run, facts, phase)
+        authorized = await live_access.filter_and_check_required(candidates)
+        permitted_tools = frozen_tools(run) &amp; await live_access.current_tool_ids()
+        receipt = assemble(bundle, profile, phase, authorized, permitted_tools)
+        # 同事务保存 input digest、私有变量/工具元数据、加密消息引用和安全摘要。
+        prepared = await journal.prepare_model_context(step_key, receipt)
+    return await invoke_with_existing_journal_and_dispatch_gate(prepared, live_access)</code></pre>
+      </section>
+      <section id="summary">
+        <h2>方案小结</h2>
+        <p>
+          PromptOps 让业务指令可预览、验证、审批与回切。Run 在受理时锁定配置，Step
+          按执行阶段组织已授权上下文。
+        </p>
+        <p>
+          <a href="TECH_DESIGN.md">阅读 Markdown 技术方案</a> ·
+          <a href="CODE_DESIGN.md">查看代码设计</a>
+        </p>
+      </section>
+    </main>
+    <script type="module">
+      window.hljs?.highlightAll();
+      document.fonts
+        .load('20px "Material Symbols Outlined"')
+        .then((fonts) => {
+          if (fonts.length) document.documentElement.classList.add("symbols-ready");
+        })
+        .catch(() => {});
+
+      const diagrams = [...document.querySelectorAll("[data-diagram]")];
+      if (diagrams.length) {
+        try {
+          const { default: mermaid } =
+            await import("https://cdn.jsdelivr.net/npm/mermaid@11.16.0/dist/mermaid.esm.min.mjs");
+          const colorScheme = matchMedia("(prefers-color-scheme: dark)");
+          let pending = Promise.resolve();
+          let renderedTheme;
+
+          async function renderDiagrams() {
+            const theme = colorScheme.matches ? "dark" : "neutral";
+            if (theme === renderedTheme) return;
+            mermaid.initialize({
+              startOnLoad: false,
+              securityLevel: "strict",
+              suppressErrorRendering: true,
+              htmlLabels: false,
+              theme,
+              fontFamily: getComputedStyle(document.body).fontFamily,
+            });
+            for (const [index, figure] of diagrams.entries()) {
+              const output = figure.querySelector(".diagram-output");
+              const source = figure.querySelector("[data-mermaid]");
+              try {
+                const { svg } = await mermaid.render(
+                  `review-${theme}-${index + 1}`,
+                  source.textContent.trim(),
+                );
+                output.innerHTML = svg;
+                const drawing = output.querySelector("svg");
+                drawing.style.setProperty("--diagram-width", `${drawing.viewBox.baseVal.width}px`);
+                output.hidden = false;
+                source.closest("details").hidden = true;
+              } catch (error) {
+                output.hidden = true;
+                source.closest("details").hidden = false;
+                console.warn("图表未能绘制", error);
+              }
+            }
+            renderedTheme = theme;
+          }
+
+          function scheduleRender() {
+            pending = pending.then(renderDiagrams);
+          }
+
+          colorScheme.addEventListener("change", scheduleRender);
+          scheduleRender();
+        } catch (error) {
+          console.warn("图表组件未能加载", error);
+        }
+      }
+    </script>
+  </body>
+</html>

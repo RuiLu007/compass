@@ -470,3 +470,35 @@ for (const terminal of ["failed", "canceled"] as const) {
     expect(fixture.submissions).toHaveLength(1);
   });
 }
+
+for (const width of [1440, 390]) {
+  test(`blocked cancellation refreshes and frees the composer at ${width}px`, async ({
+    page,
+    context,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const fixture = await enter(page, context);
+    await submit(page, fixture, "等待终止回执");
+    fixture.update((protocol) => {
+      protocol.begin();
+      protocol.append([
+        {
+          type: "run.upsert",
+          payload: {
+            ...protocol.state,
+            version: protocol.state.version + 1,
+            status: "cancelling",
+            recoveryStatus: "blocked",
+            reasonCode: "execution_unknown",
+          },
+        },
+      ]);
+    });
+    await expect(page.locator("form").getByRole("button", { name: "终止待核对" })).toBeDisabled();
+    const snapshots = fixture.snapshotReads;
+    await expect.poll(() => fixture.snapshotReads).toBeGreaterThan(snapshots);
+    fixture.update((protocol) => protocol.complete("canceled"));
+    await expect(page.getByRole("region", { name: "分析过程" })).toContainText("已终止");
+    await expect(page.getByLabel("分析问题")).toBeEnabled();
+  });
+}

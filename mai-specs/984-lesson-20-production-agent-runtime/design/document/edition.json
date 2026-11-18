@@ -1,78 +1,87 @@
 {
-  "title": "异步 Run、Worker 接管与过程展示",
-  "subtitle": "复用持久会话与双接口，建立同库队列、Worker 执行权和受控接管。",
+  "title": "定时任务与 Agent 异步执行",
+  "subtitle": "从单进程 Agent 到多副本执行。Scheduler 单实例交付，Web 与 Chat 共用计划服务。",
   "brand": "Compass",
   "label": "《企业级Agent工程架构实战营》 · 第 20 课 · 架构设计与代码导读",
-  "topics": ["Queue / Worker", "Lease / Epoch", "AgentResponse v2", "Checkpoint"],
+  "topics": ["scheduler", "Run / Checkpoint", "Lease / Epoch"],
   "source": "../TECH_DESIGN.md",
   "guide": "guide.md",
   "output": "../TECH_DESIGN.html",
-  "metrics": [
-    {
-      "value": "15",
-      "label": "秒 / 租约",
-      "detail": "课堂初值，每 3 秒心跳"
-    },
-    {
-      "value": "2 / 1",
-      "label": "个在途执行",
-      "detail": "全局最多 2 个，每租户最多 1 个"
-    },
-    {
-      "value": "4 / 12",
-      "label": "个已受理未结束 Run",
-      "detail": "每租户最多 4 个，全局最多 12 个"
-    }
-  ],
   "code": {
     "architecture": {
       "file": "../TECH_DESIGN.md",
-      "contains": "flowchart LR",
+      "contains": "Compass 定时任务与 Agent 异步执行",
       "language": "mermaid"
     },
-    "worker-sequence": {
+    "data": {
       "file": "../TECH_DESIGN.md",
-      "contains": "Execution grant",
+      "contains": "AGENT_SCHEDULE_TRIGGER {",
       "language": "mermaid"
     },
-    "scheduler": {
-      "file": "../CODE_DESIGN.md",
-      "contains": "def commit_advance",
-      "language": "python"
-    },
-    "projection": {
-      "file": "../CODE_DESIGN.md",
-      "contains": "def filter_public_response",
-      "language": "python"
-    },
-    "queue-data": {
+    "delivery": {
       "file": "../TECH_DESIGN.md",
-      "contains": "AGENT_TENANT_SCHEDULE {",
+      "contains": "participant S as scheduler",
       "language": "mermaid"
     },
-    "grant": {
+    "scan-code": {
       "file": "../CODE_DESIGN.md",
-      "contains": "class ExecutionGrant",
+      "contains": "def record_due_occurrence(",
       "language": "python"
     },
-    "admission": {
+    "delivery-code": {
       "file": "../CODE_DESIGN.md",
-      "contains": "def accept",
+      "contains": "def accept_trigger",
       "language": "python"
     },
-    "recovery": {
+    "consume-code": {
       "file": "../CODE_DESIGN.md",
-      "contains": "def resume_or_approve",
+      "contains": "async def consume_slot",
       "language": "python"
     },
-    "answer": {
+    "recovery-code": {
       "file": "../CODE_DESIGN.md",
-      "contains": "function applyScheduledResponse",
-      "language": "typescript"
+      "contains": "async def recover_expired_run",
+      "language": "python"
+    },
+    "write-code": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "def commit_schedule_effect",
+      "language": "python"
+    },
+    "scheduler-components": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "accTitle: Scheduler 进程内部组件",
+      "language": "mermaid"
+    },
+    "scheduler-uml": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "accTitle: Scheduler 内部 UML 类型",
+      "language": "mermaid"
+    },
+    "tool-sequence": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "accTitle: Chat 定时任务工具和所有者确认",
+      "language": "mermaid"
+    },
+    "tool-types": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "class ScheduleListArgs",
+      "language": "python"
+    },
+    "tool-execute": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "async def execute_schedule_write",
+      "language": "python"
+    },
+    "scheduler-runner": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "async def run_scheduler",
+      "language": "python"
+    },
+    "delivery-state": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "accTitle: Scheduler 触发交付状态",
+      "language": "mermaid"
     }
-  },
-  "cover": {
-    "file": "cover.png",
-    "alt": "第 20 课 · 异步队列与 Worker 驱动：租约、心跳、epoch 与故障接管。"
   }
 }

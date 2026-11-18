@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from compass_agent.execution_context import current_execution
 from compass_agent.llm.continuation import canonical
 from compass_agent.models.entities import ModelCall
+from compass_agent.models.errors import ModelError
 from compass_agent.runtime.entities import AgentAttempt, ModelAttempt
 
 
@@ -105,7 +106,29 @@ class AttemptRecorder:
                 attempt.status, attempt.sent, attempt.outcome_unknown = "dispatched", True, True
                 attempt.dispatched_at = datetime.now(UTC)
 
-        await asyncio.to_thread(write)
+        dispatch = asyncio.create_task(asyncio.to_thread(write))
+        try:
+            await asyncio.shield(dispatch)
+        except asyncio.CancelledError:
+            # The caller cannot enter the provider after this await was canceled.
+            # Let the dispatch write settle before recording that fact.
+            try:
+                await dispatch
+            except ModelError as error:
+                if error.code not in {"execution_fenced", "lease_lost"}:
+                    raise
+            else:
+                await asyncio.to_thread(self._cancel_before_send, identifier)
+            raise
+
+    def _cancel_before_send(self, identifier):
+        with Session(self.repository.engine) as tx, tx.begin():
+            attempt = tx.get(ModelAttempt, identifier)
+            assert attempt is not None
+            attempt.status, attempt.finished_at = "canceled", datetime.now(UTC)
+            attempt.sent, attempt.outcome_unknown = False, False
+            attempt.cleanup_confirmed = True
+            attempt.error_code = "user_canceled"
 
     async def finish(self, identifier, result):
         def write():

@@ -220,7 +220,7 @@ async def test_combined_catalog_limit_rejects_before_routing_or_inference():
     discovered = Discovered()
 
     class Loader(ToolLoader):
-        async def discover(self, trusted, control):
+        async def discover(self, trusted, control, *, defer_catalog_limit=False):
             return cast(Any, discovered)
 
     class Routing(FakeRouting):

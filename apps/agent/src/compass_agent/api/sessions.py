@@ -310,7 +310,9 @@ async def decide(
     executor: Executor,
     response: Response,
 ):
-    await service.access.check(context, approval=command.decision == "approve")
+    await service.wait_access(
+        context, run_id, command.wait_id, approval=command.decision == "approve"
+    )
     receipt = await asyncio.to_thread(
         service.hitl.decide,
         run_id,
@@ -334,7 +336,7 @@ async def wait(
     await service.access.check(context)
     may_approve = False
     try:
-        await service.access.check(context, approval=True)
+        await service.wait_access(context, run_id, wait_id, approval=True)
         may_approve = True
     except ModelError as error:
         if error.status != 403:

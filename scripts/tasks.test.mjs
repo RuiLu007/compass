@@ -156,7 +156,7 @@ test("Web build/typecheck schedule the shared uncached contract generation once"
 });
 
 test("Python apps and offline tools build and check independently without other apps or contracts", () => {
-  for (const app of ["agent", "memory", "worker", "data-seed"]) {
+  for (const app of ["agent", "memory", "data-seed"]) {
     const graph = dryRun("build", "lint", "typecheck", "test", "-F", app);
     assert.equal(graph.tasks.length, 4);
     for (const task of graph.tasks) {
@@ -229,13 +229,12 @@ test("offline data tool checks include canonical SQL and keep database acceptanc
   );
 });
 
-test("strict Turbo dev environment forwards worker authentication and Agent scheduler settings", () => {
-  const worker = dryRun("dev", "-F", "worker").tasks[0];
-  for (const key of ["COMPASS_WORKER_ID", "COMPASS_WORKER_TOKEN", "COMPASS_RUNTIME_LEASE_SECONDS"])
-    assert.ok(worker.environmentVariables.specified.passThroughEnv.includes(key), key);
+test("strict Turbo dev environment forwards the Agent runtime and Scheduler settings", () => {
   const agent = dryRun("dev", "-F", "agent").tasks[0];
   for (const key of [
-    "COMPASS_WORKER_CREDENTIALS",
+    "COMPASS_SCHEDULER_TOKEN",
+    "COMPASS_RUNTIME_CONSUMER_SLOTS",
+    "COMPASS_RUNTIME_KEY_VERSION",
     "COMPASS_RUNTIME_MAX_ACTIVE",
     "COMPASS_RUNTIME_LEASE_SECONDS",
   ])

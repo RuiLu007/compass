@@ -1,189 +1,125 @@
-## 目标
+## 本课目标
 
-| 核心问题                        | 实现目标                                              | 量化指标（设计目标）                                   |
-| ------------------------------- | ----------------------------------------------------- | ------------------------------------------------------ |
-| 持久提交后需要后台排队          | 在已有 Session/Run 受理事务中增加 job，复用命令去重   | 同一主体、requestId、命令摘要对应 1 个 Run             |
-| Worker 退出或旧实例迟到回报     | 撤销执行权、清理资源，再从原 Checkpoint 接管          | 租约 15 秒；心跳 3 秒；受控夹具恢复目标 ≤21 秒         |
-| 一个租户持续超额提交            | 公平选择有容量租户，隔离占用和积压                    | 全局在途 2、每租户 1；未结束 Run 每租户 4、全局 12     |
-| 同一会话刷新与续流              | 复用 Message 快照、Run 流和同一个 reducer             | Run 游标使用 Redis Stream ID；每 Run 自动折叠至多 1 次 |
-| 双 Worker 调度与 Agent 执行边界 | Worker 管理领取和续租，Agent 持有模型、工具和持久事务 | 单 Agent 执行所有者；两个 Worker 槽                    |
+- **多副本分布式 Agent**　把单进程执行所有者改为按 Run 授租。多个副本可同时接单并执行不同 Run，支持水平扩展、跨副本续流和故障接管。
+- **管理计划**　通过 Web「定时任务」页或自然语言对话创建、查询、修改和删除定时分析计划。授权 API 同样可用。
+- **可靠触发**　同一计划时刻对应一条触发记录。重复交付归并到一个 Run。
+- **追踪结果**　从计划历史追到触发、Run、模型和工具，定位背压、重试和等待。
 
-时间指标适用于清理上界 2 秒、监督和轮询各 1 秒、往返与抖动预留共 2 秒的本机课堂夹具。未决外部效果继续保持待核对。
-
-## 1. 方案概述
-
-### 1.1 三条链共用持久运行底座
+## 1. 整体架构
 
 {{code:architecture}}
 
-| 模块                      | 职责                                        | 关键边界                                                             |
-| ------------------------- | ------------------------------------------- | -------------------------------------------------------------------- |
-| 分析 Chat / BFF           | 提交、加载完整消息、按游标订阅              | 沿用 sessions/submit、messages 和 runs/events；共享 AgentResponse v2 |
-| Agent Run API / Scheduler | 同事务写入 job，检查配额，授予和撤销执行权  | 唯一业务 owner；一个 Agent 保持执行所有者锁                          |
-| Worker                    | claim、heartbeat、advance、release          | 独立服务凭据绑定 Worker 槽；不持有数据库或模型凭据                   |
-| 执行链                    | 每次推进到可恢复边界，提交结果和 Checkpoint | 每次实际派发、业务提交及流回调核对当前 epoch                         |
-| Publisher / Projector     | Outbox 补发、Redis 短期流、SQL 完整投影     | 沿用持久化底座；终态与回答的完整投影提交后才公开                     |
+| 模块           | 职责                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| scheduler      | 同一 Agent 镜像的独立单实例。扫描、HTTP 交付、Retry-After 退避、状态同步。                 |
+| Run 受理与队列 | Agent 统一授权、租户准入与公平领取。Run、job、Outbox 与触发关联同事务。                    |
+| Agent 内消费者 | 从原 Worker 迁回领取、心跳、推进和释放。Agent 继续执行模型、工具、审批和 Checkpoint。      |
+| 展示和诊断     | 计划侧保存触发与运行摘要。结果和产物沿用 Session/Run，SSE 和 Timeline 继续通过原入口读取。 |
 
-Worker 增加驱动与调度槽。模型、工具和工作流仍在 Agent 执行，Agent 计算容量沿用现有工具/模型并发控制。独立调度服务、任务 Broker 和专属进程池按后续实测决定。
+同一个 `apps/agent` 部署两个角色。Agent 多副本消费 Run，Scheduler 单实例处理定时交付。计划、触发与 Run 共用 PostgreSQL，Agent 副本共用 Redis Streams。Scheduler 停机期间即时提交和已入队 Run 继续运行。日常测试配置为全局/租户执行槽 **1000/200**，积压 **3000/20**。实际并行由本地消费槽、共享依赖与积压共同约束。运行中也计入积压，每租户仍最多受理 20 条计入积压的未结束 Run。隔离背压验收显式覆盖 **2/1** 和 **12/4**，便于重复验证。3000 条积压档使用有界候选领取和有界跨 Run 事件发布，验收测量领取锁和投影延迟。旧双 Worker 部署实际仍最多并行两个 Run。
 
-### 1.2 接单、领取和逐边界推进
+## 2. Scheduler 内部架构与 UML
 
-{{code:worker-sequence}}
+{{code:scheduler-components}}
 
-原子提交保存 Session/Run、消息、Outbox、命令回执和 job。收到 202 后可查询和订阅；断开订阅不影响后台调度。advance 立即返回运行中回执，重复同一命令轮询到下一持久边界。
+| 类型                                   | 职责                                                                      |
+| -------------------------------------- | ------------------------------------------------------------------------- |
+| SchedulerRunner / SchedulerLeaseStore  | 阻止双写，独立续租，分别监督扫描、交付和同步。                            |
+| DueScanner / CronCalculator            | 计算到期及下次时间，事务内更新计划并记录触发。                            |
+| TriggerDispatcher / RunAdmissionClient | 按记录限量领取，通过 HTTP 幂等提交；按 Agent 的返回退避，或进入回执核对。 |
+| RunStatusSync / ScheduleRepository     | 按 Run 版本同步安全摘要，每个写操作检查当前调度租约。                     |
 
-## 2. 调度数据和执行权
+{{code:scheduler-uml}}
 
-### 2.1 只增加两张调度表
+进程停止时先停领取，再限时等待已经送出的 HTTP。新进程从持久触发恢复。角色租约保护 Scheduler 写入，交付令牌保护单条触发，Run 执行权由 Agent 的 Run 租约独立管理。
 
-{{code:queue-data}}
+## 3. Web 与自然语言定时任务工具
 
-| 数据                         | 唯一维护位置                          | 用途                                 |
-| ---------------------------- | ------------------------------------- | ------------------------------------ |
-| 提交与控制幂等               | 既有 agent_command                    | 复用作用域、requestId、摘要和回执    |
-| 当前执行世代                 | 既有 agent_run.execution_epoch        | grant 与 Attempt 引用同一值          |
-| 积压、执行占用和 Worker 绑定 | agent_run_job                         | ready/leased/reclaiming/parked/done  |
-| 公平排序                     | agent_tenant_schedule.last_claimed_at | 选择最久未获调度的有容量租户         |
-| 内部 advance 回执            | agent_command 的 worker_advance kind  | 记录原 grant、运行中状态和已提交回执 |
+| 内置工具         | 参数分支                                                                                                     | 确认与返回                                                             |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| `schedule_read`  | `list` 名称/状态/游标；`get` 计划 ID；`history` 计划 ID 与游标。                                             | 读取不弹确认。按当前归属返回计划字段、下次触发和历史摘要。             |
+| `schedule_write` | `create` 名称、分析输入、模型、Cron、时区、启用；`update` 计划 ID、版本和变更字段；`delete` 计划 ID 和版本。 | 所有者确认后提交。计划变更和 Action 效果回执同事务，最终报告持久结果。 |
 
-job 的租户取自 Run 的 Session；外键仅在 Agent 本库内。leased/reclaiming 都占执行槽，同一 Worker 的这两种状态最多一条。parked 保留积压位置，完成清理后才释放执行槽。心跳只更新 expiry，不增加业务版本或流事件。
+{{code:tool-sequence}}
 
-### 2.2 接管状态与清理
+同名计划先澄清。模型只能传业务参数；服务端绑定用户、计划版本、批准内容和 Run 执行权。版本变化后重新查询并提请确认，定时 Run 只加载计划读工具。有权限的计划工具在 16 个/64 KiB 目录预算内优先于可选 MCP/Workflow。并行模式下计划写入仍独立串行。
 
-```mermaid 调度记录的生命周期
-flowchart TB
-    Q["ready · 等待领取"] --> L["leased · Run当前epoch"]
-    L -->|等待或暂停且资源释放| P["parked · 保留积压位置"]
-    P -->|有效批准或显式恢复| Q
-    L -->|到期或取消清理| R["reclaiming · 撤销epoch并占槽"]
-    R --> C{"资源与原效果已核对"}
-    C -->|仍未知| R
-    C -->|可安全接续| Q
-    C -->|人工暂停或待决定| P
-    C -->|取消已收口| D["done"]
-    L -->|完成且清理确认| D
-    Q -->|领取前取消| D
+{{code:tool-types}}
+
+## 4. 计划与触发
+
+{{code:data}}
+
+Web「全部任务」提供搜索筛选、创建编辑、启停与删除，「执行记录」查触发和关联会话。Web BFF、对话计划读写工具和授权 API 共用计划服务。对话写入由计划所有者确认，原业务审批规则继续生效。确认查询、提交和换副本恢复共用持久提案的授权。计划、命令、Action、工具结果及 Checkpoint 同事务提交。作用域限定在计划归属用户、工作区和租户，修改与删除检查版本；删除保留历史。
+
+{{code:delivery-state}}
+
+{{code:delivery}}
+
+- 业务锁取得后用数据库时钟复核当前角色租约和交付令牌，生成触发与推进下次时间同事务。漏跑多个时刻时补最近一次。前一次执行未结束时，本次记录为跳过。
+- 首次领取和计划修改按「计划 → 触发」取锁。修改跳过尚未领取的旧触发。已开始的交付使用原请求快照。
+- Scheduler 通过内部 HTTP 交付。Agent 在受理事务核对当前令牌并同时写触发关联，丢失响应时取回原回执。429 由 Agent 返回，重试时间由 Retry-After 和指数退避较晚值确定。预算耗尽转入独立的只核对路径。
+- 交付状态、Run 状态、Run 结果分别可查。用户可见失败阶段、安全原因和操作。调度日志记录触发延迟、积压、重试和同步滞后。计划、触发和 Run ID 串起原 Timeline。
+
+## 5. 从单进程 Agent 到多副本
+
+每个副本检查共享依赖后可接单并消费。每槽一次持有一个 Run 租约，3 秒心跳、15 秒 TTL。副本失联后其他实例持回收令牌完成核对，再从 Checkpoint 接续。各副本就绪时核对共享策略版本，每 Run 继承受理时的预算快照。接管从已接受边界和物理 Attempt 恢复耗时、成本与未确认预留。暂停和取消写共享意图，由持租副本处理。共享 Outbox 以每 Run 发布世代保护写入，Redis 按包 ID 原子去重，SSE 可跨副本续流。流或索引缺失时安全重载或阻断。
+
+切换时停旧 Worker 和单所有者消费，排空或回收租约并隔离旧写凭据，再启新发布协议和多副本消费。保留兼容迁移版本的回退构建，完成验收后移除独立 Worker。
+
+## 6. Worker 依赖迁移
+
+| 领域            | 改动                                                                                                             |
+| --------------- | ---------------------------------------------------------------------------------------------------------------- |
+| 启动与部署      | 替换根 start/deploy 中的双 Worker、状态/日志与环境变量检查。用同一个 Agent 镜像启动多个 Agent 和一个 Scheduler。 |
+| 包与任务图      | 移除 Worker 应用和镜像，更新 manifest、pnpm/uv、类型与测试路径、锁文件、Turbo。                                  |
+| HTTP 与存量队列 | 过渡构建保留模式隔离的旧 API。迁移后移除 Worker 路由与凭据，派生新契约。保留历史 job/advance/租约、审批与游标。  |
+| 验收与文档      | 替换 CI 和 E2E 进程夹具，迁移 lease/信号测试。验证新拓扑的实际领取、跨副本恢复与旧构建误启动隔离。               |
+
+## 7. 拟议改动
+
+```text
+apps/agent/
+├─ migrations/versions/0015_scheduled_tasks.py   [新增] 计划与触发持久化
+└─ src/compass_agent/
+   ├─ scheduler/                               [新增] 持久化管理与单实例角色入口
+   ├─ api/schedules.py                         [新增] 定时任务 CRUD 与运行历史
+   ├─ tools/builtin/schedule_read/ 与 schedule_write/  [新增] 查计划与所有者确认
+   ├─ runtime/submission.py                    [新增] 公共受理与交付门禁
+   ├─ runtime/run_consumer.py                  [新增] 迁回队列消费与心跳
+   └─ main.py                                 [调整] 接入副本生命周期及就绪检查
+apps/web/                                      [调整] 定时任务列表、表单、执行记录和 BFF 代理
+apps/worker/                                   [移除] 消费迁移后退出标准部署
+deploy/compose/ 与 CI                          [调整] Agent 消费与 scheduler 启动
+contracts/ 与 apps/web/src/generated/          [生成] 定时任务网络契约
 ```
 
-| 边界           | 规则                                                                       |
-| -------------- | -------------------------------------------------------------------------- |
-| 租约判断       | 取得行锁后读 clock_timestamp；过期心跳返回 lease_lost                      |
-| 锁序           | 调度锁（需要时）→ Session → Run → job → Step/Attempt → Wait/Action         |
-| 公平领取       | 先选有容量租户，再选最早 ready job；争用 Session/Run 时继续其他候选        |
-| 旧 Worker 回执 | 原凭据、boot、epoch 和摘要匹配时只读已提交回执；后继执行重新校验当前 grant |
-| 旧流回调       | 撤权后停止新输出；已确认包核对落盘，排空旧回调后才允许新 epoch             |
-| Agent 重启     | 保留单执行所有者约束；先补流和投影，再核对旧执行，最后开放调度             |
+## 8. 核心代码设计
 
-### 2.3 所有入口使用同一调度规则
+### 计划写入、审批与效果回执
 
-submit、Resume、批准、外部等待条件满足和 v1 适配器都进入 job 队列；只有 claim 可授予 epoch。旧版无 job 的 Run 在首次显式恢复时检查积压容量，超限保持原状态可重试。已受理 parked 任务保留位置，有效决定后只改变其可调度状态。
+{{code:write-code}}
 
-## 3. 消息、事件和回答
+### Scheduler 进程监督
 
-```mermaid 同一业务协议的两条读取路径
-flowchart LR
-    SQL["SQL完整投影<br/>消息 / 过程 / projected_seq"] --> M["Message JSON<br/>snapshot"]
-    REDIS["Redis已确认增量<br/>Run Stream ID"] --> S["Run SSE<br/>delta"]
-    M --> V["同一当前权限过滤和Schema"]
-    S --> V
-    V --> U["同一reducer<br/>按对象revision和Run游标应用"]
-    U --> P["UiExecutionTree与旁白"]
-    U --> A["完整助手消息 + completed<br/>自动折叠一次"]
-```
+{{code:scheduler-runner}}
 
-| 场景           | 行为                                                                                                           |
-| -------------- | -------------------------------------------------------------------------------------------------------------- |
-| 刷新、打开历史 | 先加载 Message 完整快照，非终态 Run 从 projected_seq 续流                                                      |
-| 终态短期流到期 | 409 history_reload_required，重新加载 SQL 历史                                                                 |
-| 活跃流丢失     | 410 stream_data_lost，保留投影并展示恢复受阻                                                                   |
-| Redis 暂不可用 | 流返回 503；SQL 历史继续可读，执行依照原持久化门禁暂停派发                                                     |
-| 权限过滤       | 当前范围校验覆盖快照、流和重连；安全占位保留 seq/revision，私有详情被移除；整对象不可最低展示时拒绝该 Run 读取 |
-| 最终回答       | 同一成功边界的完整助手 message.upsert 与 completed run.upsert，投影提交后可见                                  |
-| 失败与取消     | incomplete 消息保留未完成标记，过程文字不触发答案切换                                                          |
+### 定时工具写入绑定
 
-旁白采用确定性模板。调度 Timeline 也保存进完整投影，短期流过期后仍可查看；Worker/租约内部细节通过当前平台管理员身份读取；租户用量要求当前租户管理员。首期不启用模型旁白和新增分段回答。
+{{code:tool-execute}}
 
-### 用量与运行指标
+### 到期扫描
 
-| 项目       | 读取口径                                                       |
-| ---------- | -------------------------------------------------------------- |
-| 租户用量   | 当前授权租户的限额、各 job 状态数量、积压、占用与预算汇总      |
-| 排队时间   | Run.created_at 到 job.first_claimed_at，按租户统计             |
-| 槽位利用率 | 领取到确认释放的 Timeline 区间 / 观察窗×有效槽数；隔离占用单列 |
-| 恢复成功率 | 成功接续数 / 需要接管数；受阻任务单列且包含在总数中            |
-| 成本       | 已结算用量、未知保守占额和效果计数分别展示                     |
+{{code:scan-code}}
 
-## 4. 变更文件
+### 内部 HTTP 触发受理
 
-```text 拟议变更文件树
-compass/
-├─ apps/agent/
-│  ├─ src/compass_agent/
-│  │  ├─ api/worker_runs.py                 [新增] Worker身份与内部调度接口
-│  │  ├─ api/{sessions,runs}.py             [调整] 所有运行入口通过队列
-│  │  ├─ runtime/run_scheduler.py           [新增] 准入、公平、租约和回收
-│  │  ├─ runtime/{entities,store,checkpoints,hitl}.py [调整] 前置持久数据与控制事务
-│  │  ├─ runtime/{service,control}.py       [调整] 单边界推进与资源收口
-│  │  ├─ runtime/{message_reader,run_events,public_projection,outbox_publisher}.py
-│  │  │                                    [调整] 复用协议、投影和执行权门禁
-│  │  ├─ tools/dispatcher.py               [调整] 实际派发前复查执行权
-│  │  └─ {schemas,settings,main}.py         [调整] DTO、配置与生命周期
-│  ├─ migrations/versions/0010_run_scheduler.py [新增] 两张表和内部命令kind约束
-│  ├─ migrations/env.py                    [调整] ORM元数据
-│  ├─ scripts/database.py                  [调整] 受管迁移登记与校验
-│  ├─ db/main/{README.md,sql/}              [调整/生成] 完整与升级SQL
-│  ├─ package.json                         [调整] 真库测试入口
-│  ├─ README.md                            [调整] 调度职责与运行入口
-│  └─ tests/test_run_scheduler_integration.py [新增] 调度与租约集成验证
-├─ apps/worker/
-│  ├─ src/compass_worker/{main,run_consumer}.py [调整/新增] 消费、心跳和信号退出
-│  ├─ {pyproject.toml,package.json,README.md} [调整] HTTP依赖与运行入口
-│  └─ tests/test_run_consumer.py            [新增] 协议与重试验证
-├─ apps/web/
-│  ├─ src/server/{analysis-agent-client.ts,http/analysis-run-handler.ts}
-│  │                                       [调整] 已有鉴权、v2契约与用量代理
-│  ├─ src/server/modules/models/application/authorize.ts [调整] 诊断与租户统计授权
-│  ├─ src/app/api/analysis/                [新增路由] 运行诊断与用量handler入口
-│  ├─ src/client/analysis-run.ts            [调整] 复用快照、续流和去重
-│  ├─ src/components/{analysis-composer,analysis-run-turn}.tsx
-│  │                                       [调整] 调度状态与完整回答切换
-│  ├─ src/generated/                       [生成] 网络合同
-│  └─ tests/e2e/analysis-composer.spec.ts   [调整] 当前权限、重连与折叠
-├─ scripts/export-contracts.py             [调整] 派生调度合同
-├─ contracts/                             [生成] OpenAPI及Schema
-├─ deploy/{compose/compose.yaml,README.md} [调整] 双Worker配置与运行说明
-├─ {.env.example,uv.lock,manifest.yml}     [调整] 凭据、依赖与职责
-└─ docs/adr/0005-async-runtime.md          [新增] 拓扑适用条件
-```
+{{code:delivery-code}}
 
-持久运行相关文件依赖前序交付；本次只新增 Scheduler 与 Worker 驱动，复用其余运行数据和协议。
+### Agent 内消费循环
 
-## 5. 核心类型与代码
+{{code:consume-code}}
 
-### 5.1 不透明执行权
+### 跨实例接续与发布
 
-以下均为设计示意。Worker 只带执行权和期望边界，实际输出由 Agent 产生。
-
-{{code:grant}}
-
-### 5.2 受理与公平领取
-
-{{code:admission}}
-
-### 5.3 续租、幂等推进与结果提交
-
-{{code:scheduler}}
-
-### 5.4 审批再入队与到期回收
-
-{{code:recovery}}
-
-### 5.5 沿用公共业务包
-
-{{code:projection}}
-
-### 5.6 完整回答只触发一次切换
-
-{{code:answer}}
-
-实际 MCP 接管继续核对原目录、配置版本和远端效果。已提交子结果直接复用；未知远端调用保持待核对。统一执行树保留原节点、并行组、revision 和用户展开选择。
+{{code:recovery-code}}

@@ -18,6 +18,7 @@ from alembic.migration import MigrationContext
 from compass_agent.data_connections.entities import DataConnection, RetailConnection
 from compass_agent.models import entities
 from compass_agent.runtime.entities import RUNTIME_TABLES, SCHEDULER_TABLES
+from compass_agent.scheduler.entities import AgentSchedule, AgentScheduleTrigger, RuntimeControl
 from compass_agent.tools.mcp.entities import McpConnection
 from compass_agent.tools.sandbox.entities import SandboxAllocation
 from compass_agent.workflows.assets import UNIQUE_SCRIPT, WorkflowAsset
@@ -41,12 +42,20 @@ REVISIONS = {
     "0012": "0012_dynamic_workflow.py",
     "0013": "0013_model_generation_profile.py",
     "0014": "0014_workflow_asset_deletion.py",
+    "0015": "0015_scheduled_tasks.py",
 }
-TARGET = "0014"
+TARGET = "0015"
 MARKER = "compass:agent/main"
 OWNER = "compass_agent_owner"
 MIGRATOR = "compass_agent_migrator"
 RUNTIME = "compass_agent_runtime"
+SCHEDULER = "compass_agent_scheduler"
+PLAN_TABLES = {
+    RuntimeControl.__tablename__,
+    AgentSchedule.__tablename__,
+    AgentScheduleTrigger.__tablename__,
+}
+SUMMARY_VIEW = "agent_scheduled_run_summary"
 LOCK = 993001
 
 
@@ -102,6 +111,7 @@ def inspect_version(connection, *, legacy: bool = False) -> str:
         WHERE nspname NOT IN ('public','information_schema') AND nspname NOT LIKE 'pg_%'
         UNION ALL SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
         WHERE n.nspname='public' AND c.relkind NOT IN ('r','i','p','I')
+        AND NOT (c.relkind='v' AND c.relname='agent_scheduled_run_summary')
         UNION ALL SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
         WHERE n.nspname='public'
     """)
@@ -138,6 +148,11 @@ def inspect_version(connection, *, legacy: bool = False) -> str:
         expected |= RUNTIME_TABLES
     if revision >= "0010":
         expected |= SCHEDULER_TABLES
+    if revision >= "0015":
+        expected |= PLAN_TABLES
+    views = inspect(connection).get_view_names(schema="public")
+    if views != ([SUMMARY_VIEW] if revision >= "0015" else []):
+        raise DatabaseError("Agent view drift at current revision")
     if tables != expected:
         raise DatabaseError("Unknown database tables; refusing migration")
     actual = connection.execute(
@@ -192,7 +207,26 @@ def inspect_version(connection, *, legacy: bool = False) -> str:
                     revision < "0006" and table.name == DataConnection.__tablename__
                 ):
                     continue
+                if revision < "0015" and table.name in PLAN_TABLES:
+                    continue
                 copied = table.to_metadata(metadata)
+                if revision < "0015":
+                    if table.name == "agent_run":
+                        for name in (
+                            "publish_token",
+                            "publish_expires_at",
+                            "publish_generation",
+                            "publish_initialized",
+                        ):
+                            copied._columns.remove(copied.c[name])
+                    if table.name == "agent_run_job":
+                        for name in ("recovery_token", "recovery_expires_at", "active_since"):
+                            copied._columns.remove(copied.c[name])
+                    if table.name == "agent_command":
+                        copied.c.session_id.nullable = False
+                        for constraint in list(copied.constraints):
+                            if constraint.name == "ck_agent_command_schedule_scope":
+                                copied.constraints.remove(constraint)
                 if table.name == "model_provider" and revision < "0013":
                     copied._columns.remove(copied.c.generation_profile)
                 if table.name == "workflow_asset" and revision < "0014":
@@ -313,6 +347,20 @@ GRANT SELECT, INSERT ON model_change TO {RUNTIME};"""
             + ", ".join(sorted(SCHEDULER_TABLES))
             + f" TO {RUNTIME};"
         )
+    if target >= "0015":
+        grants += f"""
+GRANT SELECT, INSERT, UPDATE ON agent_schedule, agent_schedule_trigger TO {RUNTIME};
+GRANT SELECT, UPDATE (policy_sha256, holder_id) ON agent_runtime_control TO {RUNTIME};
+GRANT SELECT ON alembic_version, agent_runtime_control, agent_schedule,
+    agent_schedule_trigger, agent_scheduled_run_summary TO {SCHEDULER};
+GRANT UPDATE (holder_id, generation, expires_at) ON agent_runtime_control TO {SCHEDULER};
+GRANT UPDATE (next_fire_at) ON agent_schedule TO {SCHEDULER};
+GRANT INSERT (id, schedule_id, schedule_revision, scheduled_at, detected_at, coalesced_from_at,
+    input_ciphertext, delivery_status, reason_code, delivery_deadline_at, next_attempt_at),
+    UPDATE (delivery_status, reason_code, delivery_attempts, next_attempt_at, input_ciphertext,
+    delivery_token, delivery_generation, delivery_expires_at, observed_run_status,
+    observed_run_version, observed_reason_code, observed_at, finished_at)
+    ON agent_schedule_trigger TO {SCHEDULER};"""
     return grants
 
 
@@ -340,6 +388,7 @@ def sql_delivery(start: str, target: str = TARGET) -> str:
         "0012": "977",
         "0013": "976",
         "0014": "977",
+        "0015": "984",
     }[target]
     change = "transactional Retail copy" if target == "0006" else "additive schema"
     return (
@@ -367,14 +416,14 @@ def write_sql(*, check: bool = False) -> None:
         files[f"upgrades/{start}__0005.sql"] = sql_delivery(start, "0005")
     for start in ("0001", "0002", "0003", "0004", "0005"):
         files[f"upgrades/{start}__0006.sql"] = sql_delivery(start, "0006")
-    for target in ("0007", "0008", "0010", "0011", "0012", "0013", TARGET):
+    for target in ("0007", "0008", "0010", "0011", "0012", "0013", "0014", TARGET):
         for start in REVISIONS:
             if start < target:
                 files[f"upgrades/{start}__{target}.sql"] = sql_delivery(start, target)
     manifest = {
         "owner": "agent",
         "databaseKey": "main",
-        "feature": "977",
+        "feature": "984",
         "from": "empty",
         "to": TARGET,
         "engine": "PostgreSQL 17",
@@ -395,6 +444,7 @@ def write_sql(*, check: bool = False) -> None:
             "adds durable runs, checkpoints, HITL and immutable artifacts; "
             "adds asynchronous session titles, session deletion metadata "
             "and workflow tool contracts and soft deletion; "
+            "adds plans, triggers and replica execution and publication leases; "
             "backfills historical model attempt metadata without raw content; "
             "preserves existing Retail configuration, credentials and revisions"
         ),
@@ -478,6 +528,18 @@ def provision() -> str:
     admin = urlsplit(connection_url("AGENT_PROVISION_DATABASE_URL"))
     migration = urlsplit(connection_url("AGENT_MIGRATION_DATABASE_URL"))
     runtime = urlsplit(connection_url("DATABASE_URL"))
+    scheduler = (
+        urlsplit(connection_url("COMPASS_SCHEDULER_DATABASE_URL"))
+        if os.environ.get("COMPASS_SCHEDULER_DATABASE_URL")
+        else None
+    )
+    if scheduler and (
+        scheduler.username != SCHEDULER
+        or scheduler.path != runtime.path
+        or (scheduler.hostname, scheduler.port) != (runtime.hostname, runtime.port)
+        or not scheduler.password
+    ):
+        raise DatabaseError("Invalid dedicated Scheduler database target or credential")
     if admin.hostname not in {"localhost", "127.0.0.1", "::1", "postgres"}:
         raise DatabaseError("Provision is limited to local teaching deployments")
     if (
@@ -517,15 +579,22 @@ def provision() -> str:
             (OWNER, None),
             (MIGRATOR, migration.password),
             (RUNTIME, runtime.password),
+            (SCHEDULER, scheduler.password if scheduler else None),
         ]:
             role = connection.execute(
                 "SELECT rolsuper,rolcreatedb,rolcreaterole,rolbypassrls,rolreplication,"
-                "shobj_description(oid,'pg_authid') FROM pg_roles WHERE rolname=%s",
+                "shobj_description(oid,'pg_authid'),rolcanlogin FROM pg_roles WHERE rolname=%s",
                 (name,),
             ).fetchone()
             if role:
                 if any(role[:5]) or role[5] != MARKER:
                     raise DatabaseError("Refusing an unknown or privileged existing role")
+                if name == SCHEDULER and password and not role[6]:
+                    connection.execute(
+                        sql.SQL("ALTER ROLE {} LOGIN PASSWORD {}").format(
+                            sql.Identifier(SCHEDULER), sql.Literal(unquote(password))
+                        )
+                    )
             else:
                 login = (
                     sql.SQL("NOLOGIN")
@@ -567,8 +636,11 @@ def provision() -> str:
             sql.SQL("REVOKE ALL ON DATABASE {} FROM PUBLIC").format(sql.Identifier(database))
         )
         connection.execute(
-            sql.SQL("GRANT CONNECT ON DATABASE {} TO {},{}").format(
-                sql.Identifier(database), sql.Identifier(MIGRATOR), sql.Identifier(RUNTIME)
+            sql.SQL("GRANT CONNECT ON DATABASE {} TO {},{},{}").format(
+                sql.Identifier(database),
+                sql.Identifier(MIGRATOR),
+                sql.Identifier(RUNTIME),
+                sql.Identifier(SCHEDULER),
             )
         )
         target_url = urlunsplit(admin._replace(path=migration.path))
@@ -578,7 +650,9 @@ def provision() -> str:
             )
             target_connection.execute("REVOKE ALL ON SCHEMA public FROM PUBLIC")
             target_connection.execute(
-                sql.SQL("GRANT USAGE ON SCHEMA public TO {}").format(sql.Identifier(RUNTIME))
+                sql.SQL("GRANT USAGE ON SCHEMA public TO {},{}").format(
+                    sql.Identifier(RUNTIME), sql.Identifier(SCHEDULER)
+                )
             )
             if legacy_revision != "empty":
                 tables = target_connection.execute(

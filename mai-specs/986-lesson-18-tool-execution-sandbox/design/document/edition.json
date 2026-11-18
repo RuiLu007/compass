@@ -3,99 +3,15 @@
   "subtitle": "按 runtime、harness、workflows 与 tools 分工；统一工具策略，使用 OpenSandbox + NFS-Ganesha 分配执行环境。",
   "brand": "Compass",
   "label": "《企业级Agent工程架构实战营》 · 第 18 课 · 架构设计与代码导读",
-  "topics": ["模块边界", "工具生命周期", "MCP 动态装载", "OpenSandbox + NAS"],
+  "topics": [
+    "模块边界",
+    "工具生命周期",
+    "MCP 动态装载",
+    "OpenSandbox + NAS"
+  ],
   "source": "../TECH_DESIGN.md",
   "guide": "guide.md",
   "output": "../TECH_DESIGN.html",
-  "metrics": [
-    {
-      "value": "2 / 4",
-      "label": "个并行执行槽",
-      "detail": "每 Run 最多 2 个，进程最多 4 个"
-    },
-    {
-      "value": "20",
-      "label": "秒 / Python 执行",
-      "detail": "课堂初值，还受 Run 剩余时间限制"
-    },
-    {
-      "value": "512",
-      "label": "KiB / PNG",
-      "detail": "每 Run 产物总量最多 2 MiB"
-    }
-  ],
-  "code": {
-    "architecture": {
-      "file": "../TECH_DESIGN.md",
-      "contains": "Dispatcher · 校验参数和权限",
-      "language": "mermaid"
-    },
-    "types": {
-      "file": "../TECH_DESIGN.md",
-      "contains": "class ToolDispatcher",
-      "language": "mermaid"
-    },
-    "tool-lifecycle": {
-      "file": "../TECH_DESIGN.md",
-      "contains": "stateDiagram-v2",
-      "language": "mermaid"
-    },
-    "tool-roles": {
-      "file": "../TECH_DESIGN.md",
-      "contains": "participant D as Dispatcher",
-      "language": "mermaid"
-    },
-    "sandbox-sequence": {
-      "file": "../TECH_DESIGN.md",
-      "contains": "participant C as tools.sandbox.client",
-      "language": "mermaid"
-    },
-    "cloud-sandbox": {
-      "file": "../TECH_DESIGN.md",
-      "contains": "OpenSandbox Lifecycle Server",
-      "language": "mermaid"
-    },
-    "core": {
-      "file": "../TECH_DESIGN.md",
-      "contains": "async def execute_prepared",
-      "language": "python"
-    },
-    "mcp-startup": {
-      "file": "../TECH_DESIGN.md",
-      "contains": "participant L as RunToolLoader",
-      "language": "mermaid"
-    },
-    "batch-policy": {
-      "file": "../TECH_DESIGN.md",
-      "contains": "同轮 Tool Calls + ToolBatchPolicy",
-      "language": "mermaid"
-    },
-    "mcp-loader": {
-      "file": "../TECH_DESIGN.md",
-      "contains": "async def open_run_tools",
-      "language": "python"
-    },
-    "modules": {
-      "file": "../TECH_DESIGN.md",
-      "contains": "api · HTTP 入口",
-      "language": "mermaid"
-    },
-    "sandbox-types": {
-      "file": "../TECH_DESIGN.md",
-      "contains": "class AllocationStore",
-      "language": "mermaid"
-    },
-    "file-tree": {
-      "file": "../TECH_DESIGN.md",
-      "contains": "apps/agent/src/compass_agent/",
-      "language": "text"
-    },
-    "volume-mount": {
-      "file": "../TECH_DESIGN.md",
-      "contains": "from opensandbox import Sandbox",
-      "language": "python"
-    }
-  },
   "cover": {
     "file": "cover.png",
     "alt": "第 18 课 · 工具体系：注册发现、统一调度、进程内函数、MCP 与 OpenSandbox。"

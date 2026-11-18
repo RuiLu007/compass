@@ -80,11 +80,15 @@ class Settings(BaseSettings):
     compass_redis_password: SecretStr = SecretStr("")
     compass_runtime_state_key: SecretStr = SecretStr("")
     compass_runtime_event_token: SecretStr = SecretStr("")
-    compass_worker_credentials: SecretStr = SecretStr("{}")
-    compass_runtime_max_active: int = Field(default=2, ge=1, le=64)
-    compass_runtime_max_backlog: int = Field(default=12, ge=1, le=10000)
-    compass_runtime_tenant_active: int = Field(default=1, ge=1, le=64)
-    compass_runtime_tenant_backlog: int = Field(default=4, ge=1, le=10000)
+    compass_runtime_consumer_slots: int = Field(default=1, ge=0, le=64)
+    compass_runtime_key_version: str = Field(default="local-v1", min_length=1, max_length=64)
+    compass_scheduler_database_url: SecretStr = SecretStr("")
+    compass_scheduler_agent_url: str = "http://127.0.0.1:8102"
+    compass_scheduler_token: SecretStr = SecretStr("")
+    compass_runtime_max_active: int = Field(default=1000, ge=1, le=1000)
+    compass_runtime_max_backlog: int = Field(default=3000, ge=1, le=3000)
+    compass_runtime_tenant_active: int = Field(default=200, ge=1, le=200)
+    compass_runtime_tenant_backlog: int = Field(default=20, ge=1, le=20)
     compass_runtime_tenant_overrides: str = "{}"
     compass_runtime_lease_seconds: int = Field(default=15, ge=3, le=300)
     compass_web_authz_url: str = "http://127.0.0.1:8100/api/internal/analysis/authorize"

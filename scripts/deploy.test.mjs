@@ -7,7 +7,7 @@ import { apps, deploy, deploymentEnv, parseArgs, parseContainers } from "./deplo
 
 function fixture(
   t,
-  { fail, containers = [], sourceEnv = {}, workerState = "running", portFailure = false } = {},
+  { fail, containers = [], sourceEnv = {}, schedulerState = "running", portFailure = false } = {},
 ) {
   const workspace = mkdtempSync(path.join(tmpdir(), "compass-deploy-"));
   t.after(() => rmSync(workspace, { recursive: true, force: true }));
@@ -15,26 +15,29 @@ function fixture(
   const ports = [];
   const config = {
     services: Object.fromEntries(
-      [...apps, "worker-2", "postgres", "redis"].map((app) => [
-        app,
-        {
-          ports: app.startsWith("worker")
-            ? []
-            : [
-                {
-                  host_ip: "127.0.0.1",
-                  published: {
-                    home: 8101,
-                    web: 8100,
-                    agent: 8102,
-                    memory: 8103,
-                    postgres: 55432,
-                    redis: 56379,
-                  }[app],
-                },
-              ],
-        },
-      ]),
+      [...apps, "agent-gateway", "scheduler", "migrate", "web-migrate", "postgres", "redis"].map(
+        (app) => [
+          app,
+          {
+            build: [...apps, "migrate", "web-migrate"].includes(app),
+            ports: ["agent", "scheduler", "migrate", "web-migrate"].includes(app)
+              ? []
+              : [
+                  {
+                    host_ip: "127.0.0.1",
+                    published: {
+                      home: 8101,
+                      web: 8100,
+                      "agent-gateway": 8102,
+                      memory: 8103,
+                      postgres: 55432,
+                      redis: 56379,
+                    }[app],
+                  },
+                ],
+          },
+        ],
+      ),
     ),
   };
   return {
@@ -58,8 +61,12 @@ function fixture(
           if (args.includes("config")) return JSON.stringify(config);
           if (args.includes("ps") && args.includes("json"))
             return JSON.stringify(
-              args.at(-1) === "worker-2"
-                ? ["worker", "worker-2"].map((Service) => ({ Service, State: workerState }))
+              args.at(-1) === "scheduler"
+                ? [
+                    { Service: "agent", State: "running", Health: "healthy" },
+                    { Service: "agent", State: "running", Health: "healthy" },
+                    { Service: "scheduler", State: schedulerState, Health: "healthy" },
+                  ]
                 : containers,
             );
           return "";
@@ -139,16 +146,16 @@ for (const app of apps)
   test(`single ${app} deploy leaves other apps untouched`, async (t) => {
     const f = fixture(t);
     await f.invoke(["up", app]);
-    const stop = f.calls.find((call) => call.args.includes("stop"));
+    const stop = f.calls.find((call) => call.args.includes("stop") && call.args.includes(app));
     assert.deepEqual(stop.args.slice(stop.args.indexOf("stop")), [
       "stop",
       "--timeout",
       "15",
       app,
-      ...(app === "worker" ? ["worker-2"] : []),
+      ...(app === "agent" ? ["agent-gateway"] : []),
     ]);
     const start = f.calls.find((call) => call.args.includes("--force-recreate"));
-    assert.equal(start.args.at(-1), app === "worker" ? "worker-2" : app);
+    assert.equal(start.args.at(-1), app === "agent" ? "agent-gateway" : app);
     assert.ok(start.args.includes("--no-deps"));
     const migrations = f.calls.filter(
       (call) => call.args.includes("run") && call.args.includes("--rm"),
@@ -208,9 +215,9 @@ test("re-deploy allows ports already published by the selected running container
   assert.equal(parseContainers('{"Service":"home"}\n{"Service":"web"}').length, 2);
 });
 
-test("worker exiting after startup prevents success", async (t) => {
-  const f = fixture(t, { workerState: "exited" });
-  await assert.rejects(f.invoke(["up", "worker"]), /Both Worker consumers/);
+test("Scheduler exiting after startup prevents success", async (t) => {
+  const f = fixture(t, { schedulerState: "exited" });
+  await assert.rejects(f.invoke(["up", "agent"]), /Scheduler must be healthy/);
 });
 
 test("down preserves data and concurrent deploy is rejected", async (t) => {

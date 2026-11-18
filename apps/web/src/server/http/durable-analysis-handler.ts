@@ -12,6 +12,7 @@ import { requireCsrf, requireSameOrigin } from "./security";
 export function isDurableAnalysisRoute(route: string, request: Request) {
   return (
     route === "analysis/runtime/usage" ||
+    /^analysis\/schedules(?:\/|$)/.test(route) ||
     /^analysis\/sessions(?:\/|$)/.test(route) ||
     /^analysis\/runs\/[^/]+\/(events|pause|resume|decisions|reconcile|waits|timeline)(?:\/|$)/.test(
       route,
@@ -25,10 +26,31 @@ export async function handleDurableAnalysis(request: Request, token: string) {
     const url = new URL(request.url),
       route = url.pathname.slice("/api/web/v1/".length);
     const parts = route.split("/");
+    const schedule = parts[1] === "schedules";
     let contract = "",
       result = "",
       streaming = false;
-    if (route === "analysis/runtime/usage" && request.method === "GET") result = "RuntimeUsage";
+    if (schedule) {
+      if (parts.length === 2 && request.method === "GET") result = "SchedulePage";
+      else if (parts.length === 2 && request.method === "POST") {
+        contract = "ScheduleCreate";
+        result = "ScheduleWriteReceipt";
+      } else if (parts.length === 3 && parts[2] === "preview" && request.method === "POST") {
+        contract = "SchedulePreview";
+        result = "SchedulePreviewResult";
+      } else if (parts.length === 3) {
+        uuid.parse(parts[2]);
+        if (request.method === "GET") result = "ScheduleView";
+        else if (request.method === "PATCH" || request.method === "DELETE") {
+          contract = request.method === "PATCH" ? "ScheduleUpdate" : "ScheduleDelete";
+          result = "ScheduleWriteReceipt";
+        }
+      } else if (parts.length === 4 && parts[3] === "triggers" && request.method === "GET") {
+        uuid.parse(parts[2]);
+        result = "TriggerPage";
+      }
+    } else if (route === "analysis/runtime/usage" && request.method === "GET")
+      result = "RuntimeUsage";
     else if (route === "analysis/sessions" && request.method === "GET") result = "SessionList";
     else if (route === "analysis/sessions/submit" && request.method === "POST") {
       contract = "SessionSubmit";
@@ -83,7 +105,9 @@ export async function handleDurableAnalysis(request: Request, token: string) {
       reject("validation_failed");
     const raw =
       request.method === "GET" ? Object.fromEntries(url.searchParams) : await readJson(request);
-    const scope = z.object({ tenantId: uuid, workspaceId: uuid }).parse(raw);
+    const scope = z
+      .object({ tenantId: uuid, workspaceId: uuid })
+      .parse(schedule ? Object.fromEntries(url.searchParams) : raw);
     const command = Object.fromEntries(
       Object.entries(raw as Record<string, unknown>).filter(
         ([key]) => !["tenantId", "workspaceId"].includes(key),
@@ -109,13 +133,17 @@ export async function handleDurableAnalysis(request: Request, token: string) {
     }
     if (!contract) {
       const allowed =
-        route === "analysis/sessions"
-          ? ["limit", "cursor"]
-          : parts[3] === "messages"
-            ? ["cursor", "runId"]
-            : streaming
-              ? ["after"]
-              : [];
+        result === "SchedulePage"
+          ? ["q", "status", "cursor"]
+          : result === "TriggerPage"
+            ? ["cursor"]
+            : route === "analysis/sessions"
+              ? ["limit", "cursor"]
+              : parts[3] === "messages"
+                ? ["cursor", "runId"]
+                : streaming
+                  ? ["after"]
+                  : [];
       if (
         Object.keys(command).some((key) => !allowed.includes(key)) ||
         Object.values(command).some((value) => typeof value !== "string" || value.length > 500)
@@ -129,7 +157,11 @@ export async function handleDurableAnalysis(request: Request, token: string) {
           ? { kind: "platform", purpose: "runtime_diagnostics" }
           : {
               kind: "tenant",
-              purpose: result === "RuntimeUsage" ? "runtime_usage" : "chat",
+              purpose: schedule
+                ? "schedule_manage"
+                : result === "RuntimeUsage"
+                  ? "runtime_usage"
+                  : "chat",
               ...scope,
             },
       ),
@@ -177,8 +209,10 @@ export async function handleDurableAnalysis(request: Request, token: string) {
             error: {
               code: body.error.code,
               currentVersion: body.error.currentVersion,
-              message:
-                body.error.code === "session_busy" && request.method === "DELETE"
+              reasonCode: body.error.reasonCode,
+              message: schedule
+                ? body.error.message
+                : body.error.code === "session_busy" && request.method === "DELETE"
                   ? "请先停止任务，等任务结束后再删除会话。"
                   : body.error.code === "invalid_session_title"
                     ? "请输入有效的会话标题。"
@@ -193,7 +227,12 @@ export async function handleDurableAnalysis(request: Request, token: string) {
           },
           {
             status: upstream.status,
-            headers: { ...headers, ...(upstream.status === 429 ? { "Retry-After": "1" } : {}) },
+            headers: {
+              ...headers,
+              ...(upstream.status === 429
+                ? { "Retry-After": upstream.headers.get("Retry-After") ?? "1" }
+                : {}),
+            },
           },
         );
       reject("unavailable");

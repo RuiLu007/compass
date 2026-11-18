@@ -46,7 +46,11 @@ async def dispatch_batch(
             try:
                 item = dispatcher.prepare(call, context)
                 prepared[index] = item
+                if item.tool.local_effect and len(calls) != 1:
+                    raise ToolRejected("tool_requires_independent_call")
                 await dispatcher.revalidate(item, context)
+                item = await dispatcher.prepare_approval(item, context)
+                prepared[index] = item
                 results[index] = dispatcher.admission(item, context)
                 if (
                     results[index] is None

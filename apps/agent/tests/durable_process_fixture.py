@@ -14,13 +14,14 @@ else:
 
 original_lifespan = app.router.lifespan_context
 
-# Keep the M5 fault suite on its original single-owner execution path. M6 has a
-# separate fixture with two real HTTP Workers and explicit lease fault barriers.
+# Keep the pre-queue model crash and partial-text coverage on the original execution path.
+# Replica fault tests exercise the separate post-queue protocol.
 
 
 class LegacyFixtureRuntime(DurableRuntime):
     def __init__(self, *args, **kwargs):
         kwargs["schedule_jobs"] = False
+        kwargs["distributed"] = False
         super().__init__(*args, **kwargs)
 
 

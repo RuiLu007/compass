@@ -26,6 +26,7 @@ from compass_agent.runtime.entities import (
 )
 from compass_agent.runtime.private_state import digest
 from compass_agent.runtime.store import now
+from compass_agent.tools.contracts import PhaseCanceled
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,8 @@ class ExecutionJournal:
         self.pending_drafts = []
         self.active_started = monotonic()
         run = store.read_run(run_id)
+        self.scheduled = bool(run.config_snapshot.get("schedule"))
+        self.schedule_tools = store.distributed and "budget" in run.config_snapshot
         self.active_base = run.active_ms
         # Preserve the original model request fingerprint when an older Run resumes.
         self.deepseek_thinking = run.config_snapshot.get("deepseekThinking", False)
@@ -597,144 +600,227 @@ class ExecutionJournal:
 
     def accept(self, step_id, attempt_id, value, business_state=None, *, boundary=False):
         self.publisher.require_owner()
-        states = business_state or {}
         with self.store.transaction() as tx:
             session, run = self.store.lock(tx, self.run_id)
-            self.store.require_epoch(run, self.epoch)
+            return self.accept_in_transaction(
+                tx,
+                session,
+                run,
+                step_id,
+                attempt_id,
+                value,
+                business_state=business_state,
+                boundary=boundary,
+            )
+
+    def accept_in_transaction(
+        self,
+        tx,
+        session,
+        run,
+        step_id,
+        attempt_id,
+        value,
+        *,
+        business_state=None,
+        boundary=False,
+        expected_attempt_status="dispatched",
+    ):
+        states = business_state or {}
+        self.store.require_epoch(run, self.epoch)
+        step, attempt = tx.get(AgentStep, step_id), tx.get(AgentAttempt, attempt_id)
+        if self.store.distributed and self.store.scheduler:
+            active_ms = self.store.scheduler.active_at_boundary(
+                tx, run, boundary and step.parent_step_id is None
+            )
+        else:
             run.active_ms = max(
                 run.active_ms, self.active_base + int((monotonic() - self.active_started) * 1000)
             )
-            step, attempt = tx.get(AgentStep, step_id), tx.get(AgentAttempt, attempt_id)
-            if attempt.status != "dispatched":
-                raise ModelError("attempt_conflict", 409)
-            continuations = {}
-            if run.checkpoint_no:
-                previous = tx.get(AgentCheckpoint, (run.id, run.checkpoint_no))
-                if previous and previous.continuation_state:
-                    continuations = self.store.private.open(
-                        run.id, "continuations", previous.continuation_state
-                    )
-            if value.get("continuation") is not None:
-                continuations[str(attempt.id)] = value["continuation"]
-                value = {**value, "continuation": None}
-            attempt.output_content = self.store.private.seal(run.id, "attempt-output", value)
-            attempt.output_sha256 = digest(value)
-            attempt.status, attempt.finished_at = "completed", now()
-            if attempt.receipt.get("actionId"):
-                action = tx.get(AgentAction, UUID(attempt.receipt["actionId"]))
-                if action is None or action.run_id != run.id:
-                    raise RecoveryStop("action_conflict")
-                result = value["result"]
-                action.state = (
-                    "unknown"
-                    if result.get("cleanup") == "unconfirmed"
-                    else "applied"
-                    if result.get("status") in {"ok", "empty"}
-                    else "denied"
+            active_ms = run.active_ms
+        if attempt.status != expected_attempt_status:
+            raise ModelError("attempt_conflict", 409)
+        continuations = {}
+        if run.checkpoint_no:
+            previous = tx.get(AgentCheckpoint, (run.id, run.checkpoint_no))
+            if previous and previous.continuation_state:
+                continuations = self.store.private.open(
+                    run.id, "continuations", previous.continuation_state
                 )
-                action.receipt = {
-                    "attemptId": str(attempt.id),
-                    "status": result.get("status"),
-                    "cleanup": result.get("cleanup"),
-                    "outputDigest": digest(result),
-                }
-                action.updated_at = now()
-            attempt.budget_receipt = value.get("budget", {})
-            attempt.delivery_no = (
-                tx.scalar(
-                    select(func.max(AgentAttempt.delivery_no)).where(AgentAttempt.run_id == run.id)
-                )
-                or 0
-            ) + 1
-            step.accepted_attempt_id = attempt.id
-            step.status = "failed" if value.get("rejection") else "completed"
-            step.finished_at = now()
-            step.revision += 1
-            box = self.store.outbox(tx, session, run, [])
-            tx.flush()
-            accepted = tx.scalars(
-                select(AgentAttempt).where(
-                    AgentAttempt.run_id == run.id, AgentAttempt.status == "completed"
-                )
-            ).all()
-            refs = [
-                {"stepId": str(a.step_id), "attemptId": str(a.id), "outputDigest": a.output_sha256}
-                for a in accepted
-            ]
-            position = {
-                "schemaVersion": 1,
-                "nextNode": "journal-replay",
-                "lastStepId": str(step.id),
-            }
-            number = (run.checkpoint_no or 0) + 1
-            private = {
-                "schemaVersion": 1,
-                "accepted": refs,
-                "states": {path: state["verifier"] for path, state in states.items()},
-            }
-            checkpoint = AgentCheckpoint(
-                run_id=run.id,
-                number=number,
-                schema_version=1,
-                boundary_outbox_id=box.id,
-                position=position,
-                completed_refs=refs,
-                message_refs=[
-                    str(v)
-                    for v in tx.scalars(
-                        select(AgentMessage.id).where(AgentMessage.run_id == run.id)
-                    )
-                ],
-                tool_binding_refs=[
-                    str(v)
-                    for v in tx.scalars(
-                        select(AgentToolBinding.id).where(AgentToolBinding.run_id == run.id)
-                    )
-                ],
-                artifact_refs=[
-                    {"id": str(v.id), "sha256": v.sha256}
-                    for v in tx.scalars(select(AgentArtifact).where(AgentArtifact.run_id == run.id))
-                ],
-                plan_state={
-                    "schemaVersion": 1,
-                    "states": {path: state["plan"] for path, state in states.items()},
-                },
-                verifier_state=self.store.private.seal(run.id, "verifier", private),
-                continuation_state=self.store.private.seal(run.id, "continuations", continuations),
-                budget_state={
-                    "schemaVersion": 1,
-                    "activeMs": run.active_ms,
-                    "receipts": [{"attemptId": str(v.id), **v.budget_receipt} for v in accepted],
-                    "states": {path: state["budget"] for path, state in states.items()},
-                },
-                pending_calls=[
-                    str(v)
-                    for v in tx.scalars(
-                        select(AgentAttempt.id).where(
-                            AgentAttempt.run_id == run.id,
-                            AgentAttempt.status.in_(["prepared", "dispatched", "unknown"]),
-                        )
-                    )
-                ],
-                state_sha256="",
-                created_at=now(),
+        if value.get("continuation") is not None:
+            continuations[str(attempt.id)] = value["continuation"]
+            value = {**value, "continuation": None}
+        attempt.output_content = self.store.private.seal(run.id, "attempt-output", value)
+        attempt.output_sha256 = digest(value)
+        attempt.status, attempt.finished_at = "completed", now()
+        if attempt.receipt.get("actionId"):
+            action = tx.get(AgentAction, UUID(attempt.receipt["actionId"]))
+            if action is None or action.run_id != run.id:
+                raise RecoveryStop("action_conflict")
+            result = value["result"]
+            action.state = (
+                "unknown"
+                if result.get("cleanup") == "unconfirmed"
+                else "applied"
+                if result.get("status") in {"ok", "empty"}
+                else "denied"
             )
-            checkpoint.state_sha256 = checkpoint_digest(checkpoint)
-            tx.add(checkpoint)
-            run.checkpoint_no = number
-            self.last_attempt = attempt.id
-            if boundary and self.store.scheduler:
-                return self.store.scheduler.accepted_boundary(tx, run, step)
-            return False
+            action.receipt = {
+                "attemptId": str(attempt.id),
+                "status": result.get("status"),
+                "cleanup": result.get("cleanup"),
+                "outputDigest": digest(result),
+            }
+            action.updated_at = now()
+        attempt.budget_receipt = value.get("budget", {})
+        attempt.delivery_no = (
+            tx.scalar(
+                select(func.max(AgentAttempt.delivery_no)).where(AgentAttempt.run_id == run.id)
+            )
+            or 0
+        ) + 1
+        step.accepted_attempt_id = attempt.id
+        step.status = "failed" if value.get("rejection") else "completed"
+        step.finished_at = now()
+        step.revision += 1
+        box = self.store.outbox(tx, session, run, [])
+        tx.flush()
+        accepted = tx.scalars(
+            select(AgentAttempt).where(
+                AgentAttempt.run_id == run.id, AgentAttempt.status == "completed"
+            )
+        ).all()
+        refs = [
+            {"stepId": str(a.step_id), "attemptId": str(a.id), "outputDigest": a.output_sha256}
+            for a in accepted
+        ]
+        position = {
+            "schemaVersion": 1,
+            "nextNode": "journal-replay",
+            "lastStepId": str(step.id),
+        }
+        number = (run.checkpoint_no or 0) + 1
+        private = {
+            "schemaVersion": 1,
+            "accepted": refs,
+            "states": {path: state["verifier"] for path, state in states.items()},
+        }
+        checkpoint = AgentCheckpoint(
+            run_id=run.id,
+            number=number,
+            schema_version=1,
+            boundary_outbox_id=box.id,
+            position=position,
+            completed_refs=refs,
+            message_refs=[
+                str(v)
+                for v in tx.scalars(select(AgentMessage.id).where(AgentMessage.run_id == run.id))
+            ],
+            tool_binding_refs=[
+                str(v)
+                for v in tx.scalars(
+                    select(AgentToolBinding.id).where(AgentToolBinding.run_id == run.id)
+                )
+            ],
+            artifact_refs=[
+                {"id": str(v.id), "sha256": v.sha256}
+                for v in tx.scalars(select(AgentArtifact).where(AgentArtifact.run_id == run.id))
+            ],
+            plan_state={
+                "schemaVersion": 1,
+                "states": {path: state["plan"] for path, state in states.items()},
+            },
+            verifier_state=self.store.private.seal(run.id, "verifier", private),
+            continuation_state=self.store.private.seal(run.id, "continuations", continuations),
+            budget_state={
+                "schemaVersion": 1,
+                "activeMs": active_ms,
+                "receipts": [{"attemptId": str(v.id), **v.budget_receipt} for v in accepted],
+                "states": {path: state["budget"] for path, state in states.items()},
+            },
+            pending_calls=[
+                str(v)
+                for v in tx.scalars(
+                    select(AgentAttempt.id).where(
+                        AgentAttempt.run_id == run.id,
+                        AgentAttempt.status.in_(["prepared", "dispatched", "unknown"]),
+                    )
+                )
+            ],
+            state_sha256="",
+            created_at=now(),
+        )
+        checkpoint.state_sha256 = checkpoint_digest(checkpoint)
+        tx.add(checkpoint)
+        run.checkpoint_no = number
+        self.last_attempt = attempt.id
+        if boundary and self.store.scheduler:
+            return self.store.scheduler.accepted_boundary(tx, run, step)
+        return False
 
-    def unknown(self, attempt_id):
+    def unknown(self, attempt_id, *, sandbox_execution_id=None):
         with self.store.transaction() as tx:
             _, run = self.store.lock(tx, self.run_id)
-            if run.execution_epoch != self.epoch:
+            attempt = tx.get(AgentAttempt, attempt_id)
+            if attempt is None or attempt.run_id != run.id or attempt.execution_epoch != self.epoch:
+                return
+            if run.status == "cancelling" and sandbox_execution_id:
+                attempt.receipt = {**attempt.receipt, "sandboxExecutionId": sandbox_execution_id}
+            if run.execution_epoch == self.epoch and attempt.status == "dispatched":
+                attempt.status, attempt.error_code = "unknown", "execution_unknown"
+
+    def confirm_canceled_attempt(self, attempt_id, *, before_dispatch=False):
+        # A fenced callback may confirm cleanup, but cannot commit output or a checkpoint.
+        with self.store.transaction() as tx:
+            _, run = self.store.lock(tx, self.run_id)
+            if run.status != "cancelling":
                 return
             attempt = tx.get(AgentAttempt, attempt_id)
-            if attempt and attempt.status == "dispatched":
-                attempt.status, attempt.error_code = "unknown", "execution_unknown"
+            if (
+                attempt is None
+                or attempt.run_id != run.id
+                or attempt.execution_epoch != self.epoch
+                or attempt.status not in {"prepared", "dispatched", "unknown", "incomplete"}
+            ):
+                return
+            action_id = attempt.receipt.get("actionId")
+            if action_id:
+                if not before_dispatch:
+                    return
+                action = tx.get(AgentAction, UUID(action_id))
+                if action and action.run_id == run.id and action.state in {"pending", "unknown"}:
+                    action.state, action.updated_at = "denied", now()
+            attempt.status, attempt.finished_at = "canceled", now()
+            attempt.error_code = "user_canceled"
+
+    async def local_read(self, key, inputs, operation):
+        step, attempt, saved = await asyncio.to_thread(
+            self.prepare, "tool", key, inputs, {"environment": "in_process"}
+        )
+        if saved is not None:
+            return saved["result"]
+        await self.gate()
+        result = await operation()
+        state = self.business_state()
+
+        def accept():
+            with self.store.transaction() as tx:
+                session, run = self.store.lock(tx, self.run_id)
+                return self.accept_in_transaction(
+                    tx,
+                    session,
+                    run,
+                    step,
+                    attempt,
+                    {"result": result, "continuation": None, "budget": {}},
+                    business_state=state,
+                    boundary=True,
+                    expected_attempt_status="prepared",
+                )
+
+        if await asyncio.to_thread(accept):
+            raise BoundaryYield()
+        return result
 
     async def call(
         self, kind, key, inputs, operation, result_type, *, definition=None, budget=None
@@ -756,17 +842,39 @@ class ExecutionJournal:
             before = {name: getattr(budget, name) for name in budget_fields} if budget else {}
             await self.gate()
         except asyncio.CancelledError:
-            from compass_agent.tools.contracts import PhaseCanceled
-
             # Only local admission and replay ran; the physical dispatch intent has
             # not been committed and operation() has never been invoked.
             raise PhaseCanceled(cleanup_confirmed=True) from None
-        await asyncio.to_thread(self.dispatched, attempt_id)
+        dispatch = asyncio.create_task(asyncio.to_thread(self.dispatched, attempt_id))
+        try:
+            await asyncio.shield(dispatch)
+        except asyncio.CancelledError:
+            try:
+                await dispatch
+            except ModelError as error:
+                if error.code not in {"execution_fenced", "lease_lost", "run_stopped"}:
+                    raise
+            await asyncio.to_thread(self.confirm_canceled_attempt, attempt_id, before_dispatch=True)
+            raise PhaseCanceled(cleanup_confirmed=True) from None
         parent_token, attempt_token = self.parent.set(step_id), self.active_attempt.set(attempt_id)
+        tool_finished = False
+        sandbox_execution_id = None
         try:
             with execution_scope(key, absolute=True):
                 result = await operation()
             encoded = adapter.dump_python(result, mode="json")
+            if kind == "tool":
+                receipts = encoded if isinstance(encoded, list) else [encoded]
+                tool_finished = all(
+                    isinstance(receipt, dict)
+                    and receipt.get("cleanup") in {"confirmed", "not_started", "remote_managed"}
+                    for receipt in receipts
+                )
+                if (
+                    isinstance(encoded, dict)
+                    and encoded.get("reason_code") == "sandbox_cleanup_unconfirmed"
+                ):
+                    sandbox_execution_id = encoded.get("execution_id")
             continuation = None
             if (
                 isinstance(encoded, dict)
@@ -792,8 +900,16 @@ class ExecutionJournal:
                     await self.flush_progress()
                 raise BoundaryYield()
             return result
-        except BaseException:
-            await asyncio.shield(asyncio.to_thread(self.unknown, attempt_id))
+        except BaseException as error:
+            if tool_finished or (
+                kind == "tool" and isinstance(error, PhaseCanceled) and error.cleanup_confirmed
+            ):
+                await asyncio.to_thread(self.confirm_canceled_attempt, attempt_id)
+            await asyncio.shield(
+                asyncio.to_thread(
+                    self.unknown, attempt_id, sandbox_execution_id=sandbox_execution_id
+                )
+            )
             raise
         finally:
             self.parent.reset(parent_token)

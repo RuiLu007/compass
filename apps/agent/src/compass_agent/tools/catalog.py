@@ -3,6 +3,8 @@
 from compass_agent.tools.builtin.create_workflow import SPEC as CREATE_WORKFLOW
 from compass_agent.tools.builtin.database_query import SPEC as DATABASE_QUERY
 from compass_agent.tools.builtin.python_analysis import SPEC as PYTHON_ANALYSIS
+from compass_agent.tools.builtin.schedule_read import SPEC as SCHEDULE_READ
+from compass_agent.tools.builtin.schedule_write import SPEC as SCHEDULE_WRITE
 from compass_agent.tools.builtin.sub_agent import SPEC as SUB_AGENT
 from compass_agent.tools.builtin.todo_write import SPEC as TODO_WRITE
 from compass_agent.tools.catalog_contracts import CatalogContext, ToolSpec
@@ -13,6 +15,8 @@ TOOLS: tuple[ToolSpec, ...] = (
     PYTHON_ANALYSIS,
     SUB_AGENT,
     CREATE_WORKFLOW,
+    SCHEDULE_READ,
+    SCHEDULE_WRITE,
 )
 
 

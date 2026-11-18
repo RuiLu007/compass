@@ -6,7 +6,8 @@ export type ModelScope =
   | { kind: "platform"; purpose: "manage" | "test" | "runtime_diagnostics" }
   | {
       kind: "tenant";
-      purpose: "chat" | "module_read" | "data_manage" | "mcp_manage" | "runtime_usage";
+      purpose:
+        "chat" | "module_read" | "data_manage" | "mcp_manage" | "runtime_usage" | "schedule_manage";
       tenantId: string;
       workspaceId: string;
     };
@@ -35,6 +36,8 @@ export function createModelAuthorizer(ctx: ModelAccessContext) {
     const scope = { tenantId: request.tenantId, workspaceId: request.workspaceId };
     if (request.purpose === "runtime_usage") {
       if (access.role !== "admin" || !access.memberId) reject("forbidden");
+    } else if (request.purpose === "schedule_manage") {
+      requirePermission(access, "module.automations", scope);
     } else if (request.purpose === "chat") {
       requirePermission(access, "module.analysis", scope);
       requirePermission(access, "models.invoke", scope);

@@ -84,7 +84,7 @@ def readiness_engine():
     Base.metadata.create_all(engine)
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32))"))
-        connection.execute(text("INSERT INTO alembic_version VALUES ('0014')"))
+        connection.execute(text("INSERT INTO alembic_version VALUES ('0015')"))
     yield engine
     engine.dispose()
 
@@ -133,4 +133,6 @@ def test_production_runtime_read_routes_are_registered():
     paths = app.openapi()["paths"]
     assert "get" in paths["/v1/analysis/runtime/usage"]
     assert "get" in paths["/v1/analysis/runs/{run_id}/timeline"]
-    assert "post" in paths["/internal/runtime/jobs/advance"]
+    assert "post" in paths["/internal/scheduler/triggers/{trigger_id}/submit"]
+    assert "post" in paths["/internal/scheduler/triggers/{trigger_id}/reconcile"]
+    assert "/internal/runtime/jobs/advance" not in paths

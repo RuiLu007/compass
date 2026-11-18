@@ -154,7 +154,10 @@ export function reduceAgentResponse(state: Conversation | null, raw: unknown): C
   }
   if (response.mode === "snapshot") next.nextCursor = response.page!.nextCursor;
   for (const cursor of response.cursors) {
-    if (!ignored.has(cursor.runId) && !next.runs[cursor.runId].run) fail();
+    if (ignored.has(cursor.runId)) continue;
+    const run = next.runs[cursor.runId];
+    if (!run.run) fail();
+    if (run.finishedAtMs !== undefined) run.latestExecutionId = undefined;
   }
   return next;
 }

@@ -63,12 +63,17 @@ export default async function Page({
         "fromLocal",
         "toLocal",
       ]);
-      if (matchPage(path)?.page.id === "analysis-new") {
+      const pageId = matchPage(path)?.page.id;
+      if (pageId === "analysis-new") {
         allowed.add("session");
         allowed.add("workflow");
         if (search.session) uuid.parse(search.session);
         if (typeof search.workflow === "string" && search.workflow.length > 1024)
           throw new ApplicationError("validation_failed", "工作流参数无效。");
+      }
+      if (pageId === "automations-new" || pageId === "automations-history") {
+        allowed.add("schedule");
+        if (search.schedule !== undefined) uuid.parse(search.schedule);
       }
       if (pairs.some(([key]) => !allowed.has(key)))
         throw new ApplicationError("validation_failed", "页面参数无效。");

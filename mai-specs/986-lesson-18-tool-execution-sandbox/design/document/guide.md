@@ -1,257 +1,99 @@
-## 目标
-
-| 核心问题                   | 实现目标                                       | 量化指标（设计目标）                                                    |
-| -------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------- |
-| 各类工具自行处理授权与停止 | 同一准入、结果、取消和清理规则                 | 未注册、未授权或参数无效的调用派发数为 0                                |
-| 并行和输出挤占 Run 资源    | 在取槽后按 Run 预算检查、计量与派发            | 每 Run 最多 2 个执行，进程最多 4 个                                     |
-| Python 分析需要隔离        | OpenSandbox 分配独立计算和 NFS 工作卷          | 课堂初始为 1 CPU、512 MiB、64 PIDs，单次最多 20 秒且受 Run 剩余时间约束 |
-| 容器回收后还需要图表       | Agent 接收文件后生成稳定引用                   | 单 PNG 最多 512 KiB，每 Run 产物最多 2 MiB                              |
-| 模块职责难定位             | api/runtime/harness/workflows/tools 按职责组织 | tools 对上层实现的反向导入为 0，迁移后 M1–M3 外部契约保持               |
-| 计算回收后仍需工作文件     | NFS 工作卷独立保留并可只读重挂载               | 保留期初值 24 小时，重挂载文件摘要一致，跨 owner 访问数为 0             |
-
-## 1. 模块化方案概述
-
-### 1.1 模块边界与依赖
-
-{{code:modules}}
-
-| 模块             | 管什么                                      | 关键入口                                   |
-| ---------------- | ------------------------------------------- | ------------------------------------------ |
-| `api`            | HTTP 身份、DTO、响应和 SSE 连接             | `runs.py`、`mcp.py`                        |
-| `runtime`        | Run 启停、期限、资源收口、事件和提交        | `RunService`、`RunControl`                 |
-| `harness`        | 推理循环、模型上下文、Todo、Verifier 和预算 | `AgentExecutor`、`ControlledRun`           |
-| `workflows`      | 业务流程、Agent Node、流程资产和待审提案    | `HybridWorkflows`                          |
-| `tools`          | 工具注册、装载、策略、批次、执行和产物      | `RunToolLoader`、`ToolDispatcher`          |
-| `tools/builtin`  | Retail、SQL、CSV、Python 分析等具体工具     | 受信 handler 与注册项                      |
-| `tools/mcp`      | 本人配置、发现、协议调用与会话              | `service.py`、`client.py`、`repository.py` |
-| `tools/sandbox`  | OpenSandbox 接入、工作卷分配和清理核对      | `client.py`、`allocations.py`              |
-| `deploy/sandbox` | Compose、NAS、镜像和管理脚本                | OpenSandbox + NFS-Ganesha                  |
-
-Runtime 组合依赖。Harness 和 Workflow 调用工具；工具通过 `tools/contracts.py` 的预算、控制和事件端口取得运行能力，不导入上层实现。Harness 的 Todo/提交工具和 Workflow 工具由组装层注入注册表，Loader 负责合并与冻结。
-
-当前 `runtime/executor.py` 拆为 RunService 与 Harness 推理循环；`plan/verifier/autonomy/context` 迁入 `harness`；业务查询归 `tools/builtin`；`workflow_*` 归 `workflows`；根 `*_api.py` 迁入 `api`。现有 URL 与根 `schemas.py` 的契约源保持。所有路径为本课实施目标，当前源码尚未迁移。
-
-### 1.2 执行环境与执行策略
-
-{{code:architecture}}
-
-| 维度     | 描述什么                             | 本课选择                                                                                             |
-| -------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| 执行绑定 | 工具处理器在哪里运行                 | `in_process` 绑定受信函数，`sandbox` 绑定隔离环境，`mcp` 绑定本次 Run 的远程工具                     |
-| 执行策略 | 允许哪些副作用，是否需要审批         | `effect` 为 `read_only / local_artifact / external_write / unknown`，`approval` 为 `none / required` |
-| 批次策略 | 同一轮多个工具怎样调度               | `serial / parallel`、并发上限与 `stop / continue`，由服务端配置                                      |
-| 业务工具 | 做什么、接收什么参数、按什么权限执行 | 注册具体处理函数、严格参数 Schema 和授权规则                                                         |
-
-### 1.3 内置、隔离与远程工具
-
-| 具体工具            | 执行绑定                               | 副作用与审批                          | 负责的业务逻辑                                   |
-| ------------------- | -------------------------------------- | ------------------------------------- | ------------------------------------------------ |
-| `retail_sales`      | 进程内受信处理函数                     | 只读，默认直接执行                    | 解析查询参数、选择受限连接、查询并处理数据库取消 |
-| `python_analysis`   | Sandbox                                | 生成本次 Run 的受控产物，默认直接执行 | 对授权数据计算和绘图，接收合规 PNG               |
-| 用户配置的 MCP 工具 | `mcp`                                  | 本地策略决定，缺省未知副作用且需审批  | 每次任务自动发现，按本 Run 映射调用原工具        |
-| `apply_budget`      | 本课仅登记提案，执行绑定由后续课次接入 | 改变外部业务状态，要求审批            | 根据已经核验的参数构造提案，返回 `waiting`       |
-
-每次任务先读取本人启用的 MCP 配置，合并内置工具并冻结本次目录。进程内工具使用系统内置的受信代码。Retail 处理函数在 Agent 中运行，SQL 语句通过受限连接交给 PostgreSQL。模型生成的 Python 使用 Sandbox。只读工具也可以配置为需要审批，例如敏感导出。
-
-## 2. Tool Executor 的类型与生命周期
-
-### 2.1 工具角色与类型 UML
-
-**绿色 · 沿用**　**浅橙 · 第 18 课拟新增**　**深橙 · 第 18 课扩展已有模块**。注册项分别关联单工具策略和执行绑定；上下文另持有批次调度策略。
-
-{{code:types}}
-
-| 对象                                                      | 负责什么                                                                                                      |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `ToolRegistry` / `RegisteredTool`                         | 登记业务工具，维护模型声明、输入输出契约、授权、策略、执行绑定及适用的提案构造函数。                          |
-| `ToolPolicy`                                              | 描述副作用范围和审批要求，供 Dispatcher 在派发前检查。                                                        |
-| `InProcessBinding` / `SandboxBinding` / `McpBinding`      | 分别指向受信处理函数、固定 Sandbox 运行配置和本次 MCP 连接映射。                                              |
-| `ToolExecutionContext` / `PreparedToolCall`               | 携带可信上下文、预算、停止控制，以及已校验的注册项和业务参数。                                                |
-| `ToolDispatcher` / `SandboxClient` / `McpClient`          | Dispatcher 完成策略检查、准入、分发和结果提交。SandboxClient 管理隔离执行，McpClient 管理远端协议调用与结果。 |
-| `ExecutionReceipt` / `ToolExecutionResult` / `ToolResult` | 实际执行回执 → 统一内部结果 → 按调用 ID 回填的模型观察。                                                      |
-| `ToolExecutionEvent` / `ArtifactStore`                    | 记录安全执行元数据，保存已接收产物并按权限读取。                                                              |
-| `RunToolLoader` / `RunTools` / `McpConfigStore`           | 读取本人连接，发现工具，持有本 Run 的不可变目录和客户端，并在结束时关闭连接。                                 |
-| `ToolBatchPolicy`                                         | 独立描述串行/并行、最大并发和失败后的停止/继续行为。                                                          |
-
-### 2.2 工具生命周期
-
-{{code:tool-lifecycle}}
-
-| 阶段             | 规则                                                                                        |
-| ---------------- | ------------------------------------------------------------------------------------------- |
-| 注册与声明       | 每次 Run 读取用户 MCP 配置，发现并冻结目录；每轮推理从同一目录投影 tools。                  |
-| 参数、权限和策略 | 先检查参数与权限，再判断副作用和审批要求。需要审批时同步构造提案并返回等待。                |
-| 资源准入         | 允许执行后才占槽，复验权限、停止状态、期限和预算，再按绑定执行。                            |
-| 取消与回收       | 内置工具和 Sandbox 确认实际清理。MCP 正常响应标记远端管理；结局未知时隔离占用并停止 Run。   |
-| 发布与释放       | 校验计算与文件，按原 ID 回填观察并记录最终事件。已登记文件在 Run 内授权读取，Run 结束释放。 |
-
-待审批调用的实际派发数为零。同轮工具调用先全批预检，再按批次策略串行或有界并行，遇到待审批项时暂停整批派发，其余合格项返回 `rejected / batch_waiting`。结果按原调用顺序回填，执行事件按真实结束顺序记录。
-
-### 2.3 角色时序 UML · 查询、绘图与待审批
-
-{{code:tool-roles}}
-
-`retail_sales` 返回授权查询结果，M2 验证并登记 `VerifiedQuery`，`python_analysis` 再引用它绘图。M3 的预算提案入口准备好证据后，把 `apply_budget` 意图交给策略检查，随后由 Workflow 进入 `budget_decision` 等待。`apply_budget` 仅供 Workflow 内部调用，模型工具入口沿用 `prepare_budget_proposal`。
-
-### 2.4 多工具的串行与并行策略
-
-{{code:batch-policy}}
-
-| 字段              | 默认值与行为                                                           |
-| ----------------- | ---------------------------------------------------------------------- |
-| `mode`            | 默认 `serial`，逐项等待；可配置 `parallel`，运行输入完备且独立的调用   |
-| `max_concurrency` | 默认 2；实际受 Run 2、进程 4 及 MCP 连接配额约束，串行实际为 1         |
-| `failure_mode`    | 默认 `stop`，停止新派发并收口在途；`continue` 保留普通错误并继续独立项 |
-| 强制停止条件      | 用户取消、总期限耗尽、撤权或执行结局未知；无论 failure_mode 都停止     |
-| 审批与回填        | 任一项待审则全批零派发；结果按原调用顺序回填，事件按真实结束顺序记录   |
-
-批次策略由服务端 Run/节点配置决定，适用于模型同轮调用与 Workflow 独立组。串行只约束本批次。并行失败时已完成结果保留，未派发项明确返回 `batch_stopped`；同批输出依赖在预检时拒绝，依赖任务需分批执行。
-
-## 3. MCP 与 Run 专属工具列表
-
-### 3.1 每次任务自动装载
-
-{{code:mcp-startup}}
-
-| 阶段       | 规则                                                                                                             |
-| ---------- | ---------------------------------------------------------------------------------------------------------------- |
-| 配置来源   | Agent 持有当前租户、工作区和用户的 MCP 配置；每次新任务读取启用项                                                |
-| 连接与发现 | 官方 Python SDK，远程 HTTPS Streamable HTTP；初始化后分页 `tools/list`，按用户选择过滤                           |
-| 绑定与命名 | 注册 `McpBinding(connection_id, revision, remote_name, schema_hash)`；稳定命名空间保证内置和远端同名工具互不覆盖 |
-| 本次快照   | 名称、Schema、策略与配置版本在 Run 内固定，后续轮次复用；配置变化在下一任务重新发现                              |
-| 变化与撤权 | 派发前复查权限和配置版本；禁用或收到清单变化后阻止当前连接的新调用，报告变化                                     |
-| 关闭与恢复 | 完成、失败、取消或进入等待时关闭本次客户端；M5 恢复核对原快照并重建连接                                          |
-
-当前没有 Retail 连接时，已加载的 MCP 工具仍可供支持工具调用的模型使用。M2 控制工具和 M3 Workflow 工具也从本 Run 目录投影，Dispatcher 只接受当前轮已暴露的名称。
-
-### 3.2 配置与装载边界
-
-| 配置或边界    | 取值与行为                                                                                                               |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| 本人配置      | `endpoint / enabled / required / revision / selected_tools / tool_policies`，另有受控凭据和每连接并发上限 `max_inflight` |
-| 最小管理入口  | Web BFF `/api/mcp/connections` → Agent `/v1/mcp/connections`；本人创建、修改、禁用和发现测试，凭据不回显                 |
-| 接入范围      | 首版远程 Streamable HTTP；用户 stdio 服务先部署到独立 MCP 宿主，云端 Agent 不执行用户本机命令                            |
-| 默认策略      | 远端副作用缺省 `unknown`，审批 `required`；本地明确授权的只读工具可直接执行，远端 annotations 供参考                     |
-| 启动限制      | 最多 4 个连接，发现并发 2；每连接 8 秒，总装载 10 秒且计入 Run 期限；分页发现最多 256 项 / 512 KiB                       |
-| 模型目录      | 内置和 MCP 合计最多 16 个工具，声明最多 64 KiB；超限要求缩小所选工具，完整报告装载结果                                   |
-| 可选/必需失败 | 可选失败保留其他工具；必需失败、配置授权失败或总量超限时，首次模型调用数为零                                             |
-| 凭据与网络    | 密文绑定完整所有者及连接 ID；只向部署允许的绑定来源发送凭据，禁止自动重定向，校验实际出站目标                            |
-
-MCP 配置与 Sandbox 分配记录归 `agent/main`，合并规划迁移 `0008_tool_runtime.py`，从 0007 升到 0008。后续持久 Run 与调度迁移分别顺延至 0009 和 0010；完整管理页面与 OAuth 向导另行设计。
-
-### 3.3 MCP 结果和取消
-
-| 情况                       | 统一结果与资源语义                                                                                 |
-| -------------------------- | -------------------------------------------------------------------------------------------------- |
-| 正常远端响应               | `cleanup=remote_managed`，本地请求已收口；远端资源由 Server 管理                                   |
-| 工具或协议报错             | 区分 `isError`、JSON-RPC 错误与网络错误，返回安全原因                                              |
-| 超时、断线或取消后结局未知 | `cleanup=unconfirmed`、`execution_unknown`；停止 Run 后续派发，隔离占用，禁止自动重试              |
-| 输出支持                   | 有界文本与结构化结果，存在 outputSchema 时复验；首版不自动读取资源 URI 或将远端文件登记为 Artifact |
-
-通用回执改用 `not_started / confirmed / remote_managed / unconfirmed` 四态。MCP 取消按协议发通知，远端终止结局按实际能力核对；单次调用最多 20 秒、结果最多 64 KiB，并受 Run 剩余预算约束。
-
-## 4. OpenSandbox 与 NFS-Ganesha
-
-### 4.1 选型结论与利弊
-
-**课堂：OpenSandbox Docker 后端 + NFS-Ganesha，使用 Docker Compose。云端：沿用 OpenSandbox，计算使用专用 Linux VM + gVisor，存储接托管 NFS/NAS。**
-
-| 组合                           | 收益                                               | 代价与边界                                              | 决策                               |
-| ------------------------------ | -------------------------------------------------- | ------------------------------------------------------- | ---------------------------------- |
-| 自建 Docker 执行服务           | 执行入口完全可定制                                 | 自行维护生命周期协议、SDK、异常回收及存储接入           | 计算控制面使用 OpenSandbox         |
-| OpenSandbox + NFS-Ganesha      | 本地可分配独立环境；计算销毁后文件保留，可重新挂载 | NFS 网络、UID/GID、卷供应和保留期需要配置；单机容量有限 | **课堂默认**                       |
-| OpenSandbox + 云 NAS + gVisor  | 沿用工具接口与镜像；隔离和存储支持云端部署         | 云资源费用、兼容验证与节点维护                          | **云端默认演进**                   |
-| Kubernetes + OpenSandbox + CSI | 接入集群调度与卷供应                               | 集群及 CSI 运维增加教学成本                             | 已有集群并需要自动跨节点调度时采用 |
-| 托管 Sandbox                   | 供应商管理计算容量                                 | 本地同构、私网 NAS、地域和终止能力需验证                | 本课使用自托管组合                 |
-
-OpenSandbox 负责计算生命周期，Compass 负责租户授权、配额、卷归属和审批。NFS-Ganesha 提供持久文件服务，工作卷保留与计算终止分别管理。
-
-### 4.2 本地拓扑与卷供应
-
-{{code:cloud-sandbox}}
-
-| 部件         | 具体设计                                                                                                        |
-| ------------ | --------------------------------------------------------------------------------------------------------------- |
-| OpenSandbox  | Docker 后端动态创建 Sandbox，Agent 使用官方 SDK 的命令和文件接口                                                |
-| NFS-Ganesha  | `ganesha.nfsd` + FSAL VFS；底层使用 Docker Linux VM 内的 named volume，NFSv4 提供共享存储                       |
-| 预置工作卷池 | 管理员脚本创建独立 NFS 子目录和 named volume，课堂初始 16 个 slot；运行时从受管清单租用，满额明确拒绝           |
-| SDK 挂载     | `pvc.claimName` 指向预置 NFS named volume，挂到 `/workspace`；每调用独占可写卷，不挂 NAS 根，不用 `subPath`     |
-| 网络         | NFS 地址从 Docker daemon 可达；Agent 可访问受控 execd endpoint；Sandbox 出站阻断公网、业务库、元数据和 NAS 端口 |
-| 控制权限     | Docker socket 只给 OpenSandbox 和部署管理员脚本；Agent 与 Python 容器均不持有                                   |
-| 版本与验证   | OpenSandbox/SDK/execd/Ganesha/分析镜像固定兼容版本和 digest；当前为设计，真实组合联调在实施阶段执行             |
-
-运行时租用已预置的存储，再通过 OpenSandbox 动态创建计算环境。Compose 服务名与 Docker daemon 的 NFS 地址分别配置；执行网络保留 execd 所需通信。
-
-### 4.3 分配与存储角色 UML
-
-**浅橙 · 第 18 课新增接入。** `tools/sandbox` 持有分配与生命周期逻辑，底层控制面和 NAS 通过明确接口接入。
-
-{{code:sandbox-types}}
-
-| 资源             | 生命周期与约束                                                                                |
-| ---------------- | --------------------------------------------------------------------------------------------- |
-| Run 逻辑工作空间 | 汇集同 Run 的分配记录；实际卷按 Tool Call/Attempt 独立租用                                    |
-| Sandbox          | 每次 Python 调用单独创建；完成、异常、取消或超时后主动销毁；不跨调用共享进程状态              |
-| 工作卷           | 容器销毁后保留 24 小时供检查，随后确认无挂载、清空并核实，再归还 slot                         |
-| 并行调用         | 不同容器、不同可写卷；上一调用已接受的输入由 Agent 复制给下一调用                             |
-| 只读重挂载       | 原授权主体通过受控入口创建检查 Sandbox，占计算配额，读取原卷；检查期间阻止卷回收              |
-| 未知结局         | 保留分配记录、计算配额和卷占用，后台核对；创建响应丢失时按 allocation_id 查原资源，不重复创建 |
-
-### 4.4 一次 Python 调用与取件
-
-{{code:sandbox-sequence}}
-
-| 边界     | 初始设计值与处理                                                                                                       |
-| -------- | ---------------------------------------------------------------------------------------------------------------------- |
-| 输入     | `source_query_id` 指向同 Run 已验证数据；代码 16 KiB、输入 JSON 128 KiB                                                |
-| 执行     | 固定 Python 镜像，1 CPU、512 MiB、64 PIDs；创建等待最多 30 秒，执行最多 20 秒，均受 Run 期限约束                       |
-| 兜底期限 | Sandbox TTL 120 秒，不自动续租；正常路径主动删除并核对                                                                 |
-| 配额     | Run 2、进程 4、共享主机 4、单租户 2；跨副本在主库事务中核对，unknown 持续占用                                          |
-| 输出     | 计算结果 64 KiB，单 PNG 512 KiB，每 Run 已接受产物 2 MiB；文件通过固定入口写入                                         |
-| 文件系统 | 每 slot 64 MiB 为容量目标；课堂选定容 backing filesystem，实施验证挂载和权限，课堂未完成硬限制时仅开放受控合成代码演示 |
-| 取件     | 原 Python Sandbox 删除后，用受信只读取件 Sandbox 校验路径、链接、类型、PNG 结构与大小；取件器也须删除确认              |
-
-`cleanup=confirmed` 在计算与取件资源都确认删除后产生，工作卷按保留期继续存在。SDK `close` 释放客户端连接，`kill` 提交终止请求，最终清理需要继续核对。NAS 文件通过取件器进入 Agent，复验完成前不发布 Artifact 引用。
-
-### 4.5 工作文件与已接受产物
-
-| 对象          | 保存内容                                     | 读取与保留                                                              |
-| ------------- | -------------------------------------------- | ----------------------------------------------------------------------- |
-| NFS 工作卷    | 本次代码、输入、结果和临时文件               | 按完整 owner + Run + Attempt 授权；保留 24 小时；未接受内容标记为未验证 |
-| `ArtifactRef` | 稳定 ID、Run/Step/ToolCall、类型、大小、摘要 | 只在 Agent 已接收不可变字节后发布；同 ID 冲突拒绝覆盖                   |
-| M4 已接受产物 | Run 内有界 PNG 副本                          | 当前 Run 授权读取；工作卷后续变化不改变已登记内容                       |
-| M5 交接       | 产物字节、摘要、来源与 Step 一起提交         | 随 Checkpoint 保留；恢复依赖已提交产物，独立于 NAS 工作卷保留期         |
-
-云端的 OpenSandbox 控制面放在专用 Linux VM，启用 gVisor 并接私网 NAS。节点迁移先排空旧计算；旧主机失联时保持 unknown。M4 的分配记录支持资源核对，Run 推理恢复由 M5/M6 承接。
-
-## 5. 文件变化与评审入口
-
-{{code:file-tree}}
-
-## 6. 核心代码走读
-
-### 6.1 tools/dispatcher.py · 策略检查与环境分发
-
-以下为设计示意。先检查策略，待审批调用直接返回等待。允许执行后再取槽，复验权限和预算，并按三种绑定调用受信函数、Sandbox 或 MCP。
-
-{{code:core}}
-
-Retail 和 Python 分别按注册项校验查询数据与计算结果，统一返回类型化载荷。执行后的结果通过清理确认、Run 状态检查和输出校验后，才能发布已接收的产物引用。
-
-### 6.2 tools/loader.py · 装载一次，供本 Run 使用
-
-以下为 `tools/loader.py` 的设计示意，由 `runtime/service.py` 调用并在其作用域内启动 Harness。网络发现使用有界会话，冻结前复验配置版本；循环内声明和实际调用共用同一注册表，离开 Run 时关闭连接。
-
-{{code:mcp-loader}}
-
-### 6.3 tools/sandbox/client.py · 挂载受管 NFS 卷
-
-以下只展示 SDK 挂载形状，外围配额、授权、限额和回收按前述合同执行。卷名来自已登记的租用记录，用户和模型只传业务参数。
-
-{{code:volume-mount}}
-
-## 统一执行过程的继承
-
-| 前置能力                   | 本课接入                                                                                                                                                                                                                                                                                                                                         |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 第 17 课统一节点与树形展示 | 工具执行沿用第 17 课的统一执行节点。MCP 调用填充公开 serverId / serverName / toolName，Sandbox 填充 runtime / environmentId；来源与环境独立。Tool Executor 为每次调用提供独立节点 ID、父节点、真实并行组和依赖，补全异步任务上下文传播。输入输出先按工具展示白名单投影，再进入节点的 summary / preview。前端复用已有图标、嵌套、并行和代码组件。 |
+## 本课目标
+
+- **工具目录**：为每个 Run 装配当前可用的内置工具、授权数据连接、个人 MCP 和工作流。
+- **统一工具调度**：通过同一入口校验权限和参数，按工具策略处理串行、并行和取消。
+- **沙箱运行 Python**：让 Python 在独立 Sandbox 中读取已授权的查询结果并生成图表。
+- **文件与图表交付**：通过受管工作卷保存工作文件，并在分析结果中提供图表引用。
+
+## 整体架构
+
+```mermaid 当前工具装配与执行
+flowchart TB
+    S["RunService · 发现与预检"] --> B["RunToolBindings · 冻结 Run 目录"]
+    C["ToolSpec 静态清单"] --> B
+    A["授权数据库 · 个人资产 · MCP"] --> B
+    B --> L["Harness · 工具声明与 ToolCall"]
+    L --> D["dispatch_batch → ToolDispatcher"]
+    B --> D
+    D --> I["InProcessBinding<br/>查询、Todo、工作流编排"]
+    D --> P["SandboxBinding<br/>OpenSandbox + NFS"]
+    D --> M["McpBinding<br/>远端工具会话"]
+    D --> R["执行回执与产物"]
+    R --> L
+    R --> T["执行树和公开投影"]
+```
+
+| 模块 | 当前职责 |
+| --- | --- |
+| `runtime/service.py`、`runtime/tool_bindings.py` | 根据 Agent 定义与可信请求上下文装配目录，向模型和执行器提供同一份注册表，收集回执与产物。 |
+| `tools/catalog.py`、`catalog_contracts.py` | `ToolSpec` 统一声明工具名、启用条件、能力组及注册方式。产品选择 todo、database、python、workflow 能力组。 |
+| `tools/loader.py`、`tools/mcp/` | 发现并过滤调用人的 MCP 工具。调用前复验配置、绑定和权限。 |
+| `data_connections/` | 装配授权数据连接，验证连接身份。只读执行继续受 PostgreSQL 权限、RLS 和 SQL 校验约束。 |
+| `tools/batch.py`、`dispatcher.py` | 整批预检，再按顺序或并行派发；原顺序回填结果。 |
+| `runtime/workflow_tools.py`、`subagent.py` | 挂接试跑、复用和独立子 Agent，子任务使用父 Run 授权与预算。 |
+
+## 核心类型与工具
+
+```mermaid 工具类型关系
+flowchart LR
+    Spec["ToolSpec"] -->|构造| Entry["RegisteredTool"]
+    Reg["ToolRegistry"] -->|持有| Entry
+    Entry -->|执行环境| Binding["InProcessBinding / SandboxBinding / McpBinding"]
+    Entry -->|准入| Policy["ToolPolicy"]
+    Batch["ToolBatchPolicy"] --> Disp["ToolDispatcher"]
+    Reg --> Disp
+    Ctx["ToolExecutionContext<br/>身份、Run、配额、授权结果"] --> Disp
+    Disp --> Receipt["ExecutionReceipt → ToolExecutionResult"]
+```
+
+| 工具 | 行为 |
+| --- | --- |
+| `todo_write` | 更新计划和事项状态。 |
+| `database_query` | 列出授权连接，发现表与字段，执行受限只读查询。查询结果带 `resultId`。 |
+| `python_analysis` | 使用 `source_query_id` 引用本 Run 的授权输入，执行 Python 并接收 PNG。 |
+| `sub_agent`、`create_workflow` | 独立子循环与 JS 试跑。成功试跑后提出保存邀请，用户确认后保存。 |
+| 个人 MCP 和已启用工作流资产 | 按调用者和工作区动态装配。工具槽位由正式清单、MCP 与资产共同占用。 |
+
+## 调用与失败
+
+1. `dispatch_batch()` 按当前目录预检工具名、参数、授权与审批。待审批会暂停整批。默认 `serial + stop`，有序状态操作保持串行。
+2. `ToolDispatcher.execute()` 复验准入，申请槽位与预算，按绑定派发。已完成结果按原 ToolCall ID 和调用顺序回填。事件记录状态、耗时、清理结果。
+3. 查询成功后登记 `AuthorizedInput`，Python 执行前复验来源归属和授权。Sandbox 分配槽位，挂载受管卷，执行后读取产物并清理。清理未确认时隔离槽位，停止后续派发。
+4. 本地拓扑由 OpenSandbox 提供计算控制面，NFS-Ganesha 提供独立工作卷。启动脚本校验 16 个私有卷；工作卷用于中间文件，已接受 PNG 交给 Runtime 持久保存。MCP 走独立远端会话。
+
+## Sandbox 分配与 MCP 边界
+
+| 环节 | 当前实现 |
+| --- | --- |
+| 本地启动 | `pnpm start` 启动 OpenSandbox 与 NFS-Ganesha 并加载沙箱配置。控制面监听宿主机回环地址，执行数据使用端口段 20000–29999。 |
+| 工作卷 | 预置 16 个槽位，每槽 64 MiB ext4，经 NFSv4 挂载。分配记录用于确认执行环境回收和工作卷可再次使用。 |
+| 计算与网络 | Python 运行在非 root 容器，配额为 1 CPU、512 MiB、64 PIDs。默认拒绝主动出网，数据由授权结果引用传入。 |
+| MCP | 个人连接的凭据、配置版本与远端工具选择随调用者校验。发现使用 Streamable HTTP，会话随 Run 关闭。 |
+| 验收路径 | 分别验证 SQL 转 PNG、同轮多工具、个人 MCP，以及取消或超时后的资源清理。 |
+
+## 当前文件清单
+
+```text
+apps/agent/src/compass_agent/
+├── runtime/
+│   ├── service.py             预检与应用装配
+│   ├── tool_bindings.py       冻结工具目录、派发和结果投影
+│   ├── workflow_tools.py      试跑、复用和保存确认入口
+│   └── subagent.py            独立子循环监督
+├── data_connections/          数据源绑定、身份和只读会话
+├── tools/
+│   ├── catalog.py             正式工具清单
+│   ├── catalog_contracts.py   ToolSpec 和能力上下文
+│   ├── registry.py            声明、结构与大小限制
+│   ├── batch.py               预检、串并行、原序回填
+│   ├── dispatcher.py          准入、预算、环境分发与清理
+│   ├── builtin/               查询、计划、Python、工作流和子 Agent
+│   ├── mcp/                   远端工具发现和调用
+│   ├── sandbox/               计算分配与 NFS 清理
+│   └── artifacts.py           产物边界与校验
+└── api/mcp.py                 个人 MCP 配置入口
+deploy/compose/sandbox.yaml   本地计算与 NAS 编排
+scripts/sandbox.mjs           本地启动与分配验收
+```
+
+工具运行配置由 Agent 主库拥有，第 18 课基线迁移为 `0008_tool_runtime.py`。课程案例使用授权连接和通用工具，演示输入与生产装配保持各自入口。

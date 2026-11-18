@@ -7,6 +7,7 @@ import { requestDurableControl } from "@/client/durable-analysis";
 import { useDocumentSession } from "./shell/session-boundary";
 import { parseModelContract } from "@/contracts/model-contract";
 import type { components } from "@/generated/api";
+import { AnalysisMarkdown } from "./analysis-markdown";
 import { UiButton } from "./ui/button";
 import { UiExecutionTimeline } from "./ui/execution-timeline";
 
@@ -40,6 +41,7 @@ export function DurableRunActions({
     pending = useRef<{ kind: string; body: Record<string, unknown> } | null>(null);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [resolvedWait, setResolvedWait] = useState<string>();
   const approval = Object.values(run.objects)
     .filter((object) => object.kind === "approval")
     .sort(
@@ -48,6 +50,9 @@ export function DurableRunActions({
         (a.value.expiresAt ?? "").localeCompare(b.value.expiresAt ?? ""),
     )
     .at(-1)?.value;
+  const scheduleDetail = approval?.summary.match(
+    /^((?:创建|修改)「[^\r\n]+?」[。][\s\S]*?)分析内容[：:]([\s\S]+)$/,
+  );
   const [wait, setWait] = useState<components["schemas"]["WaitView"] | null>(null);
   const waitId = approval?.waitId;
   const scopeQuery = new URLSearchParams(scope).toString();
@@ -95,6 +100,7 @@ export function DurableRunActions({
     setError("");
     try {
       await requestDurableControl(api, sessionId, run.runId, kind, pending.current.body);
+      if (kind === "decisions" && waitId) setResolvedWait(waitId);
       pending.current = null;
       reload();
     } catch (failure) {
@@ -141,79 +147,84 @@ export function DurableRunActions({
         </details>
       )}
       {children}
-      {value && approval && (
-        <div className="durable-approval" aria-label="执行确认">
-          <strong>执行确认</strong>
-          <p>{approval.summary}</p>
-          {approval.expiresAt && (
-            <p>有效期至 {new Date(approval.expiresAt).toLocaleString("zh-CN")}</p>
-          )}
-          <p>
-            {expired && approval.status === "pending"
-              ? "确认已过期"
-              : {
-                  pending: "等待你的决定",
-                  approved: "已批准执行",
-                  rejected: "已拒绝执行",
-                  expired: "确认已过期",
-                  canceled: "已终止",
-                }[approval.status]}
-          </p>
-          {busy && approval.status === "pending" && !action && <p role="status">正在提交…</p>}
-          {approval.status === "pending" && !expired && wait && wait.waitId === waitId && (
-            <div className="actions">
-              {wait.allowedActions.includes("approve") && (
-                <button
-                  disabled={busy}
-                  onClick={() =>
-                    command("decisions", {
-                      waitId: approval.waitId,
-                      proposalId: approval.proposalId,
-                      proposalRevision: approval.proposalRevision,
-                      proposalDigest: approval.proposalDigest,
-                      decisionId: crypto.randomUUID(),
-                      decision: "approve",
-                    })
-                  }
-                >
-                  批准执行
-                </button>
-              )}
-              {wait.allowedActions.includes("reject") && (
-                <button
-                  className="secondary"
-                  disabled={busy}
-                  onClick={() =>
-                    command("decisions", {
-                      waitId: approval.waitId,
-                      proposalId: approval.proposalId,
-                      proposalRevision: approval.proposalRevision,
-                      proposalDigest: approval.proposalDigest,
-                      decisionId: crypto.randomUUID(),
-                      decision: "reject",
-                    })
-                  }
-                >
-                  拒绝执行
-                </button>
-              )}
-              {wait.allowedActions.includes("reconcile") && (
-                <button
-                  disabled={busy}
-                  onClick={() =>
-                    command("reconcile", {
-                      waitId: approval.waitId,
-                      actionId: approval.actionId,
-                    })
-                  }
-                >
-                  核对执行结果
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      {value &&
+        approval?.status === "pending" &&
+        approval.waitId !== resolvedWait &&
+        !expired &&
+        !["completed", "failed", "canceled"].includes(value.status) && (
+          <section className="durable-approval" aria-label="执行确认">
+            <strong>等待你的决定</strong>
+            {scheduleDetail ? (
+              <>
+                <p className="durable-approval-summary">{scheduleDetail[1].trim()}</p>
+                <details className="durable-approval-detail">
+                  <summary>查看分析内容</summary>
+                  <AnalysisMarkdown source={scheduleDetail[2].trim()} embedded />
+                </details>
+              </>
+            ) : (
+              <AnalysisMarkdown source={approval.summary} embedded />
+            )}
+            {approval.expiresAt && (
+              <p className="durable-approval-expiry">
+                有效期至 {new Date(approval.expiresAt).toLocaleString("zh-CN")}
+              </p>
+            )}
+            {busy && !action && <p role="status">正在提交…</p>}
+            {wait && wait.waitId === waitId && (
+              <div className="actions">
+                {wait.allowedActions.includes("approve") && (
+                  <button
+                    disabled={busy}
+                    onClick={() =>
+                      command("decisions", {
+                        waitId: approval.waitId,
+                        proposalId: approval.proposalId,
+                        proposalRevision: approval.proposalRevision,
+                        proposalDigest: approval.proposalDigest,
+                        decisionId: crypto.randomUUID(),
+                        decision: "approve",
+                      })
+                    }
+                  >
+                    批准执行
+                  </button>
+                )}
+                {wait.allowedActions.includes("reject") && (
+                  <button
+                    className="secondary"
+                    disabled={busy}
+                    onClick={() =>
+                      command("decisions", {
+                        waitId: approval.waitId,
+                        proposalId: approval.proposalId,
+                        proposalRevision: approval.proposalRevision,
+                        proposalDigest: approval.proposalDigest,
+                        decisionId: crypto.randomUUID(),
+                        decision: "reject",
+                      })
+                    }
+                  >
+                    拒绝执行
+                  </button>
+                )}
+                {wait.allowedActions.includes("reconcile") && (
+                  <button
+                    disabled={busy}
+                    onClick={() =>
+                      command("reconcile", {
+                        waitId: approval.waitId,
+                        actionId: approval.actionId,
+                      })
+                    }
+                  >
+                    核对执行结果
+                  </button>
+                )}
+              </div>
+            )}
+          </section>
+        )}
       {Object.values(run.objects)
         .filter((o) => o.kind === "artifact")
         .map(({ value: artifact }) => {

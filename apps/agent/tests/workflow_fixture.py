@@ -120,3 +120,24 @@ def new_retail(admin_url: str) -> str:
             path=f"/compass_retail_test_{suffix}",
         )
     )
+
+
+def setup_legacy_readonly_retail(admin_url: str, dsn: str) -> None:
+    """Extend the small course dataset for legacy read-only scope and pagination tests."""
+    setup_retail(admin_url, dsn)
+    target = urlsplit(dsn)
+    assert target.username and target.username.endswith("_a_east")
+    with psycopg.connect(urlunsplit(urlsplit(admin_url)._replace(path=target.path))) as db:
+        db.execute("UPDATE core.spu SET spu_name = '户外露营101-3' WHERE spu_code = 'SPU3'")
+        db.execute(
+            "INSERT INTO core.sku SELECT 101, series, 2 FROM generate_series(4, 54) AS series"
+        )
+        db.execute("INSERT INTO core.spu VALUES (102, 4, 'SPU4', '外租户样品')")
+        for number in range(47):
+            relation = sql.Identifier("core", f"fixture_{number:02d}")
+            db.execute(sql.SQL("CREATE TABLE {} (sample int)").format(relation))
+            db.execute(
+                sql.SQL("GRANT SELECT ON {} TO {}").format(
+                    relation, sql.Identifier(target.username)
+                )
+            )

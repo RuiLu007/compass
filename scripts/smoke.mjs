@@ -8,8 +8,7 @@ const appIndex = process.argv.indexOf("--apps");
 const selected = appIndex < 0 ? null : process.argv[appIndex + 1]?.split(",");
 if (
   appIndex >= 0 &&
-  (!selected?.length ||
-    selected.some((app) => !["home", "web", "agent", "memory", "worker"].includes(app)))
+  (!selected?.length || selected.some((app) => !["home", "web", "agent", "memory"].includes(app)))
 )
   throw new Error("--apps requires a comma-separated list of known apps.");
 const full = selected

@@ -109,7 +109,8 @@
         "WEB_PROVISION_DATABASE_URL",
         "DATABASE_URL",
         "AGENT_MIGRATION_DATABASE_URL",
-        "AGENT_PROVISION_DATABASE_URL"
+        "AGENT_PROVISION_DATABASE_URL",
+        "COMPASS_SCHEDULER_DATABASE_URL"
       ]
     },
     "test:integration": {

@@ -165,6 +165,14 @@ class Allocations:
             if row.state in ACTIVE:
                 row.state = "unknown"
 
+    def cancel_before_create(self, allocation: Allocation) -> None:
+        with Session(self.engine) as session, session.begin():
+            row = self._locked(session, allocation)
+            if row.state != "creating" or row.sandbox_id is not None:
+                raise ToolRejected("sandbox_phase_stale")
+            # Fresh slots have no data. Collection is using a previously retained volume.
+            row.state = "released" if allocation.phase == "compute" else "retained"
+
     def confirmed(self, allocation: Allocation, *, volume_clean: bool = False) -> Allocation:
         with Session(self.engine) as session, session.begin():
             row = self._locked(session, allocation)

@@ -14,13 +14,14 @@
 
 ## 默认装配
 
-Runtime 默认工具集为空。产品入口 compass_definition() 选择 todo、database、python、workflow 四组，按实际授权与后端条件启用：
+Runtime 默认工具集为空。产品入口 compass_definition() 装配 todo、database、python、workflow 及经授权的定时任务工具：
 
 - todo_write：模型登记和维护任务计划。
 - database_query：列出授权 PostgreSQL 连接、发现获准 schema 的表和字段、执行受限只读 SQL。多连接使用 connectionId，表名须带 schema。工具读取表和字段注释；账号权限与 RLS 继续约束可见数据。当前 MySQL 仅提供连接配置与探测。
 - python_analysis：沙箱可用时执行通用分析代码；输入必须是当前 owner、租户和 Run 授权的数据引用。当前产物通道保留 PNG。
 - create_workflow：用本次参数试跑模型生成的编排，成功后提出保存邀请。脚本入口支持异步函数体及 `async function (args) { … }` 包装，编译失败返回 `invalid_workflow_script`。
 - sub_agent：接收 prompt，启动独立的只读分析循环，只向父级返回最终结果。
+- schedule_read 读取当前工作区内本人计划和触发历史。schedule_write 生成一次所有者确认，摘要包含计划变更和按计划时区显示的预计触发时间，分析内容保留 Markdown 换行。工具使用已批准的计划版本、Run 租约与持久 Action 同事务完成更新和 Checkpoint。定时 Run 只装配读取工具。
 - 个人工作流：按用户及工作区装配启用的动态资产，执行时再次复验。模型工具清单保留通用和 MCP 工具，剩余槽位按创建时间装配资产。
 - 用户配置的 MCP：每个 Run 重新发现，沿用统一授权、预算、审批、取消和恢复机制。
 

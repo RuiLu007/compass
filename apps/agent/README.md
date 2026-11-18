@@ -5,7 +5,7 @@
 从工程根运行 `pnpm dev -F agent`，统一加载根 `.env`。本目录 `turbo.json` 为构建和静态检查声明 Python 工具链缓存指纹；开发、迁移及 seed 不缓存。
 
 - `/healthz`：进程存活，无数据库依赖。
-- `/readyz`：数据库连接、演示、模型、数据连接和工作流资产表可用性，未迁移至 0014、Runtime 密钥/Redis/执行权不可用时返回 503。
+- `/readyz`：数据库连接、演示、模型、数据连接和工作流资产表可用性，未迁移至 0015、Runtime 密钥或 Redis 不可用、运行协议或共享策略失配时返回 503。
 - `/v1/demo/overview`：固定合成数据聚合；默认关闭，启用后仍只读。空数据或数据库故障返回 503。
 
 Feature 993 增加进程内 LLM Runtime、平台模型 Provider 配置、能力测试和 Chat 调用。`models/` 拥有配置与元记录，`llm/` 统一参数、适配器、结果和错误；`api/models.py` 提供内部 HTTP 入口。账户、租户与权限由 Web / BFF 拥有，每次调用先完成短事务鉴权，再携服务令牌及可信上下文调用 Agent。Agent 校验上下文与 Provider 状态，不访问 Web 业务表。Feature 989 在此基础上增加进程内 Run / Step、顺序 ReAct、固定 Retail 查询、SSE 进度、CSV 与在途终止；第 16～18 课补充计划预算、Workflow、统一工具调度、MCP 与独立 Sandbox；第 19 课接入持久 Session/Run、Redis 投影与人工确认，见 [运行说明](../../docs/lesson-19-durable-runtime.md)。
@@ -97,7 +97,7 @@ Agent 使用 OTel 1.45.2 显式关联请求、分类、路由、逻辑调用、�
 
 0008 增加个人 MCP 配置与 Sandbox 分配租约。OpenSandbox + NFS-Ganesha 本地启动入口为 `pnpm sandbox up`。工具的环境、副作用、审批和批次策略分别配置；审批与原 Run 接续由第 19 课持久服务处理。
 
-第 20 课队列、两个独立 Worker、0010 迁移与恢复入口见 [运行说明](../../docs/lesson-20-production-runtime.md)。
+第 20 课多副本消费、Scheduler、0015 迁移与恢复入口见 [运行说明](../../docs/lesson-20-production-runtime.md)。
 
 会话首次受理时保存由首条消息生成的临时标题。Agent 后台用已选模型或 Auto 的 Flash 模型生成短标题，持久化到会话。手动改名优先，已结束会话支持软删除。数据库升级与恢复见 [agent/main](db/main/README.md)。
 

@@ -165,8 +165,6 @@ importers:
         specifier: 5.0.4
         version: 5.0.4(@types/node@24.10.1)(vite@8.3.4(@types/node@24.10.1)(jiti@2.7.0))
 
-  apps/worker: {}
-
   tools/data-seed: {}
 
 packages:

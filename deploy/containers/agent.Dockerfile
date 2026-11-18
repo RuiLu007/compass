@@ -11,7 +11,6 @@ ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
 COPY pyproject.toml uv.lock ./
 COPY apps/agent/pyproject.toml apps/agent/pyproject.toml
 COPY apps/memory/pyproject.toml apps/memory/pyproject.toml
-COPY apps/worker/pyproject.toml apps/worker/pyproject.toml
 COPY tools/data-seed/pyproject.toml tools/data-seed/pyproject.toml
 RUN uv sync --frozen --no-dev --package compass-agent --no-install-workspace
 COPY apps/agent apps/agent

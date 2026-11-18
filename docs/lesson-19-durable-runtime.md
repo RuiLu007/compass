@@ -4,6 +4,11 @@ Compass 的分析页使用服务端 Session、Run 与 Message。首次提交分�
 
 ## 本地配置
 
+分析首页「第 19 课 · 持久运行与人工确认」有两个入口。先用 `pnpm start` 启动本地服务，准备可用模型和已授权的 Retail PostgreSQL 连接。
+
+1. **暂停、刷新与继续。** 发送后在执行过程中点「暂停」，确认已暂停再刷新原会话，检查已完成节点仍可见。点击「继续」，检查同一 Run 推进至完成。绘图成功后再次刷新，下载原图。此案例需要 Sandbox。
+2. **人工确认后查一个数。** 在当前用户的 MCP 连接中启用能按日查询实付总额的工具，将该工具策略设为 `read_only / required`。发送预填问题，等待审批卡片出现。刷新原会话后由有权限的租户管理员点击批准，观察同一 Run 执行查询并返回金额。另起一次任务点拒绝，可检查查询未派发。
+
 沿用 Web/Agent 数据库与第 16～18 课的模型、授权数据连接和 Sandbox 配置。在根 `.env` 设置独立的 `COMPASS_RUNTIME_STATE_KEY`，使用 `uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'` 生成，保存到私有环境及备份密钥库。`COMPASS_MODEL_ENCRYPTION_KEY` 继续负责模型和连接凭据。
 
 ```bash

@@ -4,10 +4,9 @@ import json
 import os
 from typing import Any, cast
 
+from compass_agent import main
 from compass_agent.api.runs import RunContext, get_agent_executor
-from compass_agent.api.worker_runs import WorkerContext, get_worker_executor
 from compass_agent.data_connections.transport import AuthorizedDatabaseBinding as RetailBinding
-from compass_agent.main import app
 from compass_agent.runtime.context import compass_definition
 from compass_agent.runtime.service import RunService
 from compass_agent.schemas import TenantScope, ToolCall, ToolCallFunction
@@ -95,32 +94,35 @@ class ToolModels(FakeModels):
         )
 
 
-async def executor(context: RunContext, request: Request):
-    assert isinstance(context.scope, TenantScope)
-    scope = context.scope
+def build_executor(tool_loader):
+    dsn = os.environ["COMPASS_WORKFLOW_E2E_RETAIL_DSN"]
     from urllib.parse import urlsplit
 
-    dsn = os.environ["COMPASS_WORKFLOW_E2E_RETAIL_DSN"]
-    binding = RetailBinding(
-        tenant_id=scope.tenant_id,
-        workspace_id=scope.workspace_id,
-        role=urlsplit(dsn).username or "",
-        dsn=SecretStr(dsn),
-    )
+    def binding(scope):
+        if not isinstance(scope, TenantScope):
+            return None
+        return RetailBinding(
+            tenant_id=scope.tenant_id,
+            workspace_id=scope.workspace_id,
+            role=urlsplit(dsn).username or "",
+            dsn=SecretStr(dsn),
+        )
+
     return RunService(
         cast(Any, ToolModels([])),
         cast(Any, FakeRouting(selected_route())),
-        tools_provider=provider_for(lambda subject: binding if subject == scope else None),
-        tool_loader=request.app.state.tool_loader,
+        tools_provider=provider_for(binding),
+        tool_loader=tool_loader,
         definition=compass_definition(),
     )
 
 
+async def executor(context: RunContext, request: Request):
+    return build_executor(request.app.state.tool_loader)
+
+
+app = main.app
 app.dependency_overrides[get_agent_executor] = executor
-
-
-async def worker_executor(request: Request, context: WorkerContext):
-    return await executor(context, request)
-
-
-app.dependency_overrides[get_worker_executor] = worker_executor
+main.build_agent_executor = lambda settings, engine, app_state, model_service, **kwargs: (
+    build_executor(app_state.tool_loader)
+)

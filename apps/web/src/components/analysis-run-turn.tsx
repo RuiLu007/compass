@@ -3,8 +3,7 @@
 import Image from "next/image";
 import { memo, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Download, FileSpreadsheet, Sparkles } from "lucide-react";
-import Markdown, { defaultUrlTransform, type Components } from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { AnalysisMarkdown } from "./analysis-markdown";
 import type {
   AnalysisFileView,
   AnalysisRunScope,
@@ -26,6 +25,9 @@ const runErrors: Record<string, string> = {
   input_token_limit_exceeded: "模型拒绝了超出输入或上下文窗口限制的请求。",
   output_token_limit_exceeded: "模型拒绝了请求的输出 token 上限。",
   invalid_model_input: "模型拒绝了本次请求的输入或生成参数。",
+  model_rate_limited: "上游模型限流，请稍后重试或更换模型。",
+  runtime_overloaded: "模型调用容量已满，请稍后重试。",
+  run_budget_exhausted: "本次运行预算已耗尽，请核对分析范围后重试。",
   model_failed: "模型调用失败，本轮分析未完成。",
   model_incomplete: "模型返回结果不完整，本轮分析未完成。",
   model_unavailable: "所选模型当前不可用，请重新选择后再试。",
@@ -65,6 +67,7 @@ function processLabel(turn: AnalysisTurnView) {
   if (turn.errorMessage) return "结果待确认";
   if (turn.stopState === "unconfirmed") return "终止请求未确认";
   if (turn.stopState === "already_terminal") return "已结束，等待结果";
+  if (turn.cancellationBlocked) return "终止待核对";
   if (turn.stopState !== "idle") return "正在终止";
   switch (turn.runStatus) {
     case "created":
@@ -119,36 +122,6 @@ function parsePreview(source: string | null | undefined): Record<string, unknown
     return undefined;
   }
 }
-
-const markdownComponents: Components = {
-  table: ({ children }) => (
-    <div className="analysis-markdown-table" tabIndex={0} role="region" aria-label="数据表格">
-      <table>{children}</table>
-    </div>
-  ),
-  pre: ({ children }) => <pre tabIndex={0}>{children}</pre>,
-};
-
-const AnalysisMarkdown = memo(function AnalysisMarkdown({
-  source,
-  revealing,
-}: {
-  source: string;
-  revealing: boolean;
-}) {
-  return (
-    <div className="analysis-markdown" data-revealing={revealing}>
-      <Markdown
-        remarkPlugins={[remarkGfm]}
-        components={markdownComponents}
-        skipHtml
-        urlTransform={(url) => defaultUrlTransform(url) || undefined}
-      >
-        {source}
-      </Markdown>
-    </div>
-  );
-});
 
 function markdownPrefix(source: string, end: number) {
   if (end === source.length) return source;

@@ -64,10 +64,12 @@ class RunToolBindings:
         *,
         entries=(),
         workflow=False,
+        catalog=None,
     ):
         self.entries = tuple(entries)
         self.assets_by_tool: dict[str, WorkflowAssetView] = {}
         self.workflow = workflow
+        self.catalog = catalog
         self.subagent = SubAgent(self)
         self.workflow_tools = (
             WorkflowTools(self, executor.workflow_assets, executor.workflow_drafts)
@@ -121,12 +123,15 @@ class RunToolBindings:
     def freeze(self):
         if self.runtime is not None:
             return
-        context = CatalogContext(
+        context = self.catalog or CatalogContext(
             self.executor.definition.builtin_tools,
             sandbox=self.loader.sandbox is not None,
             workflow=self.workflow,
         )
-        entries = [*self.entries, *registrations(context, self._handler)]
+        entries = [
+            *self.entries,
+            *registrations(replace(context, workflow=self.workflow), self._handler),
+        ]
         self.runtime = self.loader.assemble(
             entries if self.supported else (), self.discovered if self.supported else None
         )
@@ -148,7 +153,7 @@ class RunToolBindings:
                     required=False,
                     data={
                         "catalogId": self.runtime.registry.catalog_id,
-                        "loadedMcpTools": self.discovered.summary.loaded if self.discovered else 0,
+                        "loadedMcpTools": len(self.discovered.entries) if self.discovered else 0,
                         "skippedMcpConnections": self.discovered.summary.skipped
                         if self.discovered
                         else 0,

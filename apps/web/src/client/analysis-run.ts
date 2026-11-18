@@ -111,6 +111,7 @@ export type AnalysisTurnView = TraceInfo & {
   execution?: ExecutionNode[];
   latestExecutionId?: string;
   runStatus?: components["schemas"]["RunPublicSnapshot"]["status"];
+  cancellationBlocked?: boolean;
   autonomy?: RunAutonomyResult;
   startedAtMs?: number;
   submittedAtMs?: number;

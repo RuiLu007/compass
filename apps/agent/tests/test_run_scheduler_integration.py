@@ -13,12 +13,11 @@ from threading import Event
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
-import httpx
 import psycopg
 import pytest
-from compass_agent.api import worker_runs
 from compass_agent.data_connections.transport import AuthorizedDatabaseBinding
 from compass_agent.execution_context import current_execution
+from compass_agent.models.attempts import AttemptRecorder
 from compass_agent.models.entities import ModelCall
 from compass_agent.models.errors import ModelError
 from compass_agent.models.repository import ModelRepository
@@ -46,7 +45,7 @@ from compass_agent.runtime.hitl import HumanDecisions
 from compass_agent.runtime.journal import BoundaryYield, ExecutionJournal, RecoveryStop
 from compass_agent.runtime.legacy import start_legacy
 from compass_agent.runtime.resources import RuntimeResources
-from compass_agent.runtime.run_scheduler import WorkerIdentity
+from compass_agent.runtime.run_scheduler import AdvanceCommand, ConsumerSlot
 from compass_agent.runtime.store import RuntimeStore
 from compass_agent.schemas import (
     AnalysisFileNone,
@@ -57,16 +56,15 @@ from compass_agent.schemas import (
     RunCompleted,
     RunWaiting,
     TenantScope,
-    WorkerAdvanceCommand,
 )
 from compass_agent.settings import Settings
 from compass_agent.tools.builtin.database_query.handler import registration
+from compass_agent.tools.contracts import PhaseCanceled
+from compass_agent.tools.sandbox.allocations import Allocations
 from compass_agent.workflows.assets import WorkflowAssets
 from compass_agent.workflows.drafts import WorkflowDrafts
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 from pydantic import SecretStr
-from sqlalchemy import create_engine, event, func, select, text
+from sqlalchemy import MetaData, Table, create_engine, event, func, select, text
 from sqlalchemy.orm import Session
 
 from .test_agent_run import CHAT, model_result
@@ -101,8 +99,17 @@ def engine(targets):
 
 @asynccontextmanager
 async def runtime_service(engine, **settings):
+    small = {
+        "compass_runtime_max_active": 2,
+        "compass_runtime_tenant_active": 1,
+        "compass_runtime_max_backlog": 12,
+        "compass_runtime_tenant_backlog": 4,
+    }
     runtime = DurableRuntime(
-        engine, Settings().model_copy(update=settings), RunRegistry(), schedule_jobs=True
+        engine,
+        Settings().model_copy(update={**small, **settings}),
+        RunRegistry(),
+        schedule_jobs=True,
     )
 
     async def allowed(context, **kwargs):
@@ -307,7 +314,7 @@ def test_parked_task_keeps_backlog_and_resume_reuses_reserved_position(engine):
     async def scenario():
         async with runtime_service(engine, compass_runtime_tenant_backlog=2) as runtime:
             first = await submit(runtime)
-            worker = WorkerIdentity("worker-a", uuid4())
+            worker = ConsumerSlot("worker-a", uuid4())
             grant = await claim(runtime, worker, first)
             await checkpoint(runtime, first, grant.epoch)
             control(runtime.store, first, "pause", control_command(runtime, first), owner())
@@ -330,7 +337,7 @@ def test_parked_task_keeps_backlog_and_resume_reuses_reserved_position(engine):
                 control(runtime.store, first, "resume", control_command(runtime, first), owner())
             await runtime.publisher.flush(first)
             await claim(runtime, worker, second)
-            assert scheduler(runtime).claim(WorkerIdentity("worker-b", uuid4())) is None
+            assert scheduler(runtime).claim(ConsumerSlot("worker-b", uuid4())) is None
             assert counts(engine)["agent_run_job"] == 2
 
     asyncio.run(scenario())
@@ -348,7 +355,7 @@ def test_resume_reuses_original_constraints_and_remaining_active_time(engine):
             receipt = runtime.store.submit(submitted, owner())
             run_id = UUID(receipt["runId"])
             await runtime.publisher.flush(run_id)
-            worker = WorkerIdentity("worker-a", uuid4())
+            worker = ConsumerSlot("worker-a", uuid4())
             first = await claim(runtime, worker, run_id)
             await checkpoint(runtime, run_id, first.epoch)
             runtime.store.record_active_time(run_id, first.epoch, 4000)
@@ -393,9 +400,7 @@ def test_claim_skips_locked_candidate_without_changing_its_fairness_position(eng
                     select(locked_table).where(locked_table.id == identifier).with_for_update()
                 )
                 granted = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        scheduler(runtime).claim, WorkerIdentity("worker-a", uuid4())
-                    ),
+                    asyncio.to_thread(scheduler(runtime).claim, ConsumerSlot("worker-a", uuid4())),
                     2,
                 )
                 assert granted is not None and granted.run_id == second
@@ -405,7 +410,7 @@ def test_claim_skips_locked_candidate_without_changing_its_fairness_position(eng
                     assert a is not None and b is not None
                     assert a.last_claimed_at is None and b.last_claimed_at is not None
             await runtime.publisher.flush(second)
-            await claim(runtime, WorkerIdentity("worker-b", uuid4()), first)
+            await claim(runtime, ConsumerSlot("worker-b", uuid4()), first)
 
     asyncio.run(scenario())
 
@@ -417,27 +422,25 @@ def test_claim_recovers_lost_response_and_enforces_boot_worker_and_active_slots(
             await submit(runtime)
             second = await submit(runtime, TENANT_B)
             third = await submit(runtime, TENANT_C)
-            worker = WorkerIdentity("worker-a", uuid4())
+            worker = ConsumerSlot("worker-a", uuid4())
             results = await asyncio.gather(
                 *(asyncio.to_thread(scheduler(runtime).claim, worker) for _ in range(6))
             )
             assert all(value == results[0] for value in results)
             assert results[0] is not None and results[0].run_id == first
             assert job(engine, first).claim_count == 1
-            assert scheduler(runtime).claim(WorkerIdentity(worker.worker_id, uuid4())) is None
-            grant_b = await claim(runtime, WorkerIdentity("worker-b", uuid4()), second)
-            assert scheduler(runtime).claim(WorkerIdentity("worker-c", uuid4())) is None
-            assert scheduler(runtime).heartbeat(
-                WorkerIdentity("worker-b", grant_b.boot_id), grant_b
-            )
+            assert scheduler(runtime).claim(ConsumerSlot(worker.worker_id, uuid4())) is None
+            grant_b = await claim(runtime, ConsumerSlot("worker-b", uuid4()), second)
+            assert scheduler(runtime).claim(ConsumerSlot("worker-c", uuid4())) is None
+            assert scheduler(runtime).heartbeat(ConsumerSlot("worker-b", grant_b.boot_id), grant_b)
             with pytest.raises(ModelError, match="lease_lost"):
-                scheduler(runtime).heartbeat(WorkerIdentity("worker-c", grant_b.boot_id), grant_b)
+                scheduler(runtime).heartbeat(ConsumerSlot("worker-c", grant_b.boot_id), grant_b)
             scheduler(runtime).release(worker, results[0])
             assert job(engine, first).status == "reclaiming"
-            assert scheduler(runtime).claim(WorkerIdentity("worker-c", uuid4())) is None
+            assert scheduler(runtime).claim(ConsumerSlot("worker-c", uuid4())) is None
             await runtime.recover_scheduled()
             await runtime.publisher.flush(first)
-            await claim(runtime, WorkerIdentity("worker-c", uuid4()), third)
+            await claim(runtime, ConsumerSlot("worker-c", uuid4()), third)
 
     asyncio.run(scenario())
 
@@ -446,7 +449,7 @@ def test_heartbeat_changes_only_lease_expiry_and_rejects_expired_grant(engine):
     async def scenario():
         async with runtime_service(engine) as runtime:
             run_id = await submit(runtime)
-            worker = WorkerIdentity("worker-a", uuid4())
+            worker = ConsumerSlot("worker-a", uuid4())
             grant = await claim(runtime, worker, run_id)
             before = runtime.store.read_run(run_id)
             before_counts = counts(engine)
@@ -474,7 +477,7 @@ def test_waiting_for_row_lock_past_ttl_uses_current_database_clock(engine, opera
     async def scenario():
         async with runtime_service(engine) as runtime:
             run_id = await submit(runtime)
-            worker = WorkerIdentity("worker-a", uuid4())
+            worker = ConsumerSlot("worker-a", uuid4())
             grant = await claim(runtime, worker, run_id)
             with Session(engine) as tx, tx.begin():
                 lease = tx.get(AgentRunJob, run_id)
@@ -493,7 +496,7 @@ def test_waiting_for_row_lock_past_ttl_uses_current_database_clock(engine, opera
                 if operation == "heartbeat":
                     return scheduler(runtime).heartbeat(worker, grant)
                 if operation == "advance":
-                    request = WorkerAdvanceCommand(grant=grant, expectedCheckpoint=0)
+                    request = AdvanceCommand(grant=grant, expectedCheckpoint=0)
                     return scheduler(runtime).prepare_advance(worker, request)
                 return runtime.store.progress(run_id, grant.epoch, [])
 
@@ -521,9 +524,9 @@ def test_advance_polling_and_old_committed_receipt_do_not_repeat_an_attempt(engi
     async def scenario():
         async with runtime_service(engine) as runtime:
             run_id = await submit(runtime)
-            worker = WorkerIdentity("worker-a", uuid4())
+            worker = ConsumerSlot("worker-a", uuid4())
             grant = await claim(runtime, worker, run_id)
-            request = WorkerAdvanceCommand(grant=grant, expectedCheckpoint=0)
+            request = AdvanceCommand(grant=grant, expectedCheckpoint=0)
             accepted = await asyncio.gather(
                 *(
                     asyncio.to_thread(scheduler(runtime).prepare_advance, worker, request)
@@ -547,7 +550,7 @@ def test_advance_polling_and_old_committed_receipt_do_not_repeat_an_attempt(engi
             assert scheduler(runtime).prepare_advance(worker, request) == (committed, False)
             with pytest.raises(ModelError, match="runtime_unavailable") as unavailable:
                 scheduler(runtime).prepare_advance(
-                    worker, WorkerAdvanceCommand(grant=refreshed, expectedCheckpoint=1)
+                    worker, AdvanceCommand(grant=refreshed, expectedCheckpoint=1)
                 )
             assert unavailable.value.status == 503
             assert counts(engine) == before_unavailable
@@ -555,13 +558,13 @@ def test_advance_polling_and_old_committed_receipt_do_not_repeat_an_attempt(engi
             scheduler(runtime).release(worker, refreshed)
             await runtime.recover_scheduled()
             await runtime.publisher.flush(run_id)
-            successor = await claim(runtime, WorkerIdentity("worker-b", uuid4()), run_id)
+            successor = await claim(runtime, ConsumerSlot("worker-b", uuid4()), run_id)
             assert successor.epoch != grant.epoch and successor.checkpoint_no == 1
             before = counts(engine)
             assert scheduler(runtime).prepare_advance(worker, request) == (committed, False)
             with pytest.raises(ModelError, match="lease_lost"):
                 scheduler(runtime).prepare_advance(
-                    worker, WorkerAdvanceCommand(grant=grant, expectedCheckpoint=1)
+                    worker, AdvanceCommand(grant=grant, expectedCheckpoint=1)
                 )
             with pytest.raises(ModelError, match="execution_fenced"):
                 runtime.store.progress(run_id, grant.epoch, [])
@@ -578,12 +581,12 @@ def test_advance_polling_and_old_committed_receipt_do_not_repeat_an_attempt(engi
 
 def test_agent_restart_reclaims_unstarted_advance_and_preserves_original_attempt(engine):
     async def scenario():
-        worker = WorkerIdentity("worker-a", uuid4())
+        worker = ConsumerSlot("worker-a", uuid4())
         async with runtime_service(engine) as runtime:
             run_id = await submit(runtime)
             grant = await claim(runtime, worker, run_id)
             await checkpoint(runtime, run_id, grant.epoch)
-            request = WorkerAdvanceCommand(grant=grant, expectedCheckpoint=1)
+            request = AdvanceCommand(grant=grant, expectedCheckpoint=1)
             ack, start = scheduler(runtime).prepare_advance(worker, request)
             assert start and ack.status == "running"
             with Session(engine) as tx:
@@ -597,7 +600,7 @@ def test_agent_restart_reclaims_unstarted_advance_and_preserves_original_attempt
                 ).one()
                 assert receipt.response["state"] == "interrupted"
                 assert tx.scalars(select(AgentAttempt.id)).all() == [original_attempt]
-            fresh = await claim(restarted, WorkerIdentity("worker-a", uuid4()), run_id)
+            fresh = await claim(restarted, ConsumerSlot("worker-a", uuid4()), run_id)
             assert fresh.epoch != grant.epoch and fresh.checkpoint_no == 1
             with pytest.raises(ModelError, match="lease_lost"):
                 scheduler(restarted).prepare_advance(worker, request)
@@ -713,7 +716,7 @@ def test_legacy_control_admission_is_atomic_and_every_success_only_enqueues(engi
             with pytest.raises(ModelError, match="worker_required"):
                 runtime.store.claim(run_id, runtime.boot_id)
             await runtime.publisher.flush(run_id)
-            grant = await claim(runtime, WorkerIdentity("worker-a", uuid4()), run_id)
+            grant = await claim(runtime, ConsumerSlot("worker-a", uuid4()), run_id)
             assert grant.checkpoint_no == (0 if entry == "created" else 1)
 
     asyncio.run(scenario())
@@ -748,7 +751,7 @@ def test_cancel_and_reclaim_block_new_dispatch_until_resources_are_settled(engin
     async def scenario():
         async with runtime_service(engine, compass_runtime_tenant_backlog=1) as runtime:
             run_id = await submit(runtime)
-            worker = WorkerIdentity("worker-a", uuid4())
+            worker = ConsumerSlot("worker-a", uuid4())
             grant = await claim(runtime, worker, run_id) if claimed else None
             request = control_command(runtime, run_id)
             receipt = control(runtime.store, run_id, "cancel", request, owner())
@@ -756,11 +759,15 @@ def test_cancel_and_reclaim_block_new_dispatch_until_resources_are_settled(engin
             if grant:
                 assert job(engine, run_id).status == "reclaiming"
                 assert job(engine, run_id).worker_id == worker.worker_id
+                repeated = control(
+                    runtime.store, run_id, "cancel", control_command(runtime, run_id), owner()
+                )
+                assert repeated["status"] == "cancelling"
                 with pytest.raises(ModelError, match="runtime_backpressure"):
                     runtime.store.submit(command(), owner())
                 with pytest.raises(ModelError, match="lease_lost"):
                     scheduler(runtime).prepare_advance(
-                        worker, WorkerAdvanceCommand(grant=grant, expectedCheckpoint=0)
+                        worker, AdvanceCommand(grant=grant, expectedCheckpoint=0)
                     )
                 with pytest.raises(ModelError, match="lease_lost"):
                     scheduler(runtime).heartbeat(worker, grant)
@@ -778,7 +785,273 @@ def test_cancel_and_reclaim_block_new_dispatch_until_resources_are_settled(engin
                 for packet in snapshot.packets
             )
             next_run = await submit(runtime)
-            await claim(runtime, WorkerIdentity("worker-b", uuid4()), next_run)
+            await claim(runtime, ConsumerSlot("worker-b", uuid4()), next_run)
+
+    asyncio.run(scenario())
+
+
+def test_reclaim_waits_for_cleanup_without_canceling_it_again(engine):
+    async def scenario():
+        async with runtime_service(engine) as runtime:
+            run_id = await submit(runtime)
+            await claim(runtime, ConsumerSlot("worker-draining", uuid4()), run_id)
+            entered, cleaning, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+            async def active():
+                entered.set()
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    cleaning.set()
+                    await release.wait()
+
+            task = asyncio.create_task(active())
+            runtime.tasks[run_id] = task
+            await entered.wait()
+            control(runtime.store, run_id, "cancel", control_command(runtime, run_id), owner())
+            try:
+                await runtime.recover_scheduled()
+                assert cleaning.is_set() and not task.done()
+                await runtime.recover_scheduled()
+                assert not task.done() and task.cancelling() == 1
+                assert job(engine, run_id).status == "reclaiming"
+            finally:
+                release.set()
+                await asyncio.gather(task, return_exceptions=True)
+            await runtime.recover_scheduled()
+            assert runtime.store.read_run(run_id).status == "canceled"
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("receipt_state", ["confirmed", "late", "prepared", "absent"])
+def test_cancel_reclaims_fenced_model_with_confirmed_cleanup(engine, receipt_state):
+    async def scenario():
+        async with runtime_service(engine) as runtime:
+            repository = ModelRepository(
+                engine, SecretStore(os.environ["COMPASS_MODEL_ENCRYPTION_KEY"]), ORIGINS
+            )
+            _, provider = create_provider(repository, alias="Cancel model fixture")
+            run_id = await submit(runtime)
+            grant = await claim(runtime, ConsumerSlot("worker-model-cancel", uuid4()), run_id)
+            journal = ExecutionJournal(runtime.store, runtime.publisher, run_id, grant.epoch)
+            step_id, attempt_id, _ = journal.prepare("model", "root/model:1", {}, None)
+            journal.dispatched(attempt_id)
+            physical_id = None
+            if receipt_state != "absent":
+                _, physical_id = ledger_attempt(
+                    runtime,
+                    repository,
+                    provider.provider_id,
+                    owner(),
+                    usage={},
+                    actual_cost=None,
+                    status="dispatched",
+                    reserved_tokens=120,
+                    run_id=run_id,
+                    agent_attempt_id=attempt_id,
+                )
+            control(runtime.store, run_id, "cancel", control_command(runtime, run_id), owner())
+            journal.unknown(attempt_id)
+            if receipt_state == "late":
+                await runtime.recover_scheduled()
+                assert job(engine, run_id).status == "parked"
+                await runtime.publisher.flush(run_id)
+                view = runtime.store.read_run(run_id).public_view["run"]
+                assert (view["status"], view["recoveryStatus"]) == ("cancelling", "blocked")
+            if physical_id:
+                with Session(engine) as tx, tx.begin():
+                    physical = tx.get(ModelAttempt, physical_id)
+                    assert physical is not None
+                    if receipt_state == "prepared":
+                        physical.status, physical.sent = "prepared", False
+                        physical.dispatched_at, physical.outcome_unknown = None, False
+                    else:
+                        physical.status, physical.cleanup_confirmed = "canceled", True
+                        physical.finished_at = tx.scalar(select(func.clock_timestamp()))
+            await runtime.recover_scheduled()
+            await runtime.publisher.flush(run_id)
+
+            run = runtime.store.read_run(run_id)
+            assert (run.status, run.cleanup_status, run.recovery_status) == (
+                "canceled",
+                "confirmed",
+                "ready",
+            )
+            assert run.public_view["run"]["status"] == "canceled"
+            assert job(engine, run_id).status == "done"
+            with Session(engine) as tx:
+                logical = tx.get(AgentAttempt, attempt_id)
+                step = tx.get(AgentStep, step_id)
+                assert logical and logical.status == "canceled"
+                assert step and step.status == "canceled"
+                if physical_id:
+                    physical = tx.get(ModelAttempt, physical_id)
+                    assert physical and physical.status == "canceled"
+                    assert physical.cleanup_confirmed and physical.reserved_tokens == 120
+                    assert physical.outcome_unknown == (receipt_state != "prepared")
+            assert runtime.store.submit(command(sessionId=str(run.session_id)), owner())
+
+    asyncio.run(scenario())
+
+
+def test_cancel_during_model_dispatch_records_that_provider_was_never_called(engine):
+    async def scenario():
+        async with runtime_service(engine) as runtime:
+            repository = ModelRepository(
+                engine, SecretStore(os.environ["COMPASS_MODEL_ENCRYPTION_KEY"]), ORIGINS
+            )
+            _, provider = create_provider(repository, alias="Cancel before model send")
+            run_id = await submit(runtime)
+            grant = await claim(runtime, ConsumerSlot("worker-before-send", uuid4()), run_id)
+            journal = ExecutionJournal(runtime.store, runtime.publisher, run_id, grant.epoch)
+            _, attempt_id, _ = journal.prepare("model", "root/model:1", {}, None)
+            journal.dispatched(attempt_id)
+            _, physical_id = ledger_attempt(
+                runtime,
+                repository,
+                provider.provider_id,
+                owner(),
+                usage={},
+                actual_cost=None,
+                status="prepared",
+                run_id=run_id,
+                agent_attempt_id=attempt_id,
+            )
+            with Session(engine) as tx, tx.begin():
+                physical = tx.get(ModelAttempt, physical_id)
+                assert physical is not None
+                physical.sent = physical.outcome_unknown = False
+                physical.dispatched_at = None
+
+            entered, release = Event(), Event()
+
+            def slow_dispatch(connection, cursor, statement, parameters, context, executemany):
+                if statement.startswith("UPDATE model_attempt") and not entered.is_set():
+                    entered.set()
+                    assert release.wait(5)
+
+            token = current_execution.set(journal)
+            try:
+                recorder = AttemptRecorder(repository)
+            finally:
+                current_execution.reset(token)
+            event.listen(engine, "before_cursor_execute", slow_dispatch)
+            try:
+                dispatch = asyncio.create_task(recorder.dispatched(physical_id))
+                assert await asyncio.to_thread(entered.wait, 5)
+                dispatch.cancel()
+                await asyncio.sleep(0)
+                release.set()
+                with pytest.raises(asyncio.CancelledError):
+                    await dispatch
+            finally:
+                release.set()
+                event.remove(engine, "before_cursor_execute", slow_dispatch)
+            with Session(engine) as tx:
+                physical = tx.get(ModelAttempt, physical_id)
+                assert physical and physical.status == "canceled" and physical.cleanup_confirmed
+                assert not physical.sent and not physical.outcome_unknown
+
+            control(runtime.store, run_id, "cancel", control_command(runtime, run_id), owner())
+            await runtime.recover_scheduled()
+            assert runtime.store.read_run(run_id).status == "canceled"
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("receipt", ["before_call", "closed", "returned", "unknown"])
+def test_cancel_fences_tool_output_but_accepts_confirmed_cleanup(engine, receipt):
+    async def scenario():
+        async with runtime_service(engine) as runtime:
+            run_id = await submit(runtime)
+            grant = await claim(runtime, ConsumerSlot("worker-tool-cancel", uuid4()), run_id)
+            journal = ExecutionJournal(runtime.store, runtime.publisher, run_id, grant.epoch)
+            dispatched, release = Event(), Event()
+            invoked = asyncio.Event()
+            record_dispatch = journal.dispatched
+
+            def delayed_dispatch(attempt_id):
+                record_dispatch(attempt_id)
+                dispatched.set()
+                assert release.wait(5)
+
+            async def operation():
+                invoked.set()
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    if receipt == "returned":
+                        return {"status": "canceled", "cleanup": "confirmed"}
+                    raise PhaseCanceled(cleanup_confirmed=receipt == "closed") from None
+
+            if receipt == "before_call":
+                journal.dispatched = delayed_dispatch
+            task = asyncio.create_task(journal.call("tool", "root/test-tool", {}, operation, dict))
+            try:
+                if receipt == "before_call":
+                    assert await asyncio.to_thread(dispatched.wait, 5)
+                else:
+                    await asyncio.wait_for(invoked.wait(), 5)
+                control(runtime.store, run_id, "cancel", control_command(runtime, run_id), owner())
+                task.cancel()
+            finally:
+                release.set()
+            if receipt == "returned":
+                with pytest.raises(ModelError, match="execution_fenced"):
+                    await task
+            else:
+                with pytest.raises(PhaseCanceled) as canceled:
+                    await task
+                assert canceled.value.cleanup_confirmed == (receipt != "unknown")
+            assert invoked.is_set() == (receipt != "before_call")
+            await runtime.recover_scheduled()
+            await runtime.publisher.flush(run_id)
+            run = runtime.store.read_run(run_id)
+            if receipt == "unknown":
+                assert run.public_view["run"]["recoveryStatus"] == "blocked"
+                assert run.status == "cancelling" and job(engine, run_id).status == "reclaiming"
+            else:
+                assert run.status == "canceled" and job(engine, run_id).status == "done"
+            with Session(engine) as tx:
+                attempt = tx.scalars(
+                    select(AgentAttempt).where(AgentAttempt.run_id == run_id)
+                ).one()
+                assert attempt.output_content is None and run.checkpoint_no is None
+                assert attempt.status == ("dispatched" if receipt == "unknown" else "canceled")
+
+    asyncio.run(scenario())
+
+
+def test_cancellation_finishes_after_sandbox_reconciliation(engine):
+    async def scenario():
+        async with runtime_service(engine) as runtime:
+            run_id = await submit(runtime)
+            grant = await claim(runtime, ConsumerSlot("worker-sandbox-cancel", uuid4()), run_id)
+            journal = ExecutionJournal(runtime.store, runtime.publisher, run_id, grant.epoch)
+            step_id, attempt_id, _ = journal.prepare("tool", "root/sandbox", {}, None)
+            journal.dispatched(attempt_id)
+            scope = owner().scope
+            assert isinstance(scope, TenantScope)
+            allocations = Allocations(engine, "cancel-test")
+            allocation = allocations.reserve(
+                (scope.tenant_id, scope.workspace_id, owner().actor_user_id),
+                run_id,
+                step_id,
+                "test-call",
+                uuid4(),
+                "fixture-digest",
+            )
+            control(runtime.store, run_id, "cancel", control_command(runtime, run_id), owner())
+            journal.unknown(attempt_id, sandbox_execution_id=str(allocation.id))
+            await runtime.recover_scheduled()
+            assert runtime.store.read_run(run_id).reason_code == "cleanup_unconfirmed"
+            assert job(engine, run_id).status == "reclaiming"
+
+            allocations.confirmed(allocation)
+            await runtime.recover_scheduled()
+            assert runtime.store.read_run(run_id).status == "canceled"
+            assert job(engine, run_id).status == "done"
 
     asyncio.run(scenario())
 
@@ -787,21 +1060,21 @@ def test_unknown_dispatched_attempt_remains_blocked_and_is_never_replayed(engine
     async def scenario():
         async with runtime_service(engine) as runtime:
             run_id = await submit(runtime)
-            worker = WorkerIdentity("worker-a", uuid4())
+            worker = ConsumerSlot("worker-a", uuid4())
             grant = await claim(runtime, worker, run_id)
             journal = ExecutionJournal(runtime.store, runtime.publisher, run_id, grant.epoch)
             step_id, attempt_id, _ = journal.prepare("tool", "unresolved-write", {}, None)
             journal.dispatched(attempt_id)
             expire_lease(engine, run_id)
             await runtime.recover_scheduled()
-            assert scheduler(runtime).claim(WorkerIdentity("worker-b", uuid4())) is None
+            assert scheduler(runtime).claim(ConsumerSlot("worker-b", uuid4())) is None
             run = runtime.store.read_run(run_id)
             assert run.recovery_status == "blocked"
             assert run.execution_epoch is None
             retained = job(engine, run_id)
             assert retained.status == "reclaiming" and retained.worker_id == worker.worker_id
             assert retained.worker_boot_id == worker.boot_id
-            assert scheduler(runtime).claim(WorkerIdentity(worker.worker_id, uuid4())) is None
+            assert scheduler(runtime).claim(ConsumerSlot(worker.worker_id, uuid4())) is None
             with Session(engine) as tx:
                 attempts = tx.scalars(
                     select(AgentAttempt).where(AgentAttempt.step_id == step_id)
@@ -818,7 +1091,7 @@ def test_unconfirmed_resources_retain_worker_tenant_and_global_slots(engine):
     async def scenario():
         async with runtime_service(engine, compass_runtime_tenant_backlog=1) as runtime:
             first = await submit(runtime)
-            worker = WorkerIdentity("worker-a", uuid4())
+            worker = ConsumerSlot("worker-a", uuid4())
             grant = await claim(runtime, worker, first)
             runtime.store.finish(
                 first, grant.epoch, "paused", reason="cleanup_unconfirmed", cleanup="unconfirmed"
@@ -831,11 +1104,11 @@ def test_unconfirmed_resources_retain_worker_tenant_and_global_slots(engine):
             assert held.worker_boot_id == worker.boot_id
             with pytest.raises(ModelError, match="runtime_backpressure"):
                 runtime.store.submit(command(), owner())
-            assert scheduler(runtime).claim(WorkerIdentity("worker-a", uuid4())) is None
+            assert scheduler(runtime).claim(ConsumerSlot("worker-a", uuid4())) is None
             second = await submit(runtime, TENANT_B)
-            await claim(runtime, WorkerIdentity("worker-b", uuid4()), second)
+            await claim(runtime, ConsumerSlot("worker-b", uuid4()), second)
             await submit(runtime, TENANT_C)
-            assert scheduler(runtime).claim(WorkerIdentity("worker-c", uuid4())) is None
+            assert scheduler(runtime).claim(ConsumerSlot("worker-c", uuid4())) is None
             control(runtime.store, first, "cancel", control_command(runtime, first), owner())
             await runtime.recover_scheduled()
             assert runtime.store.read_run(first).status == "cancelling"
@@ -871,138 +1144,12 @@ class BoundaryRunner:
         )
 
 
-def test_worker_http_credentials_bind_identity_and_private_grants(engine):
-    async def scenario():
-        credentials = {
-            "worker-a": "isolated-worker-a-secret",
-            "worker-b": "isolated-worker-b-secret",
-        }
-        async with runtime_service(
-            engine,
-            compass_worker_credentials=SecretStr(json.dumps(credentials)),
-            compass_agent_service_token="isolated-service-secret",
-        ) as runtime:
-            run_id = await submit(runtime)
-            app = FastAPI()
-            app.state.durable_runtime = runtime
-            app.include_router(worker_runs.router)
-            executor = BoundaryRunner()
-            app.dependency_overrides[worker_runs.get_worker_executor] = lambda: executor
-
-            @app.exception_handler(ModelError)
-            async def errors(request: Request, error: ModelError):
-                return JSONResponse({"code": error.code}, status_code=error.status)
-
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app), base_url="http://scheduler.test"
-            ) as client:
-                boot = {"bootId": str(uuid4())}
-                for token in (None, "isolated-service-secret", "unknown-worker-secret"):
-                    response = await client.post(
-                        "/internal/runtime/jobs/claim",
-                        json=boot,
-                        headers={} if token is None else {"Authorization": "Bearer " + token},
-                    )
-                    assert response.status_code == 401
-                headers = {"Authorization": "Bearer " + credentials["worker-a"]}
-                accepted = await client.post(
-                    "/internal/runtime/jobs/claim", json=boot, headers=headers
-                )
-                assert accepted.status_code == 200, accepted.text
-                assert accepted.headers["cache-control"] == "no-store"
-                grant = accepted.json()
-                assert set(grant) == {
-                    "runId",
-                    "workerId",
-                    "bootId",
-                    "epoch",
-                    "expiresAt",
-                    "checkpointNo",
-                }
-                assert grant["runId"] == str(run_id) and grant["workerId"] == "worker-a"
-                replay = await client.post(
-                    "/internal/runtime/jobs/claim", json=boot, headers=headers
-                )
-                assert replay.json() == grant
-                stale_boot = await client.post(
-                    "/internal/runtime/jobs/claim", json={"bootId": str(uuid4())}, headers=headers
-                )
-                assert stale_boot.status_code == 204 and stale_boot.headers["retry-after"] == "1"
-                forged = await client.post(
-                    "/internal/runtime/jobs/heartbeat",
-                    json={"grant": grant},
-                    headers={"Authorization": "Bearer " + credentials["worker-b"]},
-                )
-                assert forged.status_code == 409 and forged.json()["code"] == "lease_lost"
-                assert job(engine, run_id).claim_count == 1
-                renewed = await client.post(
-                    "/internal/runtime/jobs/heartbeat", json={"grant": grant}, headers=headers
-                )
-                assert renewed.status_code == 200, renewed.text
-                request = {"grant": renewed.json(), "expectedCheckpoint": 0}
-                await runtime.publisher.flush(run_id)
-                accepted_advance = await client.post(
-                    "/internal/runtime/jobs/advance", json=request, headers=headers
-                )
-                assert accepted_advance.status_code == 200, accepted_advance.text
-                assert accepted_advance.json()["status"] == "running"
-                await asyncio.wait_for(executor.started.wait(), 3)
-                # The original response can be discarded; identical retries only poll its receipt.
-                repeated = await asyncio.gather(
-                    *(
-                        client.post("/internal/runtime/jobs/advance", json=request, headers=headers)
-                        for _ in range(6)
-                    )
-                )
-                assert all(
-                    r.status_code == 200 and r.json() == accepted_advance.json() for r in repeated
-                )
-                assert executor.calls == 1
-                executor.release.set()
-                await asyncio.wait_for(runtime.tasks[run_id], 5)
-                committed = await client.post(
-                    "/internal/runtime/jobs/advance", json=request, headers=headers
-                )
-                assert committed.status_code == 200, committed.text
-                assert committed.json()["status"] == "continue"
-                assert committed.json()["checkpointNo"] == 1
-                continuation = {**request, "expectedCheckpoint": 1}
-                following = await client.post(
-                    "/internal/runtime/jobs/advance", json=continuation, headers=headers
-                )
-                assert following.status_code == 200, following.text
-                await asyncio.wait_for(runtime.tasks[run_id], 5)
-                completed = await client.post(
-                    "/internal/runtime/jobs/advance", json=continuation, headers=headers
-                )
-                assert completed.status_code == 200, completed.text
-                assert completed.json()["status"] == "done"
-                assert executor.calls == 1
-                assert job(engine, run_id).status == "done"
-                final = runtime.store.read_run(run_id)
-                assert final.status == "completed"
-                assert any(
-                    packet.event.type == "message.upsert"
-                    and packet.event.payload.role == "assistant"
-                    and packet.event.payload.status == "completed"
-                    and packet.event.payload.content.text == "计算结果为 190。"
-                    for packet in runtime.reader.messages(final.session_id, owner()).packets
-                )
-                with Session(engine) as tx:
-                    attempts = tx.scalars(
-                        select(AgentAttempt).where(AgentAttempt.run_id == run_id)
-                    ).all()
-                    assert len(attempts) == 1 and attempts[0].status == "completed"
-
-    asyncio.run(scenario())
-
-
 async def advance_to_boundary_stop(runtime, worker, grant, executor, context):
     checkpoint_no = grant.checkpoint_no
     continuations = []
     for _ in range(50):
         grant = scheduler(runtime).heartbeat(worker, grant)
-        request = WorkerAdvanceCommand(grant=grant, expectedCheckpoint=checkpoint_no)
+        request = AdvanceCommand(grant=grant, expectedCheckpoint=checkpoint_no)
         ack, start = scheduler(runtime).prepare_advance(worker, request)
         assert start and ack.status == "running"
         runtime.start_boundary(grant.run_id, executor, context)
@@ -1070,7 +1217,7 @@ def test_workflow_tool_finishes_across_worker_boundaries(engine, monkeypatch):
     async def scenario():
         async with runtime_service(engine, compass_runtime_lease_seconds=60) as runtime:
             run_id = await submit(runtime)
-            worker = WorkerIdentity("worker-workflow", uuid4())
+            worker = ConsumerSlot("worker-workflow", uuid4())
             grant = await claim(runtime, worker, run_id)
             models = ParentAndChildModels([create_call(), model_result(text="试跑完成。")])
             executor = service_for(
@@ -1120,7 +1267,7 @@ def test_workflow_rejection_and_child_query_replay_across_worker_boundaries(engi
     async def scenario():
         async with runtime_service(engine, compass_runtime_lease_seconds=60) as runtime:
             run_id = await submit(runtime)
-            worker = WorkerIdentity("worker-workflow-replay", uuid4())
+            worker = ConsumerSlot("worker-workflow-replay", uuid4())
             grant = await claim(runtime, worker, run_id)
             models = Models(
                 [
@@ -1254,10 +1401,10 @@ def test_diagnostics_tenant_usage_unknown_reservations_and_private_timeline(engi
             run_a = await submit(runtime)
             await submit(runtime)
             run_b = await submit(runtime, TENANT_B)
-            worker = WorkerIdentity("diagnostic-worker-a", uuid4())
+            worker = ConsumerSlot("diagnostic-worker-a", uuid4())
             grant = await claim(runtime, worker, run_a)
-            await claim(runtime, WorkerIdentity("diagnostic-worker-b", uuid4()), run_b)
-            request = WorkerAdvanceCommand(grant=grant, expectedCheckpoint=0)
+            await claim(runtime, ConsumerSlot("diagnostic-worker-b", uuid4()), run_b)
+            request = AdvanceCommand(grant=grant, expectedCheckpoint=0)
             advance, start = scheduler(runtime).prepare_advance(worker, request)
             assert start
             journal = ExecutionJournal(runtime.store, runtime.publisher, run_a, grant.epoch)
@@ -1484,7 +1631,14 @@ def test_0009_upgrade_preserves_completed_runtime_records_and_runtime_permission
             ):
                 table_name = model.__tablename__
                 if before[table_name]:
-                    tx.execute(AgentRun.metadata.tables[table_name].insert(), before[table_name])
+                    table = Table(table_name, MetaData(), autoload_with=tx)
+                    tx.execute(
+                        table.insert(),
+                        [
+                            {col.name: row[col.name] for col in table.columns}
+                            for row in before[table_name]
+                        ],
+                    )
         assert len(before["agent_session"]) == len(before["agent_run"]) == 1
         assert before["agent_command"] and before["agent_outbox"] and before["agent_checkpoint"]
         assert db.migrate(mode=mode, start="0009") == "applied"
@@ -1521,7 +1675,7 @@ def test_old_epoch_boundary_cannot_adopt_a_new_worker_grant(engine):
     async def scenario():
         async with runtime_service(engine) as runtime:
             run_id = await submit(runtime)
-            previous_worker = WorkerIdentity("previous-worker", uuid4())
+            previous_worker = ConsumerSlot("previous-worker", uuid4())
             previous = await claim(runtime, previous_worker, run_id)
             scheduler(runtime).release(previous_worker, previous)
             await runtime.recover_scheduled()
@@ -1529,7 +1683,7 @@ def test_old_epoch_boundary_cannot_adopt_a_new_worker_grant(engine):
             with pytest.raises(ModelError, match="execution_fenced"):
                 runtime.store.progress(run_id, None, [])
             await runtime.publisher.flush(run_id)
-            worker = WorkerIdentity("replacement-worker", uuid4())
+            worker = ConsumerSlot("replacement-worker", uuid4())
             replacement = await claim(runtime, worker, run_id)
             assert replacement.epoch != previous.epoch
             before = counts(engine)

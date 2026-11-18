@@ -1,5 +1,9 @@
 # 脚手架验证记录
 
+## 2026-11-16 · 第 20 课多副本 Agent 与定时任务
+
+独立 PostgreSQL、Redis、两个 Agent 副本和一个 Scheduler 验证多副本消费、跨实例控制与续流、普通所有者从 Web 和 Chat 管理计划、到期交付和重启恢复。同配额下并行数从 1 到 2，单次强杀约 14 秒后接续原 Run。实际演练 0014 升级、旧写凭据隔离和备份回退。容器复验覆盖 Agent、Web 和 Memory 的部署入口与全链路 smoke。详见[第 20 课验收](../mai-specs/984-lesson-20-production-agent-runtime/test/ACCEPTANCE.md#双角色版本--2026-11-16)。
+
 ## 2026-11-12 · 第 20 课生产运行队列与 Worker
 
 已交付 Agent 同库队列、原子准入与公平调度、租约/心跳、逐 Checkpoint 推进、回收接管、用量/诊断和安全过程展示。当前本地 `pnpm check`、`pnpm build`、573 项应用单测、130 项 Agent 集成、22 项 Web PostgreSQL 集成、12 项浏览器用例及五应用容器 smoke 均通过；工具入口另有 48 通过、13 条条件跳过。双容器 Worker 各完成一条实际队列任务，正常退出码均为 0。

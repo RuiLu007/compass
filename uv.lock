@@ -7,7 +7,6 @@ members = [
     "compass-agent",
     "compass-data-seed",
     "compass-memory",
-    "compass-worker",
     "compass-workspace",
 ]
 
@@ -370,17 +369,6 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115,<1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34,<1" },
 ]
-
-[[package]]
-name = "compass-worker"
-version = "0.1.0"
-source = { editable = "apps/worker" }
-dependencies = [
-    { name = "httpx" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "httpx", specifier = ">=0.28,<0.29" }]
 
 [[package]]
 name = "compass-workspace"

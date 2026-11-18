@@ -33,20 +33,21 @@ jobs:
       - name: Initialize isolated runtime secrets
         run: |
           uv run python - <<'PYTHON'
-          import json, os, secrets
+          import os, secrets
           from cryptography.fernet import Fernet
           with open(os.environ['GITHUB_ENV'], 'a') as output:
               for name in ('COMPASS_RUNTIME_STATE_KEY', 'COMPASS_MODEL_ENCRYPTION_KEY'):
                   output.write(name + '=' + Fernet.generate_key().decode() + '\n')
               output.write('COMPASS_AGENT_SERVICE_TOKEN=' + secrets.token_urlsafe(32) + '\n')
-              credentials = {name: secrets.token_urlsafe(32) for name in ('worker-1', 'worker-2')}
-              output.write('COMPASS_WORKER_CREDENTIALS=' + json.dumps(credentials) + '\n')
-              output.write('COMPASS_WORKER_1_TOKEN=' + credentials['worker-1'] + '\n')
-              output.write('COMPASS_WORKER_2_TOKEN=' + credentials['worker-2'] + '\n')
+              output.write('COMPASS_SCHEDULER_TOKEN=' + secrets.token_urlsafe(32) + '\n')
           PYTHON
       - run: pnpm check
       - run: pnpm build
       - run: pnpm run deploy
+      - name: Agent replica and Scheduler recovery
+        env:
+          PYTHONPATH: apps/agent/tests/replica_e2e
+        run: uv run --locked pytest -q apps/agent/tests/replica_e2e/runtime_e2e.py
       - name: Web PostgreSQL and recovery acceptance
         env:
           WEB_TEST_DATABASE_URL: postgresql://compass_web_runtime:compass_web_runtime_local_only@127.0.0.1:55432/compass_web_test_ci
@@ -81,6 +82,8 @@ jobs:
           COMPASS_MCP_LOCAL_FIXTURE_ORIGINS: http://127.0.0.1:8129
           COMPASS_HYBRID_WORKFLOW_ENABLED: "true"
           COMPASS_CONTROLLED_AUTONOMY_ENABLED: "true"
+          AGENT_RETAIL_TEST_DATABASE_URL: postgresql://compass_fixture_a_east:test-only-retail@127.0.0.1:55432/compass_retail_test_readonly
+          AGENT_RETAIL_TEST_ADMIN_URL: postgresql://compass:compass_local_only@127.0.0.1:55432/compass_retail_test_readonly
           COMPASS_WORKFLOW_E2E_RETAIL_DSN: postgresql://compass_workflow_retail:test-only-workflow@127.0.0.1:55432/compass_retail_test_workflow
         run: |
           pnpm db:provision -F agent
@@ -102,11 +105,7 @@ jobs:
             agent_test_pid=$!
             node --input-type=module -e 'for(let i=0;i<60;i++){try{const r=await fetch("http://127.0.0.1:8013/readyz");if(r.ok)process.exit(0)}catch{}await new Promise(r=>setTimeout(r,500))}process.exit(1)'
           }
-          trap 'kill "${worker_one_pid:-}" "${worker_two_pid:-}" "${agent_test_pid:-}" "${mcp_test_pid:-}" 2>/dev/null || true' EXIT
-          COMPASS_WORKER_ID=worker-1 COMPASS_WORKER_TOKEN="$COMPASS_WORKER_1_TOKEN" uv run --locked --package compass-worker python -m compass_worker > work/993/worker-1.log 2>&1 &
-          worker_one_pid=$!
-          COMPASS_WORKER_ID=worker-2 COMPASS_WORKER_TOKEN="$COMPASS_WORKER_2_TOKEN" uv run --locked --package compass-worker python -m compass_worker > work/993/worker-2.log 2>&1 &
-          worker_two_pid=$!
+          trap 'kill "${agent_test_pid:-}" "${mcp_test_pid:-}" 2>/dev/null || true' EXIT
           start_agent apps.agent.tests.workflow_e2e_app:app
           pnpm test:e2e -F web -- production-runtime.spec.ts production-runtime-live.spec.ts
           pnpm test:e2e -F web -- hybrid-workflow.spec.ts

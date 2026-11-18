@@ -92,19 +92,44 @@ const promptCards: readonly PromptCard[] = [
     title: "第 18 课 · 工具执行与 Sandbox",
     suggestions: [
       {
-        label: "Python 分析绘图",
+        label: "在 Sandbox 中执行 Python",
         question:
-          "查询 Retail 中 POS 渠道在 2025-11-17 至 2025-11-23 和 2025-11-24 至 2025-11-30 的商品实付金额。使用 Python 计算每个商品两周的金额差额，生成可下载的柱状图，并结合计算结果解释主要变化；缺少数据时说明缺口。",
+          "使用当前工作区已授权的 Retail 数据连接。先用 database_query 执行 SELECT COUNT(*) AS row_count, COALESCE(SUM(paid_amount_cent), 0) AS paid_cent FROM core.channel_product_daily WHERE report_date = DATE '2025-11-24'。拿到 resultId 后，调用 python_analysis，把 resultId 填到 source_query_id。请在 Sandbox 中运行 Python，读取 data 的第一行，把实付金额从分换算成元，将行数和换算结果写入 result。工具返回后报告结果。",
       },
       {
-        label: "同轮多工具查询",
+        label: "并行查询两个日期",
         question:
-          "同一轮发起两项互不依赖的 Retail 查询：分别读取 POS 渠道在 2025-11-17 至 2025-11-23 和 2025-11-24 至 2025-11-30 的商品实付金额。拿到两份结果后再汇总差额，列出主要商品的金额变化，并标明所用时段。",
+          "请在同一次模型响应中发出两个互不依赖的 database_query 调用，使用当前工作区已授权的 Retail 数据连接。第一个执行 SELECT COUNT(*) AS row_count FROM core.channel_product_daily WHERE report_date = DATE '2025-11-24'，第二个执行 SELECT COUNT(*) AS row_count FROM core.channel_product_daily WHERE report_date = DATE '2025-11-25'。拿到两份结果后按日期分别汇报。",
+      },
+    ],
+  },
+  {
+    title: "第 19 课 · 持久运行与人工确认",
+    suggestions: [
+      {
+        label: "暂停、刷新与继续",
+        question:
+          "比较 Retail 在 2025-11-17 至 11-23 和 11-24 至 11-30 两周的渠道实付额，找出变化最大的渠道，分析主要商品的贡献，并生成一张可下载的差额图。请标明对比口径和数据缺口。",
       },
       {
-        label: "使用我的 MCP 工具",
+        label: "人工确认后查一个数",
         question:
-          "请使用本次任务已加载的 MCP 只读工具，查询 2025-11-24 至 2025-11-30 的销售汇总，说明实付金额、订单量和工具来源。缺少合适的工具或必需参数时先告诉我；需要审批的调用先生成待审批提案。",
+          "查一下 Retail 在 2025-11-24 的实付总额，只返回这一个数和金额单位。请使用已配置为需要审批的 MCP 只读查询工具，先提交查询请求供我在审批卡片上确认，批准后再执行查询。如果当前没有合适的审批工具，请告诉我并结束本次任务。",
+      },
+    ],
+  },
+  {
+    title: "第 20 课 · 异步队列与 Worker",
+    suggestions: [
+      {
+        label: "任务 A · 先提交渠道诊断",
+        question:
+          "比较 Retail 在 2025-11-17 至 11-23 和 11-24 至 11-30 两周的渠道实付额。列出变化最大的三个渠道，分析其中变化最大渠道的商品贡献，并给出差额图。",
+      },
+      {
+        label: "任务 B · 另开会话观察排队",
+        question:
+          "汇总 Retail 在 2025-11-24 至 11-30 的每日实付额，找出实付额最高的一天，报告日期和金额。",
       },
     ],
   },
@@ -434,6 +459,7 @@ export function AnalysisComposer({
       : activeTurn?.stopState === "already_terminal"
         ? "等待结果流"
         : "停止任务";
+  const stoppingLabel = activeTurn?.cancellationBlocked ? "终止待核对" : "正在终止";
 
   return (
     <section
@@ -631,7 +657,9 @@ export function AnalysisComposer({
                     activeTurn?.stopState === "already_terminal"
                       ? "任务已结束，正在等待原结果流"
                       : stopWaiting
-                        ? "正在终止任务"
+                        ? activeTurn?.cancellationBlocked
+                          ? stoppingLabel
+                          : "正在终止任务"
                         : stopLabel
                   }
                   onClick={async () => {
@@ -657,7 +685,7 @@ export function AnalysisComposer({
                   {activeTurn?.stopState === "already_terminal"
                     ? "等待结果流"
                     : stopWaiting
-                      ? "正在终止"
+                      ? stoppingLabel
                       : stopLabel}
                 </button>
               ) : (

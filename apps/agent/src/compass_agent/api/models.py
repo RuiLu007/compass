@@ -406,9 +406,10 @@ def error_response(error):
         content=ModelErrorResponse(
             error=ModelErrorDetail(
                 code=error.code,
-                message=message(error.code),
+                message=message(error.reason_code or error.code),
                 requestId=str(uuid4()),
                 currentVersion=error.current_version,
+                reasonCode=error.reason_code,
             )
         ).model_dump(exclude_none=True),
         headers={
@@ -432,7 +433,7 @@ class ModelBoundaryMiddleware:
                 "/v1/internal/analysis",
                 "/v1/data/",
                 "/v1/mcp/",
-                "/internal/runtime/",
+                "/internal/scheduler/",
             )
         )
         if scope["type"] != "http" or not private:

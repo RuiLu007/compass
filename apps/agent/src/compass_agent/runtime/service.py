@@ -26,10 +26,12 @@ from compass_agent.routing.service import RoutingService, SelectedRoute
 from compass_agent.runtime.context import AgentDefinition, RunRoute, initial_messages
 from compass_agent.runtime.control import RunControl
 from compass_agent.runtime.execution_trace import ExecutionTrace
+from compass_agent.runtime.schedule_effect import execute_effect
 from compass_agent.runtime.session import RuntimeSession
 from compass_agent.runtime.task_state import TaskState
 from compass_agent.runtime.tool_bindings import RunToolBindings
 from compass_agent.runtime.turn import RuntimeTurn
+from compass_agent.scheduler.service import ScheduleService
 from compass_agent.schemas import (
     AnalysisRunInput,
     ChatCallInput,
@@ -113,6 +115,7 @@ class RunService(RuntimeTurn):
     ):
         super().__init__(models)
         self.tool_loader = tool_loader or ToolLoader()
+        self.schedules: ScheduleService | None = None
         self.routing, self.definition = routing, definition or AgentDefinition()
         self.tools_provider = tools_provider
         self.workflow_assets, self.workflow_drafts = workflow_assets, workflow_drafts
@@ -151,45 +154,27 @@ class RunService(RuntimeTurn):
             # Retained user assets are readable, but retired execution contracts are unavailable.
             if command.workflow_asset_ref is not None:
                 raise RunFailure("workflow_unavailable")
-            discovered = await control.perform(lambda: self.tool_loader.discover(context, control))
+            discovery = (
+                {"defer_catalog_limit": True}
+                if self.schedules and journal and journal.schedule_tools
+                else {}
+            )
+            discovered = await control.perform(
+                lambda: self.tool_loader.discover(context, control, **discovery)
+            )
             provider = self.tools_provider
             provided = (
                 await control.perform(lambda: provider(context, control, emit)) if provider else ()
             )
             entries = (*self.definition.tools, *provided)
-            declarations = [entry.definition for entry in entries if entry.definition is not None]
             snapshot = (
                 await control.perform(lambda: asyncio.to_thread(journal.catalog_declarations))
                 if journal and self.workflow_assets is not None
                 else None
             )
-            declarations.extend(
-                catalog_definitions(
-                    CatalogContext(
-                        self.definition.builtin_tools,
-                        sandbox=self.tool_loader.sandbox is not None,
-                    )
-                )
+            catalog, declarations, workflow = await self.tool_catalog(
+                context, journal, entries, discovered, snapshot
             )
-            if discovered:
-                declarations.extend(
-                    entry.definition for entry in discovered.entries if entry.definition
-                )
-            workflow_definitions = catalog_definitions(
-                CatalogContext(frozenset({"workflow"}), workflow=True)
-            )
-            workflow = (
-                "workflow" in self.definition.builtin_tools
-                and self.workflow_assets is not None
-                and (
-                    CREATE_WORKFLOW in snapshot
-                    if snapshot is not None
-                    else has_catalog_room([*declarations, *workflow_definitions])
-                )
-            )
-            if workflow:
-                declarations.extend(workflow_definitions)
-            validate_catalog(declarations)
             budget = controlled.budget if controlled else None
             stage = "routing"
             selected = await control.perform(
@@ -220,6 +205,21 @@ class RunService(RuntimeTurn):
             state = TaskState(
                 initial_messages(self.definition, command, route, workflow=workflow and supported)
             )
+            if "schedule_read" in catalog.enabled:
+                guidance = (
+                    "定时任务使用 schedule_read 和已授权的 schedule_write。"
+                    "先查询目标与版本，不确定名称或时间时请用户明确。"
+                    "等待确认与变更成功分开说明，以工具实际回执为准。"
+                    if supported
+                    else (
+                        "此模型缺少工具调用能力。"
+                        "遇到定时任务管理请求时，引导用户打开 Web 定时任务页面。"
+                    )
+                )
+                first = state.messages[0]
+                state.messages[0] = first.model_copy(
+                    update={"content": (first.content or "") + "\n" + guidance}
+                )
             state.trace = trace
             bindings = RunToolBindings(
                 self,
@@ -234,6 +234,7 @@ class RunService(RuntimeTurn):
                 supported,
                 entries=entries,
                 workflow=workflow,
+                catalog=catalog,
             )
             state.tools = bindings
             if workflow and supported:
@@ -289,6 +290,8 @@ class RunService(RuntimeTurn):
                 code = "run_timeout"
             elif stop_reason == "max_steps":
                 code = "step_limit"
+            elif stop_reason in {"token_budget", "cost_budget", "max_tool_calls"}:
+                code = "run_budget_exhausted"
             elif stop_reason == "model_budget_unavailable":
                 code = "model_unavailable"
             candidate = RunFailed(status="failed", errorCode=code)
@@ -343,6 +346,73 @@ class RunService(RuntimeTurn):
         if controlled:
             emit(controlled.result_event(result, stop_reason))
         return result
+
+    async def tool_catalog(self, context, journal, entries, discovered, snapshot):
+        capabilities = self.definition.builtin_tools
+        schedules = self.schedules if journal and journal.schedule_tools else None
+        if schedules:
+            capabilities |= await self.schedule_capabilities(context, journal, snapshot)
+        catalog = CatalogContext(
+            frozenset(capabilities),
+            sandbox=self.tool_loader.sandbox is not None,
+            schedules=schedules,
+            schedule_effect=execute_effect if schedules else None,
+        )
+        declarations = [entry.definition for entry in entries if entry.definition is not None]
+        declarations.extend(catalog_definitions(catalog))
+        if discovered:
+            if schedules:
+                self.fit_mcp_tools(declarations, discovered, snapshot)
+            else:
+                declarations.extend(
+                    entry.definition for entry in discovered.entries if entry.definition
+                )
+        workflow_definitions = catalog_definitions(
+            CatalogContext(frozenset({"workflow"}), workflow=True)
+        )
+        workflow = (
+            "workflow" in self.definition.builtin_tools
+            and self.workflow_assets is not None
+            and (
+                CREATE_WORKFLOW in snapshot
+                if snapshot is not None
+                else has_catalog_room([*declarations, *workflow_definitions])
+            )
+        )
+        if workflow:
+            declarations.extend(workflow_definitions)
+        validate_catalog(declarations)
+        return catalog, declarations, workflow
+
+    async def schedule_capabilities(self, context, journal, snapshot):
+        if snapshot is not None:
+            return set(snapshot).intersection({"schedule_read", "schedule_write"})
+        assert self.schedules is not None
+        try:
+            await self.schedules.read_access(context)
+        except ModelError as error:
+            if error.status != 403:
+                raise
+            return set()
+        return {"schedule_read"} if journal.scheduled else {"schedule_read", "schedule_write"}
+
+    @staticmethod
+    def fit_mcp_tools(declarations, discovered, snapshot):
+        selected = []
+        required = discovered.required_tools
+        for entry in sorted(discovered.entries, key=lambda item: item.name not in required):
+            declaration = entry.definition
+            if snapshot is not None and entry.name not in snapshot:
+                continue
+            if declaration and not has_catalog_room([*declarations, declaration]):
+                if entry.name in required:
+                    raise ToolRejected("tool_catalog_limit")
+                logger.info("analysis.tool_skipped tool=%s reason=catalog_limit", entry.name)
+                continue
+            selected.append(entry)
+            if declaration:
+                declarations.append(declaration)
+        discovered.entries = tuple(selected)
 
     async def _select_route(self, command, context, control, budget, question, **options):
         from compass_agent.execution_context import recorded

@@ -8,7 +8,8 @@ import pytest
 from compass_agent.models.errors import ModelError
 from compass_agent.runtime.durable_service import CurrentAccess
 from compass_agent.runtime.public_visibility import public_event, visible_response
-from compass_agent.schemas import AgentResponse, ExecutionGrant
+from compass_agent.runtime.run_scheduler import ExecutionGrant
+from compass_agent.schemas import AgentResponse
 from compass_agent.settings import Settings
 
 from .test_agent_run import CHAT

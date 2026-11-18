@@ -7,7 +7,7 @@ requires-python = ">=3.13,<3.14"
 package = false
 
 [tool.uv.workspace]
-members = ["apps/agent", "apps/memory", "apps/worker", "tools/data-seed"]
+members = ["apps/agent", "apps/memory", "tools/data-seed"]
 
 [dependency-groups]
 dev = ["ruff>=0.14,<1", "pyright>=1.1.400,<2", "pytest>=8,<10", "httpx>=0.28,<1"]
@@ -36,10 +36,9 @@ venv = ".venv"
 include = [
   "apps/agent/src", "apps/agent/tests",
   "apps/memory/src", "apps/memory/tests",
-  "apps/worker/src", "apps/worker/tests",
   "tools/data-seed/src", "tools/data-seed/tests",
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["apps/agent/tests", "apps/memory/tests", "apps/worker/tests", "tools/data-seed/tests"]
+testpaths = ["apps/agent/tests", "apps/memory/tests", "tools/data-seed/tests"]
 addopts = "--import-mode=importlib"

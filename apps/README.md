@@ -1,14 +1,14 @@
 # 应用
 
-每个目录对应可独立启动、检查和构建的应用。当前为 [产品官网](home/README.md)、[Web / BFF](web/README.md)、[Agent](agent/README.md)、[Memory](memory/README.md) 和 [Worker](worker/README.md)。从根目录使用 `pnpm dev -F <应用短名>` 统一经 Turbo 启动。应用之间通过 HTTP 契约通信，禁止跨应用源码导入。
+每个目录对应可独立启动、检查和构建的应用。当前有 [产品官网](home/README.md)、[Web / BFF](web/README.md)、[Agent](agent/README.md) 和 [Memory](memory/README.md)。从根目录使用 `pnpm dev -F <应用短名>` 启动。应用之间通过 HTTP 契约通信。
 
-五个应用均已有可启动、检查与构建的脚手架；Web / BFF 使用 Next.js + pnpm，Agent / Memory / Worker 使用 Python 3.13 + uv。agent 保留演示 API 与三天工程样本；离线业务数据工具由 [tools/data-seed](../tools/data-seed/README.md) 管理；memory 提供 FastAPI 健康检查；worker 通过 HTTP 消费 Agent 同库队列，维持租约并逐持久边界推进。第 20 课部署和恢复见 [运行说明](../docs/lesson-20-production-runtime.md)。
+Web 和官网使用 Next.js，Agent 和 Memory 使用 Python 3.13。Agent 副本在各自进程内消费共享队列。同镜像的 Scheduler 角色负责到期计划交付。离线业务数据工具见 [tools/data-seed](../tools/data-seed/README.md)，队列和定时执行见 [第 20 课运行说明](../docs/lesson-20-production-runtime.md)。
 
 ## 数据与业务职责
 
-Web / BFF 直接实现账户、租户、权限及通用配置等工程 CRUD，并拥有相应数据库；Agent 负责 Agent Runtime 推理、工具执行、分析状态与运行相关配置；Memory 独立管理记忆。管理界面的所在 app 与数据 owner 分别判断。Worker 的执行位置不改变业务数据所有者，默认通过所有者 API 提交状态。
+Web / BFF 直接实现账户、租户、权限及通用配置等工程 CRUD，并拥有相应数据库；Agent 负责 Agent Runtime 推理、工具执行、分析状态与运行相关配置；Memory 独立管理记忆。管理界面的所在 app 与数据 owner 分别判断。Scheduler 使用 Agent 主库内限权角色及内部受理 API。
 
-每个 app 可拥有独立实例或逻辑数据库，按 `<app>/<database-key>` 管理迁移历史与凭据；跨 app 通过契约访问，禁止直接访问对方业务表和跨库外键。目录、SQL 交付、现有入口与 SDD 验收统一见 [数据库规范](../docs/database-migrations.md)。Web 与 Agent 已接入各自数据库；Memory 仍提供健康检查脚手架，Worker 通过 Agent API 工作。
+每个 app 可拥有独立实例或逻辑数据库，按 `<app>/<database-key>` 管理迁移历史与凭据；跨 app 通过契约访问，禁止直接访问对方业务表和跨库外键。目录、SQL 交付、现有入口与 SDD 验收统一见 [数据库规范](../docs/database-migrations.md)。Web 与 Agent 已接入各自数据库；Memory 提供健康检查。
 
 ## 新增应用准入规范
 

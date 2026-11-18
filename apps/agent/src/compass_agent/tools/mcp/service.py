@@ -22,7 +22,12 @@ from compass_agent.tools.contracts import (
 )
 from compass_agent.tools.mcp.client import EndpointPolicy, McpSession
 from compass_agent.tools.mcp.repository import McpConfigStore, Owner
-from compass_agent.tools.registry import bounded_payload, parse_arguments, validate_schema
+from compass_agent.tools.registry import (
+    ToolRegistry,
+    bounded_payload,
+    parse_arguments,
+    validate_schema,
+)
 
 
 def tool_name(connection_id, name):
@@ -42,11 +47,20 @@ class DiscoverySummary:
 
 
 class McpRun:
-    def __init__(self, repository: McpConfigStore, policy: EndpointPolicy, owner: Owner):
+    def __init__(
+        self,
+        repository: McpConfigStore,
+        policy: EndpointPolicy,
+        owner: Owner,
+        *,
+        defer_catalog_limit: bool = False,
+    ):
+        self.defer_catalog_limit = defer_catalog_limit
         self.repository, self.policy, self.owner = repository, policy, owner
         self.sessions: dict = {}
         self.entries: tuple[RegisteredTool, ...] = ()
         self.summary = DiscoverySummary(0, 0)
+        self.required_tools: frozenset[str] = frozenset()
 
     async def open(self):
         configs = await asyncio.to_thread(self.repository.load, self.owner)
@@ -102,10 +116,18 @@ class McpRun:
                     self.repository.current, session.config
                 ):
                     raise ToolRejected("tool_config_changed")
-            from compass_agent.tools.registry import ToolRegistry
-
-            ToolRegistry(entries)
+            if self.defer_catalog_limit:
+                if len({entry.name for entry in entries}) != len(entries):
+                    raise ToolRejected("tool_name_conflict")
+            else:
+                ToolRegistry(entries)
             self.entries = tuple(entries)
+            self.required_tools = frozenset(
+                entry.name
+                for entry in self.entries
+                if isinstance(entry.binding, McpBinding)
+                and self.sessions[entry.binding.connection_id].config.required
+            )
             self.summary = DiscoverySummary(len(entries), skipped)
             return self
         except BaseException:

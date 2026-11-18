@@ -46,13 +46,21 @@ class ToolLoader:
         self.artifacts = artifacts if artifacts is not None else ArtifactStore()
         self.policy = policy or ToolBatchPolicy()
 
-    async def discover(self, trusted: TrustedContext, control: ToolControl) -> McpRun | None:
+    async def discover(
+        self,
+        trusted: TrustedContext,
+        control: ToolControl,
+        *,
+        defer_catalog_limit: bool = False,
+    ) -> McpRun | None:
         control.require_running()
         if self.repository is None:
             return None
         assert self.endpoints is not None
         repository = self.repository() if callable(self.repository) else self.repository
-        run = McpRun(repository, self.endpoints, owner_key(trusted))
+        run = McpRun(
+            repository, self.endpoints, owner_key(trusted), defer_catalog_limit=defer_catalog_limit
+        )
         try:
             async with asyncio.timeout(control.remaining):
                 await run.open()

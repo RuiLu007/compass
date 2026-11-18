@@ -20,7 +20,9 @@ from opensandbox.transport.retry import RetryPolicy
 from compass_agent.tools.contracts import (
     ExecutionBinding,
     ExecutionReceipt,
+    PhaseCanceled,
     SandboxBinding,
+    StopRequested,
     ToolExecutionContext,
     ToolRejected,
     json_bytes,
@@ -117,6 +119,20 @@ class SandboxBackend:
         await asyncio.to_thread(self.allocations.unknown, allocation)
         return None
 
+    async def _begin_phase(self, operation, *args) -> Allocation:
+        reservation = asyncio.create_task(asyncio.to_thread(operation, *args))
+        try:
+            return await asyncio.shield(reservation)
+        except asyncio.CancelledError:
+            try:
+                allocation = await reservation
+            except ToolRejected:
+                pass
+            else:
+                # Remote creation starts only after this method returns successfully.
+                await asyncio.to_thread(self.allocations.cancel_before_create, allocation)
+            raise PhaseCanceled(cleanup_confirmed=True) from None
+
     async def execute(
         self, binding: ExecutionBinding, args: object, context: ToolExecutionContext
     ) -> ExecutionReceipt:
@@ -133,7 +149,7 @@ class SandboxBackend:
             raise ToolRejected("sandbox_input_limit")
         context.require_running()
         attempt = uuid5(context.run_id, f"{context.step_id}:{context.call_id}")
-        allocation = await asyncio.to_thread(
+        allocation = await self._begin_phase(
             self.allocations.reserve,
             context.owner,
             context.run_id,
@@ -198,8 +214,11 @@ class SandboxBackend:
                 reason_code=reason,
                 environment_id=environment,
             )
-        context.require_running()
-        allocation = await asyncio.to_thread(self.allocations.phase, accepted, "collect")
+        try:
+            context.require_running()
+        except StopRequested:
+            raise PhaseCanceled(cleanup_confirmed=True) from None
+        allocation = await self._begin_phase(self.allocations.phase, accepted, "collect")
         receipt = await self._collect(allocation, context.control.remaining)
         return receipt
 

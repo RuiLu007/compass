@@ -21,7 +21,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/internal/runtime/jobs/advance": {
+    "/internal/scheduler/triggers/{trigger_id}/reconcile": {
         parameters: {
             query?: never;
             header?: never;
@@ -30,15 +30,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Advance */
-        post: operations["advance_internal_runtime_jobs_advance_post"];
+        /** Reconcile Trigger */
+        post: operations["reconcile_trigger_internal_scheduler_triggers__trigger_id__reconcile_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/internal/runtime/jobs/claim": {
+    "/internal/scheduler/triggers/{trigger_id}/submit": {
         parameters: {
             query?: never;
             header?: never;
@@ -47,42 +47,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Claim */
-        post: operations["claim_internal_runtime_jobs_claim_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/runtime/jobs/heartbeat": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Heartbeat */
-        post: operations["heartbeat_internal_runtime_jobs_heartbeat_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/runtime/jobs/release": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Release */
-        post: operations["release_internal_runtime_jobs_release_post"];
+        /** Submit Trigger */
+        post: operations["submit_trigger_internal_scheduler_triggers__trigger_id__submit_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -302,6 +268,77 @@ export interface paths {
         };
         /** Usage */
         get: operations["usage_v1_analysis_runtime_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/analysis/schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Schedules */
+        get: operations["list_schedules_v1_analysis_schedules_get"];
+        put?: never;
+        /** Create Schedule */
+        post: operations["create_schedule_v1_analysis_schedules_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/analysis/schedules/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Schedule */
+        post: operations["preview_schedule_v1_analysis_schedules_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/analysis/schedules/{schedule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Schedule */
+        get: operations["get_schedule_v1_analysis_schedules__schedule_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Schedule */
+        delete: operations["delete_schedule_v1_analysis_schedules__schedule_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Schedule */
+        patch: operations["update_schedule_v1_analysis_schedules__schedule_id__patch"];
+        trace?: never;
+    };
+    "/v1/analysis/schedules/{schedule_id}/triggers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Schedule Triggers */
+        get: operations["schedule_triggers_v1_analysis_schedules__schedule_id__triggers_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1814,33 +1851,6 @@ export interface components {
             /** Runtime */
             runtime?: string | null;
         };
-        /** ExecutionGrant */
-        ExecutionGrant: {
-            /**
-             * Bootid
-             * Format: uuid
-             */
-            bootId: string;
-            /** Checkpointno */
-            checkpointNo: number;
-            /**
-             * Epoch
-             * Format: uuid
-             */
-            epoch: string;
-            /**
-             * Expiresat
-             * Format: date-time
-             */
-            expiresAt: string;
-            /**
-             * Runid
-             * Format: uuid
-             */
-            runId: string;
-            /** Workerid */
-            workerId: string;
-        };
         /** ExecutionOrigin */
         ExecutionOrigin: {
             /**
@@ -2514,6 +2524,11 @@ export interface components {
             currentVersion: number | null;
             /** Message */
             message: string;
+            /**
+             * Reasoncode
+             * @default null
+             */
+            reasonCode: string | null;
             /** Requestid */
             requestId: string;
         };
@@ -3346,7 +3361,7 @@ export interface components {
              * Errorcode
              * @enum {string}
              */
-            errorCode: "input_token_limit_exceeded" | "output_token_limit_exceeded" | "invalid_model_input" | "model_failed" | "model_incomplete" | "model_unavailable" | "run_timeout" | "context_limit" | "workflow_unavailable" | "workflow_failed" | "tool_catalog_limit" | "tool_setup_failed" | "step_limit" | "internal_error";
+            errorCode: "input_token_limit_exceeded" | "output_token_limit_exceeded" | "invalid_model_input" | "model_failed" | "model_rate_limited" | "runtime_overloaded" | "run_budget_exhausted" | "model_incomplete" | "model_unavailable" | "run_timeout" | "context_limit" | "workflow_unavailable" | "workflow_failed" | "tool_catalog_limit" | "tool_setup_failed" | "step_limit" | "internal_error";
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -3589,6 +3604,16 @@ export interface components {
              * Format: uuid
              */
             runId: string;
+            /**
+             * Scheduleid
+             * @default null
+             */
+            scheduleId: string | null;
+            /**
+             * Triggerid
+             * @default null
+             */
+            triggerId: string | null;
         };
         /** RuntimeTimelineEntry */
         RuntimeTimelineEntry: {
@@ -3709,6 +3734,206 @@ export interface components {
             provider_id: string;
             /** Version */
             version: number;
+        };
+        /** ScheduleAutoRouting */
+        ScheduleAutoRouting: {
+            /** Flash */
+            flash: boolean;
+            /** Pro */
+            pro: boolean;
+        };
+        /** ScheduleCreate */
+        ScheduleCreate: {
+            /** @default null */
+            constraints: components["schemas"]["RunConstraints"] | null;
+            /** Cron */
+            cron: string;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Name */
+            name: string;
+            /** Question */
+            question: string;
+            /**
+             * Requestid
+             * Format: uuid
+             */
+            requestId: string;
+            selection: components["schemas"]["MainModelSelection"];
+            /** Timezone */
+            timezone: string;
+            /** @default null */
+            workflowAssetRef: components["schemas"]["WorkflowAssetRef"] | null;
+        };
+        /** ScheduleDelete */
+        ScheduleDelete: {
+            /** Expectedrevision */
+            expectedRevision: number;
+            /**
+             * Requestid
+             * Format: uuid
+             */
+            requestId: string;
+        };
+        /** ScheduleFields */
+        ScheduleFields: {
+            /** @default null */
+            constraints: components["schemas"]["RunConstraints"] | null;
+            /** Cron */
+            cron: string;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Name */
+            name: string;
+            /** Question */
+            question: string;
+            selection: components["schemas"]["MainModelSelection"];
+            /** Timezone */
+            timezone: string;
+            /** @default null */
+            workflowAssetRef: components["schemas"]["WorkflowAssetRef"] | null;
+        };
+        /** ScheduleInput */
+        ScheduleInput: {
+            /** @default null */
+            constraints: components["schemas"]["RunConstraints"] | null;
+            /** Question */
+            question: string;
+            selection: components["schemas"]["MainModelSelection"];
+            /** @default null */
+            workflowAssetRef: components["schemas"]["WorkflowAssetRef"] | null;
+        };
+        /** SchedulePage */
+        SchedulePage: {
+            /** Items */
+            items: components["schemas"]["ScheduleView"][];
+            /** Nextcursor */
+            nextCursor: string | null;
+        };
+        /** SchedulePatch */
+        SchedulePatch: {
+            /** @default null */
+            constraints: components["schemas"]["RunConstraints"] | null;
+            /**
+             * Cron
+             * @default null
+             */
+            cron: string | null;
+            /**
+             * Enabled
+             * @default null
+             */
+            enabled: boolean | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
+            /**
+             * Question
+             * @default null
+             */
+            question: string | null;
+            /** @default null */
+            selection: components["schemas"]["MainModelSelection"] | null;
+            /**
+             * Timezone
+             * @default null
+             */
+            timezone: string | null;
+            /** @default null */
+            workflowAssetRef: components["schemas"]["WorkflowAssetRef"] | null;
+        };
+        /** SchedulePreview */
+        SchedulePreview: {
+            /** Cron */
+            cron: string;
+            /** @default null */
+            selection: components["schemas"]["MainModelSelection"] | null;
+            /** Timezone */
+            timezone: string;
+        };
+        /** SchedulePreviewResult */
+        SchedulePreviewResult: {
+            /** @default null */
+            autoRouting: components["schemas"]["ScheduleAutoRouting"] | null;
+            /** Times */
+            times: string[];
+            /**
+             * Warningcode
+             * @default null
+             */
+            warningCode: "capability_not_supported" | null;
+        };
+        /** ScheduleUpdate */
+        ScheduleUpdate: {
+            /** Expectedrevision */
+            expectedRevision: number;
+            patch: components["schemas"]["SchedulePatch"];
+            /**
+             * Requestid
+             * Format: uuid
+             */
+            requestId: string;
+        };
+        /** ScheduleView */
+        ScheduleView: {
+            /** @default null */
+            constraints: components["schemas"]["RunConstraints"] | null;
+            /** Cron */
+            cron: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            latestTrigger: components["schemas"]["TriggerView"] | null;
+            /** Name */
+            name: string;
+            /** Nextfireat */
+            nextFireAt: string | null;
+            /** Question */
+            question: string;
+            /** Revision */
+            revision: number;
+            selection: components["schemas"]["MainModelSelection"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "enabled" | "disabled" | "deleted";
+            /** Timezone */
+            timezone: string;
+            /**
+             * Updatedat
+             * Format: date-time
+             */
+            updatedAt: string;
+            /** @default null */
+            workflowAssetRef: components["schemas"]["WorkflowAssetRef"] | null;
+        };
+        /** ScheduleWriteReceipt */
+        ScheduleWriteReceipt: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nextfireat */
+            nextFireAt: string | null;
+            /** Revision */
+            revision: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "enabled" | "disabled" | "deleted";
         };
         /** SchedulingPublic */
         SchedulingPublic: {
@@ -4328,6 +4553,84 @@ export interface components {
             /** Toolindex */
             toolIndex: number;
         };
+        /** TriggerAdmission */
+        TriggerAdmission: {
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "accepted" | "closed" | "ready";
+            /**
+             * Runid
+             * @default null
+             */
+            runId: string | null;
+        };
+        /** TriggerDelivery */
+        TriggerDelivery: {
+            /**
+             * Deliverytoken
+             * Format: uuid
+             */
+            deliveryToken: string;
+        };
+        /** TriggerPage */
+        TriggerPage: {
+            /** Items */
+            items: components["schemas"]["TriggerView"][];
+            /** Nextcursor */
+            nextCursor: string | null;
+        };
+        /** TriggerView */
+        TriggerView: {
+            /** Coalescedfromat */
+            coalescedFromAt: string | null;
+            /** Deliveryattempts */
+            deliveryAttempts: number;
+            /**
+             * Deliverystatus
+             * @enum {string}
+             */
+            deliveryStatus: "pending" | "dispatching" | "retry_wait" | "reconcile_pending" | "submitted" | "delivery_failed" | "skipped";
+            /**
+             * Detectedat
+             * Format: date-time
+             */
+            detectedAt: string;
+            /** Finishedat */
+            finishedAt: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nextattemptat */
+            nextAttemptAt: string | null;
+            /** Observedat */
+            observedAt: string | null;
+            /** Reasoncode */
+            reasonCode: string | null;
+            /** Runid */
+            runId: string | null;
+            /** Runreasoncode */
+            runReasonCode: string | null;
+            /** Runstatus */
+            runStatus: ("created" | "running" | "waiting" | "paused" | "cancelling" | "completed" | "failed" | "canceled") | null;
+            /**
+             * Scheduleid
+             * Format: uuid
+             */
+            scheduleId: string;
+            /** Schedulerevision */
+            scheduleRevision: number;
+            /**
+             * Scheduledat
+             * Format: date-time
+             */
+            scheduledAt: string;
+            /** Sessionid */
+            sessionId: string | null;
+        };
         /** TrustedContext */
         TrustedContext: {
             /**
@@ -4339,7 +4642,7 @@ export interface components {
              * Purpose
              * @enum {string}
              */
-            purpose: "manage" | "test" | "chat" | "module_read" | "data_manage" | "mcp_manage" | "runtime_diagnostics" | "runtime_usage";
+            purpose: "manage" | "test" | "chat" | "module_read" | "data_manage" | "mcp_manage" | "runtime_diagnostics" | "runtime_usage" | "schedule_manage" | "schedule_owner" | "schedule_run";
             /** Scope */
             scope: components["schemas"]["PlatformScope"] | components["schemas"]["TenantScope"];
         };
@@ -4407,41 +4710,6 @@ export interface components {
             summary: string;
             /** Waitid */
             waitId: string;
-        };
-        /** WorkerAdvanceAck */
-        WorkerAdvanceAck: {
-            /** Checkpointno */
-            checkpointNo: number;
-            /**
-             * Commandid
-             * Format: uuid
-             */
-            commandId: string;
-            /** Reasoncode */
-            reasonCode: string | null;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "running" | "continue" | "parked" | "done" | "interrupted";
-        };
-        /** WorkerAdvanceCommand */
-        WorkerAdvanceCommand: {
-            /** Expectedcheckpoint */
-            expectedCheckpoint: number;
-            grant: components["schemas"]["ExecutionGrant"];
-        };
-        /** WorkerBoot */
-        WorkerBoot: {
-            /**
-             * Bootid
-             * Format: uuid
-             */
-            bootId: string;
-        };
-        /** WorkerLeaseCommand */
-        WorkerLeaseCommand: {
-            grant: components["schemas"]["ExecutionGrant"];
         };
         /** WorkflowAssetDelete */
         WorkflowAssetDelete: {
@@ -4605,16 +4873,20 @@ export interface operations {
             };
         };
     };
-    advance_internal_runtime_jobs_advance_post: {
+    reconcile_trigger_internal_scheduler_triggers__trigger_id__reconcile_post: {
         parameters: {
             query?: never;
-            header?: never;
-            path?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                trigger_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["WorkerAdvanceCommand"];
+                "application/json": components["schemas"]["TriggerDelivery"];
             };
         };
         responses: {
@@ -4624,7 +4896,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WorkerAdvanceAck"];
+                    "application/json": components["schemas"]["TriggerAdmission"];
                 };
             };
             /** @description Validation Error */
@@ -4638,98 +4910,31 @@ export interface operations {
             };
         };
     };
-    claim_internal_runtime_jobs_claim_post: {
+    submit_trigger_internal_scheduler_triggers__trigger_id__submit_post: {
         parameters: {
             query?: never;
-            header?: never;
-            path?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                trigger_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["WorkerBoot"];
+                "application/json": components["schemas"]["TriggerDelivery"];
             };
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ExecutionGrant"];
+                    "application/json": components["schemas"]["TriggerAdmission"];
                 };
-            };
-            /** @description No available job */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    heartbeat_internal_runtime_jobs_heartbeat_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkerLeaseCommand"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ExecutionGrant"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    release_internal_runtime_jobs_release_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkerLeaseCommand"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -5361,6 +5566,260 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RuntimeUsage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_schedules_v1_analysis_schedules_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                status?: ("enabled" | "disabled" | "deleted") | null;
+                cursor?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchedulePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_schedule_v1_analysis_schedules_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScheduleCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleWriteReceipt"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_schedule_v1_analysis_schedules_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SchedulePreview"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchedulePreviewResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_schedule_v1_analysis_schedules__schedule_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path: {
+                schedule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_schedule_v1_analysis_schedules__schedule_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path: {
+                schedule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScheduleDelete"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleWriteReceipt"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_schedule_v1_analysis_schedules__schedule_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path: {
+                schedule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScheduleUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleWriteReceipt"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    schedule_triggers_v1_analysis_schedules__schedule_id__triggers_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path: {
+                schedule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TriggerPage"];
                 };
             };
             /** @description Validation Error */

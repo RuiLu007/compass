@@ -13,7 +13,6 @@ const packages = [
   "@compass/web",
   "@compass/agent",
   "@compass/memory",
-  "@compass/worker",
   "utility",
 ].map((name) => ({
   name,

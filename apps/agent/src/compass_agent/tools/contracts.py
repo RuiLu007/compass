@@ -236,6 +236,12 @@ class ToolBackend(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class PreparedApproval:
+    proposal: ToolApprovalProposal
+    private: dict
+
+
+@dataclass(frozen=True, slots=True)
 class RegisteredTool:
     name: str
     definition: ToolDefinition | None
@@ -250,6 +256,10 @@ class RegisteredTool:
     parallel_safe: bool = False
     timeout_s: float = 20
     revalidate: Callable[[ToolExecutionContext], Awaitable[None]] | None = None
+    prepare_approval: (
+        Callable[[object, ToolExecutionContext], Awaitable[PreparedApproval]] | None
+    ) = None
+    local_effect: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -257,3 +267,4 @@ class PreparedToolCall:
     call_id: str
     tool: RegisteredTool
     args: object = field(repr=False)
+    approval: PreparedApproval | None = None

@@ -1,25 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { options, workerEnvironments } from "./start.mjs";
+import { agentCommand, options } from "./start.mjs";
 
 test("start defaults to no Langfuse and accepts only the explicit opt-in", () => {
   assert.deepEqual(options([]), { langfuse: false });
   assert.deepEqual(options(["--langfuse"]), { langfuse: true });
   assert.throws(() => options(["--unknown"]), /Usage/);
 });
-test("each worker receives its own registered token without mutating the parent", () => {
-  const env = {
-    COMPASS_WORKER_CREDENTIALS: JSON.stringify({ "worker-1": "one", "worker-2": "two" }),
-    COMPASS_WORKER_TOKEN: "old",
-  };
-  const workers = workerEnvironments(env);
-  assert.deepEqual(
-    workers.map((e) => [e.COMPASS_WORKER_ID, e.COMPASS_WORKER_TOKEN]),
-    [
-      ["worker-1", "one"],
-      ["worker-2", "two"],
-    ],
-  );
-  assert.equal(env.COMPASS_WORKER_TOKEN, "old");
-  assert.throws(() => workerEnvironments({}), /worker-1/);
+test("Agent defaults to two replicas and uses the configured replica count", () => {
+  const args = agentCommand({});
+  assert.equal(args[args.indexOf("--workers") + 1], "2");
+  assert.equal(agentCommand({ COMPASS_AGENT_REPLICAS: "1" })[args.indexOf("--workers") + 1], "1");
+  assert.throws(() => agentCommand({ COMPASS_AGENT_REPLICAS: "0" }), /positive integer/);
 });

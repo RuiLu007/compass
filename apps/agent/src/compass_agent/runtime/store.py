@@ -2,21 +2,23 @@
 
 from contextlib import contextmanager
 from copy import deepcopy
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4, uuid5
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session, object_session
 
 from compass_agent.models.errors import ModelError
 from compass_agent.runtime.entities import (
     AgentArtifact,
+    AgentAttempt,
     AgentCommand,
     AgentMessage,
     AgentOutbox,
     AgentRun,
     AgentSession,
+    AgentStep,
 )
 from compass_agent.runtime.private_state import PrivateState, digest
 from compass_agent.runtime.public_projection import reduce_packet, stream_position
@@ -81,6 +83,32 @@ def message_snapshot(message: AgentMessage) -> dict:
     }
 
 
+def canceled_execution(tx, run):
+    for step in tx.scalars(
+        select(AgentStep).where(
+            AgentStep.run_id == run.id, AgentStep.status.in_(("pending", "waiting", "running"))
+        )
+    ):
+        step.status, step.finished_at = "canceled", run.finished_at
+        step.revision += 1
+    for attempt in tx.scalars(
+        select(AgentAttempt).where(AgentAttempt.run_id == run.id, AgentAttempt.status == "prepared")
+    ):
+        attempt.status, attempt.finished_at = "canceled", run.finished_at
+        attempt.error_code = "user_canceled"
+    message = tx.scalars(
+        select(AgentMessage).where(
+            AgentMessage.run_id == run.id,
+            AgentMessage.role == "assistant",
+            AgentMessage.channel == "conversation",
+        )
+    ).one()
+    value = message_snapshot(message)
+    value["revision"] += 1
+    value["status"] = "incomplete"
+    return [*settled_nodes(run, "canceled"), {"type": "message.upsert", "payload": value}]
+
+
 def settled_nodes(run, status):
     events = []
     for obj in run.public_view["objects"].values():
@@ -117,11 +145,16 @@ class RuntimeStore:
         self.engine = engine
         self.private = PrivateState(key)
         self.ready = False
+        self.distributed = False
         self.scheduler: RunScheduler | None = None
 
     @contextmanager
     def transaction(self, *, admission=False):
         with Session(self.engine, expire_on_commit=False) as tx, tx.begin():
+            if self.distributed:
+                from compass_agent.runtime.deployment import require_internal_mode
+
+                require_internal_mode(tx)
             if admission and self.scheduler:
                 self.scheduler.admission(tx)
             yield tx
@@ -278,139 +311,156 @@ class RuntimeStore:
     def submit(self, command: SessionSubmit, context: TrustedContext, imported_history=None):
         if context.scope.kind != "tenant":
             raise ModelError("forbidden", 403)
+        with self.transaction(admission=True) as tx:
+            return self.submit_in_transaction(
+                tx, command, context, imported_history=imported_history
+            )
+
+    @staticmethod
+    def submission_payload(command):
         payload = command.model_dump(mode="json", by_alias=True)
         if command.constraints is None:
             payload.pop("constraints", None)
-        with self.transaction(admission=True) as tx:
-            old = self.command(tx, context, command.request_id, payload)
-            if old:
-                session = tx.scalar(
-                    select(AgentSession).where(
-                        AgentSession.id == old.session_id, *owner_filter(context)
-                    )
-                )
-                if session is None:
-                    raise ModelError("not_found", 404)
-                if old.response.get("session"):
-                    latest = tx.scalar(
-                        select(AgentRun)
-                        .where(AgentRun.session_id == session.id)
-                        .order_by(AgentRun.ordinal.desc())
-                        .limit(1)
-                    )
-                    return {**old.response, "session": session_item(session, latest)}
+        return payload
+
+    def submit_in_transaction(self, tx, command, context, *, imported_history=None, schedule=None):
+        payload = self.submission_payload(command)
+        kind = "schedule_submit" if schedule else "submit"
+        old = self.command(tx, context, command.request_id, payload)
+        if old:
+            if old.kind != kind:
+                raise ModelError("request_conflict", 409)
+            if kind == "schedule_submit":
                 return old.response
-            if not self.ready:
-                raise ModelError("runtime_unavailable", 503)
-            if self.scheduler:
-                self.scheduler.require_capacity(tx, context.scope.tenant_id)
-            session = None
-            if command.session_id:
-                session = tx.scalar(
-                    select(AgentSession)
-                    .where(AgentSession.id == command.session_id, *owner_filter(context))
-                    .with_for_update()
+            session = tx.scalar(
+                select(AgentSession).where(
+                    AgentSession.id == old.session_id, *owner_filter(context)
                 )
-                if session is None:
-                    raise ModelError("not_found", 404)
-            new_session = session is None
-            if session is None:
-                session = AgentSession(
-                    id=uuid4(),
-                    tenant_id=context.scope.tenant_id,
-                    workspace_id=context.scope.workspace_id,
-                    owner_user_id=context.actor_user_id,
-                    title=" ".join(command.question.split())[:40],
-                    title_status="pending",
-                    title_next_at=now(),
-                    session_type="chat",
-                    version=1,
-                    context_start_ordinal=1,
-                    created_at=now(),
-                    updated_at=now(),
-                )
-                tx.add(session)
-                tx.flush()
-            last = tx.scalar(
-                select(AgentRun)
-                .where(AgentRun.session_id == session.id)
-                .order_by(AgentRun.ordinal.desc())
-                .limit(1)
             )
-            if last and (
-                last.status not in TERMINAL
-                or last.public_view["run"]["status"] not in TERMINAL
-                or tx.scalar(
-                    select(AgentOutbox.id)
-                    .where(AgentOutbox.run_id == last.id, AgentOutbox.delivered_at.is_(None))
+            if session is None:
+                raise ModelError("not_found", 404)
+            if old.response.get("session"):
+                latest = tx.scalar(
+                    select(AgentRun)
+                    .where(AgentRun.session_id == session.id)
+                    .order_by(AgentRun.ordinal.desc())
                     .limit(1)
                 )
-            ):
-                raise ModelError("session_busy", 409)
-            run_id = uuid4()
-            config = {
-                "command": payload,
-                "context": context.model_dump(mode="json"),
-                "schemaVersion": 1,
-                "deepseekThinking": True,
-                "timeoutSeconds": (
-                    command.constraints.timeout_seconds if command.constraints else None
-                )
-                or DEFAULT_RUN_TIMEOUT_SECONDS,
-            }
-            if imported_history:
-                config["importedHistory"] = imported_history
-            run = AgentRun(
-                id=run_id,
-                session_id=session.id,
-                request_id=command.request_id,
-                ordinal=1 if last is None else last.ordinal + 1,
-                status="created",
+                return {**old.response, "session": session_item(session, latest)}
+            return old.response
+        if not self.ready:
+            raise ModelError("runtime_unavailable", 503)
+        if self.scheduler:
+            self.scheduler.require_capacity(tx, context.scope.tenant_id)
+        session = None
+        if command.session_id:
+            session = tx.scalar(
+                select(AgentSession)
+                .where(AgentSession.id == command.session_id, *owner_filter(context))
+                .with_for_update()
+            )
+            if session is None:
+                raise ModelError("not_found", 404)
+        new_session = session is None
+        if session is None:
+            session = AgentSession(
+                id=uuid4(),
+                tenant_id=context.scope.tenant_id,
+                workspace_id=context.scope.workspace_id,
+                owner_user_id=context.actor_user_id,
+                title=" ".join(command.question.split())[:40],
+                title_status="pending",
+                title_next_at=now(),
+                session_type="chat",
                 version=1,
-                projected_seq="0-0",
-                recovery_status="ready",
-                cleanup_status="none",
-                config_snapshot=config,
-                public_view={},
+                context_start_ordinal=1,
                 created_at=now(),
-                active_ms=0,
+                updated_at=now(),
             )
-            run.public_view = {"schemaVersion": 1, "run": public_run(run), "objects": {}}
-            tx.add(run)
+            tx.add(session)
             tx.flush()
-            messages = []
-            for ordinal, role, content, status in [
-                (1, "user", command.question, "completed"),
-                (2, "assistant", "", "streaming"),
-            ]:
-                message = AgentMessage(
-                    id=uuid5(run.id, role),
-                    run_id=run.id,
-                    ordinal=ordinal,
-                    channel="conversation",
-                    role=role,
-                    status=status,
-                    revision=1,
-                    public_content={"text": content, "artifactIds": []},
-                    created_at=now(),
-                    updated_at=now(),
-                )
-                tx.add(message)
-                messages.append({"type": "message.upsert", "payload": message_snapshot(message)})
-            if self.scheduler:
-                messages.append(self.scheduler.enqueue(tx, session, run, initial=True))
-            self.outbox(tx, session, run, messages, operation_id=command.request_id)
-            response: dict[str, Any] = {
-                "sessionId": str(session.id),
-                "runId": str(run.id),
-                "streamUrl": f"/v1/analysis/runs/{run.id}/events",
-            }
-            if new_session:
-                response["session"] = session_item(session, run)
-            self.record_command(
-                tx, context, command.request_id, "submit", payload, session.id, run.id, response
+        last = tx.scalar(
+            select(AgentRun)
+            .where(AgentRun.session_id == session.id)
+            .order_by(AgentRun.ordinal.desc())
+            .limit(1)
+        )
+        if last and (
+            last.status not in TERMINAL
+            or last.public_view["run"]["status"] not in TERMINAL
+            or tx.scalar(
+                select(AgentOutbox.id)
+                .where(AgentOutbox.run_id == last.id, AgentOutbox.delivered_at.is_(None))
+                .limit(1)
             )
-            return response
+        ):
+            raise ModelError("session_busy", 409)
+        run_id = uuid4()
+        config = {
+            "command": payload,
+            "context": context.model_dump(mode="json"),
+            "schemaVersion": 1,
+            "deepseekThinking": True,
+            "timeoutSeconds": (command.constraints.timeout_seconds if command.constraints else None)
+            or DEFAULT_RUN_TIMEOUT_SECONDS,
+        }
+        if self.scheduler:
+            config["budget"] = self.scheduler.budget
+        if schedule:
+            config["schedule"] = schedule
+        if imported_history:
+            config["importedHistory"] = imported_history
+        run = AgentRun(
+            id=run_id,
+            session_id=session.id,
+            request_id=command.request_id,
+            ordinal=1 if last is None else last.ordinal + 1,
+            status="created",
+            version=1,
+            projected_seq="0-0",
+            recovery_status="ready",
+            cleanup_status="none",
+            config_snapshot=config,
+            public_view={},
+            created_at=now(),
+            active_ms=0,
+        )
+        run.public_view = {"schemaVersion": 1, "run": public_run(run), "objects": {}}
+        tx.add(run)
+        tx.flush()
+        messages = []
+        for ordinal, role, content, status in [
+            (1, "user", command.question, "completed"),
+            (2, "assistant", "", "streaming"),
+        ]:
+            message = AgentMessage(
+                id=uuid5(run.id, role),
+                run_id=run.id,
+                ordinal=ordinal,
+                channel="conversation",
+                role=role,
+                status=status,
+                revision=1,
+                public_content={"text": content, "artifactIds": []},
+                created_at=now(),
+                updated_at=now(),
+            )
+            tx.add(message)
+            messages.append({"type": "message.upsert", "payload": message_snapshot(message)})
+        if self.scheduler:
+            messages.append(self.scheduler.enqueue(tx, session, run, initial=True))
+        self.outbox(tx, session, run, messages, operation_id=command.request_id)
+        response: dict[str, Any] = {
+            "sessionId": str(session.id),
+            "runId": str(run.id),
+            "streamUrl": f"/v1/analysis/runs/{run.id}/events",
+        }
+        if new_session:
+            response["session"] = session_item(session, run)
+        self.record_command(
+            tx, context, command.request_id, kind, payload, session.id, run.id, response
+        )
+        return response
 
     def history_command(self, run_id):
         with Session(self.engine) as tx:
@@ -471,16 +521,24 @@ class RuntimeStore:
             )
             return AnalysisRunInput.model_validate(data)
 
-    def pending(self, run_id=None):
+    def pending(self, run_id=None, *, limit=None):
         with Session(self.engine, expire_on_commit=False) as tx:
             query = (
                 select(AgentOutbox)
                 .join(AgentRun, AgentRun.id == AgentOutbox.run_id)
-                .where(AgentOutbox.delivered_at.is_(None), AgentRun.recovery_status != "blocked")
+                .where(
+                    AgentOutbox.delivered_at.is_(None),
+                    (AgentRun.recovery_status != "blocked")
+                    | (
+                        (AgentRun.status == "cancelling")
+                        & AgentRun.reason_code.in_(("execution_unknown", "cleanup_unconfirmed"))
+                    ),
+                )
             )
             if run_id:
                 query = query.where(AgentOutbox.run_id == run_id)
-            return tx.scalars(query.order_by(AgentOutbox.created_at, AgentOutbox.run_version)).all()
+            ordered = query.order_by(AgentOutbox.run_id, AgentOutbox.run_version)
+            return tx.scalars(ordered.limit(limit) if limit else ordered).all()
 
     def progress(self, run_id, epoch, events):
         with self.transaction() as tx:
@@ -522,11 +580,61 @@ class RuntimeStore:
             self.outbox(tx, session, run, [])
             return run.execution_epoch
 
-    def project(self, run_id, entries):
-        if not entries:
+    def pending_runs(self, limit=32):
+        with Session(self.engine) as tx:
+            outbox = AgentOutbox
+            return tx.scalars(
+                select(outbox.run_id)
+                .join(AgentRun, AgentRun.id == outbox.run_id)
+                .where(
+                    outbox.delivered_at.is_(None),
+                    AgentRun.recovery_status != "blocked",
+                    (AgentRun.publish_token.is_(None))
+                    | (AgentRun.publish_expires_at <= func.clock_timestamp()),
+                )
+                .group_by(outbox.run_id)
+                .order_by(func.min(outbox.created_at), outbox.run_id)
+                .limit(limit)
+            ).all()
+
+    def publication(self, run_id):
+        with self.transaction() as tx:
+            _, run = self.lock(tx, run_id)
+            clock = tx.scalar(select(func.clock_timestamp()))
+            assert isinstance(clock, datetime)
+            if run.recovery_status == "blocked" or (
+                run.publish_expires_at and run.publish_expires_at > clock
+            ):
+                return None
+            run.publish_token = uuid4()
+            run.publish_generation += 1
+            run.publish_expires_at = clock + timedelta(seconds=10)
+            return run
+
+    def end_publication(self, lease):
+        with self.transaction() as tx:
+            _, run = self.lock(tx, lease.id)
+            if run.publish_token == lease.publish_token:
+                run.publish_token = run.publish_expires_at = None
+
+    def project(self, run_id, entries, lease=None):
+        if not entries and lease is None:
             return
         with self.transaction() as tx:
             _, run = self.lock(tx, run_id)
+            if lease is not None:
+                clock = tx.scalar(select(func.clock_timestamp()))
+                assert isinstance(clock, datetime)
+                if (
+                    run.publish_token != lease.publish_token
+                    or run.publish_generation != lease.publish_generation
+                    or run.publish_expires_at is None
+                    or run.publish_expires_at <= clock
+                    or run.projected_seq != lease.projected_seq
+                    or run.recovery_status == "blocked"
+                ):
+                    raise ModelError("publish_lease_lost", 409)
+                run.publish_initialized = True
             entries = [
                 (seq, row)
                 for seq, row in entries
@@ -657,12 +765,13 @@ class RuntimeStore:
     def blocked(self, run_id, reason):
         with self.transaction() as tx:
             session, run = self.lock(tx, run_id)
-            if run.status not in TERMINAL:
+            if run.status not in TERMINAL and run.recovery_status != "blocked":
                 run.recovery_status = "blocked"
                 run.reason_code = reason
                 if run.status == "running":
                     run.status = "paused"
-                run.execution_epoch = None
+                if not self.distributed:
+                    run.execution_epoch = None
                 # This recovery-only projection has no Redis successor. Message reload
                 # exposes the blocked state at the last confirmed cursor.
                 run.version += 1

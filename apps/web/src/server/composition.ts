@@ -145,15 +145,25 @@ export async function authorizeRuntime(
       throw new ApplicationError("forbidden", "当前权限不足。");
     const current = await access.current(actor, context.scope.tenant_id);
     const workspace = await access.workspace(context.scope.tenant_id, context.scope.workspace_id);
-    if (workspace.status !== "active" || (approval && current.role !== "admin"))
+    if (
+      workspace.tenantId !== context.scope.tenant_id ||
+      workspace.status !== "active" ||
+      (approval && context.purpose !== "schedule_owner" && current.role !== "admin")
+    )
       throw new ApplicationError("forbidden", "当前权限不足。");
     const scope = { tenantId: context.scope.tenant_id, workspaceId: context.scope.workspace_id };
     if (context.purpose === "runtime_usage") {
       if (current.role !== "admin" || !current.memberId)
         throw new ApplicationError("forbidden", "当前权限不足。");
     } else {
-      requirePermission(current, "module.analysis", scope);
-      requirePermission(current, "models.invoke", scope);
+      const schedule = ["schedule_manage", "schedule_owner", "schedule_run"].includes(
+        context.purpose ?? "",
+      );
+      if (schedule) requirePermission(current, "module.automations", scope);
+      if (context.purpose !== "schedule_manage") {
+        requirePermission(current, "module.analysis", scope);
+        requirePermission(current, "models.invoke", scope);
+      }
     }
     return { details: current.role === "admin", revision: current.authzVersion };
   });

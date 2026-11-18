@@ -24,6 +24,8 @@ def test_production_registry_contains_only_generic_tools():
         "python_analysis",
         "create_workflow",
         "sub_agent",
+        "schedule_read",
+        "schedule_write",
     }
     assert all(tool.category == "builtin" for tool in TOOLS)
     for folder in (ROOT / "runtime", ROOT / "harness"):
@@ -105,4 +107,6 @@ def test_production_wheel_excludes_showcases(tmp_path):
         "python_analysis",
         "create_workflow",
         "sub_agent",
+        "schedule_read",
+        "schedule_write",
     }

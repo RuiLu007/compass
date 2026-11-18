@@ -63,6 +63,9 @@ class TrustedContext(StrictModel):
         "mcp_manage",
         "runtime_diagnostics",
         "runtime_usage",
+        "schedule_manage",
+        "schedule_owner",
+        "schedule_run",
     ]
 
 
@@ -480,6 +483,9 @@ type ModelInputError = Literal[
 RunError = Literal[
     ModelInputError,
     "model_failed",
+    "model_rate_limited",
+    "runtime_overloaded",
+    "run_budget_exhausted",
     "model_incomplete",
     "model_unavailable",
     "run_timeout",
@@ -1288,6 +1294,7 @@ class ModelErrorDetail(StrictModel):
     message: str
     requestId: str
     currentVersion: int | None = None
+    reasonCode: str | None = None
 
 
 class ModelErrorResponse(StrictModel):
@@ -1867,34 +1874,6 @@ class SessionDeleted(RunContractModel):
     session_id: RunUUID = Field(alias="sessionId")
 
 
-class WorkerBoot(RunContractModel):
-    boot_id: Annotated[UUID, Field(strict=False)] = Field(alias="bootId")
-
-
-class ExecutionGrant(RunContractModel):
-    run_id: Annotated[UUID, Field(strict=False)] = Field(alias="runId")
-    worker_id: str = Field(alias="workerId", min_length=1, max_length=64)
-    boot_id: Annotated[UUID, Field(strict=False)] = Field(alias="bootId")
-    epoch: Annotated[UUID, Field(strict=False)]
-    expires_at: Annotated[datetime, Field(strict=False)] = Field(alias="expiresAt")
-    checkpoint_no: int = Field(alias="checkpointNo", ge=0)
-
-
-class WorkerLeaseCommand(RunContractModel):
-    grant: ExecutionGrant
-
-
-class WorkerAdvanceCommand(WorkerLeaseCommand):
-    expected_checkpoint: int = Field(alias="expectedCheckpoint", ge=0)
-
-
-class WorkerAdvanceAck(RunContractModel):
-    command_id: Annotated[UUID, Field(strict=False)] = Field(alias="commandId")
-    status: Literal["running", "continue", "parked", "done", "interrupted"]
-    checkpoint_no: int = Field(alias="checkpointNo", ge=0)
-    reason_code: str | None = Field(alias="reasonCode", max_length=80)
-
-
 class SchedulingPublic(RunContractModel):
     phase: Literal["scheduling"] = "scheduling"
     status: Literal["ready", "leased", "reclaiming", "parked", "done"]
@@ -1934,4 +1913,139 @@ class RuntimeTimelineEntry(RunContractModel):
 
 class RuntimeTimeline(RunContractModel):
     run_id: Annotated[UUID, Field(strict=False)] = Field(alias="runId")
+    schedule_id: Annotated[UUID, Field(strict=False)] | None = Field(
+        default=None, alias="scheduleId"
+    )
+    trigger_id: Annotated[UUID, Field(strict=False)] | None = Field(default=None, alias="triggerId")
     entries: list[RuntimeTimelineEntry] = Field(max_length=4096)
+
+
+ScheduleStatus = Literal["enabled", "disabled", "deleted"]
+DeliveryStatus = Literal[
+    "pending",
+    "dispatching",
+    "retry_wait",
+    "reconcile_pending",
+    "submitted",
+    "delivery_failed",
+    "skipped",
+]
+
+
+class ScheduleInput(RunContractModel):
+    question: str = Field(min_length=1, max_length=8000)
+    selection: MainModelSelection
+    workflow_asset_ref: WorkflowAssetRef | None = Field(default=None, alias="workflowAssetRef")
+    constraints: RunConstraints | None = None
+
+
+class ScheduleFields(ScheduleInput):
+    name: str = Field(min_length=1, max_length=120)
+    cron: str = Field(min_length=1, max_length=120)
+    timezone: str = Field(min_length=1, max_length=128)
+    enabled: bool = True
+
+
+class ScheduleCreate(ScheduleFields):
+    request_id: UUID = Field(alias="requestId", strict=False)
+
+
+class SchedulePatch(RunContractModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    question: str | None = Field(default=None, min_length=1, max_length=8000)
+    selection: MainModelSelection | None = None
+    cron: str | None = Field(default=None, min_length=1, max_length=120)
+    timezone: str | None = Field(default=None, min_length=1, max_length=128)
+    enabled: bool | None = None
+    workflow_asset_ref: WorkflowAssetRef | None = Field(default=None, alias="workflowAssetRef")
+    constraints: RunConstraints | None = None
+
+    @model_validator(mode="after")
+    def validate_patch(self):
+        if not self.model_fields_set or any(
+            getattr(self, field) is None
+            for field in self.model_fields_set - {"workflow_asset_ref", "constraints"}
+        ):
+            raise ValueError("Provide at least one valid editable field")
+        return self
+
+
+class ScheduleDelete(RunContractModel):
+    request_id: UUID = Field(alias="requestId", strict=False)
+    expected_revision: int = Field(alias="expectedRevision", ge=1)
+
+
+class ScheduleUpdate(ScheduleDelete):
+    patch: SchedulePatch
+
+
+class SchedulePreview(RunContractModel):
+    selection: MainModelSelection | None = None
+    cron: str = Field(min_length=1, max_length=120)
+    timezone: str = Field(min_length=1, max_length=128)
+
+
+class ScheduleAutoRouting(RunContractModel):
+    flash: bool
+    pro: bool
+
+
+class SchedulePreviewResult(RunContractModel):
+    times: list[datetime]
+    warning_code: Literal["capability_not_supported"] | None = Field(
+        default=None, alias="warningCode"
+    )
+    auto_routing: ScheduleAutoRouting | None = Field(default=None, alias="autoRouting")
+
+
+class ScheduleWriteReceipt(RunContractModel):
+    id: UUID
+    revision: int
+    status: ScheduleStatus
+    next_fire_at: datetime | None = Field(alias="nextFireAt")
+
+
+class TriggerView(RunContractModel):
+    id: UUID
+    schedule_id: UUID = Field(alias="scheduleId")
+    schedule_revision: int = Field(alias="scheduleRevision")
+    scheduled_at: datetime = Field(alias="scheduledAt")
+    detected_at: datetime = Field(alias="detectedAt")
+    coalesced_from_at: datetime | None = Field(alias="coalescedFromAt")
+    delivery_status: DeliveryStatus = Field(alias="deliveryStatus")
+    reason_code: str | None = Field(alias="reasonCode")
+    delivery_attempts: int = Field(alias="deliveryAttempts")
+    next_attempt_at: datetime | None = Field(alias="nextAttemptAt")
+    run_id: UUID | None = Field(alias="runId")
+    session_id: UUID | None = Field(alias="sessionId")
+    run_status: DurableStatus | None = Field(alias="runStatus")
+    run_reason_code: str | None = Field(alias="runReasonCode")
+    observed_at: datetime | None = Field(alias="observedAt")
+    finished_at: datetime | None = Field(alias="finishedAt")
+
+
+class ScheduleView(ScheduleWriteReceipt, ScheduleInput):
+    name: str
+    cron: str
+    timezone: str
+    updated_at: datetime = Field(alias="updatedAt")
+    latest_trigger: TriggerView | None = Field(alias="latestTrigger")
+
+
+class SchedulePage(RunContractModel):
+    items: list[ScheduleView]
+    next_cursor: str | None = Field(alias="nextCursor")
+
+
+class TriggerPage(RunContractModel):
+    items: list[TriggerView]
+    next_cursor: str | None = Field(alias="nextCursor")
+
+
+class TriggerDelivery(RunContractModel):
+    delivery_token: UUID = Field(alias="deliveryToken", strict=False)
+
+
+class TriggerAdmission(RunContractModel):
+    outcome: Literal["accepted", "closed", "ready"]
+    run_id: UUID | None = Field(default=None, alias="runId")

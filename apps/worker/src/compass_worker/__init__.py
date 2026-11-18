@@ -1,1 +1,0 @@
-"""Compass background worker."""

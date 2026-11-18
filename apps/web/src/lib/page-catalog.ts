@@ -42,9 +42,9 @@ group("plugins", "插件", "workspace", "module.plugins", [
   ["plugins-datasets", "数据集", "plugins/datasets"],
 ]);
 group("automations", "定时任务", "workspace", "module.automations", [
-  ["automations-all", "全部任务", "automations"],
-  ["automations-new", "新建定时任务", "automations/new"],
-  ["automations-history", "执行记录", "automations/history"],
+  ["automations-all", "全部任务", "automations", "implemented"],
+  ["automations-new", "新建定时任务", "automations/new", "implemented"],
+  ["automations-history", "执行记录", "automations/history", "implemented"],
 ]);
 group("boards", "看板", "workspace", "module.boards", [
   ["boards-overview", "经营总览", "boards/overview"],

@@ -243,13 +243,15 @@ def test_real_control_restart_and_nas_disconnect_preserve_owner_and_files(engine
         from sqlalchemy import update
         from sqlalchemy.orm import Session
 
-        dedicated_nas = os.environ.get("COMPASS_SANDBOX_TEST_NAS_CONTAINER")
-        name = (
-            dedicated_nas if service == "nas" and dedicated_nas else f"compass-sandbox-{service}-1"
+        dedicated = os.environ.get(
+            "COMPASS_SANDBOX_TEST_NAS_CONTAINER"
+            if service == "nas"
+            else "COMPASS_SANDBOX_TEST_CONTROL_CONTAINER"
         )
+        name = dedicated or f"compass-sandbox-{service}-1"
         info = json.loads(subprocess.check_output(["docker", "inspect", name]))[0]
         labels = info["Config"]["Labels"]
-        if service == "nas" and dedicated_nas:
+        if dedicated:
             assert labels.get("compass.acceptance.owner") == os.environ["COMPASS_SANDBOX_TEST_HOST"]
         else:
             assert labels.get("com.docker.compose.project") == "compass-sandbox"

@@ -13,7 +13,7 @@ from compass_agent.models.errors import ModelError
 from compass_agent.observability.observer import Observer
 from compass_agent.runtime.control import RunRegistry
 from compass_agent.runtime.durable_service import DurableRuntime
-from compass_agent.runtime.run_scheduler import WorkerIdentity
+from compass_agent.runtime.run_scheduler import ConsumerSlot
 from compass_agent.schemas import AgentResponse, PlatformScope
 from compass_agent.settings import Settings
 from fastapi import Response
@@ -248,7 +248,7 @@ def test_exporter_failure_during_execution_keeps_authorized_message_and_timeline
             executor = BoundaryRunner()
             headers = runtime.begin_observation(run_id, CHAT, executor)
             trace_id = headers["X-Compass-Trace-Id"]
-            worker = WorkerIdentity("visibility-exporter-worker", uuid4())
+            worker = ConsumerSlot("visibility-exporter-worker", uuid4())
             grant = await claim(runtime, worker, run_id)
             driving = asyncio.create_task(
                 advance_to_boundary_stop(runtime, worker, grant, executor, CHAT)
