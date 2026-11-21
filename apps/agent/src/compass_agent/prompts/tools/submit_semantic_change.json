@@ -1,0 +1,50 @@
+{
+  "type": "function",
+  "function": {
+    "name": "submit_semantic_change",
+    "description": "把已保存和校验的版本提交双人评审，需要维护者确认。",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "version_id": {
+          "format": "uuid",
+          "title": "Version Id",
+          "type": "string"
+        },
+        "expected_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Digest",
+          "type": "string"
+        },
+        "note": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Note",
+          "type": "string"
+        },
+        "request_key": {
+          "format": "uuid",
+          "title": "Request Key",
+          "type": "string"
+        },
+        "binding_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Binding Id"
+        }
+      },
+      "required": ["version_id", "expected_digest", "note", "request_key"],
+      "title": "Input",
+      "type": "object"
+    }
+  },
+  "examples": []
+}

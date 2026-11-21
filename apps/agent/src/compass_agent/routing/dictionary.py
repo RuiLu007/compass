@@ -5,16 +5,26 @@ from functools import lru_cache
 from importlib.resources import files
 
 from compass_agent.models.errors import ModelError
+from compass_agent.prompt_assets import prompt_text
 from compass_agent.schemas import Intent, RoutingFeatures
+
+CATALOG_VERSION = "2c16fee116a7536b"
 
 
 @lru_cache
 def catalog():
-    value = json.loads(files(__package__).joinpath("scenes.json").read_text())
-    scenes = {row["scene_id"]: row for row in value["scenes"]}
-    if len(scenes) != len(value["scenes"]):
-        raise ValueError("Duplicate routing scenes")
-    return value["version"], scenes
+    value = json.loads(
+        files("compass_agent").joinpath("prompts/support/routing/scenes.json").read_text()
+    )
+    scenes = {
+        key: {
+            field: item for field, item in row.items() if field not in {"description", "examples"}
+        }
+        for key, row in value["scenes"].items()
+    }
+    if any(key != row["scene_id"] for key, row in scenes.items()):
+        raise ValueError("Routing scene ID mismatch")
+    return CATALOG_VERSION, scenes
 
 
 def intent_for_scene(scene_id: str) -> Intent:
@@ -30,7 +40,9 @@ def features_for(intent):
 
 
 def descriptions():
+    document = json.loads(prompt_text("support/routing/scenes.json"))
     return {
-        key: row["category_name"] + " / " + row["name"] + "：" + row["description"]
-        for key, row in catalog()[1].items()
+        key: row["description"].rstrip("\n")
+        + ("\n识别示例：\n" + "\n".join(row["examples"]) if row.get("examples") else "")
+        for key, row in document["scenes"].items()
     }

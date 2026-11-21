@@ -8,6 +8,7 @@ from pydantic import (
     ConfigDict,
     Field,
     JsonValue,
+    PrivateAttr,
     RootModel,
     SecretStr,
     StringConstraints,
@@ -66,6 +67,7 @@ class TrustedContext(StrictModel):
         "schedule_manage",
         "schedule_owner",
         "schedule_run",
+        "promptops_manage",
     ]
 
 
@@ -743,6 +745,8 @@ class RunArtifact(RunContractModel):
 
 
 class RunCompleted(RunContractModel):
+    _delivery: Any = PrivateAttr(default=None)
+    _citations: Any = PrivateAttr(default=None)
     status: Literal["completed"]
     final_answer: Annotated[
         str,
@@ -1610,6 +1614,8 @@ class DecisionCommand(ControlCommand):
     proposal_digest: str = Field(alias="proposalDigest", pattern=r"^[a-f0-9]{64}$")
     decision_id: UUID = Field(alias="decisionId", strict=False)
     decision: Literal["approve", "reject"]
+    choice_id: UUID | None = Field(default=None, alias="choiceId", strict=False)
+    draft_edits: dict[str, str] | None = Field(default=None, alias="draftEdits", max_length=16)
 
 
 class ReconcileCommand(ControlCommand):
@@ -1693,19 +1699,105 @@ class PublicApproval(RunContractModel):
     reason_code: str | None = Field(alias="reasonCode", max_length=80)
 
 
+class DashboardWidget(RunContractModel):
+    kind: Literal["metric", "table", "bar", "line"]
+    title: str = Field(min_length=1, max_length=160)
+    fact_ref: str = Field(alias="factRef", min_length=1, max_length=200)
+    columns: list[str] = Field(min_length=1, max_length=50)
+    rows: list[list[str | int | float | bool | None]] = Field(max_length=50)
+
+
+class DashboardDocumentV1(RunContractModel):
+    schema_version: Literal[1] = Field(alias="schemaVersion")
+    title: str = Field(min_length=1, max_length=160)
+    scope: str = Field(min_length=1, max_length=500)
+    as_of: str = Field(alias="asOf", min_length=1, max_length=64)
+    widgets: list[DashboardWidget] = Field(min_length=1, max_length=24)
+
+
 class PublicArtifact(RunContractModel):
     id: RunUUID
     name: str = Field(min_length=1, max_length=160)
-    media_type: Literal["image/png", "text/csv"] = Field(alias="mediaType")
+    media_type: Literal["image/png", "text/csv", "application/json", "text/markdown"] = Field(
+        alias="mediaType"
+    )
     byte_size: int = Field(alias="byteSize", ge=1, le=2097152)
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     step_id: RunUUID = Field(alias="stepId")
     tool_call_id: str = Field(alias="toolCallId", max_length=200)
 
 
+class SemanticOption(RunContractModel):
+    id: RunUUID
+    version_id: RunUUID = Field(alias="versionId")
+    name: str
+    description: str
+    unit: str
+    version: int
+
+
 class WaitView(PublicApproval):
+    semantic_kind: Literal["choice", "result", "draft", "submit"] | None = Field(
+        default=None, alias="semanticKind"
+    )
+    options: list[SemanticOption] | None = None
+    fields: dict[str, JsonValue] | None = None
+    scopes: list[dict[str, JsonValue]] | None = None
     run_version: int = Field(alias="runVersion", ge=1)
     allowed_actions: list[Literal["approve", "reject", "reconcile"]] = Field(alias="allowedActions")
+
+
+class SemanticOpenResult(RunContractModel):
+    proposal: dict[str, JsonValue] = Field(default_factory=dict)
+    result_ref: UUID
+    created_at: datetime
+    columns: list[str]
+    status: Literal["active", "confirmed", "dismissed", "saved"]
+    reusable: bool
+    draft_id: UUID | None = None
+
+
+class CitationAnchor(RunContractModel):
+    citation_id: RunUUID = Field(alias="citationId")
+    ordinal: int = Field(ge=1)
+    start: int = Field(ge=0)
+    end: int = Field(ge=1)
+
+
+class RunCitations(RunContractModel):
+    message_id: RunUUID = Field(alias="messageId")
+    revision: int = Field(ge=1)
+    text_digest: str = Field(alias="textDigest", pattern=r"^[a-f0-9]{64}$")
+    anchors: list[CitationAnchor] = Field(max_length=96)
+
+
+class CitationSource(RunContractModel):
+    kind: Literal["metric", "definition", "detail", "knowledge", "history", "external"]
+    title: str
+    version: str
+    locator: str
+    scope: str
+    excerpt: str
+
+
+class CitationDetail(RunContractModel):
+    citation_id: RunUUID = Field(alias="citationId")
+    claim_id: RunUUID = Field(alias="claimId")
+    revision: int = Field(ge=1)
+    status: Literal["supported", "refuted", "insufficient", "contested"]
+    statement: str
+    calculation: str | None = None
+    sources: list[CitationSource] = Field(max_length=64)
+
+
+class SemanticResults(RunContractModel):
+    items: list[SemanticOpenResult]
+
+
+class SemanticResultDecision(RunContractModel):
+    result_ref: UUID = Field(strict=False)
+    action: Literal["confirm", "dismiss", "save"]
+    fields: dict[str, JsonValue] | None = Field(default=None, max_length=32)
 
 
 class PublicWorkflow(RunContractModel):
@@ -2049,3 +2141,230 @@ class TriggerDelivery(RunContractModel):
 class TriggerAdmission(RunContractModel):
     outcome: Literal["accepted", "closed", "ready"]
     run_id: UUID | None = Field(default=None, alias="runId")
+
+
+# PromptOps management contracts for the authenticated Web BFF.
+PromptPath = Annotated[str, Field(min_length=1, max_length=512)]
+PromptBody = Annotated[str, Field(max_length=262144)]
+PromptChoice = Literal["local", "online", "merge"]
+
+
+class PromptFileEntry(StrictModel):
+    path: str
+    origin: Literal["bundled", "online"]
+    current_version: int | None
+    edit_rev: int
+    active_epoch: int
+    has_draft: bool
+    used: bool
+
+
+class PromptTree(StrictModel):
+    generation: int | None
+    snapshot_no: int
+    items: list[PromptFileEntry]
+    next_cursor: str | None
+
+
+class PromptFileDetail(PromptFileEntry):
+    body: str | None
+    draft_body: str | None
+    draft_base_version: int | None
+    draft_base_epoch: int | None
+    usages: list[str]
+    variables: list[str]
+    version: int | None
+    kind: Literal["markdown", "json", "tool"] = "markdown"
+    contract_sha256: str | None = None
+    retired: bool = False
+
+
+class PromptHistoricalVersion(StrictModel):
+    path: str
+    version: int
+    sha256: str
+    created_at: datetime
+    created_by: UUID
+    note: str
+
+
+class PromptHistory(StrictModel):
+    items: list[PromptHistoricalVersion]
+    next_cursor: str | None
+
+
+class PromptSnapshotEntry(StrictModel):
+    snapshot_no: int
+    generation: int
+    policy_version: str
+    policy_digest: str
+    manifest_digest: str
+    created_at: datetime
+    created_by: UUID
+    note: str
+
+
+class PromptSnapshots(StrictModel):
+    items: list[PromptSnapshotEntry]
+    next_cursor: str | None
+
+
+class PromptSnapshotFile(StrictModel):
+    path: str
+    version: int
+
+
+class PromptSnapshot(PromptSnapshotEntry):
+    items: list[PromptSnapshotFile]
+    next_cursor: str | None
+
+
+class PromptDraftBase(StrictModel):
+    path: PromptPath
+    expected_edit_rev: int = Field(ge=0)
+    base_epoch: int = Field(ge=0)
+    request_id: UUID
+
+
+class PromptDraft(PromptDraftBase):
+    body: PromptBody
+
+
+class PromptDraftFromVersion(PromptDraftBase):
+    version: int = Field(gt=0)
+
+
+class PromptRenderInput(StrictModel):
+    path: PromptPath
+    body: PromptBody
+    variables: dict[str, str] = Field(default_factory=dict, max_length=64)
+
+
+class PromptRendered(StrictModel):
+    rendered: str
+    variables: list[str]
+
+
+class PromptImportPreviewInput(StrictModel):
+    path: PromptPath | None = None
+    cursor: str | None = Field(default=None, max_length=512)
+    limit: int = Field(default=100, ge=1, le=200)
+
+
+class PromptImportEntry(StrictModel):
+    path: str
+    state: Literal["new", "unchanged", "local", "online", "conflict"]
+    edit_rev: int
+    base_body: str | None = None
+    local_body: str | None = None
+    online_body: str | None = None
+
+
+class PromptImportPreview(StrictModel):
+    package_digest: str
+    confirmation_hash: str
+    items: list[PromptImportEntry]
+    next_cursor: str | None
+    total: int
+
+
+class PromptImportChoice(StrictModel):
+    path: PromptPath
+    choice: PromptChoice
+    body: PromptBody | None = None
+
+
+class PromptImport(StrictModel):
+    request_id: UUID
+    confirmation_hash: str = Field(min_length=64, max_length=64)
+    package_digest: str = Field(min_length=64, max_length=64)
+    choices: list[PromptImportChoice] = Field(default_factory=list, max_length=2048)
+
+
+class PromptReleaseTarget(StrictModel):
+    action: Literal["file", "all", "restore"]
+    path: PromptPath | None = None
+    snapshot_no: int | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def check_target(self):
+        if (self.action == "file") != (self.path is not None) or (
+            (self.action == "restore") != (self.snapshot_no is not None)
+        ):
+            raise ValueError("Choose the target for this release action")
+        return self
+
+
+class PromptRelease(PromptReleaseTarget):
+    confirmation_hash: str = Field(min_length=64, max_length=64)
+    note: str = Field(min_length=1, max_length=500)
+    request_id: UUID
+
+
+class PromptChange(StrictModel):
+    path: str
+    old_version: int | None
+    new_version: int | None
+    usages: list[str]
+
+
+class PromptReleasePreview(StrictModel):
+    generation: int | None
+    snapshot_no: int | None
+    changes: list[PromptChange]
+    since_snapshot: list[PromptChange]
+    errors: list[str]
+    confirmation_hash: str
+
+
+class PromptReceipt(StrictModel):
+    action: str
+    generation: int | None = None
+    snapshot_no: int | None = None
+    path: str | None = None
+    version: int | None = None
+    edit_rev: int | None = None
+    adopted: int = 0
+    changed_count: int = 0
+    retained: int = 0
+    skipped: int = 0
+
+
+class StarterModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, populate_by_name=True)
+
+
+class StarterSuggestion(StarterModel):
+    label: str
+    question: str = Field(min_length=1, max_length=8000)
+    constraints: RunConstraints | None = None
+
+
+class StarterGroup(StarterModel):
+    title: str
+    suggestions: list[StarterSuggestion]
+
+
+class StarterQuestion(StarterModel):
+    id: str
+    type: Literal["choice", "noul", "score"]
+    instructions: str
+    criteria: str
+
+
+class StarterDecision(StarterModel):
+    id: str
+    title: str
+    description: str
+    state_format: Literal["text", "json"] = Field(alias="stateFormat")
+    state: str
+    questions: list[StarterQuestion]
+
+
+class PromptStarterCards(StarterModel):
+    generation: int
+    analysis: list[StarterGroup] = Field(default_factory=list)
+    models: list[StarterDecision] = Field(default_factory=list)
+    default_choice: str | None = None
+    tool_description: str | None = None
+    workflow_parts: list[str] = Field(default_factory=list)

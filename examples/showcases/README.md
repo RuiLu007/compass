@@ -7,3 +7,5 @@
 产品 Runtime、Harness、请求 Schema、默认工具清单和组合根不导入本目录。此目录不进入 Agent wheel 或生产镜像。普通 Chat 不携带案例执行标记。
 
 演示结束或被通用能力覆盖时删除；需要进入产品时按正常 Feature 评审通用接口及跨场景行为。目录与注册规则由 `apps/agent/tests/test_showcase_isolation.py` 和构建产物检查验证。
+
+[第 23 课跨源经营诊断](lesson-23-agentic-search/README.md)提供冻结数据、工作区资料、正式口径发布与 Chat 业务验收入口。

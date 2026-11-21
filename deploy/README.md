@@ -71,7 +71,7 @@ docker compose -f deploy/compose/compose.yaml --profile web run --rm web-migrate
 
 ## 模型 Runtime 配置
 
-Agent 迁移容器先供应独立 `compass_agent` 库，再迁移至 `0015` 并写入幂等工程样本；运行容器仅持有 `compass_agent_runtime` 凭据。既有旧版 `compass` 演示库保留，接管步骤见 [agent/main](../apps/agent/db/main/README.md)。自定义已存在角色时可通过 `COMPASS_AGENT_RUNTIME_URL` / `COMPASS_AGENT_MIGRATOR_URL` 提供原凭据，供应不会覆盖密码。
+Agent 迁移容器先供应独立 `compass_agent` 库，再迁移至 `0017` 并写入幂等工程样本；运行容器仅持有 `compass_agent_runtime` 凭据。既有旧版 `compass` 演示库保留，接管步骤见 [agent/main](../apps/agent/db/main/README.md)。自定义已存在角色时可通过 `COMPASS_AGENT_RUNTIME_URL` / `COMPASS_AGENT_MIGRATOR_URL` 提供原凭据，供应不会覆盖密码。
 
 `pnpm run deploy` 不读取根 `.env`。启用模型能力时从受控进程环境传入 `COMPASS_AGENT_SERVICE_TOKEN`、`COMPASS_MODEL_ENCRYPTION_KEY`、`COMPASS_MODEL_ALLOWED_ORIGINS`；前两项默认空，模型入口会明确不可用。模型 Key 经平台页面录入；数据库备份与加密密钥分别保存。完整接入见 [Agent 说明](../apps/agent/README.md#模型接入)。
 
@@ -88,3 +88,27 @@ Agent 迁移容器先供应独立 `compass_agent` 库，再迁移至 `0015` 并�
 Agent 部署需显式提供独立 Fernet `COMPASS_RUNTIME_STATE_KEY`，同时保留 Web/Agent 服务令牌、模型密钥。缺失 Runtime 密钥时 readyz 返回 503。部署入口继续只消费进程环境；可用 `node --env-file=.env scripts/deploy.mjs up` 加载私有根环境。Redis 配置见 `redis/redis.conf`，固定 AOF always/noeviction，卷 `redis-data` 在停止后保留，默认 loopback 56379。服务令牌用于当前权限复查，独立 `COMPASS_RUNTIME_EVENT_TOKEN` 用于可信工作流事件。Agent 容器为 SSE 设 5 秒 HTTP 关闭宽限，随后 lifespan 收口任务，超时的外部执行保持待核对状态。恢复与迁移顺序见 [第 19 课](../docs/lesson-19-durable-runtime.md)。
 
 第 20 课多副本队列、Scheduler、0015 迁移与恢复入口见 [运行说明](../docs/lesson-20-production-runtime.md)。
+
+### 第 21 课的首次发布与升级
+
+所有 Agent 副本使用相同的镜像、`COMPASS_CONTEXT_SCOPE_PROFILES` 和指标词典。首次上线时运行 0016 迁移，用平台管理员在 Web「平台管理 → PromptOps」导入随包文件并整体发布。首次生效前，管理入口可用，受管模式下的新分析任务会提示配置不可用。可用单文件发布验证新 Run 使用新正文并从管理历史核对回执。
+
+从 0015 滚动切换时先暂停新受理并退出旧消费者，备份 Agent 数据库和密钥，执行 0016 迁移。过渡窗口可设置 `COMPASS_CONTEXT_RUNTIME_ENABLED=false`。全体接入端与消费者使用兼容版本且 S001 可读后，统一启用该开关并恢复流量。若已在过渡模式运行，切换开关、范围映射或指标词典前，先停止 Agent 和 Scheduler，由迁移所有者清空执行策略指纹再统一重启，步骤见[集群策略变更](../docs/lesson-20-production-runtime.md)。恢复整库快照会生成新快照，之前受理的 Run 仍按原代次读取。数据库恢复步骤见 [agent/main](../apps/agent/db/main/README.md#0016-提示词发布与运行上下文)。
+
+`COMPASS_CONTEXT_SCOPE_PROFILES` 接受 JSON 数组，元素包含 `tenantId`、可选 `workspaceId` 和 `profile`（`finance` 或 `operations`）。ID 使用实际租户和工作空间 UUID。本地开发通过 `COMPASS_METRIC_DICTIONARY_PATH` 指向经审核的词典文件或含 `current.json` 和保留版本的目录。使用 Compose 时可在部署覆盖文件中为 Agent 增加相同的只读挂载，并用 `COMPASS_CONTAINER_METRIC_DICTIONARY_PATH` 指向容器内路径。
+
+## 工作区经营语义 Registry
+
+备份两库与 Agent 私有状态密钥，暂停受理，排空使用旧策略的在途和等待任务，停止旧 Agent 与 Scheduler。先迁移 Web 至 `0006_semantic_search`，再迁移 Agent 至 `0017`。0017 清空旧执行策略指纹，首个新版副本登记当前配置，随后启动其余副本与 Scheduler。在 Web 的 PromptOps 导入随包变更并整体发布。复用任意原发布时仍需保留对应的提示词代次与代码策略。
+
+在「数据与语义 → 指标口径」登记来源与维护范围，由两名独立责任人依次审核定义和工作区绑定。先发布平台定义，再按工作区发布本地执行绑定。把获准工作区 UUID 用逗号分隔写入 `COMPASS_SEMANTIC_WORKSPACES`，所有 Agent 副本采用同一配置，按集群策略变更流程重启。默认空值使用已配置的文件字典。切换后用一个已发布指标核对实际来源、单位和期间，再恢复新流量。
+
+回切定义可在发布历史选择旧版本并填写理由。需要停用 Registry 时，先排空 Registry Run，再调整工作区配置。保留历史发布、Run、PromptOps 和来源凭据供重新鉴权。数据库恢复在新库进行，步骤见 [Web 恢复说明](../apps/web/db/main/README.md) 和 [Agent 恢复说明](../apps/agent/db/main/README.md)。
+
+## 工作区资料检索
+
+在 Web 部署宿主设置 `COMPASS_DOCUMENTS_ROOT` 为已发布包目录的绝对路径，默认目录为仓库下的 `work/document-releases`。Compose 将它只读挂载到 Web 容器的 `/srv/compass/documents`。发布、撤销某份文档或改进资料后，以原子替换方式更新 `bindings/<tenantId>/<workspaceId>.json`，保留各代 `collections/<sha256>.json`。需要零售场景方法的工作区在绑定里显式填写 `"scenePack":"retail"`。
+
+Web 容器以 `node` 用户将 Run 固定记录写入 `/var/lib/compass/document-pins`。Compose 默认使用 `documents-pins` 持久卷。已有共享文件系统可设置宿主 `COMPASS_DOCUMENTS_PIN_DIR` 为可写的绝对路径，确保 UID 1000 有目录权限并支持同目录硬链接；所有 Web 实例使用同一套发布目录与固定记录。备份时一并保存两者和 Agent 数据库。回看旧 Run 时由 Web 读取其固定记录，并重新核对当前授予的权限。
+
+在所有 Agent 副本上登记相同的 `COMPASS_SEARCH_WORKSPACES`，启用受控模型预算并发布对应 PromptOps 版本。只有被登记工作区的新 Run 固定检索时点、只读连接及资料版本。课堂专用时点副本和验收入口位于[第 23 课案例目录](../examples/showcases/lesson-23-agentic-search/)。

@@ -63,6 +63,7 @@ def targets(monkeypatch):
         monkeypatch.setenv("AGENT_PROVISION_DATABASE_URL", admin.geturl())
         monkeypatch.setenv("AGENT_MIGRATION_DATABASE_URL", mig)
         monkeypatch.setenv("DATABASE_URL", run)
+        monkeypatch.setenv("COMPASS_SCHEDULER_DATABASE_URL", "")
         db.provision()
         return run, mig
 
@@ -404,6 +405,8 @@ def test_0005_default_migrates_and_coexists_with_other_engines(targets, mode):
 
 
 def test_restores_data_and_encrypted_values_into_new_owned_database(targets):
+    from compass_agent.promptops.service import bootstrap
+
     runtime, source = targets("backup")
     db.migrate()
     provider_id = uuid4()
@@ -414,6 +417,8 @@ def test_restores_data_and_encrypted_values_into_new_owned_database(targets):
     now = datetime.now(UTC)
     engine = create_engine(db.dsn(runtime).replace("postgresql://", "postgresql+psycopg://", 1))
     try:
+        with Session(engine) as tx, tx.begin():
+            baseline = bootstrap(tx)
         DataConnections(engine, retail_settings).save(
             retail_scope,
             RetailConnectionSave.model_validate(
@@ -463,6 +468,13 @@ def test_restores_data_and_encrypted_values_into_new_owned_database(targets):
     restored_runtime, destination = targets("restore")
     pg_tool("pg_restore", destination, backup)
     assert schema(source, restored=True) == schema(destination, restored=True)
+    with psycopg.connect(db.dsn(destination)) as restored_db:
+        published = restored_db.execute(
+            "SELECT h.generation, g.snapshot_no, v.body FROM prompt_head h "
+            "JOIN prompt_generation g ON h.generation=g.id JOIN prompt_version v ON "
+            "v.path='shared/fragments/base.md' AND v.version=(g.manifest->>v.path)::bigint"
+        ).fetchone()
+        assert published and published[:2] == (baseline, 1) and published[2].strip()
     assert db.migrate() == "already_applied"
     restored_engine = create_engine(restored_runtime)
     try:
@@ -840,6 +852,7 @@ def test_session_title_jobs_and_soft_delete(targets):
     from compass_agent.llm.admission import ExecutionGate
     from compass_agent.models.repository import ModelRepository
     from compass_agent.models.service import ModelService, create_runtime
+    from compass_agent.promptops.service import bootstrap
     from compass_agent.runtime.entities import AgentRun
     from compass_agent.runtime.message_reader import MessageReader
     from compass_agent.runtime.session_management import (
@@ -863,6 +876,8 @@ def test_session_title_jobs_and_soft_delete(targets):
     url, _ = targets("session_metadata")
     assert db.migrate() == "applied"
     engine = create_engine(url)
+    with Session(engine) as tx, tx.begin():
+        bootstrap(tx)
     store = RuntimeStore(engine, Fernet.generate_key().decode())
     store.ready = True
     reader = MessageReader(store)
@@ -1051,3 +1066,103 @@ def test_0012_provider_upgrade_preserves_binding_and_defaults_to_null(targets, m
             """,
             (provider_id,),
         ).fetchone() == (None, "legacy-ciphertext", 2, 1)
+
+
+@pytest.mark.parametrize("mode", ["native", "sql"])
+def test_0017_reopens_drained_control_and_protects_semantic_receipts(targets, mode):
+    runtime, _ = targets("registry_" + mode)
+    assert db.migrate(target="0016") == "applied"
+    with psycopg.connect(db.dsn(runtime)) as old:
+        old.execute(
+            "UPDATE agent_runtime_control SET policy_sha256=%s WHERE key='execution'", ("b" * 64,)
+        )
+    assert db.migrate(mode=mode, start="0016") == "applied"
+    with psycopg.connect(db.dsn(runtime)) as upgraded:
+        assert upgraded.execute(
+            "SELECT policy_sha256 FROM agent_runtime_control WHERE key='execution'"
+        ).fetchone() == (None,)
+        assert upgraded.execute(
+            """SELECT has_table_privilege('semantic_run_binding','INSERT'),
+            has_table_privilege('semantic_run_binding','UPDATE'),
+            has_table_privilege('semantic_metric_offer','DELETE'),
+            has_column_privilege('semantic_metric_offer','private_payload','UPDATE'),
+            has_column_privilege('semantic_metric_offer','owner_id','UPDATE')"""
+        ).fetchone() == (True, False, False, True, False)
+
+
+@pytest.mark.parametrize("mode", ["native", "sql"])
+def test_0016_prompt_publication_keeps_readers_and_serializes_publishers(targets, mode):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from compass_agent import schemas as dto
+    from compass_agent.promptops import service
+    from compass_agent.promptops.reader import PromptReader
+
+    runtime, _ = targets("prompt_" + mode)
+    assert db.migrate(target="0015") == "applied"
+    with psycopg.connect(db.dsn(runtime)) as old_db:
+        old_db.execute(
+            "UPDATE agent_runtime_control SET policy_sha256=%s WHERE key='execution'",
+            ("a" * 64,),
+        )
+    assert db.migrate(mode=mode, start="0015") == "applied"
+    with psycopg.connect(db.dsn(runtime)) as upgraded:
+        assert upgraded.execute(
+            "SELECT policy_sha256 FROM agent_runtime_control WHERE key='execution'"
+        ).fetchone() == (None,)
+    engine = create_engine(db.dsn(runtime).replace("postgresql://", "postgresql+psycopg://", 1))
+    paths = (
+        "tasks/business_report/scenes/weekly/finance.md",
+        "tasks/business_report/scenes/weekly/report.md",
+    )
+    actor = uuid4()
+    gate = Barrier(2)
+    try:
+        with Session(engine) as tx, tx.begin():
+            old = service.bootstrap(tx, actor)
+            for path in paths:
+                detail = dto.PromptFileDetail.model_validate(service.file_detail(tx, path))
+                data = dto.PromptDraft(
+                    path=path,
+                    body="发布 " + path,
+                    expected_edit_rev=detail.edit_rev,
+                    base_epoch=detail.active_epoch,
+                    request_id=uuid4(),
+                )
+                service.mutate(tx, actor, "file-draft", data, service.save_draft)
+
+        def publish(path):
+            data = dto.PromptReleaseTarget(action="file", path=path)
+            with Session(engine) as tx:
+                view = service.release_plan(tx, service.head(tx), data).preview
+            gate.wait(timeout=10)
+            cmd = dto.PromptRelease(
+                action="file",
+                path=path,
+                confirmation_hash=view.confirmation_hash,
+                note="并发测试",
+                request_id=uuid4(),
+            )
+            with Session(engine) as tx, tx.begin():
+                return service.mutate(tx, actor, "releases", cmd, service.commit_release)[
+                    "generation"
+                ]
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            generations = list(executor.map(publish, paths))
+        with Session(engine) as tx:
+            current = PromptReader.pin_current(tx)
+            assert current == max(generations)
+            assert [r.version for r in PromptReader.load_exact(tx, current, paths)] == [2, 2]
+            assert [r.version for r in PromptReader.load_exact(tx, old, paths)] == [1, 1]
+        with psycopg.connect(db.dsn(runtime)) as connection:
+            for table in ("prompt_version", "prompt_generation", "prompt_command"):
+                assert connection.execute(
+                    "SELECT has_table_privilege(current_user,%s,'UPDATE')", (table,)
+                ).fetchone() == (False,)
+            assert connection.execute(
+                "SELECT has_table_privilege('compass_agent_scheduler','prompt_file','INSERT')"
+            ).fetchone() == (False,)
+    finally:
+        engine.dispose()

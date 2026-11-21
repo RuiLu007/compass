@@ -1,0 +1,1139 @@
+[
+  {
+    "code": "tenant",
+    "name": "经营租户",
+    "domain": "organization",
+    "grain": "一个数据集内的经营主体",
+    "summary": "Web 租户通过安装映射接入，零售编码只在来源内生效。",
+    "definition": {
+      "table": "tenant",
+      "primary_key": ["tenant_id"],
+      "event_time": "数据发布时冻结",
+      "visible_time": "随连接固定的数据集发布读取（租户表 tenant.release_id）",
+      "fields": {
+        "tenant_code": "企业代码",
+        "timezone": "经营时区",
+        "currency": "记账币种",
+        "release_id": "零售数据发布号"
+      },
+      "joins": []
+    }
+  },
+  {
+    "code": "calendar",
+    "name": "经营日历",
+    "domain": "organization",
+    "grain": "一个上海自然日",
+    "summary": "跨年周同时使用 ISO 周年和周号。",
+    "definition": {
+      "table": "calendar",
+      "primary_key": ["calendar_date"],
+      "event_time": "calendar_date",
+      "visible_time": "随连接固定的数据集发布读取（租户表 tenant.release_id）",
+      "fields": {
+        "calendar_date": "自然日",
+        "iso_year": "ISO周年",
+        "iso_week": "ISO周",
+        "festival_code": "节庆"
+      },
+      "joins": []
+    }
+  },
+  {
+    "code": "geo_area",
+    "name": "地理区域",
+    "domain": "organization",
+    "grain": "一个地理节点",
+    "summary": "订单的经营大区与收货地分别归属。",
+    "definition": {
+      "table": "geo_area",
+      "primary_key": ["tenant_id", "geo_id"],
+      "event_time": "固定发布",
+      "visible_time": "随连接固定的数据集发布读取（租户表 tenant.release_id）",
+      "fields": {
+        "geo_id": "地理节点",
+        "parent_geo_id": "上级节点",
+        "geo_level": "地区层级",
+        "region_id": "经营大区"
+      },
+      "joins": []
+    }
+  },
+  {
+    "code": "org_unit",
+    "name": "经营组织",
+    "domain": "organization",
+    "grain": "一个经营组织节点",
+    "summary": "经营组织树与 Web 成员归属独立。",
+    "definition": {
+      "table": "org_unit",
+      "primary_key": ["tenant_id", "org_unit_id"],
+      "event_time": "固定发布",
+      "visible_time": "随连接固定的数据集发布读取（租户表 tenant.release_id）",
+      "fields": {
+        "org_unit_id": "组织",
+        "parent_org_unit_id": "上级",
+        "org_type": "类型"
+      },
+      "joins": []
+    }
+  },
+  {
+    "code": "site",
+    "name": "经营网点",
+    "domain": "organization",
+    "grain": "一个门店或仓库",
+    "summary": "同一网点可分别承担销售、履约、接收退货和持货职责。",
+    "definition": {
+      "table": "site",
+      "primary_key": ["tenant_id", "site_id"],
+      "event_time": "opened_on / closed_on",
+      "visible_time": "随连接固定的数据集发布读取（租户表 tenant.release_id）",
+      "fields": {
+        "site_id": "网点",
+        "site_type": "门店或仓库",
+        "region_id": "所在地区",
+        "org_unit_id": "经营组织",
+        "geo_id": "物理位置"
+      },
+      "joins": [
+        {
+          "target": "org_unit",
+          "local": ["tenant_id", "org_unit_id"],
+          "remote": ["tenant_id", "org_unit_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        },
+        {
+          "target": "geo_area",
+          "local": ["tenant_id", "geo_id"],
+          "remote": ["tenant_id", "geo_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        }
+      ]
+    }
+  },
+  {
+    "code": "channel",
+    "name": "销售渠道",
+    "domain": "organization",
+    "grain": "一个交易渠道",
+    "summary": "平台归因仅适用于 PLATFORM 渠道。",
+    "definition": {
+      "table": "channel",
+      "primary_key": ["tenant_id", "channel_id"],
+      "event_time": "固定发布",
+      "visible_time": "随连接固定的数据集发布读取（租户表 tenant.release_id）",
+      "fields": {
+        "channel_id": "渠道",
+        "channel_type": "平台自营或线下",
+        "channel_name": "渠道名"
+      },
+      "joins": []
+    }
+  },
+  {
+    "code": "brand",
+    "name": "品牌",
+    "domain": "product",
+    "grain": "一个品牌",
+    "summary": "品牌与品类为商品的两个独立分析方向。",
+    "definition": {
+      "table": "brand",
+      "primary_key": ["tenant_id", "brand_id"],
+      "event_time": "固定发布",
+      "visible_time": "随连接固定的数据集发布读取（租户表 tenant.release_id）",
+      "fields": {
+        "brand_id": "品牌",
+        "brand_name": "品牌名"
+      },
+      "joins": []
+    }
+  },
+  {
+    "code": "category",
+    "name": "商品品类",
+    "domain": "product",
+    "grain": "一个品类节点",
+    "summary": "同一汇总只选择一个层级。",
+    "definition": {
+      "table": "category",
+      "primary_key": ["tenant_id", "category_id"],
+      "event_time": "固定发布",
+      "visible_time": "随连接固定的数据集发布读取（租户表 tenant.release_id）",
+      "fields": {
+        "category_id": "品类",
+        "parent_category_id": "上级品类",
+        "level_no": "层级",
+        "is_leaf": "末级"
+      },
+      "joins": []
+    }
+  },
+  {
+    "code": "sport",
+    "name": "运动项目",
+    "domain": "product",
+    "grain": "一种运动标签",
+    "summary": "一个商品可以有多种运动标签。",
+    "definition": {
+      "table": "sport",
+      "primary_key": ["tenant_id", "sport_id"],
+      "event_time": "固定发布",
+      "visible_time": "随连接固定的数据集发布读取（租户表 tenant.release_id）",
+      "fields": {
+        "sport_id": "标签",
+        "sport_name": "名称"
+      },
+      "joins": []
+    }
+  },
+  {
+    "code": "spu_sport",
+    "name": "商品运动标签",
+    "domain": "product",
+    "grain": "一个 SPU 与一项运动的组合",
+    "summary": "允许按标签筛选，跨标签可加汇总需要分摊权重。",
+    "definition": {
+      "table": "spu_sport",
+      "primary_key": ["tenant_id", "spu_id", "sport_id"],
+      "event_time": "固定发布",
+      "visible_time": "随连接固定的数据集发布读取（租户表 tenant.release_id）",
+      "fields": {
+        "spu_id": "商品款",
+        "sport_id": "运动项目"
+      },
+      "joins": [
+        {
+          "target": "sport",
+          "local": ["tenant_id", "sport_id"],
+          "remote": ["tenant_id", "sport_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        },
+        {
+          "target": "spu",
+          "local": ["tenant_id", "spu_id"],
+          "remote": ["tenant_id", "spu_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        }
+      ]
+    }
+  },
+  {
+    "code": "spu",
+    "name": "商品款（SPU）",
+    "domain": "product",
+    "grain": "一个商品款",
+    "summary": "sku 换色、换码后仍可归同一款。",
+    "definition": {
+      "table": "spu",
+      "primary_key": ["tenant_id", "spu_id"],
+      "event_time": "launch_on / discontinue_on",
+      "visible_time": "随连接固定的数据集发布读取（租户表 tenant.release_id）",
+      "fields": {
+        "spu_id": "商品款",
+        "category_id": "品类",
+        "brand_id": "品牌",
+        "spu_name": "商品名"
+      },
+      "joins": [
+        {
+          "target": "brand",
+          "local": ["tenant_id", "brand_id"],
+          "remote": ["tenant_id", "brand_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        },
+        {
+          "target": "category",
+          "local": ["tenant_id", "category_id"],
+          "remote": ["tenant_id", "category_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        }
+      ]
+    }
+  },
+  {
+    "code": "sku",
+    "name": "商品规格（SKU）",
+    "domain": "product",
+    "grain": "一个可销售规格",
+    "summary": "库存与日报先以 SKU 核算，向上归并到 SPU。",
+    "definition": {
+      "table": "sku",
+      "primary_key": ["tenant_id", "sku_id"],
+      "event_time": "launch_on / discontinue_on",
+      "visible_time": "随连接固定的数据集发布读取（租户表 tenant.release_id）",
+      "fields": {
+        "sku_id": "规格",
+        "spu_id": "商品款",
+        "color_code": "颜色",
+        "size_value": "尺码"
+      },
+      "joins": [
+        {
+          "target": "spu",
+          "local": ["tenant_id", "spu_id"],
+          "remote": ["tenant_id", "spu_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        }
+      ]
+    }
+  },
+  {
+    "code": "channel_listing",
+    "name": "渠道上架映射",
+    "domain": "product",
+    "grain": "一条渠道外部商品码有效期",
+    "summary": "以渠道和有效期解析外部码，历史查询检查可见时点。",
+    "definition": {
+      "table": "channel_listing",
+      "primary_key": ["tenant_id", "listing_id"],
+      "event_time": "valid_from / valid_to",
+      "visible_time": "available_at",
+      "fields": {
+        "external_sku_code": "外部商品码",
+        "channel_id": "渠道",
+        "sku_id": "规格"
+      },
+      "joins": [
+        {
+          "target": "sku",
+          "local": ["tenant_id", "sku_id"],
+          "remote": ["tenant_id", "sku_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "[valid_from,valid_to)，K 内可见",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        }
+      ]
+    }
+  },
+  {
+    "code": "assortment",
+    "name": "网点配货范围",
+    "domain": "inventory",
+    "grain": "地点×SKU 的一个有效区间",
+    "summary": "按区间取期末应有组合并去重，仓储属性也应纳入持货范围。",
+    "definition": {
+      "table": "assortment",
+      "primary_key": ["tenant_id", "assortment_id"],
+      "event_time": "valid_from / valid_to",
+      "visible_time": "available_at",
+      "fields": {
+        "site_id": "持货地点",
+        "region_id": "所在地区",
+        "sku_id": "应有规格",
+        "can_sell": "销售属性"
+      },
+      "joins": [
+        {
+          "target": "sku",
+          "local": ["tenant_id", "sku_id"],
+          "remote": ["tenant_id", "sku_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "[valid_from,valid_to)，K 内可见",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        },
+        {
+          "target": "site",
+          "local": ["tenant_id", "site_id", "region_id"],
+          "remote": ["tenant_id", "site_id", "region_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "[valid_from,valid_to)，K 内可见",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        }
+      ]
+    }
+  },
+  {
+    "code": "order_header",
+    "name": "下单订单",
+    "domain": "sales",
+    "grain": "一笔创建的订单",
+    "summary": "撤单保留下单事件，应付与实收金额各自取数。",
+    "definition": {
+      "table": "order_header",
+      "primary_key": ["tenant_id", "order_id"],
+      "event_time": "ordered_at",
+      "visible_time": "available_at",
+      "fields": {
+        "order_id": "订单",
+        "channel_id": "原销售渠道",
+        "region_id": "原销售地区",
+        "selling_site_id": "原销售网点",
+        "ordered_at": "下单时间",
+        "payable_cent": "应付分"
+      },
+      "joins": [
+        {
+          "target": "channel",
+          "local": ["tenant_id", "channel_id"],
+          "remote": ["tenant_id", "channel_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        },
+        {
+          "target": "site",
+          "local": ["tenant_id", "selling_site_id"],
+          "remote": ["tenant_id", "site_id"],
+          "cardinality": "N:1",
+          "nullable": true,
+          "validity": "固定数据发布内",
+          "use": "左联原销售网点，空值显示未归属"
+        },
+        {
+          "target": "geo_area",
+          "local": ["tenant_id", "region_id"],
+          "remote": ["tenant_id", "geo_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "固定数据发布内",
+          "use": "经营大区；独立于配送地"
+        },
+        {
+          "target": "customer",
+          "local": ["tenant_id", "customer_id"],
+          "remote": ["tenant_id", "customer_id"],
+          "cardinality": "N:1",
+          "nullable": true,
+          "validity": "固定数据发布内",
+          "use": "只归属订单已经识别的会员"
+        }
+      ]
+    }
+  },
+  {
+    "code": "order_line",
+    "name": "订单行",
+    "domain": "sales",
+    "grain": "订单内一行 SKU",
+    "summary": "按商品筛订单用存在性判断，一单多行只计一次。",
+    "definition": {
+      "table": "order_line",
+      "primary_key": ["tenant_id", "order_line_id"],
+      "event_time": "随原单 ordered_at",
+      "visible_time": "available_at",
+      "fields": {
+        "order_id": "原订单",
+        "sku_id": "规格",
+        "quantity": "件数",
+        "net_cent": "行净应付分"
+      },
+      "joins": [
+        {
+          "target": "order_header",
+          "local": ["tenant_id", "order_id", "region_id", "channel_id"],
+          "remote": ["tenant_id", "order_id", "region_id", "channel_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        },
+        {
+          "target": "sku",
+          "local": ["tenant_id", "sku_id"],
+          "remote": ["tenant_id", "sku_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        }
+      ]
+    }
+  },
+  {
+    "code": "order_unit",
+    "name": "订单单件",
+    "domain": "sales",
+    "grain": "一个实物单件",
+    "summary": "单件支持履约与收入定位，支付单下钻需分摊规则。",
+    "definition": {
+      "table": "order_unit",
+      "primary_key": ["tenant_id", "order_unit_id"],
+      "event_time": "随原单 ordered_at",
+      "visible_time": "available_at",
+      "fields": {
+        "order_unit_id": "单件",
+        "order_line_id": "行",
+        "order_id": "原订单",
+        "sku_id": "规格",
+        "region_id": "原销售地区"
+      },
+      "joins": [
+        {
+          "target": "order_line",
+          "local": ["tenant_id", "order_line_id", "order_id", "region_id", "sku_id"],
+          "remote": ["tenant_id", "order_line_id", "order_id", "region_id", "sku_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        },
+        {
+          "target": "order_header",
+          "local": ["tenant_id", "order_id", "region_id"],
+          "remote": ["tenant_id", "order_id", "region_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        },
+        {
+          "target": "sku",
+          "local": ["tenant_id", "sku_id"],
+          "remote": ["tenant_id", "sku_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        }
+      ]
+    }
+  },
+  {
+    "code": "payment",
+    "name": "支付尝试",
+    "domain": "sales",
+    "grain": "一次支付尝试",
+    "summary": "教学成功行用尝试时刻归期，外部清算回执需另审。",
+    "definition": {
+      "table": "payment",
+      "primary_key": ["tenant_id", "payment_id"],
+      "event_time": "attempted_at",
+      "visible_time": "available_at",
+      "fields": {
+        "status": "支付状态",
+        "amount_cent": "支付分",
+        "order_id": "原单",
+        "attempted_at": "尝试时刻"
+      },
+      "joins": [
+        {
+          "target": "order_header",
+          "local": ["tenant_id", "order_id", "region_id"],
+          "remote": ["tenant_id", "order_id", "region_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        }
+      ]
+    }
+  },
+  {
+    "code": "refund",
+    "name": "退款尝试",
+    "domain": "sales",
+    "grain": "一次退款尝试",
+    "summary": "现金流按退款日归期，可跨原单下单月。",
+    "definition": {
+      "table": "refund",
+      "primary_key": ["tenant_id", "refund_id"],
+      "event_time": "attempted_at",
+      "visible_time": "available_at",
+      "fields": {
+        "status": "退款状态",
+        "amount_cent": "正数退款分",
+        "payment_id": "原支付",
+        "order_id": "原单"
+      },
+      "joins": [
+        {
+          "target": "order_header",
+          "local": ["tenant_id", "order_id", "region_id"],
+          "remote": ["tenant_id", "order_id", "region_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        },
+        {
+          "target": "payment",
+          "local": ["tenant_id", "payment_id", "order_id", "region_id"],
+          "remote": ["tenant_id", "payment_id", "order_id", "region_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        }
+      ]
+    }
+  },
+  {
+    "code": "refund_allocation",
+    "name": "退款单件分摊",
+    "domain": "sales",
+    "grain": "一次退款到一件商品的分配",
+    "summary": "须先验证分摊合计再按单件解释，原支付额仍需独立分配。",
+    "definition": {
+      "table": "refund_allocation",
+      "primary_key": ["tenant_id", "refund_allocation_id"],
+      "event_time": "随原退款 attempted_at",
+      "visible_time": "available_at",
+      "fields": {
+        "refund_id": "退款",
+        "order_unit_id": "单件",
+        "amount_cent": "分摊分"
+      },
+      "joins": [
+        {
+          "target": "refund",
+          "local": ["tenant_id", "refund_id", "order_id", "region_id"],
+          "remote": ["tenant_id", "refund_id", "order_id", "region_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        },
+        {
+          "target": "order_unit",
+          "local": ["tenant_id", "order_unit_id", "order_id", "region_id"],
+          "remote": ["tenant_id", "order_unit_id", "order_id", "region_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        }
+      ]
+    }
+  },
+  {
+    "code": "revenue_entry",
+    "name": "收入分录",
+    "domain": "finance",
+    "grain": "一笔签名金额的会计分录",
+    "summary": "妥投正项、受理退货负项，流水退款不重复冲销。",
+    "definition": {
+      "table": "revenue_entry",
+      "primary_key": ["tenant_id", "revenue_entry_id"],
+      "event_time": "recognized_at",
+      "visible_time": "available_at",
+      "fields": {
+        "entry_type": "收入事件",
+        "recognized_at": "入账时刻",
+        "amount_cent": "带符号收入分",
+        "order_unit_id": "关联单件"
+      },
+      "joins": [
+        {
+          "target": "order_unit",
+          "local": ["tenant_id", "order_unit_id", "region_id"],
+          "remote": ["tenant_id", "order_unit_id", "region_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        }
+      ]
+    }
+  },
+  {
+    "code": "cost_entry",
+    "name": "成本分录",
+    "domain": "finance",
+    "grain": "一笔成本入账",
+    "summary": "读取成本需要独立列权限，缺项时中止毛利计算。",
+    "definition": {
+      "table": "cost_entry",
+      "primary_key": ["tenant_id", "cost_entry_id"],
+      "event_time": "recognized_at",
+      "visible_time": "available_at",
+      "fields": {
+        "entry_type": "成本事件",
+        "order_unit_id": "单件",
+        "amount_cent": "成本分"
+      },
+      "joins": [
+        {
+          "target": "order_unit",
+          "local": ["tenant_id", "order_unit_id", "region_id"],
+          "remote": ["tenant_id", "order_unit_id", "region_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        }
+      ]
+    }
+  },
+  {
+    "code": "order_fee",
+    "name": "订单费用",
+    "domain": "finance",
+    "grain": "一项目标订单费用或冲回",
+    "summary": "贡献利润需约定费用项及冲回规则。",
+    "definition": {
+      "table": "order_fee",
+      "primary_key": ["tenant_id", "fee_id"],
+      "event_time": "recognized_at",
+      "visible_time": "available_at",
+      "fields": {
+        "fee_type": "费用类型",
+        "amount_cent": "带符号金额",
+        "reversal_of_fee_id": "对应冲回"
+      },
+      "joins": [
+        {
+          "target": "order_header",
+          "local": ["tenant_id", "order_id", "region_id"],
+          "remote": ["tenant_id", "order_id", "region_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        }
+      ]
+    }
+  },
+  {
+    "code": "campaign",
+    "name": "营销活动",
+    "domain": "marketing",
+    "grain": "一个投放活动",
+    "summary": "使用活动有效期和渠道能力枚举应到日。",
+    "definition": {
+      "table": "campaign",
+      "primary_key": ["tenant_id", "campaign_id"],
+      "event_time": "starts_at / ends_at",
+      "visible_time": "available_at",
+      "fields": {
+        "campaign_id": "活动",
+        "target_channel_id": "投放渠道",
+        "objective": "目标"
+      },
+      "joins": [
+        {
+          "target": "channel",
+          "local": ["tenant_id", "target_channel_id"],
+          "remote": ["tenant_id", "channel_id"],
+          "cardinality": "N:1",
+          "nullable": true,
+          "validity": "固定数据发布内",
+          "use": "平台归因使用 PLATFORM 且有 feed 的目标渠道"
+        }
+      ]
+    }
+  },
+  {
+    "code": "campaign_daily",
+    "name": "广告消耗日报",
+    "domain": "marketing",
+    "grain": "活动×渠道×地区×报表日×修订版",
+    "summary": "逐地区取 K 内最高版，教学计划逐日核对七区。",
+    "definition": {
+      "table": "campaign_daily",
+      "primary_key": [
+        "tenant_id",
+        "report_date",
+        "campaign_id",
+        "channel_id",
+        "region_id",
+        "report_version"
+      ],
+      "event_time": "report_date",
+      "visible_time": "available_at",
+      "fields": {
+        "report_date": "报表日",
+        "spend_cent": "消耗分",
+        "region_id": "计划地区",
+        "report_version": "修订版"
+      },
+      "joins": [
+        {
+          "target": "campaign",
+          "local": ["tenant_id", "campaign_id"],
+          "remote": ["tenant_id", "campaign_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        },
+        {
+          "target": "channel",
+          "local": ["tenant_id", "channel_id"],
+          "remote": ["tenant_id", "channel_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        }
+      ]
+    }
+  },
+  {
+    "code": "campaign_attribution_daily",
+    "name": "平台归因日报",
+    "domain": "marketing",
+    "grain": "活动×归因日×修订版，整租户平台口径",
+    "summary": "固定归因规则与版本，在 K 内读最高报表版。区域级身份无权使用。",
+    "definition": {
+      "table": "campaign_attribution_daily",
+      "primary_key": ["tenant_id", "campaign_id", "cohort_date", "report_version"],
+      "event_time": "cohort_date",
+      "visible_time": "available_at",
+      "fields": {
+        "attribution_model": "归因规则",
+        "model_version": "模型版本",
+        "report_version": "报表修订",
+        "coverage_status": "归因覆盖",
+        "attributed_paid_cent": "归因支付分",
+        "attributed_refund_cent": "累计退款分",
+        "new_buyer_count": "平台新客数",
+        "new_buyer_definition": "平台首付识别边界"
+      },
+      "joins": [
+        {
+          "target": "campaign",
+          "local": ["tenant_id", "campaign_id"],
+          "remote": ["tenant_id", "campaign_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        },
+        {
+          "target": "campaign_daily",
+          "local": ["tenant_id", "campaign_id", "channel_id", "cohort_date"],
+          "remote": ["tenant_id", "campaign_id", "channel_id", "report_date"],
+          "cardinality": "1:1 after aggregation",
+          "nullable": false,
+          "validity": "同日且活动有效",
+          "use": "两边逐键取 K 内最高版；消耗查齐计划地区并上卷后才可在共同粒度联结。"
+        }
+      ]
+    }
+  },
+  {
+    "code": "channel_product_daily",
+    "name": "渠道商品经营日报",
+    "domain": "channel",
+    "grain": "渠道×SKU×地区×报表日×修订版",
+    "summary": "金额可在同版切片汇总，商品访客和商品订单数跨 SKU 存在重叠。",
+    "definition": {
+      "table": "channel_product_daily",
+      "primary_key": [
+        "tenant_id",
+        "report_date",
+        "channel_id",
+        "sku_id",
+        "region_id",
+        "report_version"
+      ],
+      "event_time": "report_date",
+      "visible_time": "available_at",
+      "fields": {
+        "channel_id": "渠道",
+        "sku_id": "规格",
+        "region_id": "报表地区",
+        "report_version": "修订版",
+        "paid_amount_cent": "报表实付分",
+        "paid_orders": "已支付计数",
+        "product_visitors": "商品访客"
+      },
+      "joins": [
+        {
+          "target": "channel",
+          "local": ["tenant_id", "channel_id"],
+          "remote": ["tenant_id", "channel_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        },
+        {
+          "target": "sku",
+          "local": ["tenant_id", "sku_id"],
+          "remote": ["tenant_id", "sku_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        }
+      ]
+    }
+  },
+  {
+    "code": "inventory_snapshot",
+    "name": "库存数量快照",
+    "domain": "inventory",
+    "grain": "地点×SKU×日期×采样时刻",
+    "summary": "期末只接收上海 23:59:59 的快照，验算可用件等于可售件减预留件。",
+    "definition": {
+      "table": "inventory_snapshot",
+      "primary_key": ["tenant_id", "snapshot_date", "site_id", "sku_id", "as_of"],
+      "event_time": "snapshot_date / as_of",
+      "visible_time": "available_at",
+      "fields": {
+        "as_of": "业务采样时刻",
+        "available_qty": "可用件",
+        "sellable_qty": "可售件",
+        "reserved_qty": "预留件",
+        "in_transit_qty": "在途件"
+      },
+      "joins": [
+        {
+          "target": "site",
+          "local": ["tenant_id", "site_id", "region_id"],
+          "remote": ["tenant_id", "site_id", "region_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        },
+        {
+          "target": "sku",
+          "local": ["tenant_id", "sku_id"],
+          "remote": ["tenant_id", "sku_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        },
+        {
+          "target": "assortment",
+          "local": ["tenant_id", "site_id", "sku_id"],
+          "remote": ["tenant_id", "site_id", "sku_id"],
+          "cardinality": "1:1 after deduplication",
+          "nullable": false,
+          "validity": "valid_from <= D < valid_to",
+          "use": "从有效配货组合左联期末快照，保留缺口。"
+        }
+      ]
+    }
+  },
+  {
+    "code": "inventory_valuation_snapshot",
+    "name": "库存估值快照",
+    "domain": "inventory",
+    "grain": "地点×SKU×日期×估值时点",
+    "summary": "估值包含成本信息，需要成本权限及独立的价值定义。",
+    "definition": {
+      "table": "inventory_valuation_snapshot",
+      "primary_key": ["tenant_id", "snapshot_date", "site_id", "sku_id", "as_of"],
+      "event_time": "snapshot_date / as_of",
+      "visible_time": "available_at",
+      "fields": {
+        "sellable_value_cent": "可售账面价值分",
+        "as_of": "估值时刻"
+      },
+      "joins": []
+    }
+  },
+  {
+    "code": "asset_period_status",
+    "name": "资产期间齐备声明",
+    "domain": "quality",
+    "grain": "来源资产×日期区间×一次观察",
+    "summary": "此包的声明覆盖商品渠道日报，混合修订时按各明细键选版。",
+    "definition": {
+      "table": "asset_period_status",
+      "primary_key": ["tenant_id", "asset_id", "period_start", "period_end", "observed_at"],
+      "event_time": "observed_at",
+      "visible_time": "available_at",
+      "fields": {
+        "asset_id": "来源资产",
+        "period_start": "期间起点",
+        "period_end": "期间终点",
+        "status": "齐备状态",
+        "last_visible_report_version": "当时公共版号"
+      },
+      "joins": []
+    }
+  },
+  {
+    "code": "source_watermark",
+    "name": "来源水位",
+    "domain": "quality",
+    "grain": "来源系统×一次观察",
+    "summary": "只使用 K 及以前的声明核对完整期间，区分无记录和未齐备。",
+    "definition": {
+      "table": "source_watermark",
+      "primary_key": ["tenant_id", "source_system", "observed_at"],
+      "event_time": "observed_at",
+      "visible_time": "observed_at",
+      "fields": {
+        "source_system": "来源系统",
+        "complete_through": "已覆盖至",
+        "status": "来源状态",
+        "arrived_batches": "已到批次"
+      },
+      "joins": []
+    }
+  },
+  {
+    "code": "shipment",
+    "name": "发货单",
+    "domain": "fulfillment",
+    "grain": "一笔出库发运",
+    "summary": "发货网点与原销售网点可不同。",
+    "definition": {
+      "table": "shipment",
+      "primary_key": ["tenant_id", "shipment_id"],
+      "event_time": "created_at",
+      "visible_time": "available_at",
+      "fields": {
+        "order_id": "原订单",
+        "from_site_id": "发货网点",
+        "promised_at": "承诺时刻"
+      },
+      "joins": [
+        {
+          "target": "site",
+          "local": ["tenant_id", "from_site_id"],
+          "remote": ["tenant_id", "site_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "固定数据发布内",
+          "use": "仅用于履约网点分析"
+        }
+      ]
+    }
+  },
+  {
+    "code": "return_header",
+    "name": "退货申请",
+    "domain": "fulfillment",
+    "grain": "一次退货申请",
+    "summary": "退货地点不能代替原单渠道或网点。",
+    "definition": {
+      "table": "return_header",
+      "primary_key": ["tenant_id", "return_id"],
+      "event_time": "requested_at",
+      "visible_time": "available_at",
+      "fields": {
+        "order_id": "原订单",
+        "receiving_site_id": "接收网点",
+        "request_channel_id": "申请渠道"
+      },
+      "joins": [
+        {
+          "target": "site",
+          "local": ["tenant_id", "receiving_site_id"],
+          "remote": ["tenant_id", "site_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "固定数据发布内",
+          "use": "仅用于售后接收分析"
+        }
+      ]
+    }
+  },
+  {
+    "code": "store_operating_day",
+    "name": "门店营业日",
+    "domain": "organization",
+    "grain": "一个网点的一自然日营业记录",
+    "summary": "同店比较先固定两期营业门店集合，检查闭店天数。",
+    "definition": {
+      "table": "store_operating_day",
+      "primary_key": ["tenant_id", "site_id", "business_date"],
+      "event_time": "business_date",
+      "visible_time": "available_at",
+      "fields": {
+        "site_id": "网点",
+        "open_minutes": "营业分钟",
+        "reason_code": "原因"
+      },
+      "joins": [
+        {
+          "target": "site",
+          "local": ["tenant_id", "site_id", "region_id"],
+          "remote": ["tenant_id", "site_id", "region_id"],
+          "cardinality": "N:1",
+          "nullable": false,
+          "validity": "按事实事件与 K；静态主数据取固定发布",
+          "use": "从事实向唯一父项归属；反向展开前先核定粒度。"
+        }
+      ]
+    }
+  },
+  {
+    "code": "customer",
+    "name": "识别会员",
+    "domain": "customer",
+    "grain": "一个已识别的会员",
+    "summary": "仅使用代理键，未识别身份留空，历史归属按当时可见映射。",
+    "definition": {
+      "table": "customer",
+      "primary_key": ["tenant_id", "customer_id"],
+      "event_time": "joined_at",
+      "visible_time": "available_at",
+      "fields": {
+        "customer_id": "会员代理键",
+        "joined_at": "入会时刻"
+      },
+      "joins": []
+    }
+  },
+  {
+    "code": "experiment_assignment",
+    "name": "实验分配",
+    "domain": "experiment",
+    "grain": "一个实验的一个随机化单位",
+    "summary": "按入组分母保留未转化者，转化窗、退款护栏与样本比另审。",
+    "definition": {
+      "table": "experiment_assignment",
+      "primary_key": ["tenant_id", "experiment_id", "unit_id"],
+      "event_time": "assigned_at",
+      "visible_time": "available_at",
+      "fields": {
+        "experiment_id": "实验",
+        "unit_id": "随机化单位",
+        "variant": "分组",
+        "assigned_at": "入组时刻"
+      },
+      "joins": []
+    }
+  },
+  {
+    "code": "target_monthly",
+    "name": "经营月目标",
+    "domain": "finance",
+    "grain": "月份×渠道×地区×指标×计划版",
+    "summary": "同单位同口径、按 K 可见的批准计划比对实际值。",
+    "definition": {
+      "table": "target_monthly",
+      "primary_key": [
+        "tenant_id",
+        "target_month",
+        "channel_id",
+        "region_id",
+        "metric_code",
+        "plan_version"
+      ],
+      "event_time": "target_month / approved_at",
+      "visible_time": "available_at",
+      "fields": {
+        "metric_code": "目标口径",
+        "plan_version": "计划版",
+        "target_cent": "目标分",
+        "approved_at": "批准时刻"
+      },
+      "joins": []
+    }
+  }
+]

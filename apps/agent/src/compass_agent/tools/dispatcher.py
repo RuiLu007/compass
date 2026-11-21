@@ -3,6 +3,7 @@
 import asyncio
 from contextlib import asynccontextmanager, nullcontext
 from dataclasses import replace
+from functools import partial
 from time import monotonic
 from typing import Any, cast
 from uuid import uuid4
@@ -10,6 +11,7 @@ from uuid import uuid4
 from jsonschema import Draft202012Validator
 
 from compass_agent.execution_context import current_execution, recorded
+from compass_agent.observability.privacy import tool_label, tool_operation
 from compass_agent.schemas import ToolCall
 from compass_agent.tools.artifacts import ArtifactStore
 from compass_agent.tools.contracts import (
@@ -160,7 +162,7 @@ class ToolDispatcher:
         context = replace(context, call_id=prepared.call_id)
         tool = prepared.tool
         tool.authorize(prepared.args, context)
-        if tool.policy.approval == "required":
+        if tool.policy.approval == "required" or prepared.approval is not None:
             journal = current_execution.get()
             if journal and journal.approves(prepared, context.step_id):
                 return None
@@ -223,8 +225,9 @@ class ToolDispatcher:
                 result = self.admission(prepared, context)
                 if result is not None:
                     return result
-                context.budget.start_tool()
-                context.on_start(prepared)
+                if not context.search_dispatch:
+                    context.budget.start_tool()
+                    context.on_start(prepared)
                 control = CallControl(
                     context.control,
                     min(
@@ -247,7 +250,12 @@ class ToolDispatcher:
                         else None
                     )
                     async with asyncio.timeout_at(tool_deadline):
-                        receipt = await self._invoke(prepared, call_context)
+                        if context.search_dispatch:
+                            receipt = await context.search_dispatch(
+                                prepared, call_context, lambda: self._invoke(prepared, call_context)
+                            )
+                        else:
+                            receipt = await self._invoke(prepared, call_context)
                 except PhaseCanceled as error:
                     receipt = ExecutionReceipt(
                         prepared.call_id,
@@ -337,6 +345,7 @@ class ToolDispatcher:
                             if result.payload is not None
                             else {"status": result.status, "code": result.reason_code}
                         ).decode(),
+                        operation=tool_operation(prepared.tool.name, prepared.args),
                     )
                 )
 
@@ -385,12 +394,38 @@ class ToolDispatcher:
     async def _invoke_live(self, prepared, context):
         binding = prepared.tool.binding
         if isinstance(binding, InProcessBinding):
-            return await binding.handler(prepared.args, context)
-        if isinstance(binding, SandboxBinding) and self.sandbox:
-            return await self.sandbox.execute(binding, prepared.args, context)
-        if isinstance(binding, McpBinding) and self.mcp:
-            return await self.mcp.execute(binding, prepared.args, context)
-        raise ToolRejected("tool_backend_unavailable")
+            invoke = binding.handler
+        elif isinstance(binding, SandboxBinding) and self.sandbox:
+            invoke = partial(self.sandbox.execute, binding)
+        elif isinstance(binding, McpBinding) and self.mcp:
+            invoke = partial(self.mcp.execute, binding)
+        else:
+            raise ToolRejected("tool_backend_unavailable")
+
+        root = context.observation
+        # Durable handlers can replay accepted inner operations. The committed tool
+        # receipt is observed once by ProgressSink, including across worker handoffs.
+        if root is None or current_execution.get() is not None:
+            return await invoke(prepared.args, context)
+        # Only a physical backend call opens this span. Preflight rejection and
+        # durable replay are handled by the caller before reaching this boundary.
+        with root.child(
+            "compass.tool.execute",
+            tool=tool_label(prepared.tool.name),
+            step_id=str(context.step_id),
+        ) as span:
+            span.native("type", "tool")
+            span.set(tool_operation=tool_operation(prepared.tool.name, prepared.args))
+            try:
+                receipt = await invoke(prepared.args, replace(context, observation=span))
+            except ToolBusinessStopped:
+                span.set(tool_status="canceled")
+                span.complete("canceled")
+                raise
+            span.set(tool_status=receipt.status)
+            if receipt.status not in {"ok", "empty"}:
+                span.complete("canceled" if receipt.status == "canceled" else "failed")
+            return receipt
 
     def _receive(self, prepared, receipt, context):
         try:

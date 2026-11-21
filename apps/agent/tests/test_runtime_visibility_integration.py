@@ -21,6 +21,7 @@ from opentelemetry.sdk.trace.export import SpanExportResult
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from sqlalchemy import create_engine
 
+from .context_fixture import install_prompts
 from .test_agent_run import CHAT
 from .test_database_tools_integration import db
 from .test_database_tools_integration import targets as targets
@@ -36,12 +37,14 @@ class AccessState:
         self.error: str | None = None
         self.checked: list[float] = []
 
-    async def authorize(self, context, *, approval=False, visibility=False):
+    async def authorize(self, context, *, approval=False, visibility=False, capabilities=False):
         assert context == CHAT
         if visibility:
             self.checked.append(asyncio.get_running_loop().time())
         if self.error:
             raise ModelError(self.error, 403 if self.error == "forbidden" else 503)
+        if capabilities:
+            return {"analysis": True, "model": True, "plugins": True}
         if visibility:
             return {"details": self.details, "revision": self.revision}
         return None
@@ -81,7 +84,7 @@ def timeline_object(packet):
 def test_active_sse_rechecks_current_view_and_preserves_durable_identity(targets, change):
     url, _ = targets("visibility")
     db.migrate()
-    engine = create_engine(url)
+    engine = install_prompts(create_engine(url))
 
     async def scenario():
         runtime = DurableRuntime(engine, Settings(), RunRegistry())
@@ -121,7 +124,9 @@ def test_active_sse_rechecks_current_view_and_preserves_durable_identity(targets
             )
             await runtime.publisher.flush(run_id)
             run = runtime.store.read_run(run_id, CHAT)
-            original = runtime.reader.messages(run.session_id, CHAT)
+            raw = runtime.reader.messages(run.session_id, CHAT)
+            assert "totalPaidCent" not in raw.model_dump_json(by_alias=True)
+            original = await messages(run.session_id, CHAT, runtime, Response(), cursor=None)
             original_packet = tool_packet(original)
             assert timeline_object(original_packet).revision == 3
             assert "secret-984" not in original.model_dump_json(by_alias=True)
@@ -156,13 +161,13 @@ def test_active_sse_rechecks_current_view_and_preserves_durable_identity(targets
             assert await asyncio.wait_for(drain(), timeout=6) == []
             elapsed = asyncio.get_running_loop().time() - started
             assert 4.5 <= elapsed <= 5.5, elapsed
-            assert len(access.checked) == 3
+            assert len(access.checked) == 4
             print(f"visibility={change} closed_after_seconds={elapsed:.3f}")
             current = runtime.store.read_run(run_id, CHAT)
             assert current.status == "running"
             assert current.version == run.version
             assert current.projected_seq == run.projected_seq
-            assert runtime.reader.messages(run.session_id, CHAT) == original
+            assert runtime.reader.messages(run.session_id, CHAT) == raw
 
             if access.error:
                 with pytest.raises(ModelError, match=access.error):
@@ -207,7 +212,7 @@ def test_active_sse_rechecks_current_view_and_preserves_durable_identity(targets
 def test_exporter_failure_during_execution_keeps_authorized_message_and_timeline(targets):
     url, _ = targets("visibility_exporter")
     db.migrate()
-    engine = create_engine(url)
+    engine = install_prompts(create_engine(url))
 
     class UnavailableExporter(InMemorySpanExporter):
         def __init__(self):
@@ -233,9 +238,11 @@ def test_exporter_failure_during_execution_keeps_authorized_message_and_timeline
         )
         denied = False
 
-        async def authorize(context, *, approval=False, visibility=False):
+        async def authorize(context, *, approval=False, visibility=False, capabilities=False):
             if denied or context not in (CHAT, diagnostic_context):
                 raise ModelError("forbidden", 403)
+            if capabilities:
+                return {"analysis": True, "model": True, "plugins": True}
             return {"details": True, "revision": "observability-view"} if visibility else None
 
         runtime.access.authorize = authorize

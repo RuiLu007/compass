@@ -17,8 +17,21 @@ from .test_agent_run import run_command
 ROOT = Path(__file__).parents[1] / "src/compass_agent"
 
 
-def test_production_registry_contains_only_generic_tools():
-    assert {tool.name for tool in TOOLS} == {
+BUSINESS_TOOLS = {
+    "read_document",
+    "search_documents",
+    "search_semantics",
+    "get_metric_definition",
+    "resolve_semantics",
+    "query_metric",
+    "discover_semantic_candidates",
+    "review_semantic_change",
+    "submit_semantic_change",
+}
+
+
+def test_production_registry_contains_only_shipped_tools():
+    assert {tool.name for tool in TOOLS if tool.category == "builtin"} == {
         "todo_write",
         "database_query",
         "python_analysis",
@@ -27,7 +40,7 @@ def test_production_registry_contains_only_generic_tools():
         "schedule_read",
         "schedule_write",
     }
-    assert all(tool.category == "builtin" for tool in TOOLS)
+    assert {tool.name for tool in TOOLS if tool.category == "business"} == BUSINESS_TOOLS
     for folder in (ROOT / "runtime", ROOT / "harness"):
         for path in folder.rglob("*.py"):
             for node in ast.walk(ast.parse(path.read_text())):
@@ -92,7 +105,11 @@ def test_production_wheel_excludes_showcases(tmp_path):
         names = wheel.namelist()
     assert not any(
         "examples/" in name
-        or ("/tools/business/" in name and not name.endswith("business/__init__.py"))
+        or (
+            "/tools/business/" in name
+            and len(name.split("/")) > 4
+            and name.split("/")[3] not in BUSINESS_TOOLS
+        )
         or "weekly-retail-review" in name
         for name in names
     )

@@ -2,10 +2,43 @@
 
 import logging
 
+from compass_agent.observability.privacy import tool_label
 from compass_agent.runtime.control import RunControl
 from compass_agent.schemas import RunProgressEvent
 
 logger = logging.getLogger("compass_agent.api.runs")
+
+
+def observe_tool_receipts(root, events):
+    """Project newly committed terminal tool receipts. Recovery can replay handler entry."""
+    if root is None:
+        return
+    for event in events:
+        obj = event["payload"]
+        if obj["kind"] != "timeline":
+            continue
+        progress = obj["value"]["event"]
+        payload = progress["payload"]
+        if (
+            progress["type"] != "stream.extension"
+            or payload.get("name") != "compass.tool.execution"
+        ):
+            continue
+        result = payload["data"]
+        if result["cleanup"] == "not_started" or result["status"] in {"waiting", "rejected"}:
+            continue
+        with root.child(
+            "compass.tool.execute",
+            step_id=result["stepId"],
+            tool=tool_label(result["toolName"]),
+            tool_status=result["status"],
+            tool_operation=result.get("operation"),
+            tool_evidence="execution_receipt",
+        ) as span:
+            span.native("type", "tool")
+            if result["status"] not in {"ok", "empty"}:
+                span.complete("canceled" if result["status"] == "canceled" else "failed")
+
 
 PROGRESS_LOG_EVENTS = {
     "run.routed": "analysis.run.routed",

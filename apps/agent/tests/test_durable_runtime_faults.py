@@ -194,6 +194,9 @@ def test_model_process_kill_preserves_unknown_attempt_reservation_and_partial_te
         "PYTHONPATH": str(Path(__file__).parent),
         "COMPASS_AGENT_SERVICE_TOKEN": "run-service-token",
         "COMPASS_TEST_REAL_MODEL": "true",
+        # Managed Runs deliberately keep model deltas private. The partial-stream
+        # recovery case covers the older public streaming protocol.
+        "COMPASS_CONTEXT_RUNTIME_ENABLED": "false" if phase == "partial" else "true",
         "COMPASS_WORKFLOW_E2E_RETAIL_DSN": "",
         "COMPASS_CONTROLLED_AUTONOMY_ENABLED": "false",
         "COMPASS_HYBRID_WORKFLOW_ENABLED": "false",

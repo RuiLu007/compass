@@ -248,6 +248,7 @@ class AgentMessage(Base):
     role: Mapped[str] = mapped_column(String(16))
     status: Mapped[str] = mapped_column(String(16))
     revision: Mapped[int] = mapped_column(Integer, default=1)
+    source_refs: Mapped[list | None] = mapped_column(DOCUMENT)
     public_content: Mapped[dict | None] = mapped_column(
         JSON(none_as_null=True).with_variant(JSONB(none_as_null=True), "postgresql")
     )
@@ -331,6 +332,7 @@ class AgentStep(Base):
     group_id: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(16))
     revision: Mapped[int] = mapped_column(Integer, default=1)
+    prepared_context: Mapped[bytes | None] = mapped_column(LargeBinary)
     definition_snapshot: Mapped[dict] = mapped_column(DOCUMENT)
     input_sha256: Mapped[str] = mapped_column(String(64))
     accepted_attempt_id: Mapped[UUID | None] = mapped_column(Uuid)
@@ -484,7 +486,10 @@ class AgentArtifact(Base):
             "size_bytes = octet_length(content)", name="ck_agent_artifact_bytes"
         ).ddl_if(dialect="postgresql"),
         CheckConstraint("size_bytes > 0 AND size_bytes <= 2097152", name="ck_agent_artifact_size"),
-        CheckConstraint("media_type IN ('image/png','text/csv')", name="ck_agent_artifact_type"),
+        CheckConstraint(
+            "media_type IN ('image/png','text/csv','application/json','text/markdown')",
+            name="ck_agent_artifact_type",
+        ),
         Index("ix_agent_artifact_run", "run_id", "created_at"),
     )
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)

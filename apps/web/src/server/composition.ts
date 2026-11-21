@@ -1,4 +1,5 @@
 import "server-only";
+import migration from "../../db/main/sql/manifest.json";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { withTransaction, type TransactionMode, type SqlClient } from "./platform/db";
 import { authConfiguration } from "./platform/config";
@@ -8,7 +9,7 @@ import { bindAccess } from "./modules/access/infrastructure/pg-access";
 import { bindAudit } from "./modules/audit/pg-store";
 import { bindNotifications } from "./modules/notifications/pg-store";
 import { createIdentityService } from "./modules/identity/public";
-import { createAccessService, requirePermission } from "./modules/access/public";
+import { allowed, createAccessService, requirePermission } from "./modules/access/public";
 import { createModelAuthorizer } from "./modules/models/public";
 import { createQueryService } from "./modules/access/application/query-service";
 import { verifyPassword, DUMMY_PASSWORD_HASH } from "./modules/identity/infrastructure/password";
@@ -113,6 +114,7 @@ function bindUseCases(client: SqlClient) {
     access: createAccessService({ ...direct, newId: randomUUID }),
     models: { authorize: createModelAuthorizer(context) },
     queries,
+    db: client,
   };
 }
 export type WebUseCases = ReturnType<typeof bindUseCases>;
@@ -125,6 +127,7 @@ export async function authorizeRuntime(
     scope: { kind?: string; tenant_id?: string; workspace_id?: string };
   },
   approval: boolean,
+  capabilityGrants = false,
 ) {
   return withTransaction("query", async (client) => {
     const { identity, access } = bind(client);
@@ -165,7 +168,19 @@ export async function authorizeRuntime(
         requirePermission(current, "models.invoke", scope);
       }
     }
-    return { details: current.role === "admin", revision: current.authzVersion };
+    return {
+      details: current.role === "admin",
+      revision: current.authzVersion,
+      ...(capabilityGrants
+        ? {
+            capabilityGrants: {
+              analysis: allowed(current, "module.analysis", scope),
+              model: allowed(current, "models.invoke", scope),
+              plugins: allowed(current, "module.plugins", scope),
+            },
+          }
+        : {}),
+    };
   });
 }
 
@@ -198,10 +213,8 @@ export async function ready() {
       "SELECT name FROM web_meta.pgmigrations ORDER BY id",
     );
     if (
-      rows.length !== 3 ||
-      rows[0].name !== "0001_web_foundation" ||
-      rows[1].name !== "0002_readable_routes" ||
-      rows[2].name !== "0003_model_invocation_permission"
+      rows.length !== migration.sources.length ||
+      rows.some((row, index) => migration.sources[index].source !== `migrations/${row.name}.sql`)
     )
       throw new ApplicationError("unavailable", "数据库版本不可用。");
     return { status: "ready" as const };

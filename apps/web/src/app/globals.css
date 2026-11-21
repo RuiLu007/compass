@@ -2012,6 +2012,28 @@ dd {
     animation: none;
   }
 }
+.analysis-cited-text,
+.analysis-citation-source {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.analysis-citation {
+  background: transparent;
+  color: var(--primary);
+  border: 0;
+  min-width: 44px;
+  min-height: 44px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.analysis-citation-source blockquote {
+  margin-inline: 0;
+  padding-inline-start: 12px;
+  border-inline-start: 2px solid var(--border);
+}
+
 .analysis-final-answer {
   margin-top: 14px;
 }

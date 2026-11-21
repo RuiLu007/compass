@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Play, Square } from "lucide-react";
 import { useDocumentSession } from "@/components/shell/session-boundary";
 import { useModelCall } from "./use-model-call";
@@ -7,16 +7,15 @@ import { ModelOutputPanel } from "./output";
 import type { DecisionInput, GenerateInput, Provider } from "./types";
 import { capabilityNames } from "./types";
 
-import { decisionExamples, type DecisionQuestionDraft as Question } from "./decision-examples";
+import { useStarters, type StarterCards } from "@/features/promptops/use-starters";
+import type { DecisionQuestionDraft as Question } from "./decision-examples";
 
-const initialQuestion = (): Question => ({
+const initialQuestion = (criteria: string): Question => ({
   id: "decision_1",
   type: "choice",
   instructions: "",
-  criteria: '{"A":"允许","B":"拒绝"}',
+  criteria,
 });
-const initialTools =
-  '[{"type":"function","function":{"name":"get_sales","description":"获取指定月份的销售额","parameters":{"type":"object","properties":{"month":{"type":"string"}},"required":["month"],"additionalProperties":false}}}]';
 export function ModelPlayground({
   provider,
   onClose,
@@ -26,23 +25,21 @@ export function ModelPlayground({
 }) {
   const api = useDocumentSession();
   const call = useModelCall();
-  const defaultExample = provider.kind === "decision" ? decisionExamples[0] : null;
-  const [exampleId, setExampleId] = useState(defaultExample?.id ?? "");
-  const [prompt, setPrompt] = useState(defaultExample?.state ?? "");
+  const initialized = useRef(false);
+  const [exampleId, setExampleId] = useState("");
+  const [prompt, setPrompt] = useState("");
   const [stream, setStream] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [effort, setEffort] = useState("");
   const [maxTokens, setMaxTokens] = useState(8192);
   const [toolsEnabled, setToolsEnabled] = useState(false);
-  const [tools, setTools] = useState(initialTools);
+  const [tools, setTools] = useState("");
   const [outputFormat, setOutputFormat] = useState<"text" | "json" | "schema">("text");
   const [schema, setSchema] = useState(
     '{"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"],"additionalProperties":false}',
   );
-  const [stateFormat, setStateFormat] = useState(defaultExample?.stateFormat ?? "text");
-  const [questions, setQuestions] = useState<Question[]>(
-    defaultExample?.questions.map((question) => ({ ...question })) ?? [initialQuestion()],
-  );
+  const [stateFormat, setStateFormat] = useState<"text" | "json">("text");
+  const [questions, setQuestions] = useState<Question[]>([initialQuestion("")]);
   const [formError, setFormError] = useState("");
   const [toolResults, setToolResults] = useState<Record<string, string>>({});
   const [continuation, setContinuation] = useState<{ input: GenerateInput; token: string } | null>(
@@ -61,6 +58,45 @@ export function ModelPlayground({
       }),
     [api],
   );
+  const initialize = useCallback(
+    (cards: StarterCards) => {
+      if (initialized.current) return;
+      initialized.current = true;
+      if (api.dirty) return;
+      const model = cards.models?.[0];
+      if (provider.kind === "decision" && model) {
+        setExampleId(model.id);
+        setPrompt(model.state);
+        setStateFormat(model.stateFormat);
+        setQuestions(model.questions);
+      }
+      if (cards.tool_description)
+        setTools(
+          JSON.stringify(
+            [
+              {
+                type: "function",
+                function: {
+                  name: "get_sales",
+                  description: cards.tool_description,
+                  parameters: {
+                    type: "object",
+                    properties: { month: { type: "string" } },
+                    required: ["month"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+            ],
+            null,
+            2,
+          ),
+        );
+    },
+    [api, provider.kind],
+  );
+  const starters = useStarters("platform/models/prompt-starters", initialize);
+  const decisionExamples = starters.cards?.models ?? [];
   function loadExample(id: string) {
     const example = decisionExamples.find((item) => item.id === id);
     if (!example) return;
@@ -223,6 +259,14 @@ export function ModelPlayground({
           }}
         >
           <h3>能力测试</h3>
+          {starters.failed && (
+            <p role="status">
+              预填示例暂时无法读取，可手动输入。{" "}
+              <button type="button" className="secondary compact" onClick={starters.retry}>
+                重新加载示例
+              </button>
+            </p>
+          )}
           <fieldset
             disabled={call.busy}
             onChange={() => {
@@ -502,7 +546,10 @@ export function ModelPlayground({
                   onClick={() =>
                     setQuestions((items) => [
                       ...items,
-                      { ...initialQuestion(), id: `decision_${crypto.randomUUID().slice(0, 8)}` },
+                      {
+                        ...initialQuestion(starters.cards?.default_choice ?? ""),
+                        id: `decision_${crypto.randomUUID().slice(0, 8)}`,
+                      },
                     ])
                   }
                 >

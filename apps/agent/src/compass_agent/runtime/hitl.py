@@ -114,18 +114,32 @@ class HumanDecisions:
             run.status, run.execution_epoch, run.cleanup_status = "waiting", None, "confirmed"
             self.store.outbox(tx, session, run, [approval_event(wait)])
 
-    def is_schedule_approval(self, wait):
+    def owner_decision(self, wait):
         if wait.kind != "approval" or not wait.private_proposal:
-            return False
+            return None
         snapshot = self.store.private.open(wait.run_id, "proposal", wait.private_proposal)
-        return snapshot.get("kind") == "schedule_owner"
+        kind = snapshot.get("kind")
+        return (
+            kind
+            if kind
+            in {
+                "schedule_owner",
+                "semantic_choice",
+                "semantic_result_choice",
+                "semantic_draft",
+                "semantic_submit",
+            }
+            else None
+        )
+
+    def is_schedule_approval(self, wait):
+        return self.owner_decision(wait) == "schedule_owner"
 
     def assert_confirmation_scope(self, session, wait, context):
-        if self.is_schedule_approval(wait):
-            if session.owner_user_id != context.actor_user_id or session.deleted_at:
-                raise ModelError("not_found", 404)
-            return True
-        return False
+        kind = self.owner_decision(wait)
+        if kind and (session.owner_user_id != context.actor_user_id or session.deleted_at):
+            raise ModelError("not_found", 404)
+        return kind
 
     def authorization_kind(self, run_id, wait_id, context):
         with self.store.transaction() as tx:
@@ -166,11 +180,18 @@ class HumanDecisions:
                     wait.kind == "reconciliation" and session.owner_user_id == context.actor_user_id
                 ):
                     actions.append("reconcile")
+            extra = {}
+            if wait.status == "pending" and self.owner_decision(wait):
+                from compass_agent.semantic.decisions import card
+
+                private = self.store.private.open(run.id, "proposal", wait.private_proposal)
+                extra = card(self.store, run, context, private)
             return WaitView.model_validate(
                 {
                     **approval_event(wait)["payload"]["value"],
                     "runVersion": run.version,
                     "allowedActions": actions,
+                    **extra,
                 }
             )
 
@@ -262,9 +283,33 @@ class HumanDecisions:
             if expired:
                 self.close_wait(tx, session, run, wait, "expired", "approval_expired")
             elif command.decision == "reject":
+                if wait.private_proposal:
+                    from compass_agent.semantic.results import dismiss_proposal
+
+                    dismiss_proposal(
+                        tx,
+                        self.store,
+                        run,
+                        self.store.private.open(run.id, "proposal", wait.private_proposal),
+                    )
                 wait.decision_id, wait.decider_user_id = command.decision_id, context.actor_user_id
                 self.close_wait(tx, session, run, wait, "rejected", "approval_rejected")
             else:
+                selection = None
+                if wait.private_proposal:
+                    from compass_agent.semantic.decisions import apply
+
+                    private = self.store.private.open(run.id, "proposal", wait.private_proposal)
+                    if (
+                        private.get("kind", "").startswith("semantic_")
+                        or command.choice_id
+                        or command.draft_edits
+                    ):
+                        from compass_agent.semantic.clarification import retain_selection
+
+                        apply(self.store, run, context, private, command)
+                        selection = retain_selection(tx, self.store, session, run, private)
+                        wait.private_proposal = self.store.private.seal(run.id, "proposal", private)
                 wait.status, wait.decision_id, wait.decider_user_id, wait.decided_at = (
                     "approved",
                     command.decision_id,
@@ -281,7 +326,8 @@ class HumanDecisions:
                         wait_id=wait.id,
                         step_id=wait.step_id,
                         proposal_sha256=wait.proposal_sha256,
-                        state="pending",
+                        state="applied" if selection else "pending",
+                        receipt=selection,
                         created_at=now(),
                         updated_at=now(),
                     )

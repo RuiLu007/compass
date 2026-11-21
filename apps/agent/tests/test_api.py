@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 from compass_agent.database import Base, get_session
 from compass_agent.main import app
+from compass_agent.runtime.deployment import REVISION
 from compass_agent.seed import seed
 from compass_agent.settings import Settings
 from fastapi.testclient import TestClient
@@ -84,7 +85,9 @@ def readiness_engine():
     Base.metadata.create_all(engine)
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32))"))
-        connection.execute(text("INSERT INTO alembic_version VALUES ('0015')"))
+        connection.execute(
+            text("INSERT INTO alembic_version VALUES (:revision)"), {"revision": REVISION}
+        )
     yield engine
     engine.dispose()
 
@@ -109,12 +112,14 @@ def test_readiness_accepts_current_empty_schema_without_model_key(readiness_engi
         "UPDATE alembic_version SET version_num='0002'",
         "UPDATE alembic_version SET version_num='0004'",
         "UPDATE alembic_version SET version_num='0005'",
+        "UPDATE alembic_version SET version_num='0015'",
         "DELETE FROM alembic_version",
         "DROP TABLE alembic_version",
         "ALTER TABLE model_provider DROP COLUMN api_key_ciphertext",
         "ALTER TABLE model_call DROP COLUMN usage",
         "ALTER TABLE model_change DROP COLUMN request_mac",
         "ALTER TABLE data_connection DROP COLUMN password_ciphertext",
+        "ALTER TABLE prompt_generation DROP COLUMN policy_digest",
     ],
 )
 def test_readiness_rejects_old_revision_or_missing_required_columns(readiness_engine, change):

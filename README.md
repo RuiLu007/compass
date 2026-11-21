@@ -38,6 +38,8 @@ pnpm db:manage -F web -- create-user --login-name local.admin --display-name 本
 pnpm start
 ```
 
+首次启动后，用平台管理员登录 Web，进入「平台管理 → PromptOps」，预览并导入随包文件，再执行「整体发布」。查看首个快照 S001 后即可提交受管分析任务。后续可按文件保存草稿、预览并单独发布。即时和定时任务在受理时固定当时的生效清单。[发布、升级与恢复](apps/agent/db/main/README.md#0016-提示词发布与运行上下文)
+
 打开 <http://127.0.0.1:8100/login> 使用刚创建的账号登录；受管工具会提示隐藏输入密码。原链路演示位于 <http://127.0.0.1:8100/demo>。API 文档位于 <http://127.0.0.1:8102/docs>。在另一个终端执行 `pnpm smoke` 验证整个链路。停止开发服务使用 Ctrl+C；`pnpm db:down` 停止数据库并保留数据卷。
 
 默认端口：home 8101、Web 8100、agent 8102、memory 8103、PostgreSQL 55432；Scheduler 不监听 HTTP 端口。 Langfuse 本机入口为 8104，Web 浏览器测试使用 8110；8105–8109 预留。启动前确认端口空闲。`.env` 只由根任务脚本加载；绕过根入口直接运行子应用脚本或 `next start` 时需显式注入环境。不要把 `.env` 复制到 Web 目录或提交 Git。
@@ -120,7 +122,8 @@ pnpm deploy:down       # 停止整个 Compose 项目，保留数据卷与镜像
 - 示例接口显式启用 `COMPASS_DEMO_ENABLED=true` 后才开放，数据全部为固定合成数据。接口不接受租户、SQL 或自由代码输入；尚未接入真实经营数据。
 - 本地登录、数据库会话、租户与成员、个人权限、CSRF、设置、通知和审计已接入；第 15～18 课已接入进程内运行编排、Workflow、统一工具、MCP 和本地 Sandbox/NFS；第 19 课接入持久会话、恢复与人工确认；企业 OIDC、云端部署验收与 EvalOps 留待后续 Feature。模型 Runtime 的管理、测试和 Chat 调用见 [993](mai-specs/993-lesson-11-llm-runtime/BRIEF.md)。第 18 课启动及验收见 [工具执行指南](docs/lesson-18-tool-runtime.md)。第 19 课配置、恢复及审批见 [持久运行指南](docs/lesson-19-durable-runtime.md)。共享部署需配置 HTTPS、私有凭据及备份策略。
 - Agent 副本共用队列、租约和 Checkpoint。定时任务可以从 Web 或 Chat 管理，由同一镜像的 Scheduler 角色交付。Memory 提供健康检查。部署、容量、恢复及定时规则见 [第 20 课运行说明](docs/lesson-20-production-runtime.md)。
-- 当前 Web 已搭齐原型框架；分析 Chat 已接入本页对话、两级意图分类、字典特征和静态/自动选模；闲聊通过专用 Flash prompt 引导回业务数据任务，响应结构可在回答下方展开，模型接入提供平台管理与租户只读摘要；除第 15 课固定 Retail 工具外，通用数据查询、文件上传、报告、看板及其余 Agent/Memory 业务继续保持待接入状态。实现及验收见 [995](mai-specs/995-web-management-foundation/README.md)。
+- 分析 Chat 支持经营问答、数据分析、看板和经营报告。Context Runtime 按任务与租户工作区选择提示词、可用工具和 Skill，使用已发布清单组装模型上下文。平台管理员在 Web 的 PromptOps 管理随包文件、在线草稿、单文件版本和整体快照。模型接入保留平台管理与租户只读摘要。[第 21 课说明](mai-specs/975-lesson-21-context-runtime-promptops/BRIEF.md)
+- 第 22 课提供工作区指标口径管理、双人审批和版本发布。Chat 可在原会话澄清同名指标，按当前授权查询已发布口径，也可把确认过的开放分析结果保存为私有草稿。[实施与验收](mai-specs/974-lesson-22-enterprise-semantic-governance/IMPLEMENTATION.md)
 - 第 15 课已将分析 Chat 接入进程内 Agent Run：一次发送可顺序完成多轮固定 Retail 只读查询、展示工具过程、提交最终回答与有界 CSV，并能按 Run ID 终止在途模型或数据库查询。当前采用单 Agent owner，运行状态及产物已由第 19 课持久化；课堂配置及复现见 [Agent Run 说明](docs/lesson-15-agent-run.md)。
 - 本工程没有授予开源许可证；依赖许可证由各上游项目提供。
 
@@ -138,6 +141,8 @@ pnpm data:prepare
 ```
 
 `data:prepare` 校验压缩包与解压 SQL，生成 `data/retail/compass-retail.sql`；仅需 Node.js / pnpm，无需 Python、数据库或重新生成数据。完整导入命令见 [学员初始化步骤](data/retail/README.md#导入)。`pnpm db:migrate -F agent` / `pnpm db:seed -F agent` 初始化三天工程样本，与完整零售数据入口分开。
+
+两租户的经营术语、指标及查询绑定通过 Web 教学包独立安装。完成 Web 教学身份初始化后执行 `pnpm db:seed -F web -- --fixture retail-semantics`，也可直接运行[单文件入库 SQL](apps/web/db/main/seeds/retail-v1.sql)。
 
 `pnpm data:seed` 调用 [tools/data-seed](tools/data-seed/README.md) 的独立 Python 工具，提供 Feature 998 的业务包生成、校验、候选库装载和发布入口。支持边界小样、1 万单 dev、10 万单工程 demo 和固定机会量的 diagnostic；提供学员单文件 SQL 导出、固定业务历史、十二类场景输入和源侧只读权限。使用专用零售库配置，原 `pnpm db:seed` 保留。
 

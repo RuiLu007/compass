@@ -11,6 +11,7 @@ import type {
   AnalysisTurnView,
 } from "@/client/analysis-run";
 import type { RunView } from "@/contracts/agent-response";
+import { CitedAnswer } from "./cited-answer";
 import { DurableRunActions } from "./durable-run-actions";
 import { WorkflowSaveCard } from "./workflow-save-card";
 import {
@@ -218,7 +219,7 @@ const failureStages = {
   verification: "核验结果",
 };
 
-function TurnNotice({ turn }: { turn: AnalysisTurnView }) {
+function TurnNotice({ turn, retry }: { turn: AnalysisTurnView; retry?: () => void }) {
   let title = "";
   let detail = "";
   let tone: "neutral" | "waiting" | "error" = "neutral";
@@ -254,6 +255,11 @@ function TurnNotice({ turn }: { turn: AnalysisTurnView }) {
     <section className="analysis-run-notice" data-tone={tone} role="status">
       <strong>{title}</strong>
       <p>{detail}</p>
+      {retry && turn.terminal?.status === "failed" && (
+        <button type="button" className="secondary compact" onClick={retry}>
+          调整原问题并重试
+        </button>
+      )}
       {turn.terminal?.status === "failed" && (
         <details>
           <summary>失败详情</summary>
@@ -392,6 +398,7 @@ export const AnalysisRunTurn = memo(function AnalysisRunTurn({
   pluginHref,
   saved = false,
   partialText,
+  retry,
   durable,
 }: {
   turn: AnalysisTurnView;
@@ -401,6 +408,7 @@ export const AnalysisRunTurn = memo(function AnalysisRunTurn({
   pluginHref?: string;
   saved?: boolean;
   partialText?: string;
+  retry?: () => void;
   durable?: { run: RunView; sessionId: string; reload: () => void };
 }) {
   const completed = turn.terminal?.status === "completed" ? turn.terminal : undefined;
@@ -428,19 +436,58 @@ export const AnalysisRunTurn = memo(function AnalysisRunTurn({
     submittedAtMs: turn.submittedAtMs,
     durationMs: turn.durationMs,
   };
+  const finalMessage =
+    durable &&
+    Object.values(durable.run.messages).find(
+      (m) => m.role === "assistant" && (m.status === "completed" || m.status === "incomplete"),
+    );
+  const finalBody =
+    completed &&
+    (saved ? (
+      <AnalysisMarkdown source={completed.finalAnswer} />
+    ) : (
+      <StreamingAnswer source={completed.finalAnswer} onReveal={onReveal} />
+    ));
   const answer = (
     <>
       {!completed && partialText && (
-        <section aria-label="正在生成的回答">
-          <AnalysisMarkdown source={partialText} revealing={false} />
+        <section
+          aria-label={finalMessage?.status === "incomplete" ? "已核实的部分答复" : "正在生成的回答"}
+        >
+          {finalMessage?.status === "incomplete" &&
+          durable &&
+          scope &&
+          /\[\d+\]/.test(partialText) ? (
+            <CitedAnswer
+              key={finalMessage.messageId + ":" + finalMessage.revision}
+              source={partialText}
+              message={finalMessage}
+              runId={durable.run.runId}
+              scope={scope}
+            >
+              <AnalysisMarkdown source={partialText} revealing={false} />
+            </CitedAnswer>
+          ) : (
+            <AnalysisMarkdown source={partialText} revealing={false} />
+          )}
         </section>
       )}
       {completed && (
         <section className="analysis-final-answer" aria-label="最终回答">
-          {saved ? (
-            <AnalysisMarkdown source={completed.finalAnswer} revealing={false} />
+          {finalMessage && durable && scope && /\[\d+\]/.test(completed.finalAnswer) ? (
+            <CitedAnswer
+              key={
+                finalMessage.messageId + ":" + finalMessage.revision + ":" + completed.finalAnswer
+              }
+              message={finalMessage}
+              runId={durable.run.runId}
+              scope={scope}
+              source={completed.finalAnswer}
+            >
+              {finalBody}
+            </CitedAnswer>
           ) : (
-            <StreamingAnswer source={completed.finalAnswer} onReveal={onReveal} />
+            finalBody
           )}
           {readyFile && (
             <AnalysisFileCard file={readyFile} onDownload={() => onDownload(readyFile)} />
@@ -496,7 +543,7 @@ export const AnalysisRunTurn = memo(function AnalysisRunTurn({
           <StreamingAnswer source={waiting.proposal.summary} onReveal={onReveal} />
         </section>
       )}
-      <TurnNotice turn={turn} />
+      <TurnNotice turn={turn} retry={retry} />
     </>
   );
 

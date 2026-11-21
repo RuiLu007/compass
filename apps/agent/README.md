@@ -5,7 +5,7 @@
 从工程根运行 `pnpm dev -F agent`，统一加载根 `.env`。本目录 `turbo.json` 为构建和静态检查声明 Python 工具链缓存指纹；开发、迁移及 seed 不缓存。
 
 - `/healthz`：进程存活，无数据库依赖。
-- `/readyz`：数据库连接、演示、模型、数据连接和工作流资产表可用性，未迁移至 0015、Runtime 密钥或 Redis 不可用、运行协议或共享策略失配时返回 503。
+- `/readyz` 检查数据库版本 0017、运行表、模型与数据连接、工作流资产和提示词表。迁移、Runtime 密钥、Redis、运行协议或共享策略检查失败时返回 503。
 - `/v1/demo/overview`：固定合成数据聚合；默认关闭，启用后仍只读。空数据或数据库故障返回 503。
 
 Feature 993 增加进程内 LLM Runtime、平台模型 Provider 配置、能力测试和 Chat 调用。`models/` 拥有配置与元记录，`llm/` 统一参数、适配器、结果和错误；`api/models.py` 提供内部 HTTP 入口。账户、租户与权限由 Web / BFF 拥有，每次调用先完成短事务鉴权，再携服务令牌及可信上下文调用 Agent。Agent 校验上下文与 Provider 状态，不访问 Web 业务表。Feature 989 在此基础上增加进程内 Run / Step、顺序 ReAct、固定 Retail 查询、SSE 进度、CSV 与在途终止；第 16～18 课补充计划预算、Workflow、统一工具调度、MCP 与独立 Sandbox；第 19 课接入持久 Session/Run、Redis 投影与人工确认，见 [运行说明](../../docs/lesson-19-durable-runtime.md)。
@@ -63,7 +63,7 @@ Base URL 可留空使用 SDK 默认端点；自定义端点须在 `COMPASS_MODEL
 
 主生成最多两次尝试，分类/诊断/决策各一次；整轮 Chat 共用 180 秒父期限。进程默认 K=8、N=32。已输出片段的中断不自动重试，失败片段不进入后续上下文；取槽后到期正常形成超时摘要，关闭未确认时隔离执行槽。
 
-平台管理员的 `/v1/models/reliability/scenarios` 和 `/v1/models/reliability/runs` 提供固定模拟演示，运行真实 SDK/Runtime/执行器，无真实供应商出站或业务表写入。入口由 BFF 平台权限及可信上下文保护；运行每进程最多一个、最多 20 条调用/20 秒。详见 [演示模块](src/compass_agent/reliability/README.md)。可靠性摘要由 0004 引入，当前数据库版本为 0013，升级和恢复见 [agent/main](db/main/README.md)。
+平台管理员的 `/v1/models/reliability/scenarios` 和 `/v1/models/reliability/runs` 提供固定模拟演示，运行真实 SDK/Runtime/执行器，无真实供应商出站或业务表写入。入口由 BFF 平台权限及可信上下文保护；运行每进程最多一个、最多 20 条调用/20 秒。详见 [演示模块](src/compass_agent/reliability/README.md)。可靠性摘要由 0004 引入，当前数据库版本为 0017，升级和恢复见 [agent/main](db/main/README.md)。
 
 ## 第 14 课调用观测
 
@@ -97,6 +97,8 @@ Agent 使用 OTel 1.45.2 显式关联请求、分类、路由、逻辑调用、�
 
 0008 增加个人 MCP 配置与 Sandbox 分配租约。OpenSandbox + NFS-Ganesha 本地启动入口为 `pnpm sandbox up`。工具的环境、副作用、审批和批次策略分别配置；审批与原 Run 接续由第 19 课持久服务处理。
 
+在独立沙箱运行 `pnpm test:integration -F agent` 时，用 `COMPASS_SANDBOX_TEST_DOMAIN`、`COMPASS_SANDBOX_TEST_HOST`、`COMPASS_SANDBOX_TEST_VOLUME_PREFIX` 和 `COMPASS_SANDBOX_TEST_SLOTS` 指定控制端、主机和私有卷。启用 `COMPASS_SANDBOX_FAULT_TESTS=true` 后，可通过 `COMPASS_SANDBOX_TEST_CONTROL_CONTAINER` 与 `COMPASS_SANDBOX_TEST_NAS_CONTAINER` 指定中断测试的两个容器。测试会核对容器的 `compass.acceptance.owner` 标签与测试主机名。
+
 第 20 课多副本消费、Scheduler、0015 迁移与恢复入口见 [运行说明](../../docs/lesson-20-production-runtime.md)。
 
 会话首次受理时保存由首条消息生成的临时标题。Agent 后台用已选模型或 Auto 的 Flash 模型生成短标题，持久化到会话。手动改名优先，已结束会话支持软删除。数据库升级与恢复见 [agent/main](db/main/README.md)。
@@ -108,3 +110,17 @@ Agent 使用 OTel 1.45.2 显式关联请求、分类、路由、逻辑调用、�
 `AgentDefinition` 提供系统提示词、`RegisteredTool` 集合和启用的内置能力。Runtime 默认定义为空工具集；产品 HTTP 入口通过 `compass_definition()` 显式装配 Todo、数据库、Python 与 Workflow 能力。任务可以提供自己的提示词与工具，个人 MCP 工具继续通过同一 Registry 加载。单纯使用自定义工具的 Agent 不加载 Retail 连接。
 
 课程案例与手输问题使用同一请求结构和模型循环。新请求拒绝 showcase 和 constraints.verification。已受理的旧请求由仅回读回执的兼容边界处理；旧历史解码不重新启用已移除能力。通用工具策略、审批、预算和持久恢复继续共用 Runtime。
+
+平台管理员可在 Web 的 Prompts 导入随包 Markdown 与 JSON 资产并整体发布首个版本。场景说明集中为一份 JSON，工具显示完整声明，参数 Schema 以代码为权威来源，在线可编辑描述、参数说明和调用示例。阶段、公共规则与前端示例按职责归组。每次发布生成完整生效清单，受管 Context Runtime 在新 Run 受理时固定该清单。[资产结构与显式数据升级](../../mai-specs/975-lesson-21-context-runtime-promptops/design/ASSET_MODEL_UPDATE.md)说明了历史保留、草稿迁移和旧格式快照恢复；表结构说明见 [Agent 数据库 0016](db/main/README.md#0016-提示词发布与运行上下文)。
+
+## 第 22 课语义查询
+
+Agent 在受理时固定工作区的发布清单。正式查询通过 Registry 解析指标版本、允许的维度和执行绑定，再使用当前主体的受限连接取数。报告和回看会核对实际权限。开放分析结果可经本人确认转为私有指标草稿。七个工具、启用条件和部署顺序见[工具目录](src/compass_agent/tools/README.md)和[第 22 课发布说明](../../deploy/README.md#工作区经营语义-registry)。
+
+## 第 23 课跨源检索
+
+在受控工作区打开普通 Chat，主模型可使用四个语义工具、只读数据库查询、资料检索和原段阅读。受理时固定业务时点、数据库连接、语义发布清单及文档集合。模型按问题登记待核事项，Runtime 逐批记录实际派发与新观察，核过的数字与原文才会进入对应的答案角标。
+
+复杂报告可以在查下一项材料时先校验已有断言。模型补查后可按键修订原草稿。交付时重新核对当前读权、所有依赖和适用范围。资料服务连续两次不可用时，同一资料包的其他问法也进入退避。退避后允许一次探测，恢复后继续检索，持续故障则在本次 Run 内关闭该来源。
+
+启用工作区须同时配置受控模型预算和 Web 资料绑定。资料、指标发布及课堂对照的运行命令见[第 23 课课堂入口](../../examples/showcases/lesson-23-agentic-search/README.md)。Agent 的搜索状态和引用沿用现有 Run 私有存储。

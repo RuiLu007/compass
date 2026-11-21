@@ -64,6 +64,10 @@ export default async function Page({
         "toLocal",
       ]);
       const pageId = matchPage(path)?.page.id;
+      if (pageId === "data-metrics") {
+        allowed.add("asset");
+        if (search.asset !== undefined) uuid.parse(search.asset);
+      }
       if (pageId === "analysis-new") {
         allowed.add("session");
         allowed.add("workflow");

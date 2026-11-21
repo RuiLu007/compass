@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, it, expect } from "vitest";
 import pg from "pg";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { seedTeaching } from "../../scripts/db-seed.mjs";
+import { loadSemanticPack, seedRetailSemantics } from "../../scripts/retail-semantic-seed.mjs";
 import { spawnSync } from "node:child_process";
 import { provision } from "../../scripts/db-provision.mjs";
 import { migrate } from "../../scripts/db-migrate.mjs";
@@ -37,7 +40,7 @@ afterAll(async () => {
     for (const db of databases) await admin.query(`DROP DATABASE "${db}" WITH (FORCE)`);
     await admin.end();
   }
-});
+}, 120_000);
 async function target(name: string) {
   const db = `compass_web_test_${suffix}_${name}`;
   databases.push(db);
@@ -300,8 +303,8 @@ it("upgrades v2 permission constraints without changing grants and keeps all whi
       );
       await migrate({ url, from: "0002_readable_routes", mode: index ? "sql" : "native" });
       for (const [table, key, max] of [
-        ["tenant_member", member, 23],
-        ["workspace_member", binding, 17],
+        ["tenant_member", member, 27],
+        ["workspace_member", binding, 21],
       ] as const) {
         expect(
           (await client.query(`SELECT permission_keys FROM web.${table} WHERE id=$1`, [key]))
@@ -331,3 +334,161 @@ it("upgrades v2 permission constraints without changing grants and keeps all whi
   }
   expect(await schema(urls[0])).toEqual(await schema(urls[1]));
 }, 30000);
+
+it("installs a single retail edition after v3, preserves scope and refuses content drift", async () => {
+  const url = await target("semantic");
+  await migrate({ url, to: "0003_model_invocation_permission" });
+  await seedTeaching("isolated-semantic-fixture", url);
+  await migrate({ url, mode: "sql" });
+  const incomplete = await connectManaged(url);
+  try {
+    await incomplete.query("UPDATE web.workspace SET id=gen_random_uuid() WHERE slug='dianshang'");
+    await expect(seedRetailSemantics(url)).rejects.toMatchObject({ code: "23503" });
+    expect(
+      (await incomplete.query("SELECT count(*)::int AS n FROM web.semantic_assets")).rows[0].n,
+    ).toBe(0);
+    expect(
+      (await incomplete.query("SELECT count(*)::int AS n FROM web.semantic_source")).rows[0].n,
+    ).toBe(0);
+    await incomplete.query(
+      "UPDATE web.workspace SET id='99500000-0000-4000-8000-000000000022' WHERE slug='dianshang'",
+    );
+  } finally {
+    await incomplete.end();
+  }
+  const installs = await Promise.all([seedRetailSemantics(url), seedRetailSemantics(url)]);
+  expect(installs.map((item) => item.status).sort()).toEqual(["already_installed", "installed"]);
+  const client = await connectManaged(url);
+  try {
+    const query = (sql: string) => client.query(sql).then((r) => r.rows);
+    // The independently distributed SQL must agree with the repository edition already installed.
+    await client.query(
+      await readFile(new URL("../../db/main/seeds/retail-v1.sql", import.meta.url), "utf8"),
+    );
+
+    expect(await query("SELECT DISTINCT lifecycle FROM web.semantic_assets")).toEqual([
+      { lifecycle: "draft" },
+    ]);
+    expect(
+      await query(
+        "SELECT count(*)::int AS n FROM web.execution_bindings WHERE validation_receipt IS NOT NULL",
+      ),
+    ).toEqual([{ n: 0 }]);
+    expect(
+      await query(`SELECT s.department_key AS department,a.code FROM web.semantic_policy p
+        JOIN web.semantic_scopes s USING(scope_id) CROSS JOIN jsonb_array_elements(p.policy->'defaults') d
+        JOIN web.semantic_assets a ON a.asset_id=(d->>'target_metric_ref')::uuid ORDER BY s.tenant_id,1`),
+    ).toEqual([
+      { department: "finance", code: "finance.recognized_revenue" },
+      { department: "sales", code: "sales.paid_gmv" },
+      { department: "sales", code: "sales.net_gmv" },
+    ]);
+    expect(
+      await query(`SELECT count(DISTINCT a.asset_id)::int AS definitions,count(*)::int AS bindings
+        FROM web.semantic_assets a JOIN web.semantic_versions v USING(asset_id)
+        JOIN web.execution_bindings b USING(version_id) WHERE a.code='sales.order_count'`),
+    ).toEqual([{ definitions: 1, bindings: 2 }]);
+    expect(
+      await query(
+        "SELECT has_table_privilege('compass_web_runtime','web.execution_bindings','UPDATE') AS writable",
+      ),
+    ).toEqual([{ writable: false }]);
+    await client.query("UPDATE web.semantic_source SET digest=repeat('0',64)");
+    await expect(seedRetailSemantics(url)).rejects.toThrow(/differs/);
+    expect(await query("SELECT count(*)::int AS n FROM web.semantic_source")).toEqual([{ n: 1 }]);
+  } finally {
+    await client.end();
+  }
+});
+
+it("adds both full-text indexes to v5 with native and incremental SQL, preserving grants", async () => {
+  const urls = [await target("search_native"), await target("search_sql")];
+  for (const [index, url] of urls.entries()) {
+    await migrate({ url, to: "0005_semantic_governance" });
+    const before = await schema(url);
+    await migrate({ url, from: "0005_semantic_governance", mode: index ? "sql" : "native" });
+    const after = await schema(url);
+    expect(after.grants).toEqual(before.grants);
+    expect(after.columnGrants).toEqual(before.columnGrants);
+    expect(
+      after.indexes
+        .filter((entry) => !before.indexes.some((old) => old.indexname === entry.indexname))
+        .map((entry) => entry.indexname)
+        .sort(),
+    ).toEqual(["semantic_alias_search", "semantic_version_search"]);
+    expect(await migrate({ url })).toBe("already_applied");
+  }
+  expect(await schema(urls[0])).toEqual(await schema(urls[1]));
+}, 30000);
+
+it("keeps cash, posting, attribution revisions and period-end stock at their source grains", async () => {
+  const url = await target("metric_edges");
+  const client = await connectManaged(url);
+  const { payload } = await loadSemanticPack();
+  try {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL search_path=pg_temp,pg_catalog");
+    await client.query(
+      await readFile(new URL("./fixtures/semantic-events.sql", import.meta.url), "utf8"),
+    );
+    async function value(
+      code: string,
+      start: string,
+      end: string,
+      at: string,
+      options: Record<string, unknown> = {},
+    ) {
+      const binding = payload.bindings.find(
+        (b) => b.source === "retail:101" && b.ref.endsWith("/" + code),
+      );
+      if (!binding) throw new Error("Missing fixture binding " + code);
+      const output = await client.query(binding.sql, [
+        { start, end, as_of: at, ...options },
+        {
+          tenant_id: 101,
+          data_release: "diagnostic-v3-20261019",
+          all_regions: true,
+          region_ids: [],
+        },
+      ]);
+      const row = output.rows[0];
+      return [row.value === null ? null : Number(row.value), row.status];
+    }
+    const close = "2025-12-01T00:00:00+08:00";
+    expect(await value("sales.paid_gmv", "2025-10-01", "2025-11-01", close)).toEqual([10000, "OK"]);
+    expect(
+      await value("sales.order_count", "2025-10-01", "2025-11-01", close, {
+        filters: { category: 8 },
+      }),
+    ).toEqual([1, "OK"]);
+    expect(await value("sales.net_gmv", "2025-11-01", "2025-12-01", close)).toEqual([-2000, "OK"]);
+    expect(await value("finance.recognized_revenue", "2025-11-01", "2025-12-01", close)).toEqual([
+      8000,
+      "OK",
+    ]);
+    expect(await value("sales.paid_gmv", "2025-11-01", "2025-12-01", close)).toEqual([0, "OK"]);
+    expect(
+      await value("sales.net_gmv", "2025-11-01", "2025-12-01", "2025-11-04T10:00:00+08:00"),
+    ).toEqual([null, "COVERAGE_UNKNOWN"]);
+    const roas = (at: string, end = "2025-06-02") =>
+      value("marketing.net_roas", "2025-06-01", end, at);
+    expect(await roas("2025-06-09T00:00:00+08:00")).toEqual([null, "ZERO_SPEND"]);
+    expect(await roas("2025-06-10T00:00:00+08:00")).toEqual([3, "OK"]);
+    expect(await roas("2025-06-10T00:00:00+08:00", "2025-06-03")).toEqual([
+      null,
+      "SPEND_INCOMPLETE",
+    ]);
+    expect(await roas("2025-07-01T00:00:00+08:00")).toEqual([null, "ATTRIBUTION_UNKNOWN"]);
+    expect(
+      await value("inventory.closing_available_qty", "2025-10-01", "2025-10-03", close, {
+        filters: { sku: 11 },
+      }),
+    ).toEqual([5, "OK"]);
+    expect(
+      await value("inventory.closing_available_qty", "2025-10-01", "2025-10-03", close),
+    ).toEqual([null, "SNAPSHOT_INCOMPLETE"]);
+  } finally {
+    await client.query("ROLLBACK");
+    await client.end();
+  }
+});

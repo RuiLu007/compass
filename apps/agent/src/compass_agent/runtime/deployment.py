@@ -8,7 +8,7 @@ from compass_agent.models.errors import ModelError
 from compass_agent.runtime.private_state import digest
 from compass_agent.scheduler.entities import RuntimeControl
 
-REVISION = "0015"
+REVISION = "0017"
 MODE_LOCK = 985002
 LEGACY_OWNER_LOCK = 985001
 
@@ -43,10 +43,40 @@ def endpoint_identity(value):
     return [endpoint.scheme, endpoint.hostname, endpoint.port, endpoint.path]
 
 
-def policy_fingerprint(settings, overrides):
+def policy_fingerprint(settings, overrides, metric_catalog=None):
+    from compass_agent.context_runtime.profiles import POLICY_DIGEST
+    from compass_agent.context_runtime.semantics import MetricCatalog
+
+    catalog = metric_catalog or MetricCatalog(settings.compass_metric_dictionary_path)
     return digest(
         {
             "budget": budget_snapshot(settings),
+            "context": {
+                "enabled": settings.compass_context_runtime_enabled,
+                "policy": POLICY_DIGEST,
+                "scopes": sorted(
+                    (str(r.tenant_id), str(r.workspace_id or ""), r.profile)
+                    for r in settings.compass_context_scope_profiles
+                ),
+                "activeMetricDictionary": catalog.active,
+                "supportedMetricDictionaries": sorted(catalog.by_digest),
+                **(
+                    {"semanticWorkspaces": settings.compass_semantic_workspaces.split(",")}
+                    if settings.compass_semantic_workspaces
+                    else {}
+                ),
+                **(
+                    {"searchWorkspaces": sorted(search_workspaces)}
+                    if (
+                        search_workspaces := {
+                            item.strip()
+                            for item in settings.compass_search_workspaces.split(",")
+                            if item.strip()
+                        }
+                    )
+                    else {}
+                ),
+            },
             "capacity": [
                 settings.compass_runtime_max_active,
                 settings.compass_runtime_tenant_active,

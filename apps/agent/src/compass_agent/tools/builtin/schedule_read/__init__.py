@@ -7,6 +7,7 @@ from pydantic import Field, TypeAdapter, ValidationError
 
 from compass_agent.execution_context import current_execution, execution_path
 from compass_agent.models.errors import ModelError
+from compass_agent.prompt_assets import tool_text
 from compass_agent.schemas import RunContractModel, ScheduleStatus, ToolDefinition, ToolFunction
 from compass_agent.tools.catalog_contracts import ToolSpec
 from compass_agent.tools.contracts import (
@@ -49,10 +50,7 @@ def definition(_context):
     return ToolDefinition(
         function=ToolFunction(
             name=NAME,
-            description=(
-                "列出、搜索当前用户的定时任务，或按 ID 查看详情及执行记录。"
-                "按名称修改或删除前先查询，遇到同名任务请用户选择。"
-            ),
+            description=(tool_text("schedule_read")),
             parameters={"type": "object", **ARGUMENTS.json_schema(by_alias=True)},
         )
     )

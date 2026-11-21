@@ -106,16 +106,25 @@ def observations(settings, trace_id):
         ),
         timeout=5,
     ) as client:
-        response = client.get(
-            "/api/public/v2/observations",
-            params={
-                "traceId": trace_id,
-                "limit": 100,
-                "fields": "core,basic,metadata,usage,model,io",
-            },
-        )
-        assert response.status_code == 200, response.text[:500]
-        return response.json()["data"]
+        params = {
+            "traceId": trace_id,
+            "limit": "100",
+            "fields": "core,basic,metadata,usage,model,io",
+            "expandMetadata": ",".join(
+                ("prompts_used", "tools_selected", "skills_selected", "capabilities_excluded")
+            ),
+        }
+        records = []
+        while True:
+            response = client.get("/api/public/v2/observations", params=params)
+            assert response.status_code == 200, response.text[:500]
+            page = response.json()
+            records.extend(page["data"])
+            cursor = page["meta"].get("cursor")
+            if not cursor:
+                return records
+            assert cursor != params.get("cursor"), "Langfuse repeated its observation cursor"
+            params["cursor"] = cursor
 
 
 def test_two_process_gold_aggregates_usage_latency_and_message_parent(settings):

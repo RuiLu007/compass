@@ -73,6 +73,8 @@ function domainError(value: unknown, status: number): ApplicationError {
   if (status === 429) return new ApplicationError("rate_limited", "当前运行任务较多，请稍后重试。");
   if (!isModelContract("ModelErrorResponse", value)) return protocolError();
   const { error } = value as components["schemas"]["ModelErrorResponse"];
+  if (status === 403 && ["source_access_denied", "context_access_changed"].includes(error.code))
+    return new ApplicationError("forbidden", "当前权限无法读取这份结果的来源。");
   if (Object.hasOwn(MODEL_ERRORS, error.code)) {
     const code = error.code as keyof typeof MODEL_ERRORS;
     return new ApplicationError(
@@ -367,7 +369,11 @@ export async function analysisArtifactAgent(
       process.env.AGENT_API_URL ?? "http://127.0.0.1:8102",
     );
     const upstream = await fetch(url, {
-      headers: agentHeaders(options.context, serviceToken, "image/png"),
+      headers: agentHeaders(
+        options.context,
+        serviceToken,
+        "image/png, text/csv, application/json, text/markdown",
+      ),
       signal: active.controller.signal,
       redirect: "error",
       cache: "no-store",
@@ -375,7 +381,10 @@ export async function analysisArtifactAgent(
     if (!upstream.ok) throw domainError(await boundedJson(upstream), upstream.status);
     const media = upstream.headers.get("content-type") ?? "";
     const csv = media === "text/csv; charset=utf-8";
-    if ((!csv && media !== "image/png") || !upstream.body) throw protocolError();
+    const dashboard = media === "application/json";
+    const report = media === "text/markdown; charset=utf-8";
+    if ((!csv && !dashboard && !report && media !== "image/png") || !upstream.body)
+      throw protocolError();
     const reader = upstream.body.getReader();
     let size = 0;
     const chunks: Uint8Array[] = [];
@@ -392,16 +401,23 @@ export async function analysisArtifactAgent(
       reader.releaseLock();
     }
     const data = Buffer.concat(chunks);
-    if (!csv && (data.length < 8 || data.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a"))
+    if (
+      media === "image/png" &&
+      (data.length < 8 || data.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a")
+    )
       throw protocolError();
+    if (dashboard && !isModelContract("DashboardDocumentV1", JSON.parse(data.toString("utf8"))))
+      throw protocolError();
+    if (report) new TextDecoder("utf-8", { fatal: true }).decode(data);
     return new Response(data, {
       headers: {
         ...privateHeaders,
         "Content-Type": media,
         "X-Content-Type-Options": "nosniff",
-        "Content-Disposition": csv
-          ? 'attachment; filename="analysis.csv"'
-          : 'inline; filename="chart.png"',
+        "Content-Disposition":
+          media === "image/png"
+            ? 'inline; filename="chart.png"'
+            : `attachment; filename="${dashboard ? "dashboard.json" : report ? "report.md" : "analysis.csv"}"`,
         "X-Compass-View-Revision": options.revision,
       },
     });

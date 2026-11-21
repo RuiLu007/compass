@@ -1,0 +1,67 @@
+{
+  "type": "function",
+  "function": {
+    "name": "search_documents",
+    "description": "检索当前工作区已发布、当前可阅的制度知识、历史产物或外部资料。query 可用作者原词、文号、实体和同义词，kind 分别为 knowledge、history、external。businessDate 为条款的业务适用日，historical=true 时必须指定。最多返回前三段线索与 ref，核实条款或报价前须读取原段。",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "query": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Query",
+          "type": "string"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "enum": ["knowledge", "history", "external"],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kind"
+        },
+        "entity": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Entity"
+        },
+        "businessDate": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Businessdate"
+        },
+        "historical": {
+          "default": false,
+          "title": "Historical",
+          "type": "boolean"
+        }
+      },
+      "required": ["query"],
+      "title": "Input",
+      "type": "object"
+    }
+  },
+  "examples": []
+}

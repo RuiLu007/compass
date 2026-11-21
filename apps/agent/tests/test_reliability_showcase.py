@@ -8,6 +8,8 @@ from compass_agent.reliability.service import CATALOG, run_showcase
 from compass_agent.schemas import ShowcaseInput
 
 from .test_models import MANAGE
+from .test_promptops import first_release, publish, save
+from .test_promptops import system as system
 
 
 @pytest.mark.parametrize("scenario", [s.id for s in CATALOG.items])
@@ -27,17 +29,30 @@ def test_showcase_scenario(scenario):
     asyncio.run(run())
 
 
-def test_showcase_http_requires_platform_admin_and_rejects_arbitrary_input():
+def test_showcase_http_requires_platform_admin_and_rejects_arbitrary_input(system):
     from unittest.mock import patch
 
     from compass_agent.main import app
+    from compass_agent.prompt_assets import prompt_text
     from compass_agent.settings import Settings
     from fastapi.testclient import TestClient
 
     from .test_models import CHAT, headers
 
     settings = Settings(compass_agent_service_token="unit-service-token")
+    admin, engine = system
+    first_release(admin)
+    path = "support/diagnostics/reliability-request.md"
+    save(admin, path, "模拟当前发布的诊断题面")
+    publish(admin, "file", path=path)
+
+    async def observed(*args):
+        assert prompt_text(path) == "模拟当前发布的诊断题面"
+        return await run_showcase(*args)
+
     with (
+        patch("compass_agent.api.models.get_engine", return_value=engine),
+        patch("compass_agent.reliability.service.run_showcase", side_effect=observed),
         patch("compass_agent.api.models.get_settings", return_value=settings),
         TestClient(app) as client,
     ):

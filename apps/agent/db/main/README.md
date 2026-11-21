@@ -1,6 +1,6 @@
 # Agent / main 数据库
 
-Owner 为 `agent/main`，PostgreSQL 17。迁移唯一源为 [Alembic revisions](../../migrations/versions/)，受管工具为 [database.py](../../scripts/database.py)。当前版本 `0015`：保留 `0001` 的演示数据，0002 增加 `model_provider`、`model_change`、`model_call`，0003 将已有 `aliyun_decision` 绑定迁移为通用 `systemone_decision`，保持 ID、型号、凭据、配置版本和历史记录。0004 为调用表追加可空 `execution` JSON，记录至多两次尝试的安全摘要；旧行保持 null。0005 新增每个工作区一行的 `retail_connection`，配置密码加密，更新按 revision 比较。0006 将旧 Retail 记录复制为工作区默认连接，保留密码密文和 revision，再移除原表。新 `data_connection` 同时支持普通 PostgreSQL 与 MySQL。0007 追加 `workflow_asset`，保存工作区个人的 JS 源码、摘要与运行契约。0008 增加 MCP 配置和 Sandbox 租约。0009 增加持久运行实体及物理模型尝试，扩展调用表的加密输入/输出。0010 增加运行调度。`0011` 增加会话标题状态、任务领取信息与软删除时间。0012 给工作流资产增加工具说明和参数 JSON Schema。0013 为 Provider 增加可空的模型容量元数据和生成默认值。0014 新增工作流软删除。0015 新增计划、触发、角色控制及回收和发布租约。Provider 凭据与 Runtime 内容使用不同用途的密文。
+Owner 为 `agent/main`，PostgreSQL 17。迁移唯一源为 [Alembic revisions](../../migrations/versions/)，受管工具为 [database.py](../../scripts/database.py)。当前版本 `0017`：保留 `0001` 的演示数据，0002 增加 `model_provider`、`model_change`、`model_call`，0003 将已有 `aliyun_decision` 绑定迁移为通用 `systemone_decision`，保持 ID、型号、凭据、配置版本和历史记录。0004 为调用表追加可空 `execution` JSON，记录至多两次尝试的安全摘要；旧行保持 null。0005 新增每个工作区一行的 `retail_connection`，配置密码加密，更新按 revision 比较。0006 将旧 Retail 记录复制为工作区默认连接，保留密码密文和 revision，再移除原表。新 `data_connection` 同时支持普通 PostgreSQL 与 MySQL。0007 追加 `workflow_asset`，保存工作区个人的 JS 源码、摘要与运行契约。0008 增加 MCP 配置和 Sandbox 租约。0009 增加持久运行实体及物理模型尝试，扩展调用表的加密输入/输出。0010 增加运行调度。`0011` 增加会话标题状态、任务领取信息与软删除时间。0012 给工作流资产增加工具说明和参数 JSON Schema。0013 为 Provider 增加可空的模型容量元数据和生成默认值。0014 新增工作流软删除。0015 新增计划、触发、角色控制及回收和发布租约。0016 保存 PromptOps 代次与运行上下文。0017 保存 Run 固定的 Registry 发布、加密查询回执与用户决定。Provider 凭据与 Runtime 内容使用不同用途的密文。
 
 ## 配置与执行
 
@@ -24,14 +24,14 @@ pnpm db:sql:check -F agent
 
 ## SQL 交付
 
-[manifest.json](sql/manifest.json) 登记工具版本、源路径、SHA-256 和固定区间。清单 sources 相对本目录，files 相对 sql/。[bootstrap.sql](sql/bootstrap.sql) 从空库安装 0015，受管增量覆盖 0001～0014。已有历史增量保留原字节。使用受管入口安装：
+[manifest.json](sql/manifest.json) 登记工具版本、源路径、SHA-256 和固定区间。清单 sources 相对本目录，files 相对 sql/。[bootstrap.sql](sql/bootstrap.sql) 从空库安装 0017，受管增量覆盖 0001～0017。已有历史增量保留原字节。使用受管入口安装：
 
 ```bash
-pnpm db:apply-sql -F agent -- --from empty --to 0015
-# 旧库按当前版本使用 --from 0001 至 --from 0012；已达目标时安全返回 already_applied。
+pnpm db:apply-sql -F agent -- --from empty --to 0017
+# 旧库按当前版本填写 --from，0016 升级示例使用 --from 0016 --to 0017。
 ```
 
-先完成供应与备份，停止模型写入，迁移 Agent 到 0015。按部署需要使用运行账号执行 seed 导入默认 Retail 连接，再发布两端应用。准备服务令牌、加密密钥与端点允许列表。数据库各自独立事务；任一步失败保留实际版本并停止功能开放。
+先完成供应与备份，停止模型写入，迁移 Agent 到 0017。按部署需要使用运行账号执行 seed 导入默认 Retail 连接，再发布两端应用。准备服务令牌、加密密钥与端点允许列表。数据库各自独立事务；任一步失败保留实际版本并停止功能开放。
 
 恢复方式为：停止模型写入，使用 PostgreSQL 17 `pg_dump` 保存原库，将备份恢复到新供应的 Agent 空库（`pg_restore --no-owner --role=compass_agent_owner`），配置原加密密钥，核验版本与受保护凭据可解密，再切换运行连接。保留旧库；本期不通过 downgrade 删除模型历史。生产备份还须采用部署方的受控存储与账号策略。
 
@@ -84,3 +84,15 @@ Feature 985，owner `agent/main`，起点 0008、终点 0009。迁移真源为 `
 `pnpm db:provision -F agent` 支持 `COMPASS_SCHEDULER_DATABASE_URL`。它使用同库的 `compass_agent_scheduler` 登录，权限限于计划扫描、交付状态、调度租约及已关联 Run 的安全摘要视图。Agent 通过自己的运行账号原子提交 Run 和触发关联。迁移保留独立的 owner、migrator 和 runtime 权限。
 
 停旧消费者与 Agent 后备份 PostgreSQL、Redis 和密钥，封存旧运行写凭据，再执行供应与迁移。先启动新 Agent 验证旧队列和游标，再启 Scheduler。回到仅支持 0014 的版本时，将升级前备份恢复到隔离数据库并采用对应 Redis 快照；封存 0015 数据并核对升级期间的受理和已提交效果。[发布与回退步骤](../../../../docs/lesson-20-production-runtime.md)
+
+## 0016 提示词发布与运行上下文
+
+Agent 独占提示词草稿、不可变正文版本、版本清单、快照、发布回执和活动指针。0015 升至 0016 时已有 Run 保留原配置。新模型步骤可保存密封上下文，消息可携带来源引用，受管产物支持看板 JSON 和 Markdown 报告。[迁移源](../../migrations/versions/0016_prompt_context.py) · [增量 SQL](sql/upgrades/0015__0016.sql) · [完整 SQL](sql/bootstrap.sql)
+
+从 Compass 根执行 `pnpm db:sql:check -F agent` 核对派生 SQL，备份数据库与密钥，暂停受理并退出旧消费者，再用 `pnpm db:migrate -F agent` 升级。迁移清空旧执行策略指纹，首个新版消费者在锁内登记新指纹。运行账号只能插入版本、清单和回执，Scheduler 通过 Agent 受理。部署支持新契约的 Agent 和 Web 后，平台管理员在 PromptOps 导入随包文件并首次整体发布，再开启受管 Run。故障恢复先将备份还原到独立库，核对活动指针、旧任务固定的清单及密钥，再切换连接。
+
+## 0017 经营语义与查询回执
+
+`agent/main` 从 0016 升级至 0017。每个 Run 可以固定一个语义发布清单，开放查询回执关联会话、所有者、加密内容和有效期。运行账号可登记绑定、插入回执及更新用户决定，绑定内容与回执所有者保持只读。[迁移源](../../migrations/versions/0017_semantic_runtime.py) · [增量 SQL](sql/upgrades/0016__0017.sql)
+
+升级前暂停新受理，排空旧任务，停止旧 Agent 与 Scheduler，备份数据库和私有状态密钥。0017 清空旧版执行策略指纹。使用一致配置启动新副本，首个副本在锁内登记新版策略，然后启动 Scheduler。需要恢复 0016 时，将升级前备份还原至独立数据库，核对已受理任务、密钥与原发布清单后切换。[工作区启用和发布步骤](../../../../deploy/README.md#工作区经营语义-registry)

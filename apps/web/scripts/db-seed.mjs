@@ -3,6 +3,7 @@ import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
 import { cli, connectManaged } from "./db-common.mjs";
 import { encodePassword } from "../src/server/modules/identity/infrastructure/password.ts";
+import { exportRetailSemanticSql, seedRetailSemantics } from "./retail-semantic-seed.mjs";
 import { DEFAULT_TEMPLATES } from "../src/server/modules/access/domain/permissions.ts";
 
 // Stable, explicitly requested teaching data. Never resets an existing account or grant.
@@ -91,9 +92,21 @@ export async function seedTeaching(password, url) {
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
   cli(async () => {
-    const { values } = parseArgs({ options: { fixture: { type: "string" } } });
+    const { values } = parseArgs({
+      options: { fixture: { type: "string" }, "output-sql": { type: "string" } },
+    });
+    if (values["output-sql"]) {
+      if (values.fixture !== "retail-semantics")
+        throw new Error("SQL export requires the retail-semantics fixture");
+      console.log(JSON.stringify(await exportRetailSemanticSql(values["output-sql"])));
+      return;
+    }
     if (!values.fixture) {
       console.log("Web seed skipped: request --fixture teaching explicitly.");
+      return;
+    }
+    if (values.fixture === "retail-semantics") {
+      console.log(JSON.stringify(await seedRetailSemantics()));
       return;
     }
     if (values.fixture !== "teaching") throw new Error("Unknown fixture");

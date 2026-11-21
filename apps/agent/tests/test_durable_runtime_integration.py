@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from uuid import UUID, uuid4
 
 import pytest
+from compass_agent.context_runtime.source_access import project_sources
 from compass_agent.models.errors import ModelError
 from compass_agent.runtime.commands import context_reset, control
 from compass_agent.runtime.control import RunRegistry
@@ -27,6 +28,7 @@ from compass_agent.workflows.drafts import WorkflowDrafts
 from sqlalchemy import create_engine, func, select, update
 from sqlalchemy.orm import Session
 
+from .context_fixture import capability_grants, install_prompts
 from .test_agent_run import CHAT, model_result
 from .test_database_tools_integration import db
 from .test_database_tools_integration import targets as targets
@@ -57,7 +59,7 @@ def command(**fields):
 def prepare(targets):
     url, _ = targets("durable")
     db.migrate()
-    return create_engine(url)
+    return install_prompts(create_engine(url))
 
 
 @asynccontextmanager
@@ -67,6 +69,7 @@ async def service(engine):
     async def allowed(context, **kwargs):
         return None
 
+    value.access.capabilities = capability_grants
     value.access.check = allowed
     await value.start()
     assert value.store.ready
@@ -99,7 +102,7 @@ async def execute(service, value, worker):
 
 
 def decision(service, run, choice="approve"):
-    snapshot = service.reader.messages(run.session_id, CHAT)
+    snapshot = project_sources(service.store, service.reader.messages(run.session_id, CHAT), CHAT)
     wait = next(
         p.event.payload.value
         for p in snapshot.packets
@@ -162,7 +165,13 @@ def test_admitted_command_failure_exposes_resumable_state_without_dispatch(targe
             if failure == "forbidden":
                 runtime.access.check = unavailable
             else:
-                runtime.publisher.flush = unavailable
+
+                async def unavailable_to_worker(run_id):
+                    if asyncio.current_task() is runtime.tasks.get(run_id):
+                        await unavailable()
+                    return await original_flush(run_id)
+
+                runtime.publisher.flush = unavailable_to_worker
             identifier = UUID(accepted["runId"])
             runtime.schedule(identifier, worker, CHAT)
             await runtime.tasks[identifier]
@@ -344,7 +353,9 @@ def test_terminal_ttl_and_checkpoint_unknown_or_corrupt_never_dispatch(targets):
             await runtime.streams.writer.delete(runtime.streams.key(identifier))
             with pytest.raises(ModelError, match="history_reload_required"):
                 await runtime.streams.validate(runtime.store.read_run(identifier))
-            snapshot = runtime.reader.messages(UUID(accepted["sessionId"]), CHAT)
+            snapshot = project_sources(
+                runtime.store, runtime.reader.messages(UUID(accepted["sessionId"]), CHAT), CHAT
+            )
             terminal_packet = next(p for p in snapshot.packets if p.event.type == "run.upsert")
             assert terminal_packet.occurred_at == rows[-1][1]["packet"]["occurredAt"]
             assert terminal_packet.occurred_at > next(
@@ -764,7 +775,9 @@ def test_dynamic_workflow_confirm_and_reuse_across_sessions(targets):
             )
             assert created.status == "completed", created.reason_code
             assert not assets.list(CHAT).items
-            snapshot = runtime.reader.messages(created.session_id, CHAT)
+            snapshot = project_sources(
+                runtime.store, runtime.reader.messages(created.session_id, CHAT), CHAT
+            )
             draft_id = next(
                 UUID(packet.event.payload.value.draft_id)
                 for packet in snapshot.packets

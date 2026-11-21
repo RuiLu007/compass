@@ -157,7 +157,10 @@ def test_routing_uses_real_postgres_for_classification_and_main_call(system):
     from compass_agent.schemas import ChatCallInput, MainModelSelection
     from compass_agent.settings import Settings
 
+    from .context_fixture import install_prompts
+
     repo, upstream, models = system
+    install_prompts(repo.engine)
     pro = unique_create(repo)[1].provider_id
     flash = unique_create(repo, api_model="deepseek-flash", catalog_id="deepseek/deepseek-flash")[
         1

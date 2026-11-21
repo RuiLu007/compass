@@ -1,5 +1,7 @@
 """Run-local budget and generic task progress, independent of business data."""
 
+from typing import TYPE_CHECKING
+
 from compass_agent.harness.autonomy import BUDGET_REASONS, AutonomyBudget, StopPolicy
 from compass_agent.schemas import (
     RunAutonomyAction,
@@ -9,6 +11,9 @@ from compass_agent.schemas import (
     StreamExtension,
 )
 from compass_agent.tools.builtin.todo_write.plan import ExecutionPlan, TodoDefinition
+
+if TYPE_CHECKING:
+    from compass_agent.context_runtime.search_control import SearchProgress
 
 
 def extension(name, data):
@@ -27,12 +32,13 @@ class RuntimeSession:
     def __init__(self, profiles, limits, *, require_plan=False):
         self.budget = AutonomyBudget(profiles, limits)
         self.stop = StopPolicy()
+        self.search_progress: SearchProgress | None = None
         self.plan = ExecutionPlan[TodoDefinition]()
         self.require_plan = require_plan
 
     def checkpoint_state(self):
         return {
-            "verifier": {},
+            "verifier": self.search_progress.snapshot() if self.search_progress else {},
             "plan": {
                 **self.plan.snapshot(),
                 "retired": sorted(self.plan.retired),
@@ -86,6 +92,10 @@ class RuntimeSession:
                 status = "budget_exhausted"
         elif status == "canceled":
             reason = result.reason
+        elif status == "completed" and self.search_progress:
+            reason = self.search_progress.stop_reason or "blocked"
+            if reason == "budget_exhausted":
+                status = "budget_exhausted"
         else:
             reason = status
         return extension(

@@ -65,7 +65,7 @@ def session_item(session: AgentSession, run: AgentRun | None) -> dict:
             "sessionType": session.session_type,
             "iconKey": session.session_type,
             "version": session.version,
-            "updatedAt": session.updated_at.isoformat(),
+            "updatedAt": session.updated_at.astimezone(UTC).isoformat(),
             "latestRunId": str(run.id) if run else None,
             "executionStatus": run.public_view["run"]["status"] if run else None,
         }
@@ -141,7 +141,15 @@ def owner_filter(context: TrustedContext, *, include_deleted=False):
 
 
 class RuntimeStore:
-    def __init__(self, engine, key: str):
+    def __init__(self, engine, key: str, *, settings=None):
+        from compass_agent.context_runtime.semantics import MetricCatalog
+        from compass_agent.settings import get_settings
+
+        settings = settings or get_settings()
+        self.source_settings = settings
+        self.context_enabled = settings.compass_context_runtime_enabled
+        self.context_scopes = settings.compass_context_scope_profiles
+        self.metric_catalog = MetricCatalog(settings.compass_metric_dictionary_path)
         self.engine = engine
         self.private = PrivateState(key)
         self.ready = False
@@ -267,6 +275,10 @@ class RuntimeStore:
     def outbox(self, tx, session, run, events, *, operation_id=None):
         from compass_agent.runtime.public_visibility import public_event
 
+        if run.config_snapshot.get("contextRuntime"):
+            from compass_agent.runtime.public_visibility import managed_events
+
+            events = managed_events(self, tx, run, events)
         events = [public_event(event) for event in events]
         if self.scheduler:
             events = self.scheduler.synchronize(tx, session, run, events)
@@ -281,9 +293,9 @@ class RuntimeStore:
         ):
             occurred_at = timestamp
             if event["type"] == "run.upsert" and run.finished_at is not None:
-                occurred_at = run.finished_at.isoformat()
+                occurred_at = run.finished_at.astimezone(UTC).isoformat()
             elif event["type"] == "message.upsert" and event["payload"]["role"] == "user":
-                occurred_at = run.created_at.isoformat()
+                occurred_at = run.created_at.astimezone(UTC).isoformat()
             packet = {
                 "packetId": str(uuid5(identifier, str(index))),
                 "runId": str(run.id),
@@ -410,6 +422,33 @@ class RuntimeStore:
             config["schedule"] = schedule
         if imported_history:
             config["importedHistory"] = imported_history
+        from compass_agent.documents import client as documents
+
+        search_enabled = documents.enabled(
+            getattr(self, "source_settings", None), session.workspace_id
+        )
+        if search_enabled and not self.context_enabled:
+            raise ModelError("context_policy_unavailable", 503)
+        if self.context_enabled:
+            from compass_agent.context_runtime.pipeline import pin
+
+            config["contextRuntime"] = pin(tx, context, self)
+            from compass_agent.semantic.client import enabled, request
+
+            if search_enabled:
+                snapshot = documents.accept(self.source_settings, context, run_id)
+                config["searchSnapshot"] = snapshot
+                config["contextRuntime"]["search"] = snapshot
+            if enabled(self.source_settings, session.workspace_id) and (
+                not search_enabled or "semantic" in config["searchSnapshot"]["kinds"]
+            ):
+                registry = request(self.source_settings, context, run_id, "manifest")
+                if not registry.get("releases"):
+                    raise ModelError("context_policy_unavailable", 503)
+                config["contextRuntime"]["registry"] = {
+                    "manifest": registry["manifest_hash"],
+                    "pins": registry["releases"],
+                }
         run = AgentRun(
             id=run_id,
             session_id=session.id,
@@ -428,6 +467,20 @@ class RuntimeStore:
         run.public_view = {"schemaVersion": 1, "run": public_run(run), "objects": {}}
         tx.add(run)
         tx.flush()
+        if registry_pin := config.get("contextRuntime", {}).get("registry"):
+            from compass_agent.semantic.entities import SemanticRunBinding
+
+            tx.add(
+                SemanticRunBinding(
+                    run_id=run_id,
+                    tenant_id=session.tenant_id,
+                    workspace_id=session.workspace_id,
+                    catalog_kind="registry",
+                    manifest_hash=registry_pin["manifest"],
+                    partition_releases=registry_pin["pins"],
+                    bound_at=now(),
+                )
+            )
         messages = []
         for ordinal, role, content, status in [
             (1, "user", command.question, "completed"),
@@ -463,12 +516,23 @@ class RuntimeStore:
         return response
 
     def history_command(self, run_id):
-        with Session(self.engine) as tx:
+        from compass_agent.context_runtime.source_access import (
+            allows,
+            assistant_message,
+            final_text,
+        )
+
+        with Session(self.engine) as tx, tx.begin():
             run = tx.get(AgentRun, run_id)
             assert run is not None
             session = tx.get(AgentSession, run.session_id)
             assert session is not None
             history = []
+            managed = bool(run.config_snapshot.get("contextRuntime"))
+            trusted = (
+                TrustedContext.model_validate(run.config_snapshot["context"]) if managed else None
+            )
+            inherited = []
             for old in reversed(
                 tx.scalars(
                     select(AgentRun)
@@ -493,13 +557,32 @@ class RuntimeStore:
                     and messages[1].public_content["text"]
                 ):
                     assert messages[0].public_content is not None
+                    answer = messages[1].public_content["text"]
+                    if managed:
+                        if not old.config_snapshot.get("contextRuntime"):
+                            continue
+                        refs = messages[1].source_refs or []
+                        if not allows(self, trusted, refs):
+                            continue
+                        answer = final_text(self, tx, old.id)
+                        if not answer:
+                            continue
+                        inherited.extend(ref for ref in refs if ref not in inherited)
                     history.append(
                         AnalysisHistoryTurn(
                             question=messages[0].public_content["text"],
-                            answer=messages[1].public_content["text"],
+                            answer=answer,
                         )
                     )
             data = dict(run.config_snapshot["command"])
+            if inherited:
+                current = assistant_message(tx, run_id)
+                if current:
+                    old_refs = current.source_refs or []
+                    current.source_refs = [
+                        *old_refs,
+                        *(ref for ref in inherited if ref not in old_refs),
+                    ]
             data.pop("sessionId", None)
             from compass_agent.runtime.history import decode_command
 
@@ -516,7 +599,7 @@ class RuntimeStore:
                 history.pop(0)
             data["history"] = (
                 history
-                if session.context_start_ordinal > 1
+                if managed or session.context_start_ordinal > 1
                 else history or run.config_snapshot.get("importedHistory", [])
             )
             return AnalysisRunInput.model_validate(data)
@@ -688,6 +771,8 @@ class RuntimeStore:
         events=(),
         cleanup="confirmed",
         drafts=(),
+        delivery=None,
+        citations=None,
     ):
         with self.transaction() as tx:
             session, run = self.lock(tx, run_id)
@@ -725,10 +810,37 @@ class RuntimeStore:
                 )
             )
             assert assistant is not None
+            if status == "completed" and delivery is not None:
+                from compass_agent.context_runtime.delivery import persist_delivery
+
+                refs = assistant.source_refs or []
+                if any(ref.get("kind") == "transient" for ref in refs):
+                    answer = (
+                        (answer or "") + "\n\n本次数据源仅支持即时读取，无法保存附件。"
+                        "可使用支持历史读取的连接重新生成。"
+                    )
+                else:
+                    events = [*events, persist_delivery(tx, session, run, delivery, refs)]
             value = message_snapshot(assistant)
             value["revision"] += 1
             value["status"] = "completed" if status == "completed" else "incomplete"
             if answer is not None:
+                if run.config_snapshot.get("contextRuntime"):
+                    from compass_agent.context_runtime.source_access import (
+                        REFERENCE,
+                        save_final_text,
+                    )
+
+                    if citations:
+                        from compass_agent.context_runtime.search_verification import (
+                            publish_citations,
+                        )
+
+                        publish_citations(
+                            self, tx, run, assistant, answer, value["revision"], citations
+                        )
+                    save_final_text(self, tx, run, assistant, answer)
+                    answer = REFERENCE
                 value["content"] = {**value["content"], "text": answer}
             value["content"]["artifactIds"] = [
                 str(v)
@@ -779,7 +891,13 @@ class RuntimeStore:
                 run.public_view = {**run.public_view, "run": public_run(run)}
 
     def artifact(self, run_id, artifact_id, context):
-        self.read_run(run_id, context)
+        run = self.read_run(run_id, context)
+        if run.config_snapshot.get("contextRuntime"):
+            from compass_agent.context_runtime.source_access import require_run_sources
+
+            require_run_sources(self, run_id, context)
+        elif self.context_enabled:
+            raise ModelError("source_access_denied", 403)
         with Session(self.engine, expire_on_commit=False) as tx:
             item = tx.scalar(
                 select(AgentArtifact).where(

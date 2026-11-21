@@ -1,0 +1,230 @@
+{
+  "type": "function",
+  "function": {
+    "name": "discover_semantic_candidates",
+    "description": "从授权素材或同会话临时查询回执发现候选。说明来源、位置、置信度、公式与缺项。保存前向用户展示可编辑预览并等待确认。\n\n使用当前会话 previous_results 列出的 result_ref。用户明确提出保存或选择此前结果时使用 requested。系统对已确认且可复用的结果主动邀请时才使用 suggest。用户指的是刚才的结果时可省略 result_ref，多份候选先由用户选择。\n\nprevious_results 为本人已经看到的查询结果。跨轮保存直接使用这些回执，原计算、来源、筛选及归属均可在预览核对。",
+    "parameters": {
+      "$defs": {
+        "SuggestedDraftFields": {
+          "properties": {
+            "name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Name"
+            },
+            "code": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Code"
+            },
+            "domain": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Domain"
+            },
+            "summary": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Summary"
+            },
+            "responsible": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Responsible"
+            },
+            "grain": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Grain"
+            },
+            "unit": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Unit"
+            },
+            "formula": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Formula"
+            },
+            "event_time": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Event Time"
+            },
+            "timezone": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Timezone"
+            },
+            "aggregation": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Aggregation"
+            }
+          },
+          "title": "SuggestedDraftFields",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "source_refs": {
+          "anyOf": [
+            {
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "maxItems": 8,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Refs"
+        },
+        "owner_scope_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Owner Scope Id"
+        },
+        "usage_scope_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Usage Scope Id"
+        },
+        "result_ref": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "可选。用户指的是刚才的查询时可以省略，系统会在当前会话查找并让用户选择。",
+          "title": "Result Ref"
+        },
+        "trigger": {
+          "default": "requested",
+          "description": "用户要求保存或选择时为 requested。只有主动推荐时填 suggest。",
+          "enum": ["requested", "suggest"],
+          "title": "Trigger",
+          "type": "string"
+        },
+        "fields": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SuggestedDraftFields"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "Input",
+      "type": "object"
+    }
+  },
+  "examples": []
+}

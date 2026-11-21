@@ -48,6 +48,7 @@ export const governanceIcons: Record<string, NavigationIconName> = {
   security: "shield",
   memory: "book",
   organization: "users",
+  platform: "shield",
 };
 export const secondaryIcons: Record<string, NavigationIconName> = {
   "reports-all": "folder",
@@ -75,6 +76,7 @@ export const secondaryIcons: Record<string, NavigationIconName> = {
   guide: "grid",
   workspaces: "grid",
   access: "shield",
+  "platform-promptops": "folder",
   "platform-tenants": "users",
 };
 

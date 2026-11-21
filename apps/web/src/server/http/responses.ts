@@ -47,6 +47,7 @@ export function errorResponse(error: unknown): Response {
     conflict: 409,
     validation_failed: 422,
     rate_limited: 429,
+    payload_too_large: 413,
     unavailable: 503,
   }[app.code];
   return Response.json(
@@ -61,9 +62,16 @@ export function errorResponse(error: unknown): Response {
     { status, headers: { ...privateHeaders, ...(status === 429 ? { "Retry-After": "60" } : {}) } },
   );
 }
-export async function readJson(request: Request, maxBytes = 65536): Promise<unknown> {
+export async function readJson(
+  request: Request,
+  maxBytes = 65536,
+  reportSize = false,
+): Promise<unknown> {
   if (Number(request.headers.get("content-length") ?? 0) > maxBytes)
-    throw new ApplicationError("validation_failed", "请求内容过大。");
+    throw new ApplicationError(
+      reportSize ? "payload_too_large" : "validation_failed",
+      "请求内容过大。",
+    );
   if (!request.body) return {};
   const reader = request.body.getReader();
   let size = 0;
@@ -75,7 +83,10 @@ export async function readJson(request: Request, maxBytes = 65536): Promise<unkn
       size += value.byteLength;
       if (size > maxBytes) {
         await reader.cancel();
-        throw new ApplicationError("validation_failed", "请求内容过大。");
+        throw new ApplicationError(
+          reportSize ? "payload_too_large" : "validation_failed",
+          "请求内容过大。",
+        );
       }
       chunks.push(value);
     }

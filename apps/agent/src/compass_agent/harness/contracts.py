@@ -6,7 +6,14 @@ from typing import Any, Literal, Protocol
 from uuid import UUID
 
 from compass_agent.execution_context import uuid4
-from compass_agent.schemas import CallResponse, ChatMessage, ExecutionDetail, RunError, ToolCall
+from compass_agent.schemas import (
+    CallResponse,
+    ChatMessage,
+    ExecutionDetail,
+    GenerateInput,
+    RunError,
+    ToolCall,
+)
 
 StepStatus = Literal["running", "completed", "failed", "canceled"]
 
@@ -56,6 +63,7 @@ class Step:
     model_call_id: UUID
     status: StepStatus = "running"
     tool_calls: tuple[ToolCall, ...] = field(default=(), repr=False)
+    prepared_request: GenerateInput | None = field(default=None, repr=False)
     tool_results: list[ToolResult] = field(default_factory=list, repr=False)
 
 

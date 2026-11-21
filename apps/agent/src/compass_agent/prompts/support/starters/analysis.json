@@ -1,0 +1,19 @@
+{
+  "questions": {
+    "channel-comparison": "比较 2025-11-17 至 11-23 和 11-24 至 11-30 两周，哪个渠道的实付金额变化最大？变化主要来自哪些商品？\n",
+    "channel-diagnosis": "比较 2025-11-17 至 11-23 和 11-24 至 11-30 两周的渠道实付金额，找出变化最大的渠道，再分析主要商品的贡献。\n",
+    "confirm-query": "查一下 Retail 在 2025-11-24 的实付总额，只返回这一个数和金额单位。请使用已配置为需要审批的 MCP 只读查询工具，先提交查询请求供我在审批卡片上确认，批准后再执行查询。如果当前没有合适的审批工具，请告诉我并结束本次任务。\n",
+    "inventory-health": "怎样评估库存健康度？\n",
+    "parallel-queries": "请在同一次模型响应中发出两个互不依赖的 database_query 调用，使用当前工作区已授权的 Retail 数据连接。第一个执行 SELECT COUNT(*) AS row_count FROM core.channel_product_daily WHERE report_date = DATE '2025-11-24'，第二个执行 SELECT COUNT(*) AS row_count FROM core.channel_product_daily WHERE report_date = DATE '2025-11-25'。拿到两份结果后按日期分别汇报。\n",
+    "pos-first-report-amount": "周会只写了“销售额”，同事问我这个数到底算的是什么。请按我所在部门平时采用的口径，核对 2025-11-17 至 2025-11-23 的销售额。告诉我指标的正式名称、哪件业务发生时才算入，以及本周哪一天金额最高、当天多少。再挑最早的一个最高日，看看当天哪个渠道贡献最大、贡献了多少。请把口径来源和本次查到的日数据分开说明；如果有并列最高或某天数据未齐，请标出来。\n",
+    "pos-first-report-brief": "周会材料明早要发。渠道同事发来一份 POS 日报，实付合计 14,108.89 元；支付团队的对账回执还没到。填报人想把这个数写进“已核对实付”栏。请给我一段可以直接转发给填报人的处理意见。\n",
+    "queue-daily": "汇总 Retail 在 2025-11-24 至 11-30 的每日实付额，找出实付额最高的一天，报告日期和金额。\n",
+    "queue-diagnosis": "比较 Retail 在 2025-11-17 至 11-23 和 11-24 至 11-30 两周的渠道实付额。列出变化最大的三个渠道，分析其中变化最大渠道的商品贡献，并给出差额图。\n",
+    "resume-run": "比较 Retail 在 2025-11-17 至 11-23 和 11-24 至 11-30 两周的渠道实付额，找出变化最大的渠道，分析主要商品的贡献，并生成一张可下载的差额图。请标明对比口径和数据缺口。\n",
+    "sales-growth": "如何拆解销售增长的影响因素？\n",
+    "sandbox-python": "使用当前工作区已授权的 Retail 数据连接。先用 database_query 执行 SELECT COUNT(*) AS row_count, COALESCE(SUM(paid_amount_cent), 0) AS paid_cent FROM core.channel_product_daily WHERE report_date = DATE '2025-11-24'。拿到 resultId 后，调用 python_analysis，把 resultId 填到 source_query_id。请在 Sandbox 中运行 Python，读取 data 的第一行，把实付金额从分换算成元，将行数和换算结果写入 result。工具返回后报告结果。\n",
+    "saved-workflow": "使用已保存的工作流「{{workflow_name}}」分析所选时段。\n",
+    "workflow-compare": "用 Retail 渠道商品日报比较 2025-11-03 至 2025-11-09 和 2025-11-10 至 2025-11-16。每个租户、日期、渠道、SKU 和区域取最新报表版本。找出实付额差额绝对值最大的渠道，只报告渠道 ID、两期金额和差额（单位为分）。\n",
+    "workflow-create": "请比较 Retail 两周的渠道实付额，找出差额绝对值最大的渠道。直接用 database_query 执行下面这一条只读 SQL，返回渠道 ID、两期金额和差额（金额单位为分）。仅使用渠道商品日报，无需查表目录、维表或拆商品。\n\nWITH latest AS ( SELECT DISTINCT ON (tenant_id, report_date, channel_id, sku_id, region_id) report_date, channel_id, paid_amount_cent FROM core.channel_product_daily WHERE report_date BETWEEN DATE '2025-11-17' AND DATE '2025-11-23' OR report_date BETWEEN DATE '2025-11-24' AND DATE '2025-11-30' ORDER BY tenant_id, report_date, channel_id, sku_id, region_id, report_version DESC ) SELECT channel_id, COALESCE(SUM(paid_amount_cent) FILTER (WHERE report_date BETWEEN DATE '2025-11-17' AND DATE '2025-11-23'), 0) AS baseline_cent, COALESCE(SUM(paid_amount_cent) FILTER (WHERE report_date BETWEEN DATE '2025-11-24' AND DATE '2025-11-30'), 0) AS current_cent FROM latest GROUP BY channel_id ORDER BY ABS(COALESCE(SUM(paid_amount_cent) FILTER (WHERE report_date BETWEEN DATE '2025-11-24' AND DATE '2025-11-30'), 0) - COALESCE(SUM(paid_amount_cent) FILTER (WHERE report_date BETWEEN DATE '2025-11-17' AND DATE '2025-11-23'), 0)) DESC, channel_id LIMIT 1\n\n查到结果后，请立即调用 create_workflow 创建并试跑「两周渠道实付对比」。将两期各自的起止日期设为四个 YYYY-MM-DD 字符串入参，脚本用本次入参填入同一条 SQL，只调度一个 sub_agent，prompt 明确要求直接执行这条 SQL 并返回查询结果。试跑成功后简要汇报结果并提示我确认保存。\n"
+  }
+}

@@ -76,7 +76,9 @@ class ExecutionJournal:
         self._last_attempt: ContextVar[UUID | None] = ContextVar(
             "journal_last_attempt", default=None
         )
-        self.model_secrets = None
+        from compass_agent.models.secrets import SecretStore
+
+        self.model_secrets: SecretStore | None = None
         self.flush_progress: Callable[[], Awaitable[None]] | None = None
         self.pending_proposal = None
         self.approved_proposal: dict | None = None
@@ -88,6 +90,27 @@ class ExecutionJournal:
         self.pending_drafts = []
         self.active_started = monotonic()
         run = store.read_run(run_id)
+        self.accepted_at = run.created_at
+        self.user_question = run.config_snapshot.get("command", {}).get("question", "")
+        self.context_binding = run.config_snapshot.get("contextRuntime")
+        self.search_snapshot = run.config_snapshot.get("searchSnapshot")
+        self.rebuilding_search = bool(self.search_snapshot and run.checkpoint_no)
+        self.rebuilt_source_digest: str | None = None
+        self.context_phase = "identify"
+        self.context_receipts = {}
+        self.context_questions = {}
+        self.prompt_cache = {}
+        self.capabilities: Callable[[], Awaitable[dict]] | None = None
+        self.context_date = run.created_at.date()
+        if self.search_snapshot:
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+
+            self.context_date = (
+                datetime.fromisoformat(self.search_snapshot["knownAt"])
+                .astimezone(ZoneInfo(self.search_snapshot["timezone"]))
+                .date()
+            )
         self.scheduled = bool(run.config_snapshot.get("schedule"))
         self.schedule_tools = store.distributed and "budget" in run.config_snapshot
         self.active_base = run.active_ms
@@ -97,6 +120,20 @@ class ExecutionJournal:
 
     def business_state(self):
         return {path: provider() for path, provider in self.state_providers.items()}
+
+    def prefetch_prompts(self, paths):
+        from compass_agent.context_runtime.pipeline import exact
+
+        missing = [path for path in paths if path not in self.prompt_cache]
+        if missing:
+            with Session(self.store.engine) as tx:
+                self.prompt_cache.update(
+                    (file.path, file) for file in exact(tx, self.context_binding, missing)
+                )
+
+    def prompt(self, path: str) -> str:
+        self.prefetch_prompts((path,))
+        return self.prompt_cache[path].body.rstrip("\n")
 
     @property
     def last_attempt(self):
@@ -436,13 +473,35 @@ class ExecutionJournal:
                 raise RecoveryStop(error.code) from None
         self.publisher.require_owner()
 
-    def prepare(self, kind, key, inputs, definition):
+    def has_step(self, key):
+        with Session(self.store.engine) as tx:
+            return (
+                tx.scalar(
+                    select(AgentStep.id).where(
+                        AgentStep.run_id == self.run_id, AgentStep.node_key == key
+                    )
+                )
+                is not None
+            )
+
+    def prepare(self, kind, key, inputs, definition, *, frame_factory=None, receive_frame=None):
         with self.store.transaction() as tx:
             session, run = self.store.lock(tx, self.run_id)
             self.store.require_epoch(run, self.epoch)
             step = tx.scalar(
                 select(AgentStep).where(AgentStep.run_id == run.id, AgentStep.node_key == key)
             )
+            frame = None
+            if frame_factory is not None:
+                assert receive_frame is not None
+                if step:
+                    if not step.prepared_context:
+                        raise ModelError("checkpoint_corrupt", 409)
+                    frame = self.store.private.open(run.id, "model-frame", step.prepared_context)
+                else:
+                    frame = frame_factory(tx)
+                inputs = frame["input"]
+                receive_frame(frame, step is not None)
             request_digest = digest(inputs)
             if step:
                 if step.input_sha256 != request_digest or step.definition_snapshot != (
@@ -489,6 +548,7 @@ class ExecutionJournal:
                             )
                             value = {**value, "continuation": continuations.get(str(attempt.id))}
                     return step.id, attempt.id, value
+                self.rebuilding_search = False
                 attempts = tx.scalars(
                     select(AgentAttempt)
                     .where(AgentAttempt.step_id == step.id)
@@ -501,6 +561,7 @@ class ExecutionJournal:
                     return step.id, attempts[-1].id, None
                 number = len(attempts) + 1
             else:
+                self.rebuilding_search = False
                 step = AgentStep(
                     id=uuid5(run.id, "step:" + key),
                     run_id=run.id,
@@ -517,6 +578,9 @@ class ExecutionJournal:
                     status="running",
                     revision=1,
                     definition_snapshot=definition or {},
+                    prepared_context=self.store.private.seal(run.id, "model-frame", frame)
+                    if frame is not None
+                    else None,
                     input_sha256=request_digest,
                     created_at=now(),
                 )
@@ -598,7 +662,16 @@ class ExecutionJournal:
                     raise RecoveryStop("action_conflict")
                 action.state, action.updated_at = "unknown", now()
 
-    def accept(self, step_id, attempt_id, value, business_state=None, *, boundary=False):
+    def accept(
+        self,
+        step_id,
+        attempt_id,
+        value,
+        business_state=None,
+        *,
+        boundary=False,
+        expected_attempt_status="dispatched",
+    ):
         self.publisher.require_owner()
         with self.store.transaction() as tx:
             session, run = self.store.lock(tx, self.run_id)
@@ -611,6 +684,7 @@ class ExecutionJournal:
                 value,
                 business_state=business_state,
                 boundary=boundary,
+                expected_attempt_status=expected_attempt_status,
             )
 
     def accept_in_transaction(
@@ -714,7 +788,13 @@ class ExecutionJournal:
             completed_refs=refs,
             message_refs=[
                 str(v)
-                for v in tx.scalars(select(AgentMessage.id).where(AgentMessage.run_id == run.id))
+                for v in tx.scalars(
+                    select(AgentMessage.id).where(
+                        AgentMessage.run_id == run.id,
+                        (AgentMessage.channel == "conversation")
+                        | AgentMessage.attempt_id.is_not(None),
+                    )
+                )
             ],
             tool_binding_refs=[
                 str(v)
@@ -793,9 +873,9 @@ class ExecutionJournal:
             attempt.status, attempt.finished_at = "canceled", now()
             attempt.error_code = "user_canceled"
 
-    async def local_read(self, key, inputs, operation):
+    async def local_read(self, key, inputs, operation, *, kind="tool", yield_boundary=True):
         step, attempt, saved = await asyncio.to_thread(
-            self.prepare, "tool", key, inputs, {"environment": "in_process"}
+            self.prepare, kind, key, inputs, {"environment": "in_process"}
         )
         if saved is not None:
             return saved["result"]
@@ -814,7 +894,7 @@ class ExecutionJournal:
                     attempt,
                     {"result": result, "continuation": None, "budget": {}},
                     business_state=state,
-                    boundary=True,
+                    boundary=yield_boundary,
                     expected_attempt_status="prepared",
                 )
 
@@ -823,16 +903,35 @@ class ExecutionJournal:
         return result
 
     async def call(
-        self, kind, key, inputs, operation, result_type, *, definition=None, budget=None
+        self,
+        kind,
+        key,
+        inputs,
+        operation,
+        result_type,
+        *,
+        definition=None,
+        budget=None,
+        frame_factory=None,
+        receive_frame=None,
+        revalidate=None,
+        yield_boundary=True,
     ):
         adapter = TypeAdapter(result_type)
         # Read accepted results before pause checks: pure reconstruction consumes no new resources.
         try:
+            options = (
+                {"frame_factory": frame_factory, "receive_frame": receive_frame}
+                if frame_factory is not None
+                else {}
+            )
             step_id, attempt_id, saved = await asyncio.to_thread(
-                self.prepare, kind, key, inputs, definition
+                self.prepare, kind, key, inputs, definition, **options
             )
             budget_fields = ("steps", "tokens", "cost_microusd", "attempts", "unknown_attempts")
             if saved is not None:
+                if revalidate:
+                    await revalidate()
                 self.last_attempt = attempt_id
                 if budget is not None:
                     for name, value in saved.get("budget", {}).items():
@@ -841,30 +940,45 @@ class ExecutionJournal:
                 return adapter.validate_json(__import__("json").dumps(saved))
             before = {name: getattr(budget, name) for name in budget_fields} if budget else {}
             await self.gate()
+            if revalidate:
+                await revalidate()
         except asyncio.CancelledError:
             # Only local admission and replay ran; the physical dispatch intent has
             # not been committed and operation() has never been invoked.
             raise PhaseCanceled(cleanup_confirmed=True) from None
-        dispatch = asyncio.create_task(asyncio.to_thread(self.dispatched, attempt_id))
-        try:
-            await asyncio.shield(dispatch)
-        except asyncio.CancelledError:
+        # The routing host only combines journaled classifiers and local metadata.
+        # Its prepared attempt can be reconstructed until the final route is accepted.
+        if kind != "routing_host":
+            dispatch = asyncio.create_task(asyncio.to_thread(self.dispatched, attempt_id))
             try:
-                await dispatch
-            except ModelError as error:
-                if error.code not in {"execution_fenced", "lease_lost", "run_stopped"}:
-                    raise
-            await asyncio.to_thread(self.confirm_canceled_attempt, attempt_id, before_dispatch=True)
-            raise PhaseCanceled(cleanup_confirmed=True) from None
+                await asyncio.shield(dispatch)
+            except asyncio.CancelledError:
+                try:
+                    await dispatch
+                except ModelError as error:
+                    if error.code not in {"execution_fenced", "lease_lost", "run_stopped"}:
+                        raise
+                await asyncio.to_thread(
+                    self.confirm_canceled_attempt, attempt_id, before_dispatch=True
+                )
+                raise PhaseCanceled(cleanup_confirmed=True) from None
         parent_token, attempt_token = self.parent.set(step_id), self.active_attempt.set(attempt_id)
         tool_finished = False
+        model_finished = False
         sandbox_execution_id = None
         try:
             with execution_scope(key, absolute=True):
                 result = await operation()
             encoded = adapter.dump_python(result, mode="json")
+            model_finished = (
+                kind == "model"
+                and isinstance(encoded, dict)
+                and encoded.get("status") == "completed"
+                and not encoded.get("error_code")
+            )
             if kind == "tool":
-                receipts = encoded if isinstance(encoded, list) else [encoded]
+                receipt = encoded.get("receipt", encoded) if isinstance(encoded, dict) else encoded
+                receipts = receipt if isinstance(receipt, list) else [receipt]
                 tool_finished = all(
                     isinstance(receipt, dict)
                     and receipt.get("cleanup") in {"confirmed", "not_started", "remote_managed"}
@@ -891,7 +1005,13 @@ class ExecutionJournal:
                 "budget": {name: getattr(budget, name) - old for name, old in before.items()},
             }
             yielded = await asyncio.to_thread(
-                self.accept, step_id, attempt_id, encoded, self.business_state(), boundary=True
+                self.accept,
+                step_id,
+                attempt_id,
+                encoded,
+                self.business_state(),
+                boundary=yield_boundary,
+                **({"expected_attempt_status": "prepared"} if kind == "routing_host" else {}),
             )
             self.last_attempt = attempt_id
             await self.publisher.flush(self.run_id)
@@ -910,6 +1030,8 @@ class ExecutionJournal:
                     self.unknown, attempt_id, sandbox_execution_id=sandbox_execution_id
                 )
             )
+            if type(error) is asyncio.CancelledError and (model_finished or tool_finished):
+                raise PhaseCanceled(cleanup_confirmed=True) from None
             raise
         finally:
             self.parent.reset(parent_token)
@@ -947,7 +1069,7 @@ class ExecutionJournal:
                 message = tx.get(AgentMessage, UUID(identifier))
                 if message is None or message.run_id != run.id:
                     raise ModelError("checkpoint_invalid", 409)
-                if message.private_content:
+                if message.private_content and message.attempt_id is not None:
                     self.store.private.open(run.id, "context-message", message.private_content)
             for identifier in checkpoint.tool_binding_refs:
                 binding = tx.get(AgentToolBinding, UUID(identifier))

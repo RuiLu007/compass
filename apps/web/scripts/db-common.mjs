@@ -7,6 +7,9 @@ export const revisions = [
   "0001_web_foundation",
   "0002_readable_routes",
   "0003_model_invocation_permission",
+  "0004_semantic_content",
+  "0005_semantic_governance",
+  "0006_semantic_search",
 ];
 export const revision = revisions.at(-1);
 export const databaseRoot = new URL("../db/main/", import.meta.url);
@@ -105,20 +108,7 @@ export async function inspectVersion(client) {
     )
       return "empty";
   }
-  const expected = [
-    "app_user",
-    "audit_event",
-    "notification",
-    "tenant",
-    "tenant_member",
-    "web_session",
-    "workspace",
-    "workspace_member",
-  ]
-    .map((n) => `web.${n}`)
-    .concat(["web_meta.migration_source", "web_meta.pgmigrations"])
-    .sort();
-  if (JSON.stringify(names) !== JSON.stringify(expected))
+  if (!names.includes("web_meta.pgmigrations") || !names.includes("web_meta.migration_source"))
     throw new Error("Unknown database objects; refusing migration");
   const { rows: ledger } = await client.query("SELECT name FROM web_meta.pgmigrations ORDER BY id");
   const { rows: sources } = await client.query(
@@ -135,6 +125,45 @@ export async function inspectVersion(client) {
     )
       throw new Error("Migration history or source checksum mismatch");
   }
+  const expected = [
+    "app_user",
+    "audit_event",
+    "notification",
+    "tenant",
+    "tenant_member",
+    "web_session",
+    "workspace",
+    "workspace_member",
+  ];
+  if (ledger.some(({ name }) => name === "0004_semantic_content"))
+    expected.push(
+      "execution_bindings",
+      "semantic_aliases",
+      "semantic_assets",
+      "semantic_policy",
+      "semantic_relations",
+      "semantic_scopes",
+      "semantic_source",
+      "semantic_versions",
+    );
+  if (ledger.some(({ name }) => name === "0005_semantic_governance"))
+    expected.push(
+      "semantic_scope_memberships",
+      "semantic_scope_grants",
+      "semantic_reviews",
+      "semantic_release",
+      "semantic_release_head",
+      "semantic_event",
+      "semantic_revocation",
+      "semantic_reference",
+      "semantic_feedback",
+    );
+  const qualified = expected
+    .map((name) => `web.${name}`)
+    .concat(["web_meta.migration_source", "web_meta.pgmigrations"])
+    .sort();
+  if (JSON.stringify(names) !== JSON.stringify(qualified))
+    throw new Error("Unknown database objects; refusing migration");
   return ledger.at(-1).name;
 }
 

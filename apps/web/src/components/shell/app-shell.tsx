@@ -77,6 +77,7 @@ export function AppShell({
   const [conversationOrder, setConversationOrder] = useState("time");
   const sidebarRef = useRef<HTMLElement>(null);
   const mobileTriggerRef = useRef<HTMLButtonElement>(null);
+  const isPromptOps = page.id === "platform-promptops";
   const isAdmin = ADMIN_SECTIONS.includes(page.section),
     currentSection = isAdmin ? "admin" : page.section,
     section = preview ?? currentSection;
@@ -85,7 +86,7 @@ export function AppShell({
     const entry = navigation.find((p) => p.section === key);
     return entry ? [entry] : [];
   });
-  const adminEntries = ADMIN_SECTIONS.flatMap((key) => {
+  const adminEntries = [...ADMIN_SECTIONS, "platform"].flatMap((key) => {
     const entry = navigation.find((p) => p.section === key);
     return entry ? [entry] : [];
   });
@@ -488,17 +489,23 @@ export function AppShell({
             >
               <NavigationIcon name="menu" size={20} />
             </button>
-            <div className="breadcrumb">
-              {isAdmin ? "管理与治理" : page.sectionTitle}
-              <span> / </span>
-              <strong>{page.title}</strong>
-            </div>
+            {isPromptOps ? (
+              <h1 className="prompt-page-title">{page.title}</h1>
+            ) : (
+              <div className="breadcrumb">
+                {isAdmin ? "管理与治理" : page.sectionTitle}
+                <span> / </span>
+                <strong>{page.title}</strong>
+              </div>
+            )}
           </div>
           <div className="topbar-right">
-            <AppLink className="context-switch" href="/workspaces">
-              {session.workspace?.name ?? session.tenant?.name ?? "选择工作空间"}
-              <ChevronDown size={14} />
-            </AppLink>
+            {!isPromptOps && (
+              <AppLink className="context-switch" href="/workspaces">
+                {session.workspace?.name ?? session.tenant?.name ?? "选择工作空间"}
+                <ChevronDown size={14} />
+              </AppLink>
+            )}
             <button className="icon-button" aria-label="全局搜索" onClick={() => setSearch(true)}>
               <NavigationIcon name="search" />
             </button>
@@ -516,27 +523,29 @@ export function AppShell({
           tabIndex={-1}
           aria-busy={busy}
         >
-          <div
-            className={page.section === "analysis" ? "sr-only" : "page-heading"}
-            hidden={page.id === "guide"}
-          >
-            <div>
-              <p className="eyebrow">
-                {isAdmin ? "工作台管理" : (session.workspace?.name ?? "COMPASS")}
-              </p>
-              <h1>{isAdmin ? page.sectionTitle : page.title}</h1>
-              <p className="muted">
-                {isAdmin
-                  ? "管理当前访问范围内的工作空间、配置与协作。"
-                  : page.id === "plugins-workflows"
-                    ? "查看和管理从分析对话保存的工作流。"
-                    : "从经营数据出发，看清每一步。"}
-              </p>
+          {!isPromptOps && (
+            <div
+              className={page.section === "analysis" ? "sr-only" : "page-heading"}
+              hidden={page.id === "guide"}
+            >
+              <div>
+                <p className="eyebrow">
+                  {isAdmin ? "工作台管理" : (session.workspace?.name ?? "COMPASS")}
+                </p>
+                <h1>{isAdmin ? page.sectionTitle : page.title}</h1>
+                <p className="muted">
+                  {isAdmin
+                    ? "管理当前访问范围内的工作空间、配置与协作。"
+                    : page.id === "plugins-workflows"
+                      ? "查看和管理从分析对话保存的工作流。"
+                      : "从经营数据出发，看清每一步。"}
+                </p>
+              </div>
+              {session.workspace?.status === "archived" && (
+                <span className="status status-muted">空间已归档</span>
+              )}
             </div>
-            {session.workspace?.status === "archived" && (
-              <span className="status status-muted">空间已归档</span>
-            )}
-          </div>
+          )}
           {isAdmin && navigation.filter((entry) => entry.section === page.section).length > 1 && (
             <nav className="route-tabs" aria-label="管理页签">
               {navigation

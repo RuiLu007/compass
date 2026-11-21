@@ -11,12 +11,15 @@ from sqlalchemy.orm import Session
 from compass_agent.api.mcp import router as mcp_router
 from compass_agent.api.models import ModelBoundaryMiddleware, create_model_service, error_response
 from compass_agent.api.models import router as model_router
+from compass_agent.api.prompt_starters import router as starter_router
+from compass_agent.api.promptops import router as promptops_router
 from compass_agent.api.retail import router as retail_connection_router
 from compass_agent.api.runs import build_agent_executor
 from compass_agent.api.runs import router as run_router
 from compass_agent.api.runtime_diagnostics import router as runtime_diagnostics_router
 from compass_agent.api.scheduler_triggers import router as scheduler_triggers_router
 from compass_agent.api.schedules import router as schedules_router
+from compass_agent.api.semantic import router as semantic_router
 from compass_agent.api.sessions import internal_router
 from compass_agent.api.sessions import router as session_router
 from compass_agent.api.workflows import router as workflow_asset_router
@@ -186,7 +189,7 @@ def readiness(request: Request) -> Health:
             ):
                 connection.execute(select(model).limit(0))
             for table in Base.metadata.tables.values():
-                if table.name.startswith("agent_") or table.name == "model_attempt":
+                if table.name.startswith(("agent_", "prompt_")) or table.name == "model_attempt":
                     connection.execute(select(table).limit(0))
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=503, detail="Database or migration unavailable") from exc
@@ -228,11 +231,14 @@ def demo_overview(
 
 app.add_middleware(ModelBoundaryMiddleware)
 app.include_router(model_router)
+app.include_router(promptops_router)
+app.include_router(starter_router)
 app.include_router(mcp_router)
 app.include_router(run_router)
 app.include_router(session_router)
 
 app.include_router(internal_router)
+app.include_router(semantic_router)
 app.include_router(schedules_router)
 app.include_router(scheduler_triggers_router)
 app.include_router(runtime_diagnostics_router)
@@ -249,6 +255,8 @@ async def request_validation_handler(request, error):
     if request.url.path.startswith(
         (
             "/v1/models",
+            "/v1/promptops",
+            "/v1/prompt-starters",
             "/v1/analysis",
             "/v1/data/",
             "/v1/mcp/",

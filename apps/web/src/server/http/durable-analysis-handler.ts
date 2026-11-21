@@ -14,7 +14,7 @@ export function isDurableAnalysisRoute(route: string, request: Request) {
     route === "analysis/runtime/usage" ||
     /^analysis\/schedules(?:\/|$)/.test(route) ||
     /^analysis\/sessions(?:\/|$)/.test(route) ||
-    /^analysis\/runs\/[^/]+\/(events|pause|resume|decisions|reconcile|waits|timeline)(?:\/|$)/.test(
+    /^analysis\/runs\/[^/]+\/(events|pause|resume|decisions|reconcile|waits|timeline|semantic-results|citations)(?:\/|$)/.test(
       route,
     ) ||
     (/^analysis\/runs\/[^/]+\/cancel$/.test(route) &&
@@ -74,7 +74,21 @@ export async function handleDurableAnalysis(request: Request, token: string) {
       }
     } else if (parts[1] === "runs") {
       uuid.parse(parts[2]);
-      if (parts.length === 4 && parts[3] === "timeline" && request.method === "GET")
+      if (parts[3] === "citations" && request.method === "GET" && parts.length === 4)
+        result = "RunCitations";
+      else if (parts[3] === "citations" && request.method === "GET" && parts.length === 5) {
+        uuid.parse(parts[4]);
+        result = "CitationDetail";
+      } else if (
+        parts.length === 4 &&
+        parts[3] === "semantic-results" &&
+        request.method === "POST"
+      ) {
+        contract = "SemanticResultDecision";
+        result = "SemanticOpenResult";
+      } else if (parts.length === 4 && parts[3] === "semantic-results" && request.method === "GET")
+        result = "SemanticResults";
+      else if (parts.length === 4 && parts[3] === "timeline" && request.method === "GET")
         result = "RuntimeTimeline";
       else if (parts.length === 4 && parts[3] === "events" && request.method === "GET") {
         result = "AgentResponse";

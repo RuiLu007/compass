@@ -1,9 +1,9 @@
 {
   "owner": "web",
   "databaseKey": "main",
-  "feature": "993",
+  "feature": "974",
   "from": "empty",
-  "to": "0003_model_invocation_permission",
+  "to": "0006_semantic_search",
   "engine": "PostgreSQL 17",
   "tool": "node-pg-migrate 9.0.0",
   "sourceRevision": "working-tree; fixed by source SHA-256",
@@ -19,15 +19,27 @@
     {
       "source": "migrations/0003_model_invocation_permission.sql",
       "sha256": "6b6c6923caf5049b629870b9c58d37dc21a2deafed7c7ada4422a09e5696f98d"
+    },
+    {
+      "source": "migrations/0004_semantic_content.sql",
+      "sha256": "fa53908f7dacc3f922f224208da4fff3093a3f9009cc89b4899bd5bf307468dd"
+    },
+    {
+      "source": "migrations/0005_semantic_governance.sql",
+      "sha256": "d13385894a52159fa75d2348b3864c111c1d441e1f395f2d3b6cbdecced710a4"
+    },
+    {
+      "source": "migrations/0006_semantic_search.sql",
+      "sha256": "8b5883ab958b27786f83b0389e903474f9716052426d90228c6e9a16987fa6ea"
     }
   ],
   "bootstrap": "sql/bootstrap.sql",
-  "bootstrapSha256": "984984058da5e8250747ae55735612b25b5eb5f82c09898849f1e30629cda6af",
-  "incremental": "sql/upgrades/0002_readable_routes__0003_model_invocation_permission.sql",
+  "bootstrapSha256": "84f2f8673da17e123f85c897b5e125eab01281d1aef920dd412cf9c3500f49f1",
+  "incremental": "sql/upgrades/0005_semantic_governance__0006_semantic_search.sql",
   "generate": "pnpm db:sql -F web",
-  "apply": "pnpm db:apply-sql -F web -- --from empty --to 0003_model_invocation_permission",
+  "apply": "pnpm db:apply-sql -F web -- --from empty --to 0006_semantic_search",
   "prerequisites": "Provisioned owned empty web/main database, owner/migrator/runtime roles; managed target checks and lock",
   "transaction": "single transaction",
-  "dataImpact": "Creates Web schema, stable slugs and models.invoke permission eligibility; existing grants remain unchanged",
+  "dataImpact": "Adds scoped semantic governance, immutable reviews, release manifests and full-text indexes for versions and aliases",
   "recovery": "Restore verified backup into a new owned database; verify permissions/revision; revoke sessions before switching"
 }

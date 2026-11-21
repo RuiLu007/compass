@@ -668,6 +668,47 @@
         "title": "AvailableModels",
         "type": "object"
       },
+      "BindingTrial": {
+        "additionalProperties": false,
+        "properties": {
+          "binding": {
+            "additionalProperties": true,
+            "title": "Binding",
+            "type": "object"
+          },
+          "expected": {
+            "items": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Expected",
+            "type": "array"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "title": "Parameters",
+            "type": "object"
+          }
+        },
+        "required": [
+          "binding",
+          "parameters",
+          "expected"
+        ],
+        "title": "BindingTrial",
+        "type": "object"
+      },
       "BudgetProposal": {
         "additionalProperties": false,
         "properties": {
@@ -1158,6 +1199,70 @@
         "title": "CallResponse",
         "type": "object"
       },
+      "Candidate": {
+        "properties": {
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "formula": {
+            "maxLength": 1600,
+            "title": "Formula",
+            "type": "string"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Missing",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "position": {
+            "maxLength": 400,
+            "title": "Position",
+            "type": "string"
+          },
+          "source_ref": {
+            "format": "uuid",
+            "title": "Source Ref",
+            "type": "string"
+          },
+          "suggestions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Suggestions",
+            "type": "array"
+          },
+          "summary": {
+            "maxLength": 1600,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_ref",
+          "position",
+          "name",
+          "summary",
+          "formula",
+          "confidence",
+          "missing",
+          "suggestions"
+        ],
+        "title": "Candidate",
+        "type": "object"
+      },
       "Capability": {
         "additionalProperties": false,
         "properties": {
@@ -1455,6 +1560,150 @@
         "title": "ChatMessage",
         "type": "object"
       },
+      "CitationAnchor": {
+        "additionalProperties": false,
+        "properties": {
+          "citationId": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Citationid",
+            "type": "string"
+          },
+          "end": {
+            "minimum": 1,
+            "title": "End",
+            "type": "integer"
+          },
+          "ordinal": {
+            "minimum": 1,
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "start": {
+            "minimum": 0,
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "citationId",
+          "ordinal",
+          "start",
+          "end"
+        ],
+        "title": "CitationAnchor",
+        "type": "object"
+      },
+      "CitationDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "calculation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Calculation"
+          },
+          "citationId": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Citationid",
+            "type": "string"
+          },
+          "claimId": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Claimid",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/CitationSource"
+            },
+            "maxItems": 64,
+            "title": "Sources",
+            "type": "array"
+          },
+          "statement": {
+            "title": "Statement",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "supported",
+              "refuted",
+              "insufficient",
+              "contested"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "citationId",
+          "claimId",
+          "revision",
+          "status",
+          "statement",
+          "sources"
+        ],
+        "title": "CitationDetail",
+        "type": "object"
+      },
+      "CitationSource": {
+        "additionalProperties": false,
+        "properties": {
+          "excerpt": {
+            "title": "Excerpt",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "metric",
+              "definition",
+              "detail",
+              "knowledge",
+              "history",
+              "external"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "locator": {
+            "title": "Locator",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "version",
+          "locator",
+          "scope",
+          "excerpt"
+        ],
+        "title": "CitationSource",
+        "type": "object"
+      },
       "ClassificationEvent": {
         "additionalProperties": false,
         "properties": {
@@ -1557,6 +1806,124 @@
           "status"
         ],
         "title": "ControlReceipt",
+        "type": "object"
+      },
+      "DashboardDocumentV1": {
+        "additionalProperties": false,
+        "properties": {
+          "asOf": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Asof",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "scope": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Scope",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "widgets": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardWidget"
+            },
+            "maxItems": 24,
+            "minItems": 1,
+            "title": "Widgets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "title",
+          "scope",
+          "asOf",
+          "widgets"
+        ],
+        "title": "DashboardDocumentV1",
+        "type": "object"
+      },
+      "DashboardWidget": {
+        "additionalProperties": false,
+        "properties": {
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Columns",
+            "type": "array"
+          },
+          "factRef": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Factref",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "metric",
+              "table",
+              "bar",
+              "line"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "maxItems": 50,
+            "title": "Rows",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "factRef",
+          "columns",
+          "rows"
+        ],
+        "title": "DashboardWidget",
         "type": "object"
       },
       "DataConnectionFields": {
@@ -1976,6 +2343,19 @@
       "DecisionCommand": {
         "additionalProperties": false,
         "properties": {
+          "choiceId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Choiceid"
+          },
           "decision": {
             "enum": [
               "approve",
@@ -1988,6 +2368,22 @@
             "format": "uuid",
             "title": "Decisionid",
             "type": "string"
+          },
+          "draftEdits": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "maxProperties": 16,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Draftedits"
           },
           "expectedVersion": {
             "minimum": 1,
@@ -3209,6 +3605,41 @@
           "mode"
         ],
         "title": "MainModelSelection",
+        "type": "object"
+      },
+      "Material": {
+        "additionalProperties": false,
+        "properties": {
+          "material": {
+            "maxLength": 2400,
+            "title": "Material",
+            "type": "string"
+          },
+          "position": {
+            "maxLength": 400,
+            "minLength": 1,
+            "title": "Position",
+            "type": "string"
+          },
+          "source_ref": {
+            "format": "uuid",
+            "title": "Source Ref",
+            "type": "string"
+          },
+          "source_version": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Source Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_ref",
+          "position",
+          "material",
+          "source_version"
+        ],
+        "title": "Material",
         "type": "object"
       },
       "McpConnectionDelete": {
@@ -4482,6 +4913,1272 @@
         "title": "ProductRunParams",
         "type": "object"
       },
+      "PromptChange": {
+        "additionalProperties": false,
+        "properties": {
+          "new_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Version"
+          },
+          "old_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old Version"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "usages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Usages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "path",
+          "old_version",
+          "new_version",
+          "usages"
+        ],
+        "title": "PromptChange",
+        "type": "object"
+      },
+      "PromptDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "base_epoch": {
+            "minimum": 0,
+            "title": "Base Epoch",
+            "type": "integer"
+          },
+          "body": {
+            "maxLength": 262144,
+            "title": "Body",
+            "type": "string"
+          },
+          "expected_edit_rev": {
+            "minimum": 0,
+            "title": "Expected Edit Rev",
+            "type": "integer"
+          },
+          "path": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "expected_edit_rev",
+          "base_epoch",
+          "request_id",
+          "body"
+        ],
+        "title": "PromptDraft",
+        "type": "object"
+      },
+      "PromptDraftBase": {
+        "additionalProperties": false,
+        "properties": {
+          "base_epoch": {
+            "minimum": 0,
+            "title": "Base Epoch",
+            "type": "integer"
+          },
+          "expected_edit_rev": {
+            "minimum": 0,
+            "title": "Expected Edit Rev",
+            "type": "integer"
+          },
+          "path": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "expected_edit_rev",
+          "base_epoch",
+          "request_id"
+        ],
+        "title": "PromptDraftBase",
+        "type": "object"
+      },
+      "PromptDraftFromVersion": {
+        "additionalProperties": false,
+        "properties": {
+          "base_epoch": {
+            "minimum": 0,
+            "title": "Base Epoch",
+            "type": "integer"
+          },
+          "expected_edit_rev": {
+            "minimum": 0,
+            "title": "Expected Edit Rev",
+            "type": "integer"
+          },
+          "path": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "version": {
+            "exclusiveMinimum": 0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "expected_edit_rev",
+          "base_epoch",
+          "request_id",
+          "version"
+        ],
+        "title": "PromptDraftFromVersion",
+        "type": "object"
+      },
+      "PromptFileDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "active_epoch": {
+            "title": "Active Epoch",
+            "type": "integer"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "contract_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Contract Sha256"
+          },
+          "current_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Version"
+          },
+          "draft_base_epoch": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Base Epoch"
+          },
+          "draft_base_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Base Version"
+          },
+          "draft_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Body"
+          },
+          "edit_rev": {
+            "title": "Edit Rev",
+            "type": "integer"
+          },
+          "has_draft": {
+            "title": "Has Draft",
+            "type": "boolean"
+          },
+          "kind": {
+            "default": "markdown",
+            "enum": [
+              "markdown",
+              "json",
+              "tool"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "bundled",
+              "online"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "retired": {
+            "default": false,
+            "title": "Retired",
+            "type": "boolean"
+          },
+          "usages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Usages",
+            "type": "array"
+          },
+          "used": {
+            "title": "Used",
+            "type": "boolean"
+          },
+          "variables": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Variables",
+            "type": "array"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "path",
+          "origin",
+          "current_version",
+          "edit_rev",
+          "active_epoch",
+          "has_draft",
+          "used",
+          "body",
+          "draft_body",
+          "draft_base_version",
+          "draft_base_epoch",
+          "usages",
+          "variables",
+          "version"
+        ],
+        "title": "PromptFileDetail",
+        "type": "object"
+      },
+      "PromptFileEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "active_epoch": {
+            "title": "Active Epoch",
+            "type": "integer"
+          },
+          "current_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Version"
+          },
+          "edit_rev": {
+            "title": "Edit Rev",
+            "type": "integer"
+          },
+          "has_draft": {
+            "title": "Has Draft",
+            "type": "boolean"
+          },
+          "origin": {
+            "enum": [
+              "bundled",
+              "online"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "used": {
+            "title": "Used",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "origin",
+          "current_version",
+          "edit_rev",
+          "active_epoch",
+          "has_draft",
+          "used"
+        ],
+        "title": "PromptFileEntry",
+        "type": "object"
+      },
+      "PromptHistoricalVersion": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "version",
+          "sha256",
+          "created_at",
+          "created_by",
+          "note"
+        ],
+        "title": "PromptHistoricalVersion",
+        "type": "object"
+      },
+      "PromptHistory": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PromptHistoricalVersion"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "PromptHistory",
+        "type": "object"
+      },
+      "PromptImport": {
+        "additionalProperties": false,
+        "properties": {
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/PromptImportChoice"
+            },
+            "maxItems": 2048,
+            "title": "Choices",
+            "type": "array"
+          },
+          "confirmation_hash": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Confirmation Hash",
+            "type": "string"
+          },
+          "package_digest": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Package Digest",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "confirmation_hash",
+          "package_digest"
+        ],
+        "title": "PromptImport",
+        "type": "object"
+      },
+      "PromptImportChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "maxLength": 262144,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body"
+          },
+          "choice": {
+            "enum": [
+              "local",
+              "online",
+              "merge"
+            ],
+            "title": "Choice",
+            "type": "string"
+          },
+          "path": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "choice"
+        ],
+        "title": "PromptImportChoice",
+        "type": "object"
+      },
+      "PromptImportEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "base_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Base Body"
+          },
+          "edit_rev": {
+            "title": "Edit Rev",
+            "type": "integer"
+          },
+          "local_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Local Body"
+          },
+          "online_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Online Body"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "new",
+              "unchanged",
+              "local",
+              "online",
+              "conflict"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "state",
+          "edit_rev"
+        ],
+        "title": "PromptImportEntry",
+        "type": "object"
+      },
+      "PromptImportPreview": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmation_hash": {
+            "title": "Confirmation Hash",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PromptImportEntry"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "package_digest": {
+            "title": "Package Digest",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "package_digest",
+          "confirmation_hash",
+          "items",
+          "next_cursor",
+          "total"
+        ],
+        "title": "PromptImportPreview",
+        "type": "object"
+      },
+      "PromptImportPreviewInput": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cursor"
+          },
+          "limit": {
+            "default": 100,
+            "maximum": 200,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Path"
+          }
+        },
+        "title": "PromptImportPreviewInput",
+        "type": "object"
+      },
+      "PromptReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "adopted": {
+            "default": 0,
+            "title": "Adopted",
+            "type": "integer"
+          },
+          "changed_count": {
+            "default": 0,
+            "title": "Changed Count",
+            "type": "integer"
+          },
+          "edit_rev": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Edit Rev"
+          },
+          "generation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Generation"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Path"
+          },
+          "retained": {
+            "default": 0,
+            "title": "Retained",
+            "type": "integer"
+          },
+          "skipped": {
+            "default": 0,
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "snapshot_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Snapshot No"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Version"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "PromptReceipt",
+        "type": "object"
+      },
+      "PromptRelease": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "file",
+              "all",
+              "restore"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "confirmation_hash": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Confirmation Hash",
+            "type": "string"
+          },
+          "note": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Note",
+            "type": "string"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Path"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "snapshot_no": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Snapshot No"
+          }
+        },
+        "required": [
+          "action",
+          "confirmation_hash",
+          "note",
+          "request_id"
+        ],
+        "title": "PromptRelease",
+        "type": "object"
+      },
+      "PromptReleasePreview": {
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/PromptChange"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "confirmation_hash": {
+            "title": "Confirmation Hash",
+            "type": "string"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "generation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation"
+          },
+          "since_snapshot": {
+            "items": {
+              "$ref": "#/components/schemas/PromptChange"
+            },
+            "title": "Since Snapshot",
+            "type": "array"
+          },
+          "snapshot_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot No"
+          }
+        },
+        "required": [
+          "generation",
+          "snapshot_no",
+          "changes",
+          "since_snapshot",
+          "errors",
+          "confirmation_hash"
+        ],
+        "title": "PromptReleasePreview",
+        "type": "object"
+      },
+      "PromptReleaseTarget": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "file",
+              "all",
+              "restore"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Path"
+          },
+          "snapshot_no": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Snapshot No"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "PromptReleaseTarget",
+        "type": "object"
+      },
+      "PromptRenderInput": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "maxLength": 262144,
+            "title": "Body",
+            "type": "string"
+          },
+          "path": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "variables": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "maxProperties": 64,
+            "title": "Variables",
+            "type": "object"
+          }
+        },
+        "required": [
+          "path",
+          "body"
+        ],
+        "title": "PromptRenderInput",
+        "type": "object"
+      },
+      "PromptRendered": {
+        "additionalProperties": false,
+        "properties": {
+          "rendered": {
+            "title": "Rendered",
+            "type": "string"
+          },
+          "variables": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Variables",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rendered",
+          "variables"
+        ],
+        "title": "PromptRendered",
+        "type": "object"
+      },
+      "PromptSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PromptSnapshotFile"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "manifest_digest": {
+            "title": "Manifest Digest",
+            "type": "string"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "policy_digest": {
+            "title": "Policy Digest",
+            "type": "string"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "snapshot_no": {
+            "title": "Snapshot No",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "snapshot_no",
+          "generation",
+          "policy_version",
+          "policy_digest",
+          "manifest_digest",
+          "created_at",
+          "created_by",
+          "note",
+          "items",
+          "next_cursor"
+        ],
+        "title": "PromptSnapshot",
+        "type": "object"
+      },
+      "PromptSnapshotEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          },
+          "manifest_digest": {
+            "title": "Manifest Digest",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "policy_digest": {
+            "title": "Policy Digest",
+            "type": "string"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "snapshot_no": {
+            "title": "Snapshot No",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "snapshot_no",
+          "generation",
+          "policy_version",
+          "policy_digest",
+          "manifest_digest",
+          "created_at",
+          "created_by",
+          "note"
+        ],
+        "title": "PromptSnapshotEntry",
+        "type": "object"
+      },
+      "PromptSnapshotFile": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "version"
+        ],
+        "title": "PromptSnapshotFile",
+        "type": "object"
+      },
+      "PromptSnapshots": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PromptSnapshotEntry"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "PromptSnapshots",
+        "type": "object"
+      },
+      "PromptStarterCards": {
+        "additionalProperties": false,
+        "properties": {
+          "analysis": {
+            "items": {
+              "$ref": "#/components/schemas/StarterGroup"
+            },
+            "title": "Analysis",
+            "type": "array"
+          },
+          "default_choice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Default Choice"
+          },
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/StarterDecision"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "tool_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tool Description"
+          },
+          "workflow_parts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Workflow Parts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "generation"
+        ],
+        "title": "PromptStarterCards",
+        "type": "object"
+      },
+      "PromptTree": {
+        "additionalProperties": false,
+        "properties": {
+          "generation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PromptFileEntry"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "snapshot_no": {
+            "title": "Snapshot No",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "generation",
+          "snapshot_no",
+          "items",
+          "next_cursor"
+        ],
+        "title": "PromptTree",
+        "type": "object"
+      },
       "ProviderCreate": {
         "additionalProperties": false,
         "properties": {
@@ -4978,7 +6675,9 @@
           "mediaType": {
             "enum": [
               "image/png",
-              "text/csv"
+              "text/csv",
+              "application/json",
+              "text/markdown"
             ],
             "title": "Mediatype",
             "type": "string"
@@ -5929,6 +7628,42 @@
           "cleanup"
         ],
         "title": "RunCanceled",
+        "type": "object"
+      },
+      "RunCitations": {
+        "additionalProperties": false,
+        "properties": {
+          "anchors": {
+            "items": {
+              "$ref": "#/components/schemas/CitationAnchor"
+            },
+            "maxItems": 96,
+            "title": "Anchors",
+            "type": "array"
+          },
+          "messageId": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Messageid",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "textDigest": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Textdigest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "messageId",
+          "revision",
+          "textDigest",
+          "anchors"
+        ],
+        "title": "RunCitations",
         "type": "object"
       },
       "RunCleanupUnconfirmed": {
@@ -8093,6 +9828,220 @@
         "title": "SchedulingPublic",
         "type": "object"
       },
+      "SemanticAnalysis": {
+        "properties": {
+          "draft": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Draft",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/Material"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Sources",
+            "type": "array"
+          },
+          "task": {
+            "default": "discover",
+            "enum": [
+              "discover",
+              "review"
+            ],
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sources"
+        ],
+        "title": "SemanticAnalysis",
+        "type": "object"
+      },
+      "SemanticOpenResult": {
+        "additionalProperties": false,
+        "properties": {
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "draft_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Draft Id"
+          },
+          "proposal": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Proposal",
+            "type": "object"
+          },
+          "result_ref": {
+            "format": "uuid",
+            "title": "Result Ref",
+            "type": "string"
+          },
+          "reusable": {
+            "title": "Reusable",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "confirmed",
+              "dismissed",
+              "saved"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result_ref",
+          "created_at",
+          "columns",
+          "status",
+          "reusable"
+        ],
+        "title": "SemanticOpenResult",
+        "type": "object"
+      },
+      "SemanticOption": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "versionId": {
+            "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "title": "Versionid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "versionId",
+          "name",
+          "description",
+          "unit",
+          "version"
+        ],
+        "title": "SemanticOption",
+        "type": "object"
+      },
+      "SemanticResultDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "confirm",
+              "dismiss",
+              "save"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "fields": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "maxProperties": 32,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fields"
+          },
+          "result_ref": {
+            "format": "uuid",
+            "title": "Result Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result_ref",
+          "action"
+        ],
+        "title": "SemanticResultDecision",
+        "type": "object"
+      },
+      "SemanticResults": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SemanticOpenResult"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "SemanticResults",
+        "type": "object"
+      },
+      "SemanticSuggestions": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/Candidate"
+            },
+            "maxItems": 12,
+            "title": "Candidates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "candidates"
+        ],
+        "title": "SemanticSuggestions",
+        "type": "object"
+      },
       "SessionAccepted": {
         "additionalProperties": false,
         "properties": {
@@ -8691,6 +10640,146 @@
           "config_version"
         ],
         "title": "StartEvent",
+        "type": "object"
+      },
+      "StarterDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/StarterQuestion"
+            },
+            "title": "Questions",
+            "type": "array"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "stateFormat": {
+            "enum": [
+              "text",
+              "json"
+            ],
+            "title": "Stateformat",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "description",
+          "stateFormat",
+          "state",
+          "questions"
+        ],
+        "title": "StarterDecision",
+        "type": "object"
+      },
+      "StarterGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/StarterSuggestion"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "suggestions"
+        ],
+        "title": "StarterGroup",
+        "type": "object"
+      },
+      "StarterModel": {
+        "additionalProperties": false,
+        "properties": {},
+        "title": "StarterModel",
+        "type": "object"
+      },
+      "StarterQuestion": {
+        "additionalProperties": false,
+        "properties": {
+          "criteria": {
+            "title": "Criteria",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "instructions": {
+            "title": "Instructions",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "choice",
+              "noul",
+              "score"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "instructions",
+          "criteria"
+        ],
+        "title": "StarterQuestion",
+        "type": "object"
+      },
+      "StarterSuggestion": {
+        "additionalProperties": false,
+        "properties": {
+          "constraints": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunConstraints"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "question": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "question"
+        ],
+        "title": "StarterSuggestion",
         "type": "object"
       },
       "StepFinished": {
@@ -9671,6 +11760,29 @@
         "title": "ToolSucceededPayload",
         "type": "object"
       },
+      "TrialResult": {
+        "properties": {
+          "matched": {
+            "title": "Matched",
+            "type": "boolean"
+          },
+          "rows": {
+            "title": "Rows",
+            "type": "integer"
+          },
+          "target_hash": {
+            "title": "Target Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "matched",
+          "rows",
+          "target_hash"
+        ],
+        "title": "TrialResult",
+        "type": "object"
+      },
       "TriggerAdmission": {
         "additionalProperties": false,
         "properties": {
@@ -9948,7 +12060,8 @@
               "runtime_usage",
               "schedule_manage",
               "schedule_owner",
-              "schedule_run"
+              "schedule_run",
+              "promptops_manage"
             ],
             "title": "Purpose",
             "type": "string"
@@ -10139,6 +12252,21 @@
             ],
             "title": "Expiresat"
           },
+          "fields": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fields"
+          },
           "kind": {
             "enum": [
               "approval",
@@ -10147,6 +12275,21 @@
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SemanticOption"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Options"
           },
           "proposalDigest": {
             "pattern": "^[a-f0-9]{64}$",
@@ -10179,6 +12322,42 @@
             "minimum": 1,
             "title": "Runversion",
             "type": "integer"
+          },
+          "scopes": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Scopes"
+          },
+          "semanticKind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "choice",
+                  "result",
+                  "draft",
+                  "submit"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Semantickind"
           },
           "status": {
             "enum": [
@@ -10927,7 +13106,10 @@
         "responses": {
           "200": {
             "content": {
-              "image/png": {}
+              "application/json": {},
+              "image/png": {},
+              "text/csv": {},
+              "text/markdown": {}
             },
             "description": "Successful Response"
           },
@@ -10993,6 +13175,141 @@
           }
         },
         "summary": "Read Artifact",
+        "tags": [
+          "analysis"
+        ]
+      }
+    },
+    "/v1/analysis/runs/{run_id}/artifacts/{artifact_id}/dashboard": {
+      "get": {
+        "operationId": "read_dashboard_v1_analysis_runs__run_id__artifacts__artifact_id__dashboard_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardDocumentV1"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Read Dashboard",
         "tags": [
           "analysis"
         ]
@@ -11146,6 +13463,166 @@
         "summary": "Cancel Run",
         "tags": [
           "analysis"
+        ]
+      }
+    },
+    "/v1/analysis/runs/{run_id}/citations": {
+      "get": {
+        "operationId": "citations_v1_analysis_runs__run_id__citations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunCitations"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Citations",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/v1/analysis/runs/{run_id}/citations/{citation_id}": {
+      "get": {
+        "operationId": "citation_detail_v1_analysis_runs__run_id__citations__citation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "citation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Citation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CitationDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Citation Detail",
+        "tags": [
+          "sessions"
         ]
       }
     },
@@ -11699,6 +14176,164 @@
         "summary": "Inspect Sandbox",
         "tags": [
           "analysis"
+        ]
+      }
+    },
+    "/v1/analysis/runs/{run_id}/semantic-results": {
+      "get": {
+        "operationId": "semantic_results_v1_analysis_runs__run_id__semantic_results_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticResults"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Semantic Results",
+        "tags": [
+          "sessions"
+        ]
+      },
+      "post": {
+        "operationId": "semantic_result_decision_v1_analysis_runs__run_id__semantic_results_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SemanticResultDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticOpenResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Semantic Result Decision",
+        "tags": [
+          "sessions"
         ]
       }
     },
@@ -17149,6 +19784,2173 @@
         "summary": "Get Test Call",
         "tags": [
           "models"
+        ]
+      }
+    },
+    "/v1/prompt-starters": {
+      "get": {
+        "operationId": "read_starters_v1_prompt_starters_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptStarterCards"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Starters",
+        "tags": [
+          "prompt-starters"
+        ]
+      }
+    },
+    "/v1/promptops/commands": {
+      "get": {
+        "operationId": "commands_v1_promptops_commands_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Commands",
+        "tags": [
+          "promptops"
+        ]
+      }
+    },
+    "/v1/promptops/draft-from-version": {
+      "post": {
+        "operationId": "draft_from_version_v1_promptops_draft_from_version_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptDraftFromVersion"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Draft From Version",
+        "tags": [
+          "promptops"
+        ]
+      }
+    },
+    "/v1/promptops/file": {
+      "get": {
+        "operationId": "file_v1_promptops_file_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "maxLength": 512,
+              "minLength": 1,
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptFileDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "File",
+        "tags": [
+          "promptops"
+        ]
+      }
+    },
+    "/v1/promptops/file-draft": {
+      "post": {
+        "operationId": "draft_v1_promptops_file_draft_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptDraft"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Draft",
+        "tags": [
+          "promptops"
+        ]
+      }
+    },
+    "/v1/promptops/history": {
+      "get": {
+        "operationId": "history_v1_promptops_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "maxLength": 512,
+              "minLength": 1,
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptHistory"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "History",
+        "tags": [
+          "promptops"
+        ]
+      }
+    },
+    "/v1/promptops/import": {
+      "post": {
+        "operationId": "import_package_v1_promptops_import_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptImport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Import Package",
+        "tags": [
+          "promptops"
+        ]
+      }
+    },
+    "/v1/promptops/import-preview": {
+      "post": {
+        "operationId": "import_preview_v1_promptops_import_preview_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptImportPreviewInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptImportPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Import Preview",
+        "tags": [
+          "promptops"
+        ]
+      }
+    },
+    "/v1/promptops/release-preview": {
+      "post": {
+        "operationId": "release_preview_v1_promptops_release_preview_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptReleaseTarget"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptReleasePreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Release Preview",
+        "tags": [
+          "promptops"
+        ]
+      }
+    },
+    "/v1/promptops/releases": {
+      "post": {
+        "operationId": "releases_v1_promptops_releases_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptRelease"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Releases",
+        "tags": [
+          "promptops"
+        ]
+      }
+    },
+    "/v1/promptops/render-preview": {
+      "post": {
+        "operationId": "render_preview_v1_promptops_render_preview_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptRenderInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptRendered"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Render Preview",
+        "tags": [
+          "promptops"
+        ]
+      }
+    },
+    "/v1/promptops/snapshot": {
+      "get": {
+        "operationId": "snapshot_v1_promptops_snapshot_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "snapshot_no",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "Snapshot No",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Snapshot",
+        "tags": [
+          "promptops"
+        ]
+      }
+    },
+    "/v1/promptops/snapshots": {
+      "get": {
+        "operationId": "snapshots_v1_promptops_snapshots_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptSnapshots"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Snapshots",
+        "tags": [
+          "promptops"
+        ]
+      }
+    },
+    "/v1/promptops/tree": {
+      "get": {
+        "operationId": "tree_v1_promptops_tree_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "prefix",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 512,
+              "title": "Prefix",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 512,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptTree"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Tree",
+        "tags": [
+          "promptops"
+        ]
+      }
+    },
+    "/v1/semantic/suggestions": {
+      "post": {
+        "operationId": "suggestions_v1_semantic_suggestions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SemanticAnalysis"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticSuggestions"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Suggestions",
+        "tags": [
+          "semantic"
+        ]
+      }
+    },
+    "/v1/semantic/trial": {
+      "post": {
+        "operationId": "binding_trial_v1_semantic_trial_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindingTrial"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Binding Trial",
+        "tags": [
+          "semantic"
         ]
       }
     }

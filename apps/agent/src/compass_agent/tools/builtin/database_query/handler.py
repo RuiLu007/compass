@@ -1,5 +1,6 @@
 """Per-Run database registration and authorized query-result inputs."""
 
+import asyncio
 import json
 from collections.abc import Awaitable, Callable
 from typing import cast
@@ -52,8 +53,41 @@ def registration(
             raise ToolRejected("tool_scope_denied")
 
     async def execute(args, context):
+        from compass_agent.execution_context import current_execution
+
+        journal = current_execution.get()
+        if journal and (getattr(journal, "context_binding", None) or {}).get("registry"):
+            from compass_agent.semantic.service import RegistryTools
+
+            progress = getattr(journal, "search_progress", None)
+            if not (progress and progress.independent_detail()) and await asyncio.to_thread(
+                RegistryTools(journal, context.trusted).formal_query_started
+            ):
+                raise ToolRejected("formal_metric_requires_query_metric")
         action = DATABASE_ACTION.validate_python(args)
         if isinstance(action, ListConnections):
+            visible = bindings
+            if getattr(journal, "search_snapshot", None):
+                from compass_agent.context_runtime.source_access import record_sources
+
+                authorized = await current() if current else ()
+                visible = tuple(b for b in bindings if b in authorized)
+                await asyncio.to_thread(
+                    record_sources,
+                    journal,
+                    [
+                        {
+                            "kind": "metadata",
+                            "connection": str(b.connection_id or b.workspace_id),
+                            "tenant": str(b.tenant_id),
+                            "workspace": str(b.workspace_id),
+                            "revision": b.revision,
+                            "role": b.role,
+                            "columns": {},
+                        }
+                        for b in visible
+                    ],
+                )
             return ExecutionReceipt(
                 context.call_id,
                 "ok",
@@ -65,7 +99,7 @@ def registration(
                             "name": item.name,
                             "engine": "postgresql",
                         }
-                        for item in bindings
+                        for item in visible
                     ]
                 },
             )
@@ -134,7 +168,26 @@ def registration(
                 context.call_id, "error", "confirmed", {"status": "error", "code": result}
             )
         payload = json.loads(result.observation())
-        context.sources[result.id] = AuthorizedInput(
+        from compass_agent.context_runtime.source_access import record_source
+
+        witness = result.source_ref or {"kind": "transient"}
+        if journal and (
+            (getattr(journal, "context_binding", None) or {}).get("registry")
+            or getattr(journal, "search_snapshot", None)
+        ):
+            from compass_agent.semantic.service import remember_open
+
+            retained = await asyncio.to_thread(
+                remember_open, journal, context, args, result, binding
+            )
+            if retained:
+                ref, witness = retained
+                payload.update(
+                    {"calculation_mode": "open_sql", "resultId": ref, "semantic_result_ref": ref}
+                )
+        if journal and getattr(journal, "context_binding", None):
+            await asyncio.to_thread(record_source, journal, witness)
+        context.sources[payload["resultId"]] = AuthorizedInput(
             context.run_id, context.owner, payload, revalidate
         )
         preview = result.observation(include_result_id=False)

@@ -8,6 +8,8 @@ import { UiGuide } from "./ui/guide";
 import { Blocks, CircleAlert } from "lucide-react";
 import { RetailConnectionPage } from "@/features/data/retail-connection-page";
 import { AutomationsPage } from "@/features/automations/page";
+import { SemanticPage } from "@/features/semantic/page";
+import { PromptOpsPage } from "@/features/promptops/page";
 import { ModelsPages } from "@/features/models/pages";
 import type { WorkflowAssetRef } from "@/client/analysis-run";
 import { isModelContract } from "@/contracts/model-contract";
@@ -58,6 +60,10 @@ export function ProductContent({ payload }: { payload: PagePayload }) {
       </section>
     ) : ["platform-models", "capabilities-models"].includes(page.id) ? (
       <ModelsPages payload={payload} />
+    ) : page.id === "platform-promptops" ? (
+      <PromptOpsPage />
+    ) : page.id === "data-metrics" ? (
+      <SemanticPage key={tenantId + "/" + workspaceId} session={session} />
     ) : page.id === "data-sources" ? (
       <RetailConnectionPage session={payload.session} />
     ) : page.kind === "placeholder" ? (

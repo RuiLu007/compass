@@ -18,6 +18,7 @@ from compass_agent.data_connections.transport import (
     read_database,
 )
 from compass_agent.execution_context import uuid4
+from compass_agent.prompt_assets import tool_text
 from compass_agent.schemas import (
     RUN_STREAM_LIMITS,
     RunContractModel,
@@ -42,7 +43,8 @@ _FUNCTIONS = frozenset(
     left length lower lpad ltrim max min mod now nth_value ntile nullif percentile_cont
     percentile_disc
     position rank replace right round row_number rpad rtrim split_part stddev stddev_pop stddev_samp
-    string_agg strpos substr substring sum to_char trim trunc upper variance var_pop var_samp
+    string_agg strpos substr substring sum timezone to_char trim trunc upper variance
+    var_pop var_samp
 """.split()
 )
 _TYPES = frozenset(
@@ -125,11 +127,7 @@ def definition(_context=None) -> ToolDefinition:
     return ToolDefinition(
         function=ToolFunction(
             name=DATABASE_QUERY,
-            description=(
-                "列出可查询的表、查看字段，或执行一条只读 PostgreSQL SELECT。"
-                "先用 list_connections 发现连接，多个连接时指定 connectionId。"
-                "SQL 使用 schema.table。最多返回 50 行、4 KiB。"
-            ),
+            description=(tool_text("database_query")),
             parameters={"type": "object", **DATABASE_ACTION.json_schema(by_alias=True)},
         )
     )
@@ -201,6 +199,7 @@ class DatabaseResult:
     rows: tuple[tuple[Any, ...], ...]
     truncated: bool
     next_offset: int | None = None
+    source_ref: dict | None = None
 
     def observation(self, *, include_result_id: bool = True) -> str:
         payload = {
@@ -265,12 +264,12 @@ async def query_database(
             "connectionId": str(binding.connection_id) if binding.connection_id else None,
             "revision": binding.revision,
         },
-        lambda: _query_database_live(call, binding, control),
+        lambda: query_database_live(call, binding, control),
         DatabaseResult | RunToolError,
     )
 
 
-async def _query_database_live(
+async def query_database_live(
     call: ToolCall, binding: AuthorizedDatabaseBinding, control: ToolControl
 ) -> DatabaseResult | RunToolError:
     try:
@@ -314,15 +313,58 @@ async def _query_database_live(
             ):
                 raise TimeoutError
             # Project bounded text on the server before transporting the preview.
-            await cursor.execute(
-                "SELECT pg_catalog.left(pg_catalog.row_to_json(result)::text, "
-                f"{MAX_RESULT_BYTES + 1}) "
-                f"FROM ({query}) AS result LIMIT {MAX_ROWS + 1}",
-                values,
+            from compass_agent.data_connections.retail_access_refs import (
+                MAX_KEYS,
+                reference,
+                retail_projection,
             )
-            return await cursor.fetchall()
 
-        return _bounded_result(await read_database(binding, control, read), offset)
+            projected = (
+                await retail_projection(cursor, binding, query)
+                if isinstance(action, ReadSql)
+                else None
+            )
+            preview = (
+                "SELECT pg_catalog.left(pg_catalog.row_to_json(result)::text, "
+                f"{MAX_RESULT_BYTES + 1}) AS line FROM ({query}) AS result LIMIT {MAX_ROWS + 1}"
+            )
+            if projected:
+                await cursor.execute(
+                    f"WITH preview AS ({preview}), keys AS ({projected[0]} LIMIT {MAX_KEYS + 1}) "
+                    "SELECT (SELECT json_agg(line) FROM preview), (SELECT json_agg(keys) FROM keys)"
+                )
+                values_read, keys = await cursor.fetchone()
+                rows = [(line,) for line in values_read or ()]
+                ref = reference(binding, projected, keys)
+            else:
+                await cursor.execute(preview, values)
+                rows = await cursor.fetchall()
+                ref = {"kind": "transient"}
+                if isinstance(action, (ListTables, DescribeTable)):
+                    metadata = [json.loads(row[0]) for row in rows]
+                    columns = (
+                        {
+                            action.schema_name + "." + action.table: [
+                                m["column_name"] for m in metadata
+                            ]
+                        }
+                        if isinstance(action, DescribeTable)
+                        else {m["schema"] + "." + m["table"]: [] for m in metadata}
+                    )
+                    ref = {
+                        "kind": "metadata",
+                        "columns": columns,
+                        "tenant": str(binding.tenant_id),
+                        "workspace": str(binding.workspace_id),
+                        "role": binding.role,
+                        "revision": binding.revision,
+                        "connection": str(binding.connection_id or binding.workspace_id),
+                    }
+            from dataclasses import replace
+
+            return replace(_bounded_result(rows, offset), source_ref=ref)
+
+        return await read_database(binding, control, read)
     except (ValueError, RecursionError):
         return "invalid_parameters"
     except DatabaseIdentityMismatch:

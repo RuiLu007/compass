@@ -9,6 +9,7 @@ from uuid import uuid4
 import httpx
 from compass_agent.api.models import ModelBoundaryMiddleware, error_response
 from compass_agent.api.sessions import internal_router
+from compass_agent.context_runtime.source_access import project_sources
 from compass_agent.database import DemoSale
 from compass_agent.execution_context import current_execution
 from compass_agent.llm.admission import ExecutionGate
@@ -149,7 +150,9 @@ def test_trusted_event_http_requires_separate_identity_and_consumes_once(targets
                 assert any(
                     packet.event.type == "message.upsert"
                     and packet.event.payload.content.text == "已确认金额 19。"
-                    for packet in runtime.reader.messages(final.session_id, CHAT).packets
+                    for packet in project_sources(
+                        runtime.store, runtime.reader.messages(final.session_id, CHAT), CHAT
+                    ).packets
                 )
                 with Session(engine) as tx:
                     attempts = tx.scalars(
@@ -362,7 +365,7 @@ def test_real_classifier_fallback_preserves_each_attempt_under_original_run(targ
                     (jev, "failed"),
                     (flash, "completed"),
                 }
-                assert sum(step.kind == "routing" for _, _, step in rows) == 2
+                assert sum(step.kind == "classifier" for _, _, step in rows) == 2
                 assert sum(step.kind == "model" for _, _, step in rows) == expected_calls - 2
                 assert all(
                     call.run_id == run.id and step.run_id == run.id for _, call, step in rows

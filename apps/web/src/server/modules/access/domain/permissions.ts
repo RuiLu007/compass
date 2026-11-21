@@ -1,9 +1,13 @@
 import { reject } from "../../../platform/errors.ts";
 
-export const PERMISSION_CATALOG_VERSION = "2";
+export const PERMISSION_CATALOG_VERSION = "3";
 export type GrantScope = "tenant" | "workspace";
 const entries = [
   ["module.analysis", "分析入口", "both"],
+  ["semantics.read", "发现已发布口径", "both"],
+  ["semantics.query", "按授权绑定计算指标", "both"],
+  ["semantics.draft", "维护指标草稿", "both"],
+  ["semantics.govern", "受理口径审批与发布", "both"],
   ["models.invoke", "使用模型", "both"],
   ["module.reports", "报告入口", "both"],
   ["module.plugins", "插件入口", "both"],

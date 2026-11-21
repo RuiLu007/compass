@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import hmac
+from contextlib import nullcontext
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
@@ -20,6 +21,8 @@ from compass_agent.models.lifecycle import root_task
 from compass_agent.models.repository import ModelRepository
 from compass_agent.models.secrets import SecretStore
 from compass_agent.models.service import ModelService
+from compass_agent.prompt_assets import use_prompts
+from compass_agent.promptops.reader import current_bodies
 from compass_agent.schemas import (
     AvailableModels,
     CallRecordView,
@@ -232,6 +235,21 @@ async def summary(
 
 
 async def invoke(request, service, context, call_id, provider_id, value):
+    paths = []
+    if getattr(value, "output_format", "text") != "text":
+        paths.append("shared/fragments/output-json.md")
+        if value.output_schema is not None:
+            paths.append("shared/fragments/output-schema.md")
+    prompts = (
+        await asyncio.to_thread(current_bodies, service.repository.engine, paths)
+        if paths and get_settings().compass_context_runtime_enabled
+        else None
+    )
+
+    async def run(*args, **kwargs):
+        with use_prompts(prompts) if prompts is not None else nullcontext():
+            return await service.run(*args, **kwargs)
+
     start_observation(request, service, context, call_id)
     spec = await service.prepare(call_id, provider_id, value, context)
     if not value.stream:
@@ -239,7 +257,7 @@ async def invoke(request, service, context, call_id, provider_id, value):
             request,
             observed_run(
                 request,
-                service.run(
+                run(
                     spec,
                     value,
                     disconnect=request.is_disconnected,
@@ -258,7 +276,7 @@ async def invoke(request, service, context, call_id, provider_id, value):
             request,
             observed_run(
                 request,
-                service.run(spec, value, emit=emit, logical_policy=LogicalPolicy(max_attempts=1)),
+                run(spec, value, emit=emit, logical_policy=LogicalPolicy(max_attempts=1)),
             ),
         )
         pending = None
@@ -317,6 +335,12 @@ async def reliability_run(body: ShowcaseInput, request: Request, context: Contex
     require(context, {"manage"}, "platform")
     if request.app.state.showcase_running:
         raise ModelError("runtime_overloaded", 503)
+    prompts = None
+    if get_settings().compass_context_runtime_enabled:
+        paths = ["support/diagnostics/reliability-request.md"]
+        if body.scenario == "schema_invalid":
+            paths.extend(("shared/fragments/output-json.md", "shared/fragments/output-schema.md"))
+        prompts = await asyncio.to_thread(current_bodies, get_engine(), paths)
 
     async def events():
         # Acquire admission when iteration starts; check/increment contains no await.
@@ -329,7 +353,8 @@ async def reliability_run(body: ShowcaseInput, request: Request, context: Contex
         async def emit(event):
             await queue.put(event)
 
-        runner = root_task(request, run_showcase(body, context, emit))
+        with use_prompts(prompts) if prompts is not None else nullcontext():
+            runner = root_task(request, run_showcase(body, context, emit))
         pending = None
         try:
             yield encode_event(ShowcaseStart(call_id=body.call_id))
@@ -406,7 +431,7 @@ def error_response(error):
         content=ModelErrorResponse(
             error=ModelErrorDetail(
                 code=error.code,
-                message=message(error.reason_code or error.code),
+                message=getattr(error, "message", None) or message(error.reason_code or error.code),
                 requestId=str(uuid4()),
                 currentVersion=error.current_version,
                 reasonCode=error.reason_code,
@@ -429,6 +454,8 @@ class ModelBoundaryMiddleware:
         private = scope.get("path", "").startswith(
             (
                 "/v1/models",
+                "/v1/promptops",
+                "/v1/prompt-starters",
                 "/v1/analysis",
                 "/v1/internal/analysis",
                 "/v1/data/",
@@ -438,8 +465,11 @@ class ModelBoundaryMiddleware:
         )
         if scope["type"] != "http" or not private:
             return await self.app(scope, receive, send)
+        promptops = scope["path"].startswith("/v1/promptops")
         limit = (
-            2 * 1048576 if scope["method"] == "POST" and scope["path"].endswith("/tests") else 65536
+            2 * 1048576
+            if promptops or (scope["method"] == "POST" and scope["path"].endswith("/tests"))
+            else 65536
         )
         body = bytearray()
         while True:
@@ -448,7 +478,8 @@ class ModelBoundaryMiddleware:
                 return
             body.extend(msg.get("body", b""))
             if len(body) > limit:
-                return await error_response(ModelError("validation_failed"))(scope, receive, send)
+                error = ModelError("validation_failed", 413 if promptops else 422)
+                return await error_response(error)(scope, receive, send)
             if not msg.get("more_body", False):
                 break
         delivered = False

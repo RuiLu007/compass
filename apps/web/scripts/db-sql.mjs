@@ -25,7 +25,7 @@ export async function generateSql() {
   const manifest = {
     owner: "web",
     databaseKey: "main",
-    feature: "993",
+    feature: "974",
     from: "empty",
     to: revision,
     engine: "PostgreSQL 17",
@@ -42,7 +42,7 @@ export async function generateSql() {
       "Provisioned owned empty web/main database, owner/migrator/runtime roles; managed target checks and lock",
     transaction: "single transaction",
     dataImpact:
-      "Creates Web schema, stable slugs and models.invoke permission eligibility; existing grants remain unchanged",
+      "Adds scoped semantic governance, immutable reviews, release manifests and full-text indexes for versions and aliases",
     recovery:
       "Restore verified backup into a new owned database; verify permissions/revision; revoke sessions before switching",
   };

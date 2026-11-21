@@ -240,3 +240,18 @@ test("strict Turbo dev environment forwards the Agent runtime and Scheduler sett
   ])
     assert.ok(agent.environmentVariables.specified.passThroughEnv.includes(key), key);
 });
+
+test("Agent integration runs use the explicitly selected sandbox and its private volumes", () => {
+  const task = dryRun("test:integration", "-F", "agent").tasks[0];
+  const allowed = task.resolvedTaskDefinition.passThroughEnv;
+  for (const key of [
+    "COMPASS_SANDBOX_TEST_DOMAIN",
+    "COMPASS_SANDBOX_TEST_HOST",
+    "COMPASS_SANDBOX_TEST_SLOTS",
+    "COMPASS_SANDBOX_TEST_VOLUME_PREFIX",
+    "COMPASS_SANDBOX_TEST_CONTROL_CONTAINER",
+    "COMPASS_SANDBOX_TEST_NAS_CONTAINER",
+  ]) {
+    assert.ok(allowed.includes(key), key);
+  }
+});

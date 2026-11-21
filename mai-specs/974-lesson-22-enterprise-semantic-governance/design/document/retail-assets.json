@@ -1,0 +1,26 @@
+{
+  "title": "Compass Retail 语义层设计",
+  "subtitle": "默认资产、审批发布与查询执行",
+  "brand": "Compass",
+  "label": "第 22 课 · 经营语义治理",
+  "source": "../RETAIL_SEMANTIC_ASSETS.md",
+  "guide": "retail-assets.md",
+  "output": "../RETAIL_SEMANTIC_ASSETS.html",
+  "code": {
+    "seed": {
+      "file": "../RETAIL_SEMANTIC_ASSETS.md",
+      "language": "bash",
+      "contains": "pnpm db:migrate -F web"
+    },
+    "standalone": {
+      "file": "../RETAIL_SEMANTIC_ASSETS.md",
+      "language": "bash",
+      "contains": "psql -X -v ON_ERROR_STOP=1"
+    },
+    "inspect": {
+      "file": "../RETAIL_SEMANTIC_ASSETS.md",
+      "language": "sql",
+      "contains": "SELECT s.kind, s.tenant_id"
+    }
+  }
+}

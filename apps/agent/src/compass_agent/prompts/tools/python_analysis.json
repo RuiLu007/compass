@@ -1,0 +1,24 @@
+{
+  "type": "function",
+  "function": {
+    "name": "python_analysis",
+    "description": "在独立 Python 环境中分析本轮已授权的查询结果。data 是输入数据；将 JSON 结果赋给 result，可写 /workspace/chart.png 生成 PNG。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "source_query_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384
+        }
+      },
+      "required": ["source_query_id", "code"],
+      "additionalProperties": false
+    }
+  },
+  "examples": []
+}

@@ -95,8 +95,9 @@ export function ResourceReader() {
             <details key={lesson.number} open className={styles.branch}>
               <summary>
                 <ChevronRight size={15} className={styles.chevron} />
-                <span>
-                  第 {lesson.number} 课<span className={styles.lessonTitle}>{lesson.title}</span>
+                <span className={styles.lessonNumber}>第 {lesson.number} 课</span>
+                <span className={styles.lessonTitle} title={lesson.title}>
+                  {lesson.title}
                 </span>
               </summary>
               <ul>

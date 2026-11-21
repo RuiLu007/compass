@@ -1,0 +1,21 @@
+{
+  "type": "function",
+  "function": {
+    "name": "review_semantic_change",
+    "description": "检查草稿来源、声明、依赖、冲突与已登记影响，说明阻断项及修正建议。",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "version_id": {
+          "format": "uuid",
+          "title": "Version Id",
+          "type": "string"
+        }
+      },
+      "required": ["version_id"],
+      "title": "Input",
+      "type": "object"
+    }
+  },
+  "examples": []
+}

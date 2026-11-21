@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Literal
 
 from compass_agent.schemas import ToolDefinition
@@ -11,7 +11,9 @@ from compass_agent.tools.contracts import InProcessBinding, RegisteredTool, Tool
 from compass_agent.tools.registry import bounded_payload, parse_arguments
 
 if TYPE_CHECKING:
+    from compass_agent.documents.service import DocumentTools
     from compass_agent.scheduler.service import ScheduleService
+    from compass_agent.semantic.service import RegistryTools
 
 
 @dataclass(frozen=True)
@@ -22,6 +24,8 @@ class CatalogContext:
     workflow: bool = False
     schedules: ScheduleService | None = None
     schedule_effect: Callable | None = None
+    semantics: RegistryTools | None = None
+    documents: DocumentTools | None = None
 
 
 @dataclass(frozen=True)
@@ -38,16 +42,22 @@ class ToolSpec:
 
     def register(self, context: CatalogContext, handler: Callable) -> RegisteredTool:
         if self.context_factory is not None:
-            return self.context_factory(context)
-        if self.factory is not None:
-            return self.factory()
-        return RegisteredTool(
-            self.name,
-            self.definition(context),
-            ToolPolicy(),
-            InProcessBinding(handler(self.name), orchestrates=self.orchestrates),
-            parse_arguments,
-            lambda args, execution: execution.require_running(),
-            bounded_payload,
-            parallel_safe=self.parallel_safe,
-        )
+            entry = self.context_factory(context)
+        elif self.factory is not None:
+            entry = self.factory()
+        else:
+            entry = RegisteredTool(
+                self.name,
+                self.definition(context),
+                ToolPolicy(),
+                InProcessBinding(handler(self.name), orchestrates=self.orchestrates),
+                parse_arguments,
+                lambda args, execution: execution.require_running(),
+                bounded_payload,
+                parallel_safe=self.parallel_safe,
+            )
+        if entry.definition:
+            from compass_agent.promptops.structured import enrich_definition
+
+            entry = replace(entry, definition=enrich_definition(entry.definition))
+        return entry

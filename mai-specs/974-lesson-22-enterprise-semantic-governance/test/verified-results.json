@@ -1,0 +1,964 @@
+{
+  "release": "verified",
+  "source_sha256": "e54f93a0edac89c8a9d027cf9ec7cf07574886fd350384a44549b367c10429c3",
+  "question_sha256": "14ec21556d2a9b4653398a66405b3368c59ec2ae9308bfd6b7e0546e8e576065",
+  "sql_sha256": "456269b301ff7b0ba47a349bc1aa8b0d74122f632ec639c6de6283564da45b10",
+  "migrations": {
+    "web": "0006_semantic_search",
+    "agent": "0017"
+  },
+  "model": "DeepSeek V4.1 Flash",
+  "model_profile_max_output_tokens": 8192,
+  "prompt_generation": 5,
+  "prompt_version_sha256": {
+    "shared/tools/definitions/query_metric.md": "81c346b3206871fbbd6b67acd636b4496cc2e242b1773c1b61da43d356a5b116",
+    "shared/tools/definitions/resolve_semantics.md": "910715a22617cb3c452dd7cb3cb3bfe3f0468fefcaad9910f93efc6888333f28"
+  },
+  "chat_counts": {
+    "identification": {
+      "total": 100,
+      "passed": 99,
+      "states": {
+        "completed": 100
+      }
+    },
+    "ambiguity": {
+      "total": 100,
+      "passed": 98,
+      "states": {
+        "completed": 78,
+        "failed": 2,
+        "waiting": 20
+      }
+    },
+    "complex": {
+      "total": 20,
+      "passed": 19,
+      "states": {
+        "completed": 20
+      }
+    }
+  },
+  "clarification": {
+    "scope_defaults": {
+      "passed": 58,
+      "total": 60
+    },
+    "clarify_with_two_choices": {
+      "passed": 20,
+      "total": 20
+    },
+    "access_denial": {
+      "passed": 20,
+      "total": 20
+    }
+  },
+  "sql": {
+    "independent_source": 100,
+    "formal_executor": 100,
+    "total": 100
+  },
+  "registry_without_conversation": {
+    "identification": 85,
+    "ambiguity": 100,
+    "total_per_group": 100
+  },
+  "retail_contracts": {
+    "passed": 8,
+    "total": 8,
+    "restricted_identities": 2
+  },
+  "chromium": {
+    "passed": 4,
+    "total": 4,
+    "duration_seconds": 39.1
+  },
+  "cases": [
+    {
+      "id": "I001",
+      "outcome": "completed"
+    },
+    {
+      "id": "I002",
+      "outcome": "completed"
+    },
+    {
+      "id": "I003",
+      "outcome": "completed"
+    },
+    {
+      "id": "I004",
+      "outcome": "completed"
+    },
+    {
+      "id": "I005",
+      "outcome": "completed"
+    },
+    {
+      "id": "I006",
+      "outcome": "completed"
+    },
+    {
+      "id": "I007",
+      "outcome": "completed"
+    },
+    {
+      "id": "I008",
+      "outcome": "completed"
+    },
+    {
+      "id": "I009",
+      "outcome": "completed"
+    },
+    {
+      "id": "I010",
+      "outcome": "completed"
+    },
+    {
+      "id": "I011",
+      "outcome": "completed"
+    },
+    {
+      "id": "I012",
+      "outcome": "completed"
+    },
+    {
+      "id": "I013",
+      "outcome": "completed"
+    },
+    {
+      "id": "I014",
+      "outcome": "completed"
+    },
+    {
+      "id": "I015",
+      "outcome": "completed"
+    },
+    {
+      "id": "I016",
+      "outcome": "completed"
+    },
+    {
+      "id": "I017",
+      "outcome": "completed"
+    },
+    {
+      "id": "I018",
+      "outcome": "completed"
+    },
+    {
+      "id": "I019",
+      "outcome": "completed"
+    },
+    {
+      "id": "I020",
+      "outcome": "completed"
+    },
+    {
+      "id": "I021",
+      "outcome": "completed"
+    },
+    {
+      "id": "I022",
+      "outcome": "completed"
+    },
+    {
+      "id": "I023",
+      "outcome": "completed"
+    },
+    {
+      "id": "I024",
+      "outcome": "completed"
+    },
+    {
+      "id": "I025",
+      "outcome": "completed"
+    },
+    {
+      "id": "I026",
+      "outcome": "completed"
+    },
+    {
+      "id": "I027",
+      "outcome": "completed"
+    },
+    {
+      "id": "I028",
+      "outcome": "completed"
+    },
+    {
+      "id": "I029",
+      "outcome": "completed"
+    },
+    {
+      "id": "I030",
+      "outcome": "completed"
+    },
+    {
+      "id": "I031",
+      "outcome": "completed"
+    },
+    {
+      "id": "I032",
+      "outcome": "completed"
+    },
+    {
+      "id": "I033",
+      "outcome": "completed"
+    },
+    {
+      "id": "I034",
+      "outcome": "completed"
+    },
+    {
+      "id": "I035",
+      "outcome": "completed"
+    },
+    {
+      "id": "I036",
+      "outcome": "completed"
+    },
+    {
+      "id": "I037",
+      "outcome": "completed"
+    },
+    {
+      "id": "I038",
+      "outcome": "completed"
+    },
+    {
+      "id": "I039",
+      "outcome": "completed"
+    },
+    {
+      "id": "I040",
+      "outcome": "completed"
+    },
+    {
+      "id": "I041",
+      "outcome": "completed"
+    },
+    {
+      "id": "I042",
+      "outcome": "completed"
+    },
+    {
+      "id": "I043",
+      "outcome": "completed"
+    },
+    {
+      "id": "I044",
+      "outcome": "completed"
+    },
+    {
+      "id": "I045",
+      "outcome": "completed"
+    },
+    {
+      "id": "I046",
+      "outcome": "completed"
+    },
+    {
+      "id": "I047",
+      "outcome": "completed"
+    },
+    {
+      "id": "I048",
+      "outcome": "completed"
+    },
+    {
+      "id": "I049",
+      "outcome": "completed"
+    },
+    {
+      "id": "I050",
+      "outcome": "completed"
+    },
+    {
+      "id": "I051",
+      "outcome": "completed"
+    },
+    {
+      "id": "I052",
+      "outcome": "completed"
+    },
+    {
+      "id": "I053",
+      "outcome": "completed"
+    },
+    {
+      "id": "I054",
+      "outcome": "completed"
+    },
+    {
+      "id": "I055",
+      "outcome": "completed"
+    },
+    {
+      "id": "I056",
+      "outcome": "completed"
+    },
+    {
+      "id": "I057",
+      "outcome": "completed"
+    },
+    {
+      "id": "I058",
+      "outcome": "completed"
+    },
+    {
+      "id": "I059",
+      "outcome": "completed"
+    },
+    {
+      "id": "I060",
+      "outcome": "completed"
+    },
+    {
+      "id": "I061",
+      "outcome": "completed"
+    },
+    {
+      "id": "I062",
+      "outcome": "completed"
+    },
+    {
+      "id": "I063",
+      "outcome": "completed"
+    },
+    {
+      "id": "I064",
+      "outcome": "completed"
+    },
+    {
+      "id": "I065",
+      "outcome": "completed"
+    },
+    {
+      "id": "I066",
+      "outcome": "completed"
+    },
+    {
+      "id": "I067",
+      "outcome": "completed"
+    },
+    {
+      "id": "I068",
+      "outcome": "completed"
+    },
+    {
+      "id": "I069",
+      "outcome": "completed"
+    },
+    {
+      "id": "I070",
+      "outcome": "completed"
+    },
+    {
+      "id": "I071",
+      "outcome": "completed"
+    },
+    {
+      "id": "I072",
+      "outcome": "completed"
+    },
+    {
+      "id": "I073",
+      "outcome": "completed"
+    },
+    {
+      "id": "I074",
+      "outcome": "completed"
+    },
+    {
+      "id": "I075",
+      "outcome": "completed"
+    },
+    {
+      "id": "I076",
+      "outcome": "completed"
+    },
+    {
+      "id": "I077",
+      "outcome": "completed",
+      "failed_checks": ["metric_version_window", "source_scope", "group_by"]
+    },
+    {
+      "id": "I078",
+      "outcome": "completed"
+    },
+    {
+      "id": "I079",
+      "outcome": "completed"
+    },
+    {
+      "id": "I080",
+      "outcome": "completed"
+    },
+    {
+      "id": "I081",
+      "outcome": "completed"
+    },
+    {
+      "id": "I082",
+      "outcome": "completed"
+    },
+    {
+      "id": "I083",
+      "outcome": "completed"
+    },
+    {
+      "id": "I084",
+      "outcome": "completed"
+    },
+    {
+      "id": "I085",
+      "outcome": "completed"
+    },
+    {
+      "id": "I086",
+      "outcome": "completed"
+    },
+    {
+      "id": "I087",
+      "outcome": "completed"
+    },
+    {
+      "id": "I088",
+      "outcome": "completed"
+    },
+    {
+      "id": "I089",
+      "outcome": "completed"
+    },
+    {
+      "id": "I090",
+      "outcome": "completed"
+    },
+    {
+      "id": "I091",
+      "outcome": "completed"
+    },
+    {
+      "id": "I092",
+      "outcome": "completed"
+    },
+    {
+      "id": "I093",
+      "outcome": "completed"
+    },
+    {
+      "id": "I094",
+      "outcome": "completed"
+    },
+    {
+      "id": "I095",
+      "outcome": "completed"
+    },
+    {
+      "id": "I096",
+      "outcome": "completed"
+    },
+    {
+      "id": "I097",
+      "outcome": "completed"
+    },
+    {
+      "id": "I098",
+      "outcome": "completed"
+    },
+    {
+      "id": "I099",
+      "outcome": "completed"
+    },
+    {
+      "id": "I100",
+      "outcome": "completed"
+    },
+    {
+      "id": "D001",
+      "outcome": "completed"
+    },
+    {
+      "id": "D002",
+      "outcome": "completed"
+    },
+    {
+      "id": "D003",
+      "outcome": "completed"
+    },
+    {
+      "id": "D004",
+      "outcome": "completed"
+    },
+    {
+      "id": "D005",
+      "outcome": "completed"
+    },
+    {
+      "id": "D006",
+      "outcome": "completed"
+    },
+    {
+      "id": "D007",
+      "outcome": "completed"
+    },
+    {
+      "id": "D008",
+      "outcome": "failed",
+      "reason": "model_incomplete",
+      "failed_checks": ["visible", "metric_version_window", "source_scope"]
+    },
+    {
+      "id": "D009",
+      "outcome": "completed"
+    },
+    {
+      "id": "D010",
+      "outcome": "completed"
+    },
+    {
+      "id": "D011",
+      "outcome": "completed"
+    },
+    {
+      "id": "D012",
+      "outcome": "completed"
+    },
+    {
+      "id": "D013",
+      "outcome": "completed"
+    },
+    {
+      "id": "D014",
+      "outcome": "completed"
+    },
+    {
+      "id": "D015",
+      "outcome": "completed"
+    },
+    {
+      "id": "D016",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D017",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D018",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D019",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D020",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D021",
+      "outcome": "completed"
+    },
+    {
+      "id": "D022",
+      "outcome": "completed"
+    },
+    {
+      "id": "D023",
+      "outcome": "completed"
+    },
+    {
+      "id": "D024",
+      "outcome": "completed"
+    },
+    {
+      "id": "D025",
+      "outcome": "completed"
+    },
+    {
+      "id": "D026",
+      "outcome": "completed"
+    },
+    {
+      "id": "D027",
+      "outcome": "completed"
+    },
+    {
+      "id": "D028",
+      "outcome": "completed"
+    },
+    {
+      "id": "D029",
+      "outcome": "completed"
+    },
+    {
+      "id": "D030",
+      "outcome": "completed"
+    },
+    {
+      "id": "D031",
+      "outcome": "completed"
+    },
+    {
+      "id": "D032",
+      "outcome": "completed"
+    },
+    {
+      "id": "D033",
+      "outcome": "completed"
+    },
+    {
+      "id": "D034",
+      "outcome": "completed"
+    },
+    {
+      "id": "D035",
+      "outcome": "completed"
+    },
+    {
+      "id": "D036",
+      "outcome": "completed"
+    },
+    {
+      "id": "D037",
+      "outcome": "completed"
+    },
+    {
+      "id": "D038",
+      "outcome": "completed"
+    },
+    {
+      "id": "D039",
+      "outcome": "completed"
+    },
+    {
+      "id": "D040",
+      "outcome": "completed"
+    },
+    {
+      "id": "D041",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D042",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D043",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D044",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D045",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D046",
+      "outcome": "completed"
+    },
+    {
+      "id": "D047",
+      "outcome": "completed"
+    },
+    {
+      "id": "D048",
+      "outcome": "completed"
+    },
+    {
+      "id": "D049",
+      "outcome": "completed"
+    },
+    {
+      "id": "D050",
+      "outcome": "completed"
+    },
+    {
+      "id": "D051",
+      "outcome": "completed"
+    },
+    {
+      "id": "D052",
+      "outcome": "completed"
+    },
+    {
+      "id": "D053",
+      "outcome": "completed"
+    },
+    {
+      "id": "D054",
+      "outcome": "completed"
+    },
+    {
+      "id": "D055",
+      "outcome": "completed"
+    },
+    {
+      "id": "D056",
+      "outcome": "completed"
+    },
+    {
+      "id": "D057",
+      "outcome": "failed",
+      "reason": "model_incomplete",
+      "failed_checks": ["visible", "metric_version_window", "source_scope"]
+    },
+    {
+      "id": "D058",
+      "outcome": "completed"
+    },
+    {
+      "id": "D059",
+      "outcome": "completed"
+    },
+    {
+      "id": "D060",
+      "outcome": "completed"
+    },
+    {
+      "id": "D061",
+      "outcome": "completed"
+    },
+    {
+      "id": "D062",
+      "outcome": "completed"
+    },
+    {
+      "id": "D063",
+      "outcome": "completed"
+    },
+    {
+      "id": "D064",
+      "outcome": "completed"
+    },
+    {
+      "id": "D065",
+      "outcome": "completed"
+    },
+    {
+      "id": "D066",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D067",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D068",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D069",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D070",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D071",
+      "outcome": "completed"
+    },
+    {
+      "id": "D072",
+      "outcome": "completed"
+    },
+    {
+      "id": "D073",
+      "outcome": "completed"
+    },
+    {
+      "id": "D074",
+      "outcome": "completed"
+    },
+    {
+      "id": "D075",
+      "outcome": "completed"
+    },
+    {
+      "id": "D076",
+      "outcome": "completed"
+    },
+    {
+      "id": "D077",
+      "outcome": "completed"
+    },
+    {
+      "id": "D078",
+      "outcome": "completed"
+    },
+    {
+      "id": "D079",
+      "outcome": "completed"
+    },
+    {
+      "id": "D080",
+      "outcome": "completed"
+    },
+    {
+      "id": "D081",
+      "outcome": "completed"
+    },
+    {
+      "id": "D082",
+      "outcome": "completed"
+    },
+    {
+      "id": "D083",
+      "outcome": "completed"
+    },
+    {
+      "id": "D084",
+      "outcome": "completed"
+    },
+    {
+      "id": "D085",
+      "outcome": "completed"
+    },
+    {
+      "id": "D086",
+      "outcome": "completed"
+    },
+    {
+      "id": "D087",
+      "outcome": "completed"
+    },
+    {
+      "id": "D088",
+      "outcome": "completed"
+    },
+    {
+      "id": "D089",
+      "outcome": "completed"
+    },
+    {
+      "id": "D090",
+      "outcome": "completed"
+    },
+    {
+      "id": "D091",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D092",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D093",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D094",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D095",
+      "outcome": "waiting"
+    },
+    {
+      "id": "D096",
+      "outcome": "completed"
+    },
+    {
+      "id": "D097",
+      "outcome": "completed"
+    },
+    {
+      "id": "D098",
+      "outcome": "completed"
+    },
+    {
+      "id": "D099",
+      "outcome": "completed"
+    },
+    {
+      "id": "D100",
+      "outcome": "completed"
+    },
+    {
+      "id": "C001",
+      "outcome": "completed"
+    },
+    {
+      "id": "C002",
+      "outcome": "completed"
+    },
+    {
+      "id": "C003",
+      "outcome": "completed"
+    },
+    {
+      "id": "C004",
+      "outcome": "completed"
+    },
+    {
+      "id": "C005",
+      "outcome": "completed"
+    },
+    {
+      "id": "C006",
+      "outcome": "completed"
+    },
+    {
+      "id": "C007",
+      "outcome": "completed"
+    },
+    {
+      "id": "C008",
+      "outcome": "completed"
+    },
+    {
+      "id": "C009",
+      "outcome": "completed",
+      "failed_checks": ["paid_total"]
+    },
+    {
+      "id": "C010",
+      "outcome": "completed"
+    },
+    {
+      "id": "C011",
+      "outcome": "completed"
+    },
+    {
+      "id": "C012",
+      "outcome": "completed"
+    },
+    {
+      "id": "C013",
+      "outcome": "completed"
+    },
+    {
+      "id": "C014",
+      "outcome": "completed"
+    },
+    {
+      "id": "C015",
+      "outcome": "completed"
+    },
+    {
+      "id": "C016",
+      "outcome": "completed"
+    },
+    {
+      "id": "C017",
+      "outcome": "completed"
+    },
+    {
+      "id": "C018",
+      "outcome": "completed"
+    },
+    {
+      "id": "C019",
+      "outcome": "completed"
+    },
+    {
+      "id": "C020",
+      "outcome": "completed"
+    }
+  ]
+}

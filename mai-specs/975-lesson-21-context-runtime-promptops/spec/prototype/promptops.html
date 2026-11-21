@@ -1,0 +1,3287 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PromptOps · Compass 平台管理</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --canvas: #f8f9f6;
+        --surface: #fff;
+        --surface-subtle: #f3f6f2;
+        --ink: #202b27;
+        --muted: #57675f;
+        --primary: #1c5145;
+        --primary-hover: #153e35;
+        --primary-soft: #e5eee7;
+        --border: #dce2da;
+        --border-strong: #788b80;
+        --danger: #a34236;
+        --danger-soft: #fff4f1;
+        --warning: #745018;
+        --warning-soft: #fff4de;
+        --focus-ring: #28725e;
+        --code-surface: #182620;
+        --font:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei",
+          sans-serif;
+        --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--canvas);
+        color: var(--ink);
+        font: 16px/1.55 var(--font);
+      }
+      button,
+      input,
+      textarea,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      button,
+      select,
+      summary,
+      label.check,
+      button.asset-row {
+        cursor: pointer;
+      }
+      button {
+        border: 0;
+        background: none;
+      }
+      button:disabled {
+        cursor: default;
+        opacity: 0.55;
+      }
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      textarea:focus-visible,
+      summary:focus-visible,
+      a:focus-visible,
+      [tabindex]:focus-visible {
+        outline: 3px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+      a {
+        color: var(--primary);
+      }
+      h1,
+      h2,
+      h3,
+      h4,
+      p,
+      fieldset {
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(32px, 3.2vw, 44px);
+        line-height: 1.12;
+        letter-spacing: -0.046em;
+      }
+      h2 {
+        font-size: 20px;
+        line-height: 1.35;
+        letter-spacing: -0.025em;
+      }
+      h3 {
+        font-size: 17px;
+        line-height: 1.4;
+      }
+      small,
+      .meta {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 14px;
+      }
+      code,
+      .mono {
+        font-family: var(--mono);
+        overflow-wrap: anywhere;
+      }
+      .ico {
+        display: inline-block;
+        width: 18px;
+        height: 18px;
+        flex: none;
+        vertical-align: middle;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.65;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .skip {
+        position: fixed;
+        z-index: 10;
+        top: -80px;
+        left: 8px;
+        background: white;
+        padding: 12px;
+      }
+      .skip:focus {
+        top: 6px;
+      }
+      .rail {
+        position: fixed;
+        inset: 0 auto 0 0;
+        width: 60px;
+        background: #f1f3ef;
+        border-right: 1px solid #e4e8e1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 9px;
+        padding: 16px 6px;
+        z-index: 2;
+      }
+      .rail-mark,
+      .rail-item {
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+      }
+      .rail-mark {
+        color: var(--primary);
+        margin-bottom: 16px;
+      }
+      .rail-mark .ico {
+        width: 30px;
+        height: 30px;
+      }
+      .rail-item.current {
+        background: #dfe8db;
+        color: var(--primary);
+        border-radius: 11px;
+      }
+      .rail-rule {
+        width: 28px;
+        border-top: 1px solid var(--border);
+        margin: 8px;
+      }
+      .rail-profile {
+        margin-top: auto;
+        background: #dfe8db;
+        color: var(--primary);
+        border-radius: 50%;
+        padding: 7px;
+      }
+      .side {
+        position: fixed;
+        inset: 0 auto 0 60px;
+        width: 260px;
+        background: #f5f7f2;
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        padding: 28px 14px 18px;
+        overflow: auto;
+      }
+      .side h2 {
+        font-size: 21px;
+        color: #244537;
+        margin: 0 8px 4px;
+      }
+      .side .caption {
+        margin: 0 8px 19px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .navitem {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--muted);
+        padding: 11px 13px;
+        font-size: 14px;
+        border-radius: 8px;
+      }
+      .navitem.current {
+        background: var(--primary-soft);
+        color: var(--primary);
+        font-weight: 650;
+      }
+      .side-foot {
+        margin-top: auto;
+        padding: 24px 10px 0;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .workspace {
+        margin-left: 320px;
+      }
+      .topbar {
+        min-height: 66px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 8px clamp(18px, 3.2vw, 48px);
+      }
+      .crumb,
+      .inline,
+      .actions,
+      .chips,
+      .localmark {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .crumb {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .crumb strong {
+        color: var(--ink);
+      }
+      .crumb .ico {
+        width: 15px;
+      }
+      .localmark {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .identity {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .identity select {
+        min-height: 44px;
+        background: transparent;
+        border: 0;
+        font-weight: 600;
+        color: var(--ink);
+      }
+      main {
+        max-width: 1580px;
+        margin: auto;
+        padding: 24px clamp(18px, 3.2vw, 48px) 56px;
+        min-width: 0;
+      }
+      .page-tabs {
+        display: flex;
+        gap: 24px;
+        border-bottom: 1px solid var(--border);
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .page-tabs span {
+        padding: 0 0 11px;
+      }
+      .page-tabs .current {
+        color: var(--primary);
+        border-bottom: 2px solid var(--primary);
+        font-weight: 650;
+      }
+      .titlebar,
+      .panel-head,
+      .history-row,
+      .between,
+      .codebar,
+      .actionline {
+        display: flex;
+        gap: 14px;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .titlebar {
+        margin: 24px 0 18px;
+        flex-wrap: wrap;
+      }
+      .titlebar p {
+        font-size: 14px;
+        color: var(--muted);
+        margin-top: 7px;
+      }
+      .btn,
+      .iconbtn,
+      .tab,
+      .asset-row,
+      .kind-filter {
+        min-height: 44px;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        border: 1px solid var(--border-strong);
+        background: var(--surface);
+        border-radius: 8px;
+        padding: 9px 14px;
+        font-size: 14px;
+        line-height: 1.35;
+        font-weight: 600;
+        color: var(--primary);
+        text-align: center;
+      }
+      .btn.primary {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: white;
+      }
+      .btn.quiet {
+        background: transparent;
+        border-color: transparent;
+      }
+      .btn:hover:not(:disabled),
+      .iconbtn:hover:not(:disabled) {
+        background: var(--surface-subtle);
+      }
+      .btn.primary:hover:not(:disabled) {
+        background: var(--primary-hover);
+      }
+      .btn:active:not(:disabled) {
+        transform: scale(0.985);
+      }
+      .iconbtn {
+        min-width: 44px;
+        display: inline-grid;
+        place-items: center;
+        border-radius: 8px;
+        color: var(--primary);
+      }
+      dialog {
+        width: min(660px, calc(100% - 30px));
+        max-height: 88dvh;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 0;
+        color: var(--ink);
+        background: var(--surface);
+        box-shadow: 0 18px 58px #14251d29;
+      }
+      dialog::backdrop {
+        background: #14251d63;
+      }
+      .dialog-inner {
+        padding: 22px;
+      }
+      .dialog-actions {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 18px;
+        border-top: 1px solid var(--border);
+        padding-top: 14px;
+      }
+      .dialog-actions .btn {
+        min-width: 80px;
+      }
+      #dialog-body {
+        display: grid;
+        gap: 13px;
+      }
+
+      .side {
+        width: 214px;
+      }
+      .workspace {
+        margin-left: 274px;
+      }
+      main {
+        padding: 12px clamp(18px, 2.5vw, 40px) 32px;
+        max-width: 1720px;
+      }
+      .topbar {
+        padding-inline: clamp(18px, 2.5vw, 40px);
+      }
+      .titlebar {
+        margin: 24px 0 18px;
+      }
+      .titlebar h1 {
+        font-size: 38px;
+      }
+      .tabs {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        border-bottom: 1px solid var(--border);
+        margin: 0 0 16px;
+      }
+      .tabs button,
+      .subtabs button {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        min-height: 44px;
+        padding: 0 5px;
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 600;
+        border-bottom: 2px solid transparent;
+      }
+      .tabs button[aria-current="page"],
+      .subtabs button[aria-current="page"] {
+        color: var(--primary);
+        border-bottom-color: var(--primary);
+      }
+      .tabs .ico {
+        width: 16px;
+      }
+      .count {
+        font: 11px var(--mono);
+        background: var(--surface-subtle);
+        border-radius: 5px;
+        padding: 3px 6px;
+        color: var(--muted);
+      }
+      .status:empty {
+        display: none;
+      }
+      .status {
+        margin: 10px 0;
+        color: var(--primary);
+        background: var(--primary-soft);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 14px;
+      }
+      .status.alert,
+      .field-error {
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+      .field-error {
+        padding: 6px 9px;
+        border-radius: 6px;
+        font-size: 13px;
+      }
+      .panel,
+      .library {
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--surface);
+        min-width: 0;
+      }
+      .panel {
+        padding: 20px;
+      }
+      .library {
+        display: grid;
+        grid-template-columns: minmax(250px, 30%) minmax(0, 1fr);
+        overflow: clip;
+        min-height: 600px;
+      }
+      .file-side {
+        min-width: 0;
+        background: #f6f8f4;
+        border-right: 1px solid var(--border);
+        padding: 16px 10px;
+        display: flex;
+        flex-direction: column;
+      }
+      .side-head,
+      .file-meta,
+      .panel-head,
+      .toolbar,
+      .tree-root,
+      .between {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .side-head {
+        padding: 0 2px 6px 8px;
+      }
+      .side-head h2 {
+        font-size: 16px;
+      }
+      .searchbox {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 4px 10px;
+        padding: 0 9px;
+        border: 1px solid var(--border-strong);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--muted);
+      }
+      .searchbox .ico {
+        width: 16px;
+      }
+      .searchbox input {
+        width: 100%;
+        min-width: 0;
+        border: 0;
+        background: transparent;
+        height: 42px;
+        font-size: 14px;
+      }
+      .tree-root {
+        padding: 0 8px;
+        color: var(--muted);
+        font: 13px var(--mono);
+      }
+      .tree-root button {
+        color: var(--muted);
+      }
+      .tree-scroll {
+        max-height: clamp(420px, 65vh, 850px);
+        overflow: auto;
+        padding: 4px 3px 8px;
+        scrollbar-width: thin;
+      }
+      .tree-group {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      .tree-row {
+        width: 100%;
+        min-height: 44px;
+        padding: 5px 6px 5px calc(5px + var(--depth) * 12px);
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        text-align: left;
+        color: #3b5145;
+        line-height: 1.36;
+        min-width: 0;
+      }
+      .tree-row:hover,
+      .iconbtn:hover,
+      .mini:hover {
+        background: var(--primary-soft);
+      }
+      .tree-row.selected {
+        background: #dfece3;
+        color: #164b3a;
+        box-shadow: inset 3px 0 0 var(--primary);
+      }
+      .tree-row .ico {
+        width: 15px;
+        height: 15px;
+      }
+      .tree-row .angle {
+        width: 10px;
+        height: 10px;
+        flex: 0 0 10px;
+      }
+      .tree-row[aria-expanded="true"] .angle {
+        transform: rotate(90deg);
+      }
+      .tree-name {
+        min-width: 0;
+        overflow-wrap: anywhere;
+        font: 13px/1.42 var(--mono);
+      }
+      .alias {
+        font: 12px/1.4 var(--font);
+        color: var(--muted);
+        margin-left: auto;
+        white-space: nowrap;
+      }
+      .dot {
+        margin-left: auto;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #a06322;
+        flex: none;
+      }
+      .tree-empty {
+        padding: 12px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .detail {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .detail-head {
+        padding: 21px 24px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .path {
+        color: var(--muted);
+        font: 12px/1.55 var(--mono);
+        overflow-wrap: anywhere;
+      }
+      .path .ico {
+        width: 15px;
+        height: 15px;
+        margin-right: 5px;
+        color: var(--primary);
+      }
+      .file-meta {
+        margin: 10px 0 8px;
+        flex-wrap: wrap;
+      }
+      .file-name {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .file-name h2 {
+        font: 650 20px/1.4 var(--mono);
+        overflow-wrap: anywhere;
+      }
+      .file-name .ico {
+        color: var(--primary);
+      }
+      .pill {
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+        padding: 3px 8px;
+        font: 12px/1.4 var(--font);
+        background: var(--surface-subtle);
+        color: var(--muted);
+        border-radius: 6px;
+      }
+      .pill.ok {
+        background: var(--primary-soft);
+        color: var(--primary);
+      }
+      .pill.warm {
+        background: var(--warning-soft);
+        color: var(--warning);
+      }
+      .usage {
+        font-size: 13px;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+      .subtabs {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+      }
+      .subtabs button {
+        font-size: 13px;
+      }
+      .editor-area {
+        padding: 20px 24px 24px;
+        min-width: 0;
+      }
+      .markdown {
+        font: 16px/1.72 var(--font);
+        overflow-wrap: anywhere;
+        max-width: 80ch;
+        color: var(--ink);
+      }
+      .markdown > * + * {
+        margin-top: 0.85em;
+      }
+      .markdown h1 {
+        font: 650 26px/1.35 var(--font);
+        letter-spacing: -0.025em;
+      }
+      .markdown h2 {
+        font-size: 18px;
+      }
+      .markdown h3 {
+        font-size: 16px;
+      }
+      .markdown h2,
+      .markdown h3 {
+        margin-top: 1.3em;
+      }
+      .markdown ul,
+      .markdown ol {
+        padding-left: 1.5em;
+      }
+      .markdown li + li {
+        margin-top: 0.28em;
+      }
+      .markdown blockquote {
+        margin-inline: 0;
+        border-left: 3px solid #9bb4a1;
+        padding-left: 12px;
+        color: var(--muted);
+      }
+      .markdown table,
+      .registry {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      .markdown th,
+      .markdown td,
+      .registry th,
+      .registry td {
+        padding: 8px 10px;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+      }
+      .markdown th,
+      .registry th {
+        background: var(--surface-subtle);
+        font-size: 13px;
+      }
+      .table-scroll {
+        max-width: 100%;
+        overflow: auto;
+      }
+      .markdown pre,
+      .source {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        padding: 14px;
+        background: var(--code-surface);
+        color: #e4eee6;
+        border-radius: 8px;
+        max-width: 100%;
+        font: 13px/1.6 var(--mono);
+      }
+      .markdown pre {
+        white-space: pre;
+        overflow: auto;
+      }
+      .markdown :not(pre) > code,
+      .var-token {
+        background: #edf3ec;
+        color: #245342;
+        border-radius: 4px;
+        padding: 1px 4px;
+        font: 0.88em var(--mono);
+      }
+      .source {
+        max-height: 330px;
+        overflow: auto;
+      }
+      .editor {
+        width: 100%;
+        resize: vertical;
+        padding: 14px;
+        min-height: 345px;
+        border: 1px solid var(--border-strong);
+        border-radius: 8px;
+        font: 14px/1.65 var(--mono);
+        color: var(--ink);
+        background: #fbfcf9;
+      }
+      .actions {
+        gap: 8px;
+      }
+      .doc-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+        border-top: 1px solid var(--border);
+        margin-top: 22px;
+        padding-top: 12px;
+      }
+      .mini {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        min-width: 44px;
+        min-height: 44px;
+        border-radius: 8px;
+        color: var(--primary);
+        font-size: 13px;
+      }
+      .mini .ico {
+        width: 15px;
+        height: 15px;
+      }
+      .label {
+        display: grid;
+        gap: 5px;
+        color: var(--ink);
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .label input,
+      .label textarea,
+      .label select {
+        width: 100%;
+        min-width: 0;
+        border-radius: 8px;
+        border: 1px solid var(--border-strong);
+        background: #fff;
+        min-height: 44px;
+        padding: 9px 10px;
+        font-weight: 400;
+      }
+      .label textarea {
+        resize: vertical;
+      }
+      .dialog-inner .panel-head {
+        margin-bottom: 12px;
+      }
+      .dialog-inner strong,
+      .label,
+      .history-row,
+      .registry td {
+        overflow-wrap: anywhere;
+      }
+      .dialog-actions {
+        position: relative;
+      }
+      .changes {
+        display: grid;
+        gap: 9px;
+      }
+      .changes > div,
+      .history-row,
+      .snapshot-row {
+        padding: 11px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .history-row,
+      .snapshot-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .history-row small,
+      .snapshot-row small {
+        display: block;
+        margin-top: 3px;
+      }
+      .history-row strong,
+      .snapshot-row strong {
+        margin-right: 8px;
+      }
+      .subtle {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      details > summary {
+        min-height: 44px;
+        align-content: center;
+        color: var(--primary);
+        font-weight: 600;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      .diff {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .diff h3 {
+        font-size: 13px;
+      }
+      .checkrow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 44px;
+        overflow-wrap: anywhere;
+      }
+      .checkrow input {
+        width: 18px;
+        height: 18px;
+        flex: none;
+      }
+      .disabled-info {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .mobile-tree {
+        display: none;
+      }
+      .skip:focus {
+        z-index: 5;
+      }
+      footer {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--muted);
+        padding-top: 16px;
+      }
+      footer .ico {
+        width: 15px;
+      }
+      @media (max-width: 1270px) and (min-width: 901px) {
+        .side {
+          width: 182px;
+        }
+        .workspace {
+          margin-left: 242px;
+        }
+        .library {
+          grid-template-columns: minmax(235px, 31%) minmax(0, 1fr);
+        }
+        main,
+        .topbar {
+          padding-inline: 20px;
+        }
+      }
+      @media (max-width: 1020px) {
+        .side {
+          display: none;
+        }
+        .workspace {
+          margin-left: 60px;
+        }
+      }
+      @media (max-width: 800px) {
+        .library {
+          grid-template-columns: minmax(220px, 33%) minmax(0, 1fr);
+        }
+        .detail-head {
+          padding: 16px 16px 0;
+        }
+        .editor-area {
+          padding: 16px;
+        }
+        .tree-row {
+          padding-left: calc(4px + var(--depth) * 8px);
+        }
+        .tree-name {
+          font-size: 12px;
+        }
+      }
+      @media (max-width: 680px) {
+        .rail {
+          display: none;
+        }
+        .workspace {
+          margin: 0;
+        }
+        main,
+        .topbar {
+          padding-inline: 14px;
+        }
+        .wide,
+        .localmark {
+          display: none;
+        }
+        .topbar {
+          min-height: 54px;
+          gap: 6px;
+        }
+        .titlebar {
+          margin: 14px 0 10px;
+        }
+        .titlebar h1 {
+          font-size: 30px;
+        }
+        .titlebar p {
+          margin-top: 3px;
+        }
+        .page-tabs {
+          gap: 12px;
+        }
+        .library {
+          display: block;
+          min-height: 0;
+        }
+        .mobile-tree {
+          display: inline-flex;
+        }
+        .file-side {
+          border: 0;
+          border-bottom: 1px solid var(--border);
+          padding: 8px;
+        }
+        .tree-scroll {
+          max-height: 42dvh;
+        }
+        .tree-row {
+          min-height: 44px;
+        }
+        .file-side[data-open="false"] .tree-content,
+        .file-side[data-open="false"] .new-tree {
+          display: none;
+        }
+        .side-head {
+          padding-bottom: 0;
+        }
+        .detail-head {
+          padding: 14px 12px 0;
+        }
+        .editor-area {
+          padding: 16px 12px;
+        }
+        .editor {
+          min-height: 260px;
+        }
+        .diff {
+          grid-template-columns: 1fr;
+        }
+        .dialog-inner {
+          padding: 15px;
+        }
+        .registry th,
+        .registry td {
+          padding: 8px 5px;
+        }
+        .titlebar .btn {
+          padding-inline: 10px;
+        }
+        .markdown h1 {
+          font-size: 23px;
+        }
+        .file-meta {
+          gap: 7px;
+        }
+        .toolbar {
+          flex-wrap: wrap;
+        }
+        .alias {
+          margin-left: 2px;
+        }
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        button {
+          transition:
+            background-color 140ms ease,
+            color 140ms ease;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#main">跳到管理内容</a>
+    <aside id="rail" class="rail" aria-hidden="true"></aside>
+    <aside class="side" aria-label="管理导航">
+      <h2 id="side-title">管理与治理</h2>
+      <p class="caption" id="side-caption">配置、运行与治理</p>
+      <div id="side-items"></div>
+      <div class="side-foot">Compass · 经营分析工作台</div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <div id="breadcrumb" class="crumb"></div>
+        <div class="inline">
+          <span class="localmark">离线原型</span
+          ><label class="identity"
+            >演示身份<select id="identity">
+              <option value="admin">平台管理员</option>
+              <option value="tenant">租户管理员</option>
+              <option value="member">普通成员</option>
+            </select></label
+          >
+        </div>
+      </header>
+      <main id="main" tabindex="-1">
+        <div id="page-head"></div>
+        <nav id="tabs" class="tabs" aria-label="PromptOps 功能"></nav>
+        <p id="notice" class="status" role="status" aria-live="polite"></p>
+        <div id="view"></div>
+        <footer id="foot"></footer>
+      </main>
+    </div>
+    <dialog id="dialog" aria-labelledby="dialog-title">
+      <div class="dialog-inner">
+        <div class="panel-head">
+          <h2 id="dialog-title"></h2>
+          <button type="button" class="iconbtn" id="close-dialog" aria-label="关闭对话框"></button>
+        </div>
+        <form id="dialog-form" novalidate>
+          <div id="dialog-body"></div>
+          <p id="dialog-error" class="status alert" role="alert" tabindex="-1"></p>
+          <div class="dialog-actions" id="dialog-actions"></div>
+        </form>
+      </div>
+    </dialog>
+    <!-- prettier-ignore -->
+    <script type="application/json" id="local-catalog">
+{
+  "shared/fragments/base.md": "# Compass 经营分析助手\n\n你是 Compass 经营分析助手。沿用用户当前工作空间已确认的指标口径、数据范围和权限。已有信息足够时直接完成任务。缺少会改变结论的条件时，先问最关键的一项。对尚未取得的数据说明缺口。只在产物已生成并可打开时给出入口。\n",
+  "shared/fragments/retail.md": "# 零售指标口径\n\n展示查询所用的渠道、统计期间、币种和单位。对齐实付额、订单量和支付笔数各自的定义。\n",
+  "shared/skills/metric-check.md": "# 指标口径核对\n\n核实期间、分母、单位与数据来源。需要查数时，沿用当前身份的数据读取权限。\n",
+  "shared/skills/report-outline.md": "# 周报提纲\n\n按经营摘要、指标变化、风险与行动建议组织周报。所有关键数字对应已确认的指标与范围。\n",
+  "shared/stages/analyze.md": "# 分析\n\n核对分组可比性与分母。解释关键变化时区分观测事实和需要业务复核的原因。\n",
+  "shared/stages/generate.md": "# 生成答案\n\n依据已核对的数据和本次交付目标作答。使用对应的输出模板，标明结果可用的范围和截至时间。\n",
+  "shared/stages/identify.md": "# 识别交付目标\n\n根据本轮提问和已确认的对话背景，识别经营问答、数据分析、看板创建或经营报告。交付形式仍有歧义时问最关键的一项。\n",
+  "shared/stages/plan.md": "# 规划\n\n列出当前问题需要的指标、期间、对照组和可交付的结果，仅使用当前身份获准的能力。\n",
+  "shared/stages/query.md": "# 查询\n\n确认字段、单位和统计边界后取得授权数据。记录实际期间、筛选范围、来源和缺项。\n",
+  "shared/tools/database-query.md": "# 数据查询\n\n使用获准的数据查询工具查阅必要的表和字段，再执行只读查询。只读取本次任务需要的范围，先核对指标口径。查询失败时说明缺口。\n",
+  "support/routing/business.md": "# 业务分析\n\n根据用户提供的信息和授权数据回答。需要取数时先确认数据源和指标定义。说明已完成的工作与仍缺少的信息。\n",
+  "support/routing/clarify.md": "# 澄清\n\n问题缺少会改变结论的条件时，只问一项最重要的信息，并给出用户能选择的业务口径。\n",
+  "support/routing/classify.md": "# 场景识别\n\n结合历史指代和用户本轮的交付目标，从运行时提供的场景目录选择场景。目录与输出约定由当前调用提供。\n",
+  "support/routing/handoff.md": "# 转至管理入口\n\n对需要后台管理或外部操作的请求，指出对应产品入口，并说明用户可在那里完成哪一步。\n",
+  "support/routing/off-topic.md": "# 范围外问题\n\n用简短的中文说明 Compass 可处理的经营分析问题，并引导用户说明指标、期间或需要的交付物。\n",
+  "support/routing/restricted.md": "# 受限请求\n\n说明当前身份可使用的范围，邀请用户缩小问题范围或通过现有入口申请相应权限。\n",
+  "support/session/title.md": "# 会话标题\n\n仅根据用户本轮主题，用相同语言写一行简短标题。写明分析对象或动作，省略个人身份信息、凭据和其他敏感值。\n",
+  "support/starters/metric-question.md": "# 经营提问模板\n\n请按渠道列出 {{period}} 的实付额，并说明金额口径。\n",
+  "support/subagent/analysis.md": "# 子任务分析\n\n围绕主任务交付的明确子问题使用已获准的工具。返回可供主任务复核的结论、数据口径和局限。\n",
+  "tasks/business_qa/scenes/metric_lookup/answer.md": "# 指标快查\n\n先给所问指标的数值、单位和起止日期，再用一句话解释指标口径。\n\n## 数据状态\n\n- 区分已确认的零、暂无记录和数据尚未到齐。\n- 问题只涉及定义时，直接说明已发布的定义。\n",
+  "tasks/business_qa/system.md": "# 经营问答\n\n直接回答用户问的指标或定义。问数值时，先给数值、单位和期间，再用一句话解释口径。只问定义时直接解释。遇到同名指标且口径不同，先问清用户要看哪一个。\n\n## 业务与回答约束\n\n采用当前工作空间认可的指标口径和业务日历。“上周”在答案中展开为日期。区分已确认的零、没有记录和数据未到齐。\n\n## 默认组装的上下文清单\n\n- 默认带入当前问题、工作空间与授权范围、业务日历、指标名称及已发布释义。\n- 查数时补入目标期间、可见渠道、数据截至日、汇总值、数据是否到齐。仅问定义时可直接使用指标释义。\n\n## 完成任务的 SOP\n\n1. 区分问定义与问数值，将“上周”展开为具体日期。\n2. 核对指标释义与范围。同名异义时给用户可选择的口径。\n3. 查数时核对数据截至日和完整性，分别处理已确认的零、无记录和未到齐。\n4. 先答所问，再补足日期、单位或退款说明。\n\n## 最终 Answer\n\n第一句给数值或定义，第二句回答会影响理解的口径。数据未到齐时说明可用截止日。指标定义有歧义时只追问这一项。\n\n## 交付产物\n\n对话中保留可重读的文字答复。单次问数或口径解释用正文交付。\n",
+  "tasks/business_report/scenes/weekly/finance.md": "# 财务周报摘要\n\n为财务负责人整理 **{{period}}** 的经营周报。金额统一使用 **{{unit}}**。\n\n## 摘要怎么写\n\n- 首行给出本期最重要的财务结论。\n- 实付额按支付成功日期统计，退款单列。\n- 从已核实的渠道变化中选出最值得跟进的一项。\n\n## 交付格式\n\n在对话中给出一至三条摘要，附上完整报告的打开与下载入口。摘要、正文与下载稿使用同一组数字。\n",
+  "tasks/business_report/scenes/weekly/report.md": "# 经营周报\n\n面向 **{{audience}}** 汇总 {{period}} 的经营情况，金额用 {{unit}} 表示。\n\n## 正文顺序\n\n1. 经营摘要与本期核心指标。\n2. 相比对照期的变化及可核实的原因。\n3. 风险、待确认事项与下一步行动。\n\n在对话中给出摘要和完整报告入口。\n",
+  "tasks/business_report/system.md": "# 经营报告\n\n围绕指定读者和报告期间撰写经营报告。开篇给经营结论，正文列核心指标、关键变化、风险或待核实项和可执行建议。按已发布模板组织内容，金额单位一致。生成完整报告后，在对话中只给摘要与报告入口。\n\n## 业务与回答约束\n\n实绩、目标、预测分别标注。没有已确认目标时略去达成率。没有核实的活动或成本信息时，将相关解释列为待核实项。建议与本期观察对应。\n\n## 默认组装的上下文清单\n\n- 默认带入报告读者与用途、报告期与对比期、部门生效模板、金额单位、授权指标汇总、经核对的分项变化及数据截至日。\n- 报告涉及目标、风险或上期行动时，补入已确认的目标、业务事件或行动进度。缺少的材料记为待核实项。\n\n## 完成任务的 SOP\n\n1. 确认读者、期间、模板和单位。\n2. 汇总可见的实绩、变化与待跟进事项，区分已核实事实和待核实解释。\n3. 按模板撰写全文。把建议对应到具体观察，核对摘要、正文、表格及下载稿的数字。\n4. 保存完整报告并检查可打开、可下载，再向用户交付简短摘要和两个入口。\n\n## 最终 Answer\n\n用一至三条摘要回答读者最关心的变化和待跟进事项，提供“打开报告”和“下载报告”。摘要、正文和下载文件中的关键数字一致。\n\n## 交付产物\n\n保存一份完整、可重开的经营报告，含标题、期间与范围、摘要、指标对比、风险和行动建议。首版以 Markdown（.md）提供可独立阅读的下载稿。\n",
+  "tasks/dashboard/scenes/channel_overview/layout.md": "# 渠道概览看板\n\n根据授权数据生成指标卡、趋势和渠道分布。用标题标注各组件的统计期间。\n\n## 交付前核对\n\n- 趋势与占比分别使用正确的时间范围。\n- 保留创建时的筛选和数据截至时间。\n- 保存成功后才提供“打开看板”。\n",
+  "tasks/dashboard/system.md": "# 看板创建\n\n围绕用户要观察的指标创建看板。用指标卡展示当前值、折线图展示时间趋势、条形图展示渠道比较或占比。标清期间、单位、筛选范围和缺数。看板保存成功后，在回答中给出打开入口。\n\n## 业务与回答约束\n\n各组件沿用同一指标定义，单独展示某周的组件另标期间。占比写明分母，缺失日期标为缺数。全部组件均缺少可用数据时，提示补充范围或数据。\n\n## 默认组装的上下文清单\n\n- 默认带入看板目的、指标释义、时间范围与粒度、筛选范围、用户点名的组件、数据截至日。\n- 趋势图需要各期数列及缺失标记。结构图需要同一期的分组数值与整体。由追问发起时，带入上轮确认的筛选，并重新核对访问权限。\n\n## 完成任务的 SOP\n\n1. 确定看板要回答的问题，沿用用户确认的筛选，补齐新要求的期间。\n2. 为当前值、趋势和结构分别选择适用组件，逐项核对粒度、单位、分母与缺数。\n3. 生成并保存看板，对照指标卡与图表读数。部分缺数在对应组件说明，全部缺数时请用户调整范围。\n4. 确认可重开后，交付看板卡和关键读数。保存失败时保留问题并提供重试。\n\n## 最终 Answer\n\n给出看板名称、覆盖范围和最值得先看的读数，附“打开看板”。部分组件缺数时指出具体组件。保存失败时给出重试入口。\n\n## 交付产物\n\n一张可从原会话重开的看板卡，包含标题、筛选范围、数据截至时间及用户点名的组件。重开看到创建时的结果和口径。\n",
+  "tasks/data_analysis/scenes/period_comparison/answer.md": "# 周期对比\n\n先写整体变化，再指出贡献最大的分项。列出两期数值、差额和贡献分母。\n\n| 列           | 填写要求                   |\n| ------------ | -------------------------- |\n| 本期与对照期 | 明确日期和单位             |\n| 差额         | 以同一范围汇总             |\n| 贡献占比     | 整体增量为零时标为“不适用” |\n",
+  "tasks/data_analysis/system.md": "# 数据分析\n\n先确定指标、范围和比较对象。跨期分析对齐期间和口径，分组或排名明确使用的维度。先回答最重要的变化或差异，用对比表列出可核对的数字。解释原因时注明已确认的业务事实和待核实项。\n\n## 业务与回答约束\n\n各分项使用可比的口径、粒度和范围。基期为零时给差额，变化率标为“不适用”。总增量为零时贡献占比同样处理。某个分项缺数时说明对排序或比较的影响。\n\n## 默认组装的上下文清单\n\n- 默认带入分析问题、指标定义、比较对象、期间、分组维度、每组在可见范围内的数值及数据截至日。\n- 跨期分析补入可比基期与两期共同覆盖范围。贡献分析补入整体增量。仅在解释原因时补入已核实的业务事件。\n\n## 完成任务的 SOP\n\n1. 确认用户想比较期间、拆解贡献还是查看单期排名。\n2. 对齐粒度、可比范围与单位，标出缺失分项。\n3. 计算并核对整体与分项。完整互斥的分组应能加回整体。分母为零时保留可计算的差额。\n4. 按用户的问题给出结论和表格。需要导出时，用同一批可见数据生成 CSV。\n\n## 最终 Answer\n\n先回答最重要的差异，再列能复核结论的表格。跨期比较列出分项、两期数值和差额，单期排名列出名次、分项和指标值。计算贡献占比时标明分母。\n\n## 交付产物\n\n对比表随对话保存。用户要求导出时，提供与表中期间、筛选、单位及可见行一致的 CSV。\n"
+}
+</script>
+    <!-- prettier-ignore -->
+    <script type="text/plain" id="markdown-licenses">
+# License information
+
+## Contribution License Agreement
+
+If you contribute code to this project, you are implicitly allowing your code
+to be distributed under the MIT license. You are also implicitly verifying that
+all code is your original work. `</legalese>`
+
+## Marked
+
+Copyright (c) 2018+, MarkedJS (https://github.com/markedjs/)
+Copyright (c) 2011-2018, Christopher Jeffrey (https://github.com/chjj/)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+## Markdown
+
+Copyright © 2004, John Gruber
+http://daringfireball.net/
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+* Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+* Neither the name “Markdown” nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
+This software is provided by the copyright holders and contributors “as is” and any express or implied warranties, including, but not limited to, the implied warranties of merchantability and fitness for a particular purpose are disclaimed. In no event shall the copyright owner or contributors be liable for any direct, indirect, incidental, special, exemplary, or consequential damages (including, but not limited to, procurement of substitute goods or services; loss of use, data, or profits; or business interruption) however caused and on any theory of liability, whether in contract, strict liability, or tort (including negligence or otherwise) arising in any way out of the use of this software, even if advised of the possibility of such damage.
+
+
+
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+
+Mozilla Public License Version 2.0
+==================================
+
+1. Definitions
+--------------
+
+1.1. "Contributor"
+    means each individual or legal entity that creates, contributes to
+    the creation of, or owns Covered Software.
+
+1.2. "Contributor Version"
+    means the combination of the Contributions of others (if any) used
+    by a Contributor and that particular Contributor's Contribution.
+
+1.3. "Contribution"
+    means Covered Software of a particular Contributor.
+
+1.4. "Covered Software"
+    means Source Code Form to which the initial Contributor has attached
+    the notice in Exhibit A, the Executable Form of such Source Code
+    Form, and Modifications of such Source Code Form, in each case
+    including portions thereof.
+
+1.5. "Incompatible With Secondary Licenses"
+    means
+
+    (a) that the initial Contributor has attached the notice described
+        in Exhibit B to the Covered Software; or
+
+    (b) that the Covered Software was made available under the terms of
+        version 1.1 or earlier of the License, but not also under the
+        terms of a Secondary License.
+
+1.6. "Executable Form"
+    means any form of the work other than Source Code Form.
+
+1.7. "Larger Work"
+    means a work that combines Covered Software with other material, in 
+    a separate file or files, that is not Covered Software.
+
+1.8. "License"
+    means this document.
+
+1.9. "Licensable"
+    means having the right to grant, to the maximum extent possible,
+    whether at the time of the initial grant or subsequently, any and
+    all of the rights conveyed by this License.
+
+1.10. "Modifications"
+    means any of the following:
+
+    (a) any file in Source Code Form that results from an addition to,
+        deletion from, or modification of the contents of Covered
+        Software; or
+
+    (b) any new file in Source Code Form that contains any Covered
+        Software.
+
+1.11. "Patent Claims" of a Contributor
+    means any patent claim(s), including without limitation, method,
+    process, and apparatus claims, in any patent Licensable by such
+    Contributor that would be infringed, but for the grant of the
+    License, by the making, using, selling, offering for sale, having
+    made, import, or transfer of either its Contributions or its
+    Contributor Version.
+
+1.12. "Secondary License"
+    means either the GNU General Public License, Version 2.0, the GNU
+    Lesser General Public License, Version 2.1, the GNU Affero General
+    Public License, Version 3.0, or any later versions of those
+    licenses.
+
+1.13. "Source Code Form"
+    means the form of the work preferred for making modifications.
+
+1.14. "You" (or "Your")
+    means an individual or a legal entity exercising rights under this
+    License. For legal entities, "You" includes any entity that
+    controls, is controlled by, or is under common control with You. For
+    purposes of this definition, "control" means (a) the power, direct
+    or indirect, to cause the direction or management of such entity,
+    whether by contract or otherwise, or (b) ownership of more than
+    fifty percent (50%) of the outstanding shares or beneficial
+    ownership of such entity.
+
+2. License Grants and Conditions
+--------------------------------
+
+2.1. Grants
+
+Each Contributor hereby grants You a world-wide, royalty-free,
+non-exclusive license:
+
+(a) under intellectual property rights (other than patent or trademark)
+    Licensable by such Contributor to use, reproduce, make available,
+    modify, display, perform, distribute, and otherwise exploit its
+    Contributions, either on an unmodified basis, with Modifications, or
+    as part of a Larger Work; and
+
+(b) under Patent Claims of such Contributor to make, use, sell, offer
+    for sale, have made, import, and otherwise transfer either its
+    Contributions or its Contributor Version.
+
+2.2. Effective Date
+
+The licenses granted in Section 2.1 with respect to any Contribution
+become effective for each Contribution on the date the Contributor first
+distributes such Contribution.
+
+2.3. Limitations on Grant Scope
+
+The licenses granted in this Section 2 are the only rights granted under
+this License. No additional rights or licenses will be implied from the
+distribution or licensing of Covered Software under this License.
+Notwithstanding Section 2.1(b) above, no patent license is granted by a
+Contributor:
+
+(a) for any code that a Contributor has removed from Covered Software;
+    or
+
+(b) for infringements caused by: (i) Your and any other third party's
+    modifications of Covered Software, or (ii) the combination of its
+    Contributions with other software (except as part of its Contributor
+    Version); or
+
+(c) under Patent Claims infringed by Covered Software in the absence of
+    its Contributions.
+
+This License does not grant any rights in the trademarks, service marks,
+or logos of any Contributor (except as may be necessary to comply with
+the notice requirements in Section 3.4).
+
+2.4. Subsequent Licenses
+
+No Contributor makes additional grants as a result of Your choice to
+distribute the Covered Software under a subsequent version of this
+License (see Section 10.2) or under the terms of a Secondary License (if
+permitted under the terms of Section 3.3).
+
+2.5. Representation
+
+Each Contributor represents that the Contributor believes its
+Contributions are its original creation(s) or it has sufficient rights
+to grant the rights to its Contributions conveyed by this License.
+
+2.6. Fair Use
+
+This License is not intended to limit any rights You have under
+applicable copyright doctrines of fair use, fair dealing, or other
+equivalents.
+
+2.7. Conditions
+
+Sections 3.1, 3.2, 3.3, and 3.4 are conditions of the licenses granted
+in Section 2.1.
+
+3. Responsibilities
+-------------------
+
+3.1. Distribution of Source Form
+
+All distribution of Covered Software in Source Code Form, including any
+Modifications that You create or to which You contribute, must be under
+the terms of this License. You must inform recipients that the Source
+Code Form of the Covered Software is governed by the terms of this
+License, and how they can obtain a copy of this License. You may not
+attempt to alter or restrict the recipients' rights in the Source Code
+Form.
+
+3.2. Distribution of Executable Form
+
+If You distribute Covered Software in Executable Form then:
+
+(a) such Covered Software must also be made available in Source Code
+    Form, as described in Section 3.1, and You must inform recipients of
+    the Executable Form how they can obtain a copy of such Source Code
+    Form by reasonable means in a timely manner, at a charge no more
+    than the cost of distribution to the recipient; and
+
+(b) You may distribute such Executable Form under the terms of this
+    License, or sublicense it under different terms, provided that the
+    license for the Executable Form does not attempt to limit or alter
+    the recipients' rights in the Source Code Form under this License.
+
+3.3. Distribution of a Larger Work
+
+You may create and distribute a Larger Work under terms of Your choice,
+provided that You also comply with the requirements of this License for
+the Covered Software. If the Larger Work is a combination of Covered
+Software with a work governed by one or more Secondary Licenses, and the
+Covered Software is not Incompatible With Secondary Licenses, this
+License permits You to additionally distribute such Covered Software
+under the terms of such Secondary License(s), so that the recipient of
+the Larger Work may, at their option, further distribute the Covered
+Software under the terms of either this License or such Secondary
+License(s).
+
+3.4. Notices
+
+You may not remove or alter the substance of any license notices
+(including copyright notices, patent notices, disclaimers of warranty,
+or limitations of liability) contained within the Source Code Form of
+the Covered Software, except that You may alter any license notices to
+the extent required to remedy known factual inaccuracies.
+
+3.5. Application of Additional Terms
+
+You may choose to offer, and to charge a fee for, warranty, support,
+indemnity or liability obligations to one or more recipients of Covered
+Software. However, You may do so only on Your own behalf, and not on
+behalf of any Contributor. You must make it absolutely clear that any
+such warranty, support, indemnity, or liability obligation is offered by
+You alone, and You hereby agree to indemnify every Contributor for any
+liability incurred by such Contributor as a result of warranty, support,
+indemnity or liability terms You offer. You may include additional
+disclaimers of warranty and limitations of liability specific to any
+jurisdiction.
+
+4. Inability to Comply Due to Statute or Regulation
+---------------------------------------------------
+
+If it is impossible for You to comply with any of the terms of this
+License with respect to some or all of the Covered Software due to
+statute, judicial order, or regulation then You must: (a) comply with
+the terms of this License to the maximum extent possible; and (b)
+describe the limitations and the code they affect. Such description must
+be placed in a text file included with all distributions of the Covered
+Software under this License. Except to the extent prohibited by statute
+or regulation, such description must be sufficiently detailed for a
+recipient of ordinary skill to be able to understand it.
+
+5. Termination
+--------------
+
+5.1. The rights granted under this License will terminate automatically
+if You fail to comply with any of its terms. However, if You become
+compliant, then the rights granted under this License from a particular
+Contributor are reinstated (a) provisionally, unless and until such
+Contributor explicitly and finally terminates Your grants, and (b) on an
+ongoing basis, if such Contributor fails to notify You of the
+non-compliance by some reasonable means prior to 60 days after You have
+come back into compliance. Moreover, Your grants from a particular
+Contributor are reinstated on an ongoing basis if such Contributor
+notifies You of the non-compliance by some reasonable means, this is the
+first time You have received notice of non-compliance with this License
+from such Contributor, and You become compliant prior to 30 days after
+Your receipt of the notice.
+
+5.2. If You initiate litigation against any entity by asserting a patent
+infringement claim (excluding declaratory judgment actions,
+counter-claims, and cross-claims) alleging that a Contributor Version
+directly or indirectly infringes any patent, then the rights granted to
+You by any and all Contributors for the Covered Software under Section
+2.1 of this License shall terminate.
+
+5.3. In the event of termination under Sections 5.1 or 5.2 above, all
+end user license agreements (excluding distributors and resellers) which
+have been validly granted by You or Your distributors under this License
+prior to termination shall survive termination.
+
+************************************************************************
+*                                                                      *
+*  6. Disclaimer of Warranty                                           *
+*  -------------------------                                           *
+*                                                                      *
+*  Covered Software is provided under this License on an "as is"       *
+*  basis, without warranty of any kind, either expressed, implied, or  *
+*  statutory, including, without limitation, warranties that the       *
+*  Covered Software is free of defects, merchantable, fit for a        *
+*  particular purpose or non-infringing. The entire risk as to the     *
+*  quality and performance of the Covered Software is with You.        *
+*  Should any Covered Software prove defective in any respect, You     *
+*  (not any Contributor) assume the cost of any necessary servicing,   *
+*  repair, or correction. This disclaimer of warranty constitutes an   *
+*  essential part of this License. No use of any Covered Software is   *
+*  authorized under this License except under this disclaimer.         *
+*                                                                      *
+************************************************************************
+
+************************************************************************
+*                                                                      *
+*  7. Limitation of Liability                                          *
+*  --------------------------                                          *
+*                                                                      *
+*  Under no circumstances and under no legal theory, whether tort      *
+*  (including negligence), contract, or otherwise, shall any           *
+*  Contributor, or anyone who distributes Covered Software as          *
+*  permitted above, be liable to You for any direct, indirect,         *
+*  special, incidental, or consequential damages of any character      *
+*  including, without limitation, damages for lost profits, loss of    *
+*  goodwill, work stoppage, computer failure or malfunction, or any    *
+*  and all other commercial damages or losses, even if such party      *
+*  shall have been informed of the possibility of such damages. This   *
+*  limitation of liability shall not apply to liability for death or   *
+*  personal injury resulting from such party's negligence to the       *
+*  extent applicable law prohibits such limitation. Some               *
+*  jurisdictions do not allow the exclusion or limitation of           *
+*  incidental or consequential damages, so this exclusion and          *
+*  limitation may not apply to You.                                    *
+*                                                                      *
+************************************************************************
+
+8. Litigation
+-------------
+
+Any litigation relating to this License may be brought only in the
+courts of a jurisdiction where the defendant maintains its principal
+place of business and such litigation shall be governed by laws of that
+jurisdiction, without reference to its conflict-of-law provisions.
+Nothing in this Section shall prevent a party's ability to bring
+cross-claims or counter-claims.
+
+9. Miscellaneous
+----------------
+
+This License represents the complete agreement concerning the subject
+matter hereof. If any provision of this License is held to be
+unenforceable, such provision shall be reformed only to the extent
+necessary to make it enforceable. Any law or regulation which provides
+that the language of a contract shall be construed against the drafter
+shall not be used to construe this License against a Contributor.
+
+10. Versions of the License
+---------------------------
+
+10.1. New Versions
+
+Mozilla Foundation is the license steward. Except as provided in Section
+10.3, no one other than the license steward has the right to modify or
+publish new versions of this License. Each version will be given a
+distinguishing version number.
+
+10.2. Effect of New Versions
+
+You may distribute the Covered Software under the terms of the version
+of the License under which You originally received the Covered Software,
+or under the terms of any subsequent version published by the license
+steward.
+
+10.3. Modified Versions
+
+If you create software not governed by this License, and you want to
+create a new license for such software, you may create and use a
+modified version of this License if you rename the license and remove
+any references to the name of the license steward (except to note that
+such modified license differs from this License).
+
+10.4. Distributing Source Code Form that is Incompatible With Secondary
+Licenses
+
+If You choose to distribute Source Code Form that is Incompatible With
+Secondary Licenses under the terms of this version of the License, the
+notice described in Exhibit B of this License must be attached.
+
+Exhibit A - Source Code Form License Notice
+-------------------------------------------
+
+  This Source Code Form is subject to the terms of the Mozilla Public
+  License, v. 2.0. If a copy of the MPL was not distributed with this
+  file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+If it is not possible or desirable to put the notice in a particular
+file, then You may include the notice in a location (such as a LICENSE
+file in a relevant directory) where a recipient would be likely to look
+for such a notice.
+
+You may add additional accurate notices of copyright ownership.
+
+Exhibit B - "Incompatible With Secondary Licenses" Notice
+---------------------------------------------------------
+
+  This Source Code Form is "Incompatible With Secondary Licenses", as
+  defined by the Mozilla Public License, v. 2.0.
+
+</script>
+    <!-- prettier-ignore -->
+    <script>
+/**
+ * marked v16.4.2 - a markdown parser
+ * Copyright (c) 2018-2025, MarkedJS. (MIT License)
+ * Copyright (c) 2011-2018, Christopher Jeffrey. (MIT License)
+ * https://github.com/markedjs/marked
+ */
+
+/**
+ * DO NOT EDIT THIS FILE
+ * The code in this file is generated from files in ./src/
+ */
+(function(g,f){if(typeof exports=="object"&&typeof module<"u"){module.exports=f()}else if("function"==typeof define && define.amd){define("marked",f)}else {g["marked"]=f()}}(typeof globalThis < "u" ? globalThis : typeof self < "u" ? self : this,function(){var exports={};var __exports=exports;var module={exports};
+"use strict";var G=Object.defineProperty;var Re=Object.getOwnPropertyDescriptor;var Te=Object.getOwnPropertyNames;var Oe=Object.prototype.hasOwnProperty;var we=(l,e)=>{for(var t in e)G(l,t,{get:e[t],enumerable:!0})},ye=(l,e,t,n)=>{if(e&&typeof e=="object"||typeof e=="function")for(let r of Te(e))!Oe.call(l,r)&&r!==t&&G(l,r,{get:()=>e[r],enumerable:!(n=Re(e,r))||n.enumerable});return l};var Pe=l=>ye(G({},"__esModule",{value:!0}),l);var gt={};we(gt,{Hooks:()=>S,Lexer:()=>x,Marked:()=>A,Parser:()=>b,Renderer:()=>P,TextRenderer:()=>$,Tokenizer:()=>y,defaults:()=>T,getDefaults:()=>_,lexer:()=>kt,marked:()=>k,options:()=>at,parse:()=>ht,parseInline:()=>ct,parser:()=>dt,setOptions:()=>lt,use:()=>ut,walkTokens:()=>pt});module.exports=Pe(gt);function _(){return{async:!1,breaks:!1,extensions:null,gfm:!0,hooks:null,pedantic:!1,renderer:null,silent:!1,tokenizer:null,walkTokens:null}}var T=_();function N(l){T=l}var I={exec:()=>null};function d(l,e=""){let t=typeof l=="string"?l:l.source,n={replace:(r,i)=>{let s=typeof i=="string"?i:i.source;return s=s.replace(m.caret,"$1"),t=t.replace(r,s),n},getRegex:()=>new RegExp(t,e)};return n}var Se=(()=>{try{return!!new RegExp("(?<=1)(?<!1)")}catch{return!1}})(),m={codeRemoveIndent:/^(?: {1,4}| {0,3}\t)/gm,outputLinkReplace:/\\([\[\]])/g,indentCodeCompensation:/^(\s+)(?:```)/,beginningSpace:/^\s+/,endingHash:/#$/,startingSpaceChar:/^ /,endingSpaceChar:/ $/,nonSpaceChar:/[^ ]/,newLineCharGlobal:/\n/g,tabCharGlobal:/\t/g,multipleSpaceGlobal:/\s+/g,blankLine:/^[ \t]*$/,doubleBlankLine:/\n[ \t]*\n[ \t]*$/,blockquoteStart:/^ {0,3}>/,blockquoteSetextReplace:/\n {0,3}((?:=+|-+) *)(?=\n|$)/g,blockquoteSetextReplace2:/^ {0,3}>[ \t]?/gm,listReplaceTabs:/^\t+/,listReplaceNesting:/^ {1,4}(?=( {4})*[^ ])/g,listIsTask:/^\[[ xX]\] /,listReplaceTask:/^\[[ xX]\] +/,anyLine:/\n.*\n/,hrefBrackets:/^<(.*)>$/,tableDelimiter:/[:|]/,tableAlignChars:/^\||\| *$/g,tableRowBlankLine:/\n[ \t]*$/,tableAlignRight:/^ *-+: *$/,tableAlignCenter:/^ *:-+: *$/,tableAlignLeft:/^ *:-+ *$/,startATag:/^<a /i,endATag:/^<\/a>/i,startPreScriptTag:/^<(pre|code|kbd|script)(\s|>)/i,endPreScriptTag:/^<\/(pre|code|kbd|script)(\s|>)/i,startAngleBracket:/^</,endAngleBracket:/>$/,pedanticHrefTitle:/^([^'"]*[^\s])\s+(['"])(.*)\2/,unicodeAlphaNumeric:/[\p{L}\p{N}]/u,escapeTest:/[&<>"']/,escapeReplace:/[&<>"']/g,escapeTestNoEncode:/[<>"']|&(?!(#\d{1,7}|#[Xx][a-fA-F0-9]{1,6}|\w+);)/,escapeReplaceNoEncode:/[<>"']|&(?!(#\d{1,7}|#[Xx][a-fA-F0-9]{1,6}|\w+);)/g,unescapeTest:/&(#(?:\d+)|(?:#x[0-9A-Fa-f]+)|(?:\w+));?/ig,caret:/(^|[^\[])\^/g,percentDecode:/%25/g,findPipe:/\|/g,splitPipe:/ \|/,slashPipe:/\\\|/g,carriageReturn:/\r\n|\r/g,spaceLine:/^ +$/gm,notSpaceStart:/^\S*/,endingNewline:/\n$/,listItemRegex:l=>new RegExp(`^( {0,3}${l})((?:[	 ][^\\n]*)?(?:\\n|$))`),nextBulletRegex:l=>new RegExp(`^ {0,${Math.min(3,l-1)}}(?:[*+-]|\\d{1,9}[.)])((?:[ 	][^\\n]*)?(?:\\n|$))`),hrRegex:l=>new RegExp(`^ {0,${Math.min(3,l-1)}}((?:- *){3,}|(?:_ *){3,}|(?:\\* *){3,})(?:\\n+|$)`),fencesBeginRegex:l=>new RegExp(`^ {0,${Math.min(3,l-1)}}(?:\`\`\`|~~~)`),headingBeginRegex:l=>new RegExp(`^ {0,${Math.min(3,l-1)}}#`),htmlBeginRegex:l=>new RegExp(`^ {0,${Math.min(3,l-1)}}<(?:[a-z].*>|!--)`,"i")},$e=/^(?:[ \t]*(?:\n|$))+/,_e=/^((?: {4}| {0,3}\t)[^\n]+(?:\n(?:[ \t]*(?:\n|$))*)?)+/,Le=/^ {0,3}(`{3,}(?=[^`\n]*(?:\n|$))|~{3,})([^\n]*)(?:\n|$)(?:|([\s\S]*?)(?:\n|$))(?: {0,3}\1[~`]* *(?=\n|$)|$)/,C=/^ {0,3}((?:-[\t ]*){3,}|(?:_[ \t]*){3,}|(?:\*[ \t]*){3,})(?:\n+|$)/,Me=/^ {0,3}(#{1,6})(?=\s|$)(.*)(?:\n+|$)/,j=/(?:[*+-]|\d{1,9}[.)])/,oe=/^(?!bull |blockCode|fences|blockquote|heading|html|table)((?:.|\n(?!\s*?\n|bull |blockCode|fences|blockquote|heading|html|table))+?)\n {0,3}(=+|-+) *(?:\n+|$)/,ae=d(oe).replace(/bull/g,j).replace(/blockCode/g,/(?: {4}| {0,3}\t)/).replace(/fences/g,/ {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g,/ {0,3}>/).replace(/heading/g,/ {0,3}#{1,6}/).replace(/html/g,/ {0,3}<[^\n>]+>\n/).replace(/\|table/g,"").getRegex(),ze=d(oe).replace(/bull/g,j).replace(/blockCode/g,/(?: {4}| {0,3}\t)/).replace(/fences/g,/ {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g,/ {0,3}>/).replace(/heading/g,/ {0,3}#{1,6}/).replace(/html/g,/ {0,3}<[^\n>]+>\n/).replace(/table/g,/ {0,3}\|?(?:[:\- ]*\|)+[\:\- ]*\n/).getRegex(),Q=/^([^\n]+(?:\n(?!hr|heading|lheading|blockquote|fences|list|html|table| +\n)[^\n]+)*)/,Ae=/^[^\n]+/,U=/(?!\s*\])(?:\\[\s\S]|[^\[\]\\])+/,Ee=d(/^ {0,3}\[(label)\]: *(?:\n[ \t]*)?([^<\s][^\s]*|<.*?>)(?:(?: +(?:\n[ \t]*)?| *\n[ \t]*)(title))? *(?:\n+|$)/).replace("label",U).replace("title",/(?:"(?:\\"?|[^"\\])*"|'[^'\n]*(?:\n[^'\n]+)*\n?'|\([^()]*\))/).getRegex(),Ie=d(/^( {0,3}bull)([ \t][^\n]+?)?(?:\n|$)/).replace(/bull/g,j).getRegex(),v="address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul",K=/<!--(?:-?>|[\s\S]*?(?:-->|$))/,Ce=d("^ {0,3}(?:<(script|pre|style|textarea)[\\s>][\\s\\S]*?(?:</\\1>[^\\n]*\\n+|$)|comment[^\\n]*(\\n+|$)|<\\?[\\s\\S]*?(?:\\?>\\n*|$)|<![A-Z][\\s\\S]*?(?:>\\n*|$)|<!\\[CDATA\\[[\\s\\S]*?(?:\\]\\]>\\n*|$)|</?(tag)(?: +|\\n|/?>)[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|<(?!script|pre|style|textarea)([a-z][\\w-]*)(?:attribute)*? */?>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|</(?!script|pre|style|textarea)[a-z][\\w-]*\\s*>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$))","i").replace("comment",K).replace("tag",v).replace("attribute",/ +[a-zA-Z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?/).getRegex(),le=d(Q).replace("hr",C).replace("heading"," {0,3}#{1,6}(?:\\s|$)").replace("|lheading","").replace("|table","").replace("blockquote"," {0,3}>").replace("fences"," {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list"," {0,3}(?:[*+-]|1[.)]) ").replace("html","</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag",v).getRegex(),Be=d(/^( {0,3}> ?(paragraph|[^\n]*)(?:\n|$))+/).replace("paragraph",le).getRegex(),W={blockquote:Be,code:_e,def:Ee,fences:Le,heading:Me,hr:C,html:Ce,lheading:ae,list:Ie,newline:$e,paragraph:le,table:I,text:Ae},se=d("^ *([^\\n ].*)\\n {0,3}((?:\\| *)?:?-+:? *(?:\\| *:?-+:? *)*(?:\\| *)?)(?:\\n((?:(?! *\\n|hr|heading|blockquote|code|fences|list|html).*(?:\\n|$))*)\\n*|$)").replace("hr",C).replace("heading"," {0,3}#{1,6}(?:\\s|$)").replace("blockquote"," {0,3}>").replace("code","(?: {4}| {0,3}	)[^\\n]").replace("fences"," {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list"," {0,3}(?:[*+-]|1[.)]) ").replace("html","</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag",v).getRegex(),qe={...W,lheading:ze,table:se,paragraph:d(Q).replace("hr",C).replace("heading"," {0,3}#{1,6}(?:\\s|$)").replace("|lheading","").replace("table",se).replace("blockquote"," {0,3}>").replace("fences"," {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list"," {0,3}(?:[*+-]|1[.)]) ").replace("html","</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag",v).getRegex()},ve={...W,html:d(`^ *(?:comment *(?:\\n|\\s*$)|<(tag)[\\s\\S]+?</\\1> *(?:\\n{2,}|\\s*$)|<tag(?:"[^"]*"|'[^']*'|\\s[^'"/>\\s]*)*?/?> *(?:\\n{2,}|\\s*$))`).replace("comment",K).replace(/tag/g,"(?!(?:a|em|strong|small|s|cite|q|dfn|abbr|data|time|code|var|samp|kbd|sub|sup|i|b|u|mark|ruby|rt|rp|bdi|bdo|span|br|wbr|ins|del|img)\\b)\\w+(?!:|[^\\w\\s@]*@)\\b").getRegex(),def:/^ *\[([^\]]+)\]: *<?([^\s>]+)>?(?: +(["(][^\n]+[")]))? *(?:\n+|$)/,heading:/^(#{1,6})(.*)(?:\n+|$)/,fences:I,lheading:/^(.+?)\n {0,3}(=+|-+) *(?:\n+|$)/,paragraph:d(Q).replace("hr",C).replace("heading",` *#{1,6} *[^
+]`).replace("lheading",ae).replace("|table","").replace("blockquote"," {0,3}>").replace("|fences","").replace("|list","").replace("|html","").replace("|tag","").getRegex()},De=/^\\([!"#$%&'()*+,\-./:;<=>?@\[\]\\^_`{|}~])/,He=/^(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/,ue=/^( {2,}|\\)\n(?!\s*$)/,Ze=/^(`+|[^`])(?:(?= {2,}\n)|[\s\S]*?(?:(?=[\\<!\[`*_]|\b_|$)|[^ ](?= {2,}\n)))/,D=/[\p{P}\p{S}]/u,X=/[\s\p{P}\p{S}]/u,pe=/[^\s\p{P}\p{S}]/u,Ge=d(/^((?![*_])punctSpace)/,"u").replace(/punctSpace/g,X).getRegex(),ce=/(?!~)[\p{P}\p{S}]/u,Ne=/(?!~)[\s\p{P}\p{S}]/u,Fe=/(?:[^\s\p{P}\p{S}]|~)/u,je=d(/link|precode-code|html/,"g").replace("link",/\[(?:[^\[\]`]|(?<a>`+)[^`]+\k<a>(?!`))*?\]\((?:\\[\s\S]|[^\\\(\)]|\((?:\\[\s\S]|[^\\\(\)])*\))*\)/).replace("precode-",Se?"(?<!`)()":"(^^|[^`])").replace("code",/(?<b>`+)[^`]+\k<b>(?!`)/).replace("html",/<(?! )[^<>]*?>/).getRegex(),he=/^(?:\*+(?:((?!\*)punct)|[^\s*]))|^_+(?:((?!_)punct)|([^\s_]))/,Qe=d(he,"u").replace(/punct/g,D).getRegex(),Ue=d(he,"u").replace(/punct/g,ce).getRegex(),de="^[^_*]*?__[^_*]*?\\*[^_*]*?(?=__)|[^*]+(?=[^*])|(?!\\*)punct(\\*+)(?=[\\s]|$)|notPunctSpace(\\*+)(?!\\*)(?=punctSpace|$)|(?!\\*)punctSpace(\\*+)(?=notPunctSpace)|[\\s](\\*+)(?!\\*)(?=punct)|(?!\\*)punct(\\*+)(?!\\*)(?=punct)|notPunctSpace(\\*+)(?=notPunctSpace)",Ke=d(de,"gu").replace(/notPunctSpace/g,pe).replace(/punctSpace/g,X).replace(/punct/g,D).getRegex(),We=d(de,"gu").replace(/notPunctSpace/g,Fe).replace(/punctSpace/g,Ne).replace(/punct/g,ce).getRegex(),Xe=d("^[^_*]*?\\*\\*[^_*]*?_[^_*]*?(?=\\*\\*)|[^_]+(?=[^_])|(?!_)punct(_+)(?=[\\s]|$)|notPunctSpace(_+)(?!_)(?=punctSpace|$)|(?!_)punctSpace(_+)(?=notPunctSpace)|[\\s](_+)(?!_)(?=punct)|(?!_)punct(_+)(?!_)(?=punct)","gu").replace(/notPunctSpace/g,pe).replace(/punctSpace/g,X).replace(/punct/g,D).getRegex(),Je=d(/\\(punct)/,"gu").replace(/punct/g,D).getRegex(),Ve=d(/^<(scheme:[^\s\x00-\x1f<>]*|email)>/).replace("scheme",/[a-zA-Z][a-zA-Z0-9+.-]{1,31}/).replace("email",/[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+(@)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+(?![-_])/).getRegex(),Ye=d(K).replace("(?:-->|$)","-->").getRegex(),et=d("^comment|^</[a-zA-Z][\\w:-]*\\s*>|^<[a-zA-Z][\\w-]*(?:attribute)*?\\s*/?>|^<\\?[\\s\\S]*?\\?>|^<![a-zA-Z]+\\s[\\s\\S]*?>|^<!\\[CDATA\\[[\\s\\S]*?\\]\\]>").replace("comment",Ye).replace("attribute",/\s+[a-zA-Z:_][\w.:-]*(?:\s*=\s*"[^"]*"|\s*=\s*'[^']*'|\s*=\s*[^\s"'=<>`]+)?/).getRegex(),q=/(?:\[(?:\\[\s\S]|[^\[\]\\])*\]|\\[\s\S]|`+[^`]*?`+(?!`)|[^\[\]\\`])*?/,tt=d(/^!?\[(label)\]\(\s*(href)(?:(?:[ \t]*(?:\n[ \t]*)?)(title))?\s*\)/).replace("label",q).replace("href",/<(?:\\.|[^\n<>\\])+>|[^ \t\n\x00-\x1f]*/).replace("title",/"(?:\\"?|[^"\\])*"|'(?:\\'?|[^'\\])*'|\((?:\\\)?|[^)\\])*\)/).getRegex(),ke=d(/^!?\[(label)\]\[(ref)\]/).replace("label",q).replace("ref",U).getRegex(),ge=d(/^!?\[(ref)\](?:\[\])?/).replace("ref",U).getRegex(),nt=d("reflink|nolink(?!\\()","g").replace("reflink",ke).replace("nolink",ge).getRegex(),ie=/[hH][tT][tT][pP][sS]?|[fF][tT][pP]/,J={_backpedal:I,anyPunctuation:Je,autolink:Ve,blockSkip:je,br:ue,code:He,del:I,emStrongLDelim:Qe,emStrongRDelimAst:Ke,emStrongRDelimUnd:Xe,escape:De,link:tt,nolink:ge,punctuation:Ge,reflink:ke,reflinkSearch:nt,tag:et,text:Ze,url:I},rt={...J,link:d(/^!?\[(label)\]\((.*?)\)/).replace("label",q).getRegex(),reflink:d(/^!?\[(label)\]\s*\[([^\]]*)\]/).replace("label",q).getRegex()},F={...J,emStrongRDelimAst:We,emStrongLDelim:Ue,url:d(/^((?:protocol):\/\/|www\.)(?:[a-zA-Z0-9\-]+\.?)+[^\s<]*|^email/).replace("protocol",ie).replace("email",/[A-Za-z0-9._+-]+(@)[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![-_])/).getRegex(),_backpedal:/(?:[^?!.,:;*_'"~()&]+|\([^)]*\)|&(?![a-zA-Z0-9]+;$)|[?!.,:;*_'"~)]+(?!$))+/,del:/^(~~?)(?=[^\s~])((?:\\[\s\S]|[^\\])*?(?:\\[\s\S]|[^\s~\\]))\1(?=[^~]|$)/,text:d(/^([`~]+|[^`~])(?:(?= {2,}\n)|(?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)|[\s\S]*?(?:(?=[\\<!\[`*~_]|\b_|protocol:\/\/|www\.|$)|[^ ](?= {2,}\n)|[^a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-](?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)))/).replace("protocol",ie).getRegex()},st={...F,br:d(ue).replace("{2,}","*").getRegex(),text:d(F.text).replace("\\b_","\\b_| {2,}\\n").replace(/\{2,\}/g,"*").getRegex()},B={normal:W,gfm:qe,pedantic:ve},M={normal:J,gfm:F,breaks:st,pedantic:rt};var it={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"},fe=l=>it[l];function w(l,e){if(e){if(m.escapeTest.test(l))return l.replace(m.escapeReplace,fe)}else if(m.escapeTestNoEncode.test(l))return l.replace(m.escapeReplaceNoEncode,fe);return l}function V(l){try{l=encodeURI(l).replace(m.percentDecode,"%")}catch{return null}return l}function Y(l,e){let t=l.replace(m.findPipe,(i,s,a)=>{let o=!1,p=s;for(;--p>=0&&a[p]==="\\";)o=!o;return o?"|":" |"}),n=t.split(m.splitPipe),r=0;if(n[0].trim()||n.shift(),n.length>0&&!n.at(-1)?.trim()&&n.pop(),e)if(n.length>e)n.splice(e);else for(;n.length<e;)n.push("");for(;r<n.length;r++)n[r]=n[r].trim().replace(m.slashPipe,"|");return n}function z(l,e,t){let n=l.length;if(n===0)return"";let r=0;for(;r<n;){let i=l.charAt(n-r-1);if(i===e&&!t)r++;else if(i!==e&&t)r++;else break}return l.slice(0,n-r)}function me(l,e){if(l.indexOf(e[1])===-1)return-1;let t=0;for(let n=0;n<l.length;n++)if(l[n]==="\\")n++;else if(l[n]===e[0])t++;else if(l[n]===e[1]&&(t--,t<0))return n;return t>0?-2:-1}function xe(l,e,t,n,r){let i=e.href,s=e.title||null,a=l[1].replace(r.other.outputLinkReplace,"$1");n.state.inLink=!0;let o={type:l[0].charAt(0)==="!"?"image":"link",raw:t,href:i,title:s,text:a,tokens:n.inlineTokens(a)};return n.state.inLink=!1,o}function ot(l,e,t){let n=l.match(t.other.indentCodeCompensation);if(n===null)return e;let r=n[1];return e.split(`
+`).map(i=>{let s=i.match(t.other.beginningSpace);if(s===null)return i;let[a]=s;return a.length>=r.length?i.slice(r.length):i}).join(`
+`)}var y=class{options;rules;lexer;constructor(e){this.options=e||T}space(e){let t=this.rules.block.newline.exec(e);if(t&&t[0].length>0)return{type:"space",raw:t[0]}}code(e){let t=this.rules.block.code.exec(e);if(t){let n=t[0].replace(this.rules.other.codeRemoveIndent,"");return{type:"code",raw:t[0],codeBlockStyle:"indented",text:this.options.pedantic?n:z(n,`
+`)}}}fences(e){let t=this.rules.block.fences.exec(e);if(t){let n=t[0],r=ot(n,t[3]||"",this.rules);return{type:"code",raw:n,lang:t[2]?t[2].trim().replace(this.rules.inline.anyPunctuation,"$1"):t[2],text:r}}}heading(e){let t=this.rules.block.heading.exec(e);if(t){let n=t[2].trim();if(this.rules.other.endingHash.test(n)){let r=z(n,"#");(this.options.pedantic||!r||this.rules.other.endingSpaceChar.test(r))&&(n=r.trim())}return{type:"heading",raw:t[0],depth:t[1].length,text:n,tokens:this.lexer.inline(n)}}}hr(e){let t=this.rules.block.hr.exec(e);if(t)return{type:"hr",raw:z(t[0],`
+`)}}blockquote(e){let t=this.rules.block.blockquote.exec(e);if(t){let n=z(t[0],`
+`).split(`
+`),r="",i="",s=[];for(;n.length>0;){let a=!1,o=[],p;for(p=0;p<n.length;p++)if(this.rules.other.blockquoteStart.test(n[p]))o.push(n[p]),a=!0;else if(!a)o.push(n[p]);else break;n=n.slice(p);let u=o.join(`
+`),c=u.replace(this.rules.other.blockquoteSetextReplace,`
+    $1`).replace(this.rules.other.blockquoteSetextReplace2,"");r=r?`${r}
+${u}`:u,i=i?`${i}
+${c}`:c;let g=this.lexer.state.top;if(this.lexer.state.top=!0,this.lexer.blockTokens(c,s,!0),this.lexer.state.top=g,n.length===0)break;let h=s.at(-1);if(h?.type==="code")break;if(h?.type==="blockquote"){let R=h,f=R.raw+`
+`+n.join(`
+`),O=this.blockquote(f);s[s.length-1]=O,r=r.substring(0,r.length-R.raw.length)+O.raw,i=i.substring(0,i.length-R.text.length)+O.text;break}else if(h?.type==="list"){let R=h,f=R.raw+`
+`+n.join(`
+`),O=this.list(f);s[s.length-1]=O,r=r.substring(0,r.length-h.raw.length)+O.raw,i=i.substring(0,i.length-R.raw.length)+O.raw,n=f.substring(s.at(-1).raw.length).split(`
+`);continue}}return{type:"blockquote",raw:r,tokens:s,text:i}}}list(e){let t=this.rules.block.list.exec(e);if(t){let n=t[1].trim(),r=n.length>1,i={type:"list",raw:"",ordered:r,start:r?+n.slice(0,-1):"",loose:!1,items:[]};n=r?`\\d{1,9}\\${n.slice(-1)}`:`\\${n}`,this.options.pedantic&&(n=r?n:"[*+-]");let s=this.rules.other.listItemRegex(n),a=!1;for(;e;){let p=!1,u="",c="";if(!(t=s.exec(e))||this.rules.block.hr.test(e))break;u=t[0],e=e.substring(u.length);let g=t[2].split(`
+`,1)[0].replace(this.rules.other.listReplaceTabs,H=>" ".repeat(3*H.length)),h=e.split(`
+`,1)[0],R=!g.trim(),f=0;if(this.options.pedantic?(f=2,c=g.trimStart()):R?f=t[1].length+1:(f=t[2].search(this.rules.other.nonSpaceChar),f=f>4?1:f,c=g.slice(f),f+=t[1].length),R&&this.rules.other.blankLine.test(h)&&(u+=h+`
+`,e=e.substring(h.length+1),p=!0),!p){let H=this.rules.other.nextBulletRegex(f),te=this.rules.other.hrRegex(f),ne=this.rules.other.fencesBeginRegex(f),re=this.rules.other.headingBeginRegex(f),be=this.rules.other.htmlBeginRegex(f);for(;e;){let Z=e.split(`
+`,1)[0],E;if(h=Z,this.options.pedantic?(h=h.replace(this.rules.other.listReplaceNesting,"  "),E=h):E=h.replace(this.rules.other.tabCharGlobal,"    "),ne.test(h)||re.test(h)||be.test(h)||H.test(h)||te.test(h))break;if(E.search(this.rules.other.nonSpaceChar)>=f||!h.trim())c+=`
+`+E.slice(f);else{if(R||g.replace(this.rules.other.tabCharGlobal,"    ").search(this.rules.other.nonSpaceChar)>=4||ne.test(g)||re.test(g)||te.test(g))break;c+=`
+`+h}!R&&!h.trim()&&(R=!0),u+=Z+`
+`,e=e.substring(Z.length+1),g=E.slice(f)}}i.loose||(a?i.loose=!0:this.rules.other.doubleBlankLine.test(u)&&(a=!0));let O=null,ee;this.options.gfm&&(O=this.rules.other.listIsTask.exec(c),O&&(ee=O[0]!=="[ ] ",c=c.replace(this.rules.other.listReplaceTask,""))),i.items.push({type:"list_item",raw:u,task:!!O,checked:ee,loose:!1,text:c,tokens:[]}),i.raw+=u}let o=i.items.at(-1);if(o)o.raw=o.raw.trimEnd(),o.text=o.text.trimEnd();else return;i.raw=i.raw.trimEnd();for(let p=0;p<i.items.length;p++)if(this.lexer.state.top=!1,i.items[p].tokens=this.lexer.blockTokens(i.items[p].text,[]),!i.loose){let u=i.items[p].tokens.filter(g=>g.type==="space"),c=u.length>0&&u.some(g=>this.rules.other.anyLine.test(g.raw));i.loose=c}if(i.loose)for(let p=0;p<i.items.length;p++)i.items[p].loose=!0;return i}}html(e){let t=this.rules.block.html.exec(e);if(t)return{type:"html",block:!0,raw:t[0],pre:t[1]==="pre"||t[1]==="script"||t[1]==="style",text:t[0]}}def(e){let t=this.rules.block.def.exec(e);if(t){let n=t[1].toLowerCase().replace(this.rules.other.multipleSpaceGlobal," "),r=t[2]?t[2].replace(this.rules.other.hrefBrackets,"$1").replace(this.rules.inline.anyPunctuation,"$1"):"",i=t[3]?t[3].substring(1,t[3].length-1).replace(this.rules.inline.anyPunctuation,"$1"):t[3];return{type:"def",tag:n,raw:t[0],href:r,title:i}}}table(e){let t=this.rules.block.table.exec(e);if(!t||!this.rules.other.tableDelimiter.test(t[2]))return;let n=Y(t[1]),r=t[2].replace(this.rules.other.tableAlignChars,"").split("|"),i=t[3]?.trim()?t[3].replace(this.rules.other.tableRowBlankLine,"").split(`
+`):[],s={type:"table",raw:t[0],header:[],align:[],rows:[]};if(n.length===r.length){for(let a of r)this.rules.other.tableAlignRight.test(a)?s.align.push("right"):this.rules.other.tableAlignCenter.test(a)?s.align.push("center"):this.rules.other.tableAlignLeft.test(a)?s.align.push("left"):s.align.push(null);for(let a=0;a<n.length;a++)s.header.push({text:n[a],tokens:this.lexer.inline(n[a]),header:!0,align:s.align[a]});for(let a of i)s.rows.push(Y(a,s.header.length).map((o,p)=>({text:o,tokens:this.lexer.inline(o),header:!1,align:s.align[p]})));return s}}lheading(e){let t=this.rules.block.lheading.exec(e);if(t)return{type:"heading",raw:t[0],depth:t[2].charAt(0)==="="?1:2,text:t[1],tokens:this.lexer.inline(t[1])}}paragraph(e){let t=this.rules.block.paragraph.exec(e);if(t){let n=t[1].charAt(t[1].length-1)===`
+`?t[1].slice(0,-1):t[1];return{type:"paragraph",raw:t[0],text:n,tokens:this.lexer.inline(n)}}}text(e){let t=this.rules.block.text.exec(e);if(t)return{type:"text",raw:t[0],text:t[0],tokens:this.lexer.inline(t[0])}}escape(e){let t=this.rules.inline.escape.exec(e);if(t)return{type:"escape",raw:t[0],text:t[1]}}tag(e){let t=this.rules.inline.tag.exec(e);if(t)return!this.lexer.state.inLink&&this.rules.other.startATag.test(t[0])?this.lexer.state.inLink=!0:this.lexer.state.inLink&&this.rules.other.endATag.test(t[0])&&(this.lexer.state.inLink=!1),!this.lexer.state.inRawBlock&&this.rules.other.startPreScriptTag.test(t[0])?this.lexer.state.inRawBlock=!0:this.lexer.state.inRawBlock&&this.rules.other.endPreScriptTag.test(t[0])&&(this.lexer.state.inRawBlock=!1),{type:"html",raw:t[0],inLink:this.lexer.state.inLink,inRawBlock:this.lexer.state.inRawBlock,block:!1,text:t[0]}}link(e){let t=this.rules.inline.link.exec(e);if(t){let n=t[2].trim();if(!this.options.pedantic&&this.rules.other.startAngleBracket.test(n)){if(!this.rules.other.endAngleBracket.test(n))return;let s=z(n.slice(0,-1),"\\");if((n.length-s.length)%2===0)return}else{let s=me(t[2],"()");if(s===-2)return;if(s>-1){let o=(t[0].indexOf("!")===0?5:4)+t[1].length+s;t[2]=t[2].substring(0,s),t[0]=t[0].substring(0,o).trim(),t[3]=""}}let r=t[2],i="";if(this.options.pedantic){let s=this.rules.other.pedanticHrefTitle.exec(r);s&&(r=s[1],i=s[3])}else i=t[3]?t[3].slice(1,-1):"";return r=r.trim(),this.rules.other.startAngleBracket.test(r)&&(this.options.pedantic&&!this.rules.other.endAngleBracket.test(n)?r=r.slice(1):r=r.slice(1,-1)),xe(t,{href:r&&r.replace(this.rules.inline.anyPunctuation,"$1"),title:i&&i.replace(this.rules.inline.anyPunctuation,"$1")},t[0],this.lexer,this.rules)}}reflink(e,t){let n;if((n=this.rules.inline.reflink.exec(e))||(n=this.rules.inline.nolink.exec(e))){let r=(n[2]||n[1]).replace(this.rules.other.multipleSpaceGlobal," "),i=t[r.toLowerCase()];if(!i){let s=n[0].charAt(0);return{type:"text",raw:s,text:s}}return xe(n,i,n[0],this.lexer,this.rules)}}emStrong(e,t,n=""){let r=this.rules.inline.emStrongLDelim.exec(e);if(!r||r[3]&&n.match(this.rules.other.unicodeAlphaNumeric))return;if(!(r[1]||r[2]||"")||!n||this.rules.inline.punctuation.exec(n)){let s=[...r[0]].length-1,a,o,p=s,u=0,c=r[0][0]==="*"?this.rules.inline.emStrongRDelimAst:this.rules.inline.emStrongRDelimUnd;for(c.lastIndex=0,t=t.slice(-1*e.length+s);(r=c.exec(t))!=null;){if(a=r[1]||r[2]||r[3]||r[4]||r[5]||r[6],!a)continue;if(o=[...a].length,r[3]||r[4]){p+=o;continue}else if((r[5]||r[6])&&s%3&&!((s+o)%3)){u+=o;continue}if(p-=o,p>0)continue;o=Math.min(o,o+p+u);let g=[...r[0]][0].length,h=e.slice(0,s+r.index+g+o);if(Math.min(s,o)%2){let f=h.slice(1,-1);return{type:"em",raw:h,text:f,tokens:this.lexer.inlineTokens(f)}}let R=h.slice(2,-2);return{type:"strong",raw:h,text:R,tokens:this.lexer.inlineTokens(R)}}}}codespan(e){let t=this.rules.inline.code.exec(e);if(t){let n=t[2].replace(this.rules.other.newLineCharGlobal," "),r=this.rules.other.nonSpaceChar.test(n),i=this.rules.other.startingSpaceChar.test(n)&&this.rules.other.endingSpaceChar.test(n);return r&&i&&(n=n.substring(1,n.length-1)),{type:"codespan",raw:t[0],text:n}}}br(e){let t=this.rules.inline.br.exec(e);if(t)return{type:"br",raw:t[0]}}del(e){let t=this.rules.inline.del.exec(e);if(t)return{type:"del",raw:t[0],text:t[2],tokens:this.lexer.inlineTokens(t[2])}}autolink(e){let t=this.rules.inline.autolink.exec(e);if(t){let n,r;return t[2]==="@"?(n=t[1],r="mailto:"+n):(n=t[1],r=n),{type:"link",raw:t[0],text:n,href:r,tokens:[{type:"text",raw:n,text:n}]}}}url(e){let t;if(t=this.rules.inline.url.exec(e)){let n,r;if(t[2]==="@")n=t[0],r="mailto:"+n;else{let i;do i=t[0],t[0]=this.rules.inline._backpedal.exec(t[0])?.[0]??"";while(i!==t[0]);n=t[0],t[1]==="www."?r="http://"+t[0]:r=t[0]}return{type:"link",raw:t[0],text:n,href:r,tokens:[{type:"text",raw:n,text:n}]}}}inlineText(e){let t=this.rules.inline.text.exec(e);if(t){let n=this.lexer.state.inRawBlock;return{type:"text",raw:t[0],text:t[0],escaped:n}}}};var x=class l{tokens;options;state;tokenizer;inlineQueue;constructor(e){this.tokens=[],this.tokens.links=Object.create(null),this.options=e||T,this.options.tokenizer=this.options.tokenizer||new y,this.tokenizer=this.options.tokenizer,this.tokenizer.options=this.options,this.tokenizer.lexer=this,this.inlineQueue=[],this.state={inLink:!1,inRawBlock:!1,top:!0};let t={other:m,block:B.normal,inline:M.normal};this.options.pedantic?(t.block=B.pedantic,t.inline=M.pedantic):this.options.gfm&&(t.block=B.gfm,this.options.breaks?t.inline=M.breaks:t.inline=M.gfm),this.tokenizer.rules=t}static get rules(){return{block:B,inline:M}}static lex(e,t){return new l(t).lex(e)}static lexInline(e,t){return new l(t).inlineTokens(e)}lex(e){e=e.replace(m.carriageReturn,`
+`),this.blockTokens(e,this.tokens);for(let t=0;t<this.inlineQueue.length;t++){let n=this.inlineQueue[t];this.inlineTokens(n.src,n.tokens)}return this.inlineQueue=[],this.tokens}blockTokens(e,t=[],n=!1){for(this.options.pedantic&&(e=e.replace(m.tabCharGlobal,"    ").replace(m.spaceLine,""));e;){let r;if(this.options.extensions?.block?.some(s=>(r=s.call({lexer:this},e,t))?(e=e.substring(r.raw.length),t.push(r),!0):!1))continue;if(r=this.tokenizer.space(e)){e=e.substring(r.raw.length);let s=t.at(-1);r.raw.length===1&&s!==void 0?s.raw+=`
+`:t.push(r);continue}if(r=this.tokenizer.code(e)){e=e.substring(r.raw.length);let s=t.at(-1);s?.type==="paragraph"||s?.type==="text"?(s.raw+=(s.raw.endsWith(`
+`)?"":`
+`)+r.raw,s.text+=`
+`+r.text,this.inlineQueue.at(-1).src=s.text):t.push(r);continue}if(r=this.tokenizer.fences(e)){e=e.substring(r.raw.length),t.push(r);continue}if(r=this.tokenizer.heading(e)){e=e.substring(r.raw.length),t.push(r);continue}if(r=this.tokenizer.hr(e)){e=e.substring(r.raw.length),t.push(r);continue}if(r=this.tokenizer.blockquote(e)){e=e.substring(r.raw.length),t.push(r);continue}if(r=this.tokenizer.list(e)){e=e.substring(r.raw.length),t.push(r);continue}if(r=this.tokenizer.html(e)){e=e.substring(r.raw.length),t.push(r);continue}if(r=this.tokenizer.def(e)){e=e.substring(r.raw.length);let s=t.at(-1);s?.type==="paragraph"||s?.type==="text"?(s.raw+=(s.raw.endsWith(`
+`)?"":`
+`)+r.raw,s.text+=`
+`+r.raw,this.inlineQueue.at(-1).src=s.text):this.tokens.links[r.tag]||(this.tokens.links[r.tag]={href:r.href,title:r.title},t.push(r));continue}if(r=this.tokenizer.table(e)){e=e.substring(r.raw.length),t.push(r);continue}if(r=this.tokenizer.lheading(e)){e=e.substring(r.raw.length),t.push(r);continue}let i=e;if(this.options.extensions?.startBlock){let s=1/0,a=e.slice(1),o;this.options.extensions.startBlock.forEach(p=>{o=p.call({lexer:this},a),typeof o=="number"&&o>=0&&(s=Math.min(s,o))}),s<1/0&&s>=0&&(i=e.substring(0,s+1))}if(this.state.top&&(r=this.tokenizer.paragraph(i))){let s=t.at(-1);n&&s?.type==="paragraph"?(s.raw+=(s.raw.endsWith(`
+`)?"":`
+`)+r.raw,s.text+=`
+`+r.text,this.inlineQueue.pop(),this.inlineQueue.at(-1).src=s.text):t.push(r),n=i.length!==e.length,e=e.substring(r.raw.length);continue}if(r=this.tokenizer.text(e)){e=e.substring(r.raw.length);let s=t.at(-1);s?.type==="text"?(s.raw+=(s.raw.endsWith(`
+`)?"":`
+`)+r.raw,s.text+=`
+`+r.text,this.inlineQueue.pop(),this.inlineQueue.at(-1).src=s.text):t.push(r);continue}if(e){let s="Infinite loop on byte: "+e.charCodeAt(0);if(this.options.silent){console.error(s);break}else throw new Error(s)}}return this.state.top=!0,t}inline(e,t=[]){return this.inlineQueue.push({src:e,tokens:t}),t}inlineTokens(e,t=[]){let n=e,r=null;if(this.tokens.links){let o=Object.keys(this.tokens.links);if(o.length>0)for(;(r=this.tokenizer.rules.inline.reflinkSearch.exec(n))!=null;)o.includes(r[0].slice(r[0].lastIndexOf("[")+1,-1))&&(n=n.slice(0,r.index)+"["+"a".repeat(r[0].length-2)+"]"+n.slice(this.tokenizer.rules.inline.reflinkSearch.lastIndex))}for(;(r=this.tokenizer.rules.inline.anyPunctuation.exec(n))!=null;)n=n.slice(0,r.index)+"++"+n.slice(this.tokenizer.rules.inline.anyPunctuation.lastIndex);let i;for(;(r=this.tokenizer.rules.inline.blockSkip.exec(n))!=null;)i=r[2]?r[2].length:0,n=n.slice(0,r.index+i)+"["+"a".repeat(r[0].length-i-2)+"]"+n.slice(this.tokenizer.rules.inline.blockSkip.lastIndex);n=this.options.hooks?.emStrongMask?.call({lexer:this},n)??n;let s=!1,a="";for(;e;){s||(a=""),s=!1;let o;if(this.options.extensions?.inline?.some(u=>(o=u.call({lexer:this},e,t))?(e=e.substring(o.raw.length),t.push(o),!0):!1))continue;if(o=this.tokenizer.escape(e)){e=e.substring(o.raw.length),t.push(o);continue}if(o=this.tokenizer.tag(e)){e=e.substring(o.raw.length),t.push(o);continue}if(o=this.tokenizer.link(e)){e=e.substring(o.raw.length),t.push(o);continue}if(o=this.tokenizer.reflink(e,this.tokens.links)){e=e.substring(o.raw.length);let u=t.at(-1);o.type==="text"&&u?.type==="text"?(u.raw+=o.raw,u.text+=o.text):t.push(o);continue}if(o=this.tokenizer.emStrong(e,n,a)){e=e.substring(o.raw.length),t.push(o);continue}if(o=this.tokenizer.codespan(e)){e=e.substring(o.raw.length),t.push(o);continue}if(o=this.tokenizer.br(e)){e=e.substring(o.raw.length),t.push(o);continue}if(o=this.tokenizer.del(e)){e=e.substring(o.raw.length),t.push(o);continue}if(o=this.tokenizer.autolink(e)){e=e.substring(o.raw.length),t.push(o);continue}if(!this.state.inLink&&(o=this.tokenizer.url(e))){e=e.substring(o.raw.length),t.push(o);continue}let p=e;if(this.options.extensions?.startInline){let u=1/0,c=e.slice(1),g;this.options.extensions.startInline.forEach(h=>{g=h.call({lexer:this},c),typeof g=="number"&&g>=0&&(u=Math.min(u,g))}),u<1/0&&u>=0&&(p=e.substring(0,u+1))}if(o=this.tokenizer.inlineText(p)){e=e.substring(o.raw.length),o.raw.slice(-1)!=="_"&&(a=o.raw.slice(-1)),s=!0;let u=t.at(-1);u?.type==="text"?(u.raw+=o.raw,u.text+=o.text):t.push(o);continue}if(e){let u="Infinite loop on byte: "+e.charCodeAt(0);if(this.options.silent){console.error(u);break}else throw new Error(u)}}return t}};var P=class{options;parser;constructor(e){this.options=e||T}space(e){return""}code({text:e,lang:t,escaped:n}){let r=(t||"").match(m.notSpaceStart)?.[0],i=e.replace(m.endingNewline,"")+`
+`;return r?'<pre><code class="language-'+w(r)+'">'+(n?i:w(i,!0))+`</code></pre>
+`:"<pre><code>"+(n?i:w(i,!0))+`</code></pre>
+`}blockquote({tokens:e}){return`<blockquote>
+${this.parser.parse(e)}</blockquote>
+`}html({text:e}){return e}def(e){return""}heading({tokens:e,depth:t}){return`<h${t}>${this.parser.parseInline(e)}</h${t}>
+`}hr(e){return`<hr>
+`}list(e){let t=e.ordered,n=e.start,r="";for(let a=0;a<e.items.length;a++){let o=e.items[a];r+=this.listitem(o)}let i=t?"ol":"ul",s=t&&n!==1?' start="'+n+'"':"";return"<"+i+s+`>
+`+r+"</"+i+`>
+`}listitem(e){let t="";if(e.task){let n=this.checkbox({checked:!!e.checked});e.loose?e.tokens[0]?.type==="paragraph"?(e.tokens[0].text=n+" "+e.tokens[0].text,e.tokens[0].tokens&&e.tokens[0].tokens.length>0&&e.tokens[0].tokens[0].type==="text"&&(e.tokens[0].tokens[0].text=n+" "+w(e.tokens[0].tokens[0].text),e.tokens[0].tokens[0].escaped=!0)):e.tokens.unshift({type:"text",raw:n+" ",text:n+" ",escaped:!0}):t+=n+" "}return t+=this.parser.parse(e.tokens,!!e.loose),`<li>${t}</li>
+`}checkbox({checked:e}){return"<input "+(e?'checked="" ':"")+'disabled="" type="checkbox">'}paragraph({tokens:e}){return`<p>${this.parser.parseInline(e)}</p>
+`}table(e){let t="",n="";for(let i=0;i<e.header.length;i++)n+=this.tablecell(e.header[i]);t+=this.tablerow({text:n});let r="";for(let i=0;i<e.rows.length;i++){let s=e.rows[i];n="";for(let a=0;a<s.length;a++)n+=this.tablecell(s[a]);r+=this.tablerow({text:n})}return r&&(r=`<tbody>${r}</tbody>`),`<table>
+<thead>
+`+t+`</thead>
+`+r+`</table>
+`}tablerow({text:e}){return`<tr>
+${e}</tr>
+`}tablecell(e){let t=this.parser.parseInline(e.tokens),n=e.header?"th":"td";return(e.align?`<${n} align="${e.align}">`:`<${n}>`)+t+`</${n}>
+`}strong({tokens:e}){return`<strong>${this.parser.parseInline(e)}</strong>`}em({tokens:e}){return`<em>${this.parser.parseInline(e)}</em>`}codespan({text:e}){return`<code>${w(e,!0)}</code>`}br(e){return"<br>"}del({tokens:e}){return`<del>${this.parser.parseInline(e)}</del>`}link({href:e,title:t,tokens:n}){let r=this.parser.parseInline(n),i=V(e);if(i===null)return r;e=i;let s='<a href="'+e+'"';return t&&(s+=' title="'+w(t)+'"'),s+=">"+r+"</a>",s}image({href:e,title:t,text:n,tokens:r}){r&&(n=this.parser.parseInline(r,this.parser.textRenderer));let i=V(e);if(i===null)return w(n);e=i;let s=`<img src="${e}" alt="${n}"`;return t&&(s+=` title="${w(t)}"`),s+=">",s}text(e){return"tokens"in e&&e.tokens?this.parser.parseInline(e.tokens):"escaped"in e&&e.escaped?e.text:w(e.text)}};var $=class{strong({text:e}){return e}em({text:e}){return e}codespan({text:e}){return e}del({text:e}){return e}html({text:e}){return e}text({text:e}){return e}link({text:e}){return""+e}image({text:e}){return""+e}br(){return""}};var b=class l{options;renderer;textRenderer;constructor(e){this.options=e||T,this.options.renderer=this.options.renderer||new P,this.renderer=this.options.renderer,this.renderer.options=this.options,this.renderer.parser=this,this.textRenderer=new $}static parse(e,t){return new l(t).parse(e)}static parseInline(e,t){return new l(t).parseInline(e)}parse(e,t=!0){let n="";for(let r=0;r<e.length;r++){let i=e[r];if(this.options.extensions?.renderers?.[i.type]){let a=i,o=this.options.extensions.renderers[a.type].call({parser:this},a);if(o!==!1||!["space","hr","heading","code","table","blockquote","list","html","def","paragraph","text"].includes(a.type)){n+=o||"";continue}}let s=i;switch(s.type){case"space":{n+=this.renderer.space(s);continue}case"hr":{n+=this.renderer.hr(s);continue}case"heading":{n+=this.renderer.heading(s);continue}case"code":{n+=this.renderer.code(s);continue}case"table":{n+=this.renderer.table(s);continue}case"blockquote":{n+=this.renderer.blockquote(s);continue}case"list":{n+=this.renderer.list(s);continue}case"html":{n+=this.renderer.html(s);continue}case"def":{n+=this.renderer.def(s);continue}case"paragraph":{n+=this.renderer.paragraph(s);continue}case"text":{let a=s,o=this.renderer.text(a);for(;r+1<e.length&&e[r+1].type==="text";)a=e[++r],o+=`
+`+this.renderer.text(a);t?n+=this.renderer.paragraph({type:"paragraph",raw:o,text:o,tokens:[{type:"text",raw:o,text:o,escaped:!0}]}):n+=o;continue}default:{let a='Token with "'+s.type+'" type was not found.';if(this.options.silent)return console.error(a),"";throw new Error(a)}}}return n}parseInline(e,t=this.renderer){let n="";for(let r=0;r<e.length;r++){let i=e[r];if(this.options.extensions?.renderers?.[i.type]){let a=this.options.extensions.renderers[i.type].call({parser:this},i);if(a!==!1||!["escape","html","link","image","strong","em","codespan","br","del","text"].includes(i.type)){n+=a||"";continue}}let s=i;switch(s.type){case"escape":{n+=t.text(s);break}case"html":{n+=t.html(s);break}case"link":{n+=t.link(s);break}case"image":{n+=t.image(s);break}case"strong":{n+=t.strong(s);break}case"em":{n+=t.em(s);break}case"codespan":{n+=t.codespan(s);break}case"br":{n+=t.br(s);break}case"del":{n+=t.del(s);break}case"text":{n+=t.text(s);break}default:{let a='Token with "'+s.type+'" type was not found.';if(this.options.silent)return console.error(a),"";throw new Error(a)}}}return n}};var S=class{options;block;constructor(e){this.options=e||T}static passThroughHooks=new Set(["preprocess","postprocess","processAllTokens","emStrongMask"]);static passThroughHooksRespectAsync=new Set(["preprocess","postprocess","processAllTokens"]);preprocess(e){return e}postprocess(e){return e}processAllTokens(e){return e}emStrongMask(e){return e}provideLexer(){return this.block?x.lex:x.lexInline}provideParser(){return this.block?b.parse:b.parseInline}};var A=class{defaults=_();options=this.setOptions;parse=this.parseMarkdown(!0);parseInline=this.parseMarkdown(!1);Parser=b;Renderer=P;TextRenderer=$;Lexer=x;Tokenizer=y;Hooks=S;constructor(...e){this.use(...e)}walkTokens(e,t){let n=[];for(let r of e)switch(n=n.concat(t.call(this,r)),r.type){case"table":{let i=r;for(let s of i.header)n=n.concat(this.walkTokens(s.tokens,t));for(let s of i.rows)for(let a of s)n=n.concat(this.walkTokens(a.tokens,t));break}case"list":{let i=r;n=n.concat(this.walkTokens(i.items,t));break}default:{let i=r;this.defaults.extensions?.childTokens?.[i.type]?this.defaults.extensions.childTokens[i.type].forEach(s=>{let a=i[s].flat(1/0);n=n.concat(this.walkTokens(a,t))}):i.tokens&&(n=n.concat(this.walkTokens(i.tokens,t)))}}return n}use(...e){let t=this.defaults.extensions||{renderers:{},childTokens:{}};return e.forEach(n=>{let r={...n};if(r.async=this.defaults.async||r.async||!1,n.extensions&&(n.extensions.forEach(i=>{if(!i.name)throw new Error("extension name required");if("renderer"in i){let s=t.renderers[i.name];s?t.renderers[i.name]=function(...a){let o=i.renderer.apply(this,a);return o===!1&&(o=s.apply(this,a)),o}:t.renderers[i.name]=i.renderer}if("tokenizer"in i){if(!i.level||i.level!=="block"&&i.level!=="inline")throw new Error("extension level must be 'block' or 'inline'");let s=t[i.level];s?s.unshift(i.tokenizer):t[i.level]=[i.tokenizer],i.start&&(i.level==="block"?t.startBlock?t.startBlock.push(i.start):t.startBlock=[i.start]:i.level==="inline"&&(t.startInline?t.startInline.push(i.start):t.startInline=[i.start]))}"childTokens"in i&&i.childTokens&&(t.childTokens[i.name]=i.childTokens)}),r.extensions=t),n.renderer){let i=this.defaults.renderer||new P(this.defaults);for(let s in n.renderer){if(!(s in i))throw new Error(`renderer '${s}' does not exist`);if(["options","parser"].includes(s))continue;let a=s,o=n.renderer[a],p=i[a];i[a]=(...u)=>{let c=o.apply(i,u);return c===!1&&(c=p.apply(i,u)),c||""}}r.renderer=i}if(n.tokenizer){let i=this.defaults.tokenizer||new y(this.defaults);for(let s in n.tokenizer){if(!(s in i))throw new Error(`tokenizer '${s}' does not exist`);if(["options","rules","lexer"].includes(s))continue;let a=s,o=n.tokenizer[a],p=i[a];i[a]=(...u)=>{let c=o.apply(i,u);return c===!1&&(c=p.apply(i,u)),c}}r.tokenizer=i}if(n.hooks){let i=this.defaults.hooks||new S;for(let s in n.hooks){if(!(s in i))throw new Error(`hook '${s}' does not exist`);if(["options","block"].includes(s))continue;let a=s,o=n.hooks[a],p=i[a];S.passThroughHooks.has(s)?i[a]=u=>{if(this.defaults.async&&S.passThroughHooksRespectAsync.has(s))return(async()=>{let g=await o.call(i,u);return p.call(i,g)})();let c=o.call(i,u);return p.call(i,c)}:i[a]=(...u)=>{if(this.defaults.async)return(async()=>{let g=await o.apply(i,u);return g===!1&&(g=await p.apply(i,u)),g})();let c=o.apply(i,u);return c===!1&&(c=p.apply(i,u)),c}}r.hooks=i}if(n.walkTokens){let i=this.defaults.walkTokens,s=n.walkTokens;r.walkTokens=function(a){let o=[];return o.push(s.call(this,a)),i&&(o=o.concat(i.call(this,a))),o}}this.defaults={...this.defaults,...r}}),this}setOptions(e){return this.defaults={...this.defaults,...e},this}lexer(e,t){return x.lex(e,t??this.defaults)}parser(e,t){return b.parse(e,t??this.defaults)}parseMarkdown(e){return(n,r)=>{let i={...r},s={...this.defaults,...i},a=this.onError(!!s.silent,!!s.async);if(this.defaults.async===!0&&i.async===!1)return a(new Error("marked(): The async option was set to true by an extension. Remove async: false from the parse options object to return a Promise."));if(typeof n>"u"||n===null)return a(new Error("marked(): input parameter is undefined or null"));if(typeof n!="string")return a(new Error("marked(): input parameter is of type "+Object.prototype.toString.call(n)+", string expected"));if(s.hooks&&(s.hooks.options=s,s.hooks.block=e),s.async)return(async()=>{let o=s.hooks?await s.hooks.preprocess(n):n,u=await(s.hooks?await s.hooks.provideLexer():e?x.lex:x.lexInline)(o,s),c=s.hooks?await s.hooks.processAllTokens(u):u;s.walkTokens&&await Promise.all(this.walkTokens(c,s.walkTokens));let h=await(s.hooks?await s.hooks.provideParser():e?b.parse:b.parseInline)(c,s);return s.hooks?await s.hooks.postprocess(h):h})().catch(a);try{s.hooks&&(n=s.hooks.preprocess(n));let p=(s.hooks?s.hooks.provideLexer():e?x.lex:x.lexInline)(n,s);s.hooks&&(p=s.hooks.processAllTokens(p)),s.walkTokens&&this.walkTokens(p,s.walkTokens);let c=(s.hooks?s.hooks.provideParser():e?b.parse:b.parseInline)(p,s);return s.hooks&&(c=s.hooks.postprocess(c)),c}catch(o){return a(o)}}}onError(e,t){return n=>{if(n.message+=`
+Please report this to https://github.com/markedjs/marked.`,e){let r="<p>An error occurred:</p><pre>"+w(n.message+"",!0)+"</pre>";return t?Promise.resolve(r):r}if(t)return Promise.reject(n);throw n}}};var L=new A;function k(l,e){return L.parse(l,e)}k.options=k.setOptions=function(l){return L.setOptions(l),k.defaults=L.defaults,N(k.defaults),k};k.getDefaults=_;k.defaults=T;k.use=function(...l){return L.use(...l),k.defaults=L.defaults,N(k.defaults),k};k.walkTokens=function(l,e){return L.walkTokens(l,e)};k.parseInline=L.parseInline;k.Parser=b;k.parser=b.parse;k.Renderer=P;k.TextRenderer=$;k.Lexer=x;k.lexer=x.lex;k.Tokenizer=y;k.Hooks=S;k.parse=k;var at=k.options,lt=k.setOptions,ut=k.use,pt=k.walkTokens,ct=k.parseInline,ht=k,dt=b.parse,kt=x.lex;
+
+if(__exports != exports)module.exports = exports;return module.exports}));
+
+
+</script>
+    <!-- prettier-ignore -->
+    <script>
+/*! @license DOMPurify 3.4.17 | (c) Cure53 and other contributors | Released under the Apache license 2.0 and Mozilla Public License 2.0 | github.com/cure53/DOMPurify/blob/3.4.17/LICENSE */
+(function(e,t){typeof exports==`object`&&typeof module<`u`?module.exports=t():typeof define==`function`&&define.amd?define([],t):(e=typeof globalThis<`u`?globalThis:e||self,e.DOMPurify=t())})(this,function(){"use strict";function e(e,t){this.v=e,this.k=t}function t(e,t){(t==null||t>e.length)&&(t=e.length);for(var n=0,r=Array(t);n<t;n++)r[n]=e[n];return r}function n(e){if(Array.isArray(e))return e}function r(e,t){var n=e==null?null:typeof Symbol<`u`&&e[Symbol.iterator]||e[`@@iterator`];if(n!=null){var r,i,a,o,s=[],c=!0,l=!1;try{if(a=(n=n.call(e)).next,t===0){if(Object(n)!==n)return;c=!1}else for(;!(c=(r=a.call(n)).done)&&(s.push(r.value),s.length!==t);c=!0);}catch(e){l=!0,i=e}finally{try{if(!c&&n.return!=null&&(o=n.return(),Object(o)!==o))return}finally{if(l)throw i}}return s}}function i(){throw TypeError(`Invalid attempt to destructure non-iterable instance.
+In order to be iterable, non-array objects must have a [Symbol.iterator]() method.`)}
+/*! regenerator-runtime -- Copyright (c) 2014-present, Facebook, Inc. -- license (MIT): https://github.com/babel/babel/blob/main/packages/babel-helpers/LICENSE */
+function a(e,t){return n(e)||r(e,t)||o(e,t)||i()}function o(e,n){if(e){if(typeof e==`string`)return t(e,n);var r={}.toString.call(e).slice(8,-1);return r===`Object`&&e.constructor&&(r=e.constructor.name),r===`Map`||r===`Set`?Array.from(e):r===`Arguments`||/^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(r)?t(e,n):void 0}}function s(t){var n,r;function i(n,r){try{var o=t[n](r),s=o.value,c=s instanceof e;Promise.resolve(c?s.v:s).then(function(e){if(c){var r=n===`return`&&s.k?n:`next`;if(!s.k||e.done)return i(r,e);e=t[r](e).value}a(!!o.done,e)},function(e){i(`throw`,e)})}catch(e){a(2,e)}}function a(e,t){e===2?n.reject(t):n.resolve({value:t,done:e}),(n=n.next)?i(n.key,n.arg):r=null}this._invoke=function(e,t){return new Promise(function(a,o){var s={key:e,arg:t,resolve:a,reject:o,next:null};r?r=r.next=s:(n=r=s,i(e,t))})},typeof t.return!=`function`&&(this.return=void 0)}s.prototype[typeof Symbol==`function`&&Symbol.asyncIterator||`@@asyncIterator`]=function(){return this},s.prototype.next=function(e){return this._invoke(`next`,e)},s.prototype.throw=function(e){return this._invoke(`throw`,e)},s.prototype.return=function(e){return this._invoke(`return`,e)};let c=Object.entries,l=Object.setPrototypeOf,u=Object.isFrozen,d=Object.getPrototypeOf,f=Object.getOwnPropertyDescriptor,p=Object.freeze,m=Object.seal,h=Object.create,ee=typeof Reflect<`u`&&Reflect,g=ee.apply,te=ee.construct;p||(p=function(e){return e}),m||(m=function(e){return e}),g||(g=function(e,t){var n=[...arguments].slice(2);return e.apply(t,n)}),te||(te=function(e){return new e(...[...arguments].slice(1))});let _=E(Array.prototype.forEach);Array.prototype.indexOf;let ne=E(Array.prototype.lastIndexOf),re=E(Array.prototype.pop),ie=E(Array.prototype.push),ae=E(Array.prototype.slice),oe=E(Array.prototype.splice),v=Array.isArray,se=D(Set),ce=E(Set.prototype.add),le=E(Set.prototype.has),y=E(String.prototype.toLowerCase),ue=E(String.prototype.toString),de=E(String.prototype.match),fe=E(String.prototype.replace),pe=E(String.prototype.indexOf),me=E(String.prototype.trim),he=E(Number.prototype.toString),b=E(Boolean.prototype.toString),x=typeof BigInt>`u`?null:E(BigInt.prototype.toString),ge=typeof Symbol>`u`?null:E(Symbol.prototype.toString),S=E(Object.prototype.hasOwnProperty),C=E(Object.prototype.toString),w=E(RegExp.prototype.test),T=D(TypeError);function E(e){return function(t){t instanceof RegExp&&(t.lastIndex=0);var n=[...arguments].slice(1);return g(e,t,n)}}function D(e){return function(){return te(e,[...arguments])}}function O(e,t){let n=arguments.length>2&&arguments[2]!==void 0?arguments[2]:y;if(l&&l(e,null),!v(t))return e;let r=t.length;for(;r--;){let i=t[r];if(typeof i==`string`){let e=n(i);e!==i&&(u(t)||(t[r]=e),i=e)}e[i]=!0}return e}function _e(e){for(let t=0;t<e.length;t++)S(e,t)||(e[t]=null);return e}function k(e){let t=h(null);for(let r of c(e)){var n=a(r,2);let i=n[0],o=n[1];S(e,i)&&(t[i]=v(o)?_e(o):o&&typeof o==`object`&&o.constructor===Object?k(o):o)}return t}function ve(e){switch(typeof e){case`string`:return e;case`number`:return he(e);case`boolean`:return b(e);case`bigint`:return x?x(e):`0`;case`symbol`:return ge?ge(e):`Symbol()`;case`undefined`:return C(e);case`function`:case`object`:{if(e===null)return C(e);let t=e,n=A(t,`toString`);if(typeof n==`function`){let e=n(t);return typeof e==`string`?e:C(e)}return C(e)}default:return C(e)}}function A(e,t){for(;e!==null;){let n=f(e,t);if(n){if(n.get)return E(n.get);if(typeof n.value==`function`)return E(n.value)}e=d(e)}function n(){return null}return n}function ye(e,t){for(;e!==null;){let n=f(e,t);if(n)return n.get?E(n.get):null;e=d(e)}return null}function be(e){try{return w(e,``),!0}catch(e){return!1}}let xe=p(/* @__PURE__ */ `a.abbr.acronym.address.area.article.aside.audio.b.bdi.bdo.big.blink.blockquote.body.br.button.canvas.caption.center.cite.code.col.colgroup.content.data.datalist.dd.decorator.del.details.dfn.dialog.dir.div.dl.dt.element.em.fieldset.figcaption.figure.font.footer.form.h1.h2.h3.h4.h5.h6.head.header.hgroup.hr.html.i.img.input.ins.kbd.label.legend.li.main.map.mark.marquee.menu.menuitem.meter.nav.nobr.ol.optgroup.option.output.p.picture.pre.progress.q.rp.rt.ruby.s.samp.search.section.select.shadow.slot.small.source.spacer.span.strike.strong.style.sub.summary.sup.table.tbody.td.template.textarea.tfoot.th.thead.time.tr.track.tt.u.ul.var.video.wbr`.split(`.`)),Se=p(/* @__PURE__ */ `svg.a.altglyph.altglyphdef.altglyphitem.animatecolor.animatemotion.animatetransform.circle.clippath.defs.desc.ellipse.enterkeyhint.exportparts.filter.font.g.glyph.glyphref.hkern.image.inputmode.line.lineargradient.marker.mask.metadata.mpath.part.path.pattern.polygon.polyline.radialgradient.rect.stop.style.switch.symbol.text.textpath.title.tref.tspan.view.vkern`.split(`.`)),Ce=p([`feBlend`,`feColorMatrix`,`feComponentTransfer`,`feComposite`,`feConvolveMatrix`,`feDiffuseLighting`,`feDisplacementMap`,`feDistantLight`,`feDropShadow`,`feFlood`,`feFuncA`,`feFuncB`,`feFuncG`,`feFuncR`,`feGaussianBlur`,`feImage`,`feMerge`,`feMergeNode`,`feMorphology`,`feOffset`,`fePointLight`,`feSpecularLighting`,`feSpotLight`,`feTile`,`feTurbulence`]),we=p([`animate`,`color-profile`,`cursor`,`discard`,`font-face`,`font-face-format`,`font-face-name`,`font-face-src`,`font-face-uri`,`foreignobject`,`hatch`,`hatchpath`,`mesh`,`meshgradient`,`meshpatch`,`meshrow`,`missing-glyph`,`script`,`set`,`solidcolor`,`unknown`,`use`]),Te=p(/* @__PURE__ */ `math.menclose.merror.mfenced.mfrac.mglyph.mi.mlabeledtr.mmultiscripts.mn.mo.mover.mpadded.mphantom.mroot.mrow.ms.mspace.msqrt.mstyle.msub.msup.msubsup.mtable.mtd.mtext.mtr.munder.munderover.mprescripts`.split(`.`)),Ee=p([`maction`,`maligngroup`,`malignmark`,`mlongdiv`,`mscarries`,`mscarry`,`msgroup`,`mstack`,`msline`,`msrow`,`semantics`,`annotation`,`annotation-xml`,`mprescripts`,`none`]),De=p([`#text`]),Oe=p(/* @__PURE__ */ `accept.action.align.alt.autocapitalize.autocomplete.autopictureinpicture.autoplay.background.bgcolor.border.capture.cellpadding.cellspacing.checked.cite.class.clear.color.cols.colspan.command.commandfor.controls.controlslist.coords.crossorigin.datetime.decoding.default.dir.disabled.disablepictureinpicture.disableremoteplayback.download.draggable.enctype.enterkeyhint.exportparts.face.for.headers.height.hidden.high.href.hreflang.id.inert.inputmode.integrity.ismap.kind.label.lang.list.loading.loop.low.max.maxlength.media.method.min.minlength.multiple.muted.name.nonce.noshade.novalidate.nowrap.open.optimum.part.pattern.placeholder.playsinline.popover.popovertarget.popovertargetaction.poster.preload.pubdate.radiogroup.readonly.rel.required.rev.reversed.role.rows.rowspan.spellcheck.scope.selected.shape.size.sizes.slot.span.srclang.start.src.srcset.step.style.summary.tabindex.title.translate.type.usemap.valign.value.width.wrap.xmlns`.split(`.`)),ke=p(/* @__PURE__ */ `accent-height.accumulate.additive.alignment-baseline.amplitude.ascent.attributename.attributetype.azimuth.basefrequency.baseline-shift.begin.bias.by.class.clip.clippathunits.clip-path.clip-rule.color.color-interpolation.color-interpolation-filters.color-profile.color-rendering.cx.cy.d.dx.dy.diffuseconstant.direction.display.divisor.dominant-baseline.dur.edgemode.elevation.end.exponent.fill.fill-opacity.fill-rule.filter.filterunits.flood-color.flood-opacity.font-family.font-size.font-size-adjust.font-stretch.font-style.font-variant.font-weight.fx.fy.g1.g2.glyph-name.glyphref.gradientunits.gradienttransform.height.href.id.image-rendering.in.in2.intercept.k.k1.k2.k3.k4.kerning.keypoints.keysplines.keytimes.lang.lengthadjust.letter-spacing.kernelmatrix.kernelunitlength.lighting-color.local.marker-end.marker-mid.marker-start.markerheight.markerunits.markerwidth.maskcontentunits.maskunits.max.mask.mask-type.media.method.mode.min.name.numoctaves.offset.operator.opacity.order.orient.orientation.origin.overflow.paint-order.path.pathlength.patterncontentunits.patterntransform.patternunits.pointer-events.points.preservealpha.preserveaspectratio.primitiveunits.r.rx.ry.radius.refx.refy.repeatcount.repeatdur.restart.result.rotate.scale.seed.shape-rendering.slope.specularconstant.specularexponent.spreadmethod.startoffset.stddeviation.stitchtiles.stop-color.stop-opacity.stroke-dasharray.stroke-dashoffset.stroke-linecap.stroke-linejoin.stroke-miterlimit.stroke-opacity.stroke.stroke-width.style.surfacescale.systemlanguage.tabindex.tablevalues.targetx.targety.transform.transform-origin.text-anchor.text-decoration.text-orientation.text-rendering.textlength.type.u1.u2.unicode.values.vector-effect.viewbox.visibility.version.vert-adv-y.vert-origin-x.vert-origin-y.width.word-spacing.wrap.writing-mode.xchannelselector.ychannelselector.x.x1.x2.xmlns.y.y1.y2.z.zoomandpan`.split(`.`)),Ae=p(/* @__PURE__ */ `accent.accentunder.align.bevelled.close.columnalign.columnlines.columnspacing.columnspan.denomalign.depth.dir.display.displaystyle.encoding.fence.frame.height.href.id.largeop.length.linethickness.lquote.lspace.mathbackground.mathcolor.mathsize.mathvariant.maxsize.minsize.movablelimits.notation.numalign.open.rowalign.rowlines.rowspacing.rowspan.rspace.rquote.scriptlevel.scriptminsize.scriptsizemultiplier.selection.separator.separators.stretchy.subscriptshift.supscriptshift.symmetric.voffset.width.xmlns`.split(`.`)),je=p([`xlink:href`,`xml:id`,`xlink:title`,`xml:space`,`xmlns:xlink`]),Me=m(/{{[\w\W]*|^[\w\W]*}}/g),Ne=m(/<%[\w\W]*|^[\w\W]*%>/g),Pe=m(/\${[\w\W]*/g),Fe=m(/^data-[\-\w.\u00B7-\uFFFF]+$/),Ie=m(/^aria-[\-\w]+$/),Le=m(/^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|matrix):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i),Re=m(/^(?:\w+script|data):/i),ze=m(/[\u0000-\u0020\u00A0\u1680\u180E\u2000-\u2029\u205F\u3000]/g),Be=m(/^html$/i),Ve=m(/^[a-z][.\w]*(-[.\w]+)+$/i),He=m(/<[/\w!]/g),Ue=m(/<[/\w]/g),We=m(/<\/no(script|embed|frames)/i),Ge=m(/\/>/i),j={element:1,attribute:2,text:3,cdataSection:4,entityReference:5,entityNode:6,processingInstruction:7,comment:8,document:9,documentType:10,documentFragment:11,notation:12},Ke=p(O({},[`style`,`script`,`xmp`,`iframe`,`noembed`,`noframes`,`plaintext`,`noscript`])),qe=function(){return typeof window>`u`?null:window},Je=function(e,t){if(typeof e!=`object`||typeof e.createPolicy!=`function`)return null;let n=null,r=`data-tt-policy-suffix`;t&&t.hasAttribute(r)&&(n=t.getAttribute(r));let i=`dompurify`+(n?`#`+n:``);try{return e.createPolicy(i,{createHTML(e){return e},createScriptURL(e){return e}})}catch(e){return console.warn(`TrustedTypes policy `+i+` could not be created.`),null}},Ye=function(){return{afterSanitizeAttributes:[],afterSanitizeElements:[],afterSanitizeShadowDOM:[],beforeSanitizeAttributes:[],beforeSanitizeElements:[],beforeSanitizeShadowDOM:[],uponSanitizeAttribute:[],uponSanitizeElement:[],uponSanitizeShadowNode:[]}},M=function(e,t,n,r){return S(e,t)&&v(e[t])?O(r.base?k(r.base):{},e[t],r.transform):n},Xe=function(e,t,n){let r=S(e,t)?e[t]:void 0;return r&&typeof r==`object`?k(r):n()};function Ze(){let e=arguments.length>0&&arguments[0]!==void 0?arguments[0]:qe(),t=e=>Ze(e);if(t.version=`3.4.17`,t.removed=[],!e||!e.document||e.document.nodeType!==j.document||!e.Element)return t.isSupported=!1,t;let n=e.document,r=n,i=r.currentScript;e.DocumentFragment;let a=e.HTMLTemplateElement,o=e.Node,s=e.Element,l=e.NodeFilter;e.NamedNodeMap===void 0&&(e.NamedNodeMap||e.MozNamedAttrMap),e.HTMLFormElement;let u=e.DOMParser,d=e.trustedTypes,f=s.prototype,ee=A(f,`cloneNode`),g=A(f,`remove`),te=A(f,`removeAttributeNode`),he=A(f,`nextSibling`),b=A(f,`childNodes`),x=A(f,`parentNode`),ge=A(f,`shadowRoot`),C=A(f,`attributes`),E=o&&o.prototype?A(o.prototype,`nodeType`):null,D=o&&o.prototype?A(o.prototype,`nodeName`):null,_e=o&&o.prototype?A(o.prototype,`ownerDocument`):null,N=function(e){return E?E(e):e.nodeType},Qe=function(e){return D?D(e):e.nodeName},$e=ye(f,`namespaceURI`),et=function(e){return $e?$e(e):e.namespaceURI};if(typeof a==`function`){let e=n.createElement(`template`);e.content&&e.content.ownerDocument&&(n=e.content.ownerDocument)}let P,F=``,tt,nt=!1,rt=0,it=function(){if(rt>0)throw T(`A configured TRUSTED_TYPES_POLICY callback (createHTML or createScriptURL) must not call DOMPurify.sanitize, as that causes infinite recursion. Do not pass a policy whose callbacks wrap DOMPurify as TRUSTED_TYPES_POLICY; see the "DOMPurify and Trusted Types" section of the README.`)},at=function(e){it(),rt++;try{return P.createHTML(e)}finally{rt--}},ot=function(e){it(),rt++;try{return P.createScriptURL(e)}finally{rt--}},st=function(){return nt||(tt=Je(d,i),nt=!0),tt},ct=n,lt=ct.implementation,ut=ct.createNodeIterator,dt=ct.createDocumentFragment,ft=ct.getElementsByTagName,pt=r.importNode,I=Ye();t.isSupported=typeof c==`function`&&typeof x==`function`&&lt&&lt.createHTMLDocument!==void 0;let mt=Me,ht=Ne,gt=Pe,_t=Fe,vt=Ie,yt=Re,bt=ze,xt=Ve,St=Le,L=null,Ct=O({},[...xe,...Se,...Ce,...Te,...De]),R=null,wt=O({},[...Oe,...ke,...Ae,...je]),z=Object.seal(h(null,{tagNameCheck:{writable:!0,configurable:!1,enumerable:!0,value:null},attributeNameCheck:{writable:!0,configurable:!1,enumerable:!0,value:null},allowCustomizedBuiltInElements:{writable:!0,configurable:!1,enumerable:!0,value:!1}})),Tt=null,Et=null,B=Object.seal(h(null,{tagCheck:{writable:!0,configurable:!1,enumerable:!0,value:null},attributeCheck:{writable:!0,configurable:!1,enumerable:!0,value:null}})),Dt=!0,Ot=!0,kt=!1,At=!0,V=!1,H=!0,U=!1,jt=!1,Mt=null,Nt=null,Pt=!1,W=!1,Ft=!1,It=!1,Lt=!0,Rt=!1,zt=`user-content-`,Bt=!0,Vt=!1,G=null,K={},q=null,Ht=O({},/* @__PURE__ */ `annotation-xml.audio.colgroup.desc.foreignobject.head.iframe.math.mi.mn.mo.ms.mtext.noembed.noframes.noscript.plaintext.script.selectedcontent.style.svg.template.thead.title.video.xmp`.split(`.`)),Ut=null,Wt=O({},[`audio`,`video`,`img`,`source`,`image`,`track`]),Gt=null,Kt=O({},[`alt`,`class`,`for`,`id`,`label`,`name`,`pattern`,`placeholder`,`role`,`summary`,`title`,`value`,`style`,`xmlns`]),qt=`http://www.w3.org/1998/Math/MathML`,Jt=`http://www.w3.org/2000/svg`,J=`http://www.w3.org/1999/xhtml`,Yt=J,Xt=!1,Zt=null,Qt=O({},[qt,Jt,J],ue),$t=p([`mi`,`mo`,`mn`,`ms`,`mtext`]),en=O({},$t),tn=p([`annotation-xml`]),nn=O({},tn),rn=O({},[`title`,`style`,`font`,`a`,`script`]),an=null,on=[`application/xhtml+xml`,`text/html`],Y=null,sn=null,cn=n.createElement(`form`),ln=function(e){return e instanceof RegExp||e instanceof Function},un=function(){let e=arguments.length>0&&arguments[0]!==void 0?arguments[0]:{};if(sn&&sn===e)return;(!e||typeof e!=`object`)&&(e={}),e=k(e),an=on.indexOf(e.PARSER_MEDIA_TYPE)===-1?`text/html`:e.PARSER_MEDIA_TYPE,Y=an===`application/xhtml+xml`?ue:y,L=M(e,`ALLOWED_TAGS`,Ct,{transform:Y}),R=M(e,`ALLOWED_ATTR`,wt,{transform:Y}),Zt=M(e,`ALLOWED_NAMESPACES`,Qt,{transform:ue}),Gt=M(e,`ADD_URI_SAFE_ATTR`,Kt,{transform:Y,base:Kt}),Ut=M(e,`ADD_DATA_URI_TAGS`,Wt,{transform:Y,base:Wt}),q=M(e,`FORBID_CONTENTS`,Ht,{transform:Y}),Tt=M(e,`FORBID_TAGS`,k({}),{transform:Y}),Et=M(e,`FORBID_ATTR`,k({}),{transform:Y}),K=S(e,`USE_PROFILES`)?e.USE_PROFILES&&typeof e.USE_PROFILES==`object`?k(e.USE_PROFILES):e.USE_PROFILES:!1,Dt=e.ALLOW_ARIA_ATTR!==!1,Ot=e.ALLOW_DATA_ATTR!==!1,kt=e.ALLOW_UNKNOWN_PROTOCOLS||!1,At=e.ALLOW_SELF_CLOSE_IN_ATTR!==!1,V=e.SAFE_FOR_TEMPLATES||!1,H=e.SAFE_FOR_XML!==!1,U=e.WHOLE_DOCUMENT||!1,W=e.RETURN_DOM||!1,Ft=e.RETURN_DOM_FRAGMENT||!1,It=e.RETURN_TRUSTED_TYPE||!1,Pt=e.FORCE_BODY||!1,Lt=e.SANITIZE_DOM!==!1,Rt=e.SANITIZE_NAMED_PROPS||!1,Bt=e.KEEP_CONTENT!==!1,Vt=e.IN_PLACE||!1,St=be(e.ALLOWED_URI_REGEXP)?e.ALLOWED_URI_REGEXP:Le,Yt=typeof e.NAMESPACE==`string`?e.NAMESPACE:J,en=Xe(e,`MATHML_TEXT_INTEGRATION_POINTS`,()=>O({},$t)),nn=Xe(e,`HTML_INTEGRATION_POINTS`,()=>O({},tn));let t=Xe(e,`CUSTOM_ELEMENT_HANDLING`,()=>h(null));if(z=h(null),S(t,`tagNameCheck`)&&ln(t.tagNameCheck)&&(z.tagNameCheck=t.tagNameCheck),S(t,`attributeNameCheck`)&&ln(t.attributeNameCheck)&&(z.attributeNameCheck=t.attributeNameCheck),S(t,`allowCustomizedBuiltInElements`)&&typeof t.allowCustomizedBuiltInElements==`boolean`&&(z.allowCustomizedBuiltInElements=t.allowCustomizedBuiltInElements),m(z),V&&(Ot=!1),Ft&&(W=!0),K&&(L=O({},De),R=h(null),K.html===!0&&(O(L,xe),O(R,Oe)),K.svg===!0&&(O(L,Se),O(R,ke),O(R,je)),K.svgFilters===!0&&(O(L,Ce),O(R,ke),O(R,je)),K.mathMl===!0&&(O(L,Te),O(R,Ae),O(R,je))),B.tagCheck=null,B.attributeCheck=null,S(e,`ADD_TAGS`)&&(typeof e.ADD_TAGS==`function`?B.tagCheck=e.ADD_TAGS:v(e.ADD_TAGS)&&(L===Ct&&(L=k(L)),O(L,e.ADD_TAGS,Y))),S(e,`ADD_ATTR`)&&(typeof e.ADD_ATTR==`function`?B.attributeCheck=e.ADD_ATTR:v(e.ADD_ATTR)&&(R===wt&&(R=k(R)),O(R,e.ADD_ATTR,Y))),S(e,`ADD_FORBID_CONTENTS`)&&v(e.ADD_FORBID_CONTENTS)&&(q===Ht&&(q=k(q)),O(q,e.ADD_FORBID_CONTENTS,Y)),Bt&&(L[`#text`]=!0),U&&O(L,[`html`,`head`,`body`]),L.table&&(O(L,[`tbody`]),delete Tt.tbody),e.TRUSTED_TYPES_POLICY){if(typeof e.TRUSTED_TYPES_POLICY.createHTML!=`function`)throw T(`TRUSTED_TYPES_POLICY configuration option must provide a "createHTML" hook.`);if(typeof e.TRUSTED_TYPES_POLICY.createScriptURL!=`function`)throw T(`TRUSTED_TYPES_POLICY configuration option must provide a "createScriptURL" hook.`);let t=P;P=e.TRUSTED_TYPES_POLICY;try{F=at(``)}catch(e){throw P=t,e}}else e.TRUSTED_TYPES_POLICY===null?(P=void 0,F=``):(P===void 0&&(P=st()),P&&typeof F==`string`&&(F=at(``)));p&&p(e),sn=e},dn=O({},[...Se,...Ce,...we]),fn=O({},[...Te,...Ee]),pn=function(e,t,n){return t.namespaceURI===J?e===`svg`:t.namespaceURI===qt?e===`svg`&&(n===`annotation-xml`||en[n]):!!dn[e]},mn=function(e,t,n){return t.namespaceURI===J?e===`math`:t.namespaceURI===Jt?e===`math`&&nn[n]:!!fn[e]},hn=function(e,t,n){return t.namespaceURI===Jt&&!nn[n]||t.namespaceURI===qt&&!en[n]?!1:!fn[e]&&(rn[e]||!dn[e])},gn=function(e){let t=et(e),n=y(Qe(e)),r=x(e),i,a;return r&&N(r)===j.element?(i={namespaceURI:et(r)},a=y(Qe(r))):(i={namespaceURI:Yt},a=`template`),Zt[t]?t===Jt?pn(n,i,a):t===qt?mn(n,i,a):t===J?hn(n,i,a):!!(an===`application/xhtml+xml`&&Zt[t]):!1},X=function(e){ie(t.removed,{element:e});try{x(e).removeChild(e)}catch(t){if(g(e),!x(e))throw T(`a node selected for removal could not be detached from its tree and cannot be safely returned; refusing to sanitize in place`)}},_n=function(e,t,n){try{te(e,t)}catch(t){try{e.removeAttribute(n)}catch(e){}}},vn=function(e){Sn(e);let t=b(e);t&&_(ae(t),e=>{try{g(e)}catch(e){}});let n=N(e)===j.element?C(e):null;if(n)for(let t=n.length-1;t>=0;--t){let r=n[t],i=r&&r.name;typeof i==`string`&&_n(e,r,i)}},yn=function(e,n,r){if(!r)try{r=n.getAttributeNode(e)}catch(e){r=null}ie(t.removed,{attribute:r||null,from:n});try{r?te(n,r):n.removeAttribute(e)}catch(t){try{n.removeAttribute(e)}catch(e){}}if(e===`is`){if(W||Ft)try{X(n)}catch(e){}else try{n.setAttribute(e,``)}catch(e){}}},bn=function(e){let t=C(e);if(t)for(let n=t.length-1;n>=0;--n){let r=t[n],i=r&&r.name;typeof i!=`string`||R[Y(i)]||_n(e,r,i)}},xn=function(e,t){let n=arguments.length>2&&arguments[2]!==void 0&&arguments[2],r=[e];for(;r.length>0;){let e=r.pop();if(t(e)===!1)continue;if(n&&N(e)===j.element){let t=ge(e);Z(t)&&r.push(t)}let i=b(e);if(i)for(let e=i.length-1;e>=0;--e)r.push(i[e])}},Sn=function(e){xn(e,e=>{N(e)===j.element&&bn(e)})},Cn=function(e){let t=[];return xn(e,e=>{t.push(e)},!0),t},wn=function(e,t){let n=se();_(Cn(e),e=>{N(e)===j.element&&ce(n,e)}),_(t,e=>{N(e)===j.element&&!le(n,e)&&bn(e)})},Tn=function(e,n){let r=!1;return _(t.removed,t=>{t.element&&(r=r||t.element===e,Sn(t.element))}),wn(e,n),r},En=function(e,t){let n=G,r=null,i=()=>(r||(r=se(),_(t,e=>{ce(r,e)})),r);for(let t=0;;t++){let r=Cn(e),a=[e],o=!1;if(_(r,e=>{N(e)===j.documentFragment?ie(a,e):!o&&!le(n,e)&&(o=le(i(),e))}),!o)return;if(t>=8)throw T(`the tree kept changing during in-place sanitization; refusing to return it`);_(a,(t,n)=>{Dn(t,n>0,e,i())})}},Dn=function(e,t,n,r){let i=Mn(e),a;for(;a=i.nextNode();)le(r,a)&&!le(G,a)&&(t&&Q(I.uponSanitizeShadowNode,a,null),Hn(a,n),Yn(a,n),Z(a.content)&&Xn(a.content))},On=function(e){G&&ce(G,e)},kn=function(e,t){return H?e===`patchsrc`||e===`for`&&t!==`label`&&t!==`output`:!1},An=function(e){H&&xn(e,e=>{let t=N(e);if(t===j.processingInstruction||t===j.comment&&w(Ue,e.data)){try{g(e)}catch(e){}return!1}if(t===j.element){let t=e,n=Y(Qe(e));try{t.hasAttribute&&t.hasAttribute(`patchsrc`)&&t.removeAttribute(`patchsrc`),t.hasAttribute&&t.hasAttribute(`for`)&&kn(`for`,n)&&t.removeAttribute(`for`)}catch(e){}}return!0})},jn=function(e){let t=null,r=null;if(Pt)e=`<remove></remove>`+e;else{let t=de(e,/^[\r\n\t ]+/);r=t&&t[0]}an===`application/xhtml+xml`&&Yt===J&&(e=`<html xmlns="http://www.w3.org/1999/xhtml"><head></head><body>`+e+`</body></html>`);let i=P?at(e):e;if(Yt===J)try{t=new u().parseFromString(i,an)}catch(e){}if(!t||!t.documentElement){t=lt.createDocument(Yt,`template`,null);try{t.documentElement.innerHTML=Xt?F:i}catch(e){}}let a=t.body||t.documentElement;return e&&r&&a.insertBefore(n.createTextNode(r),a.childNodes[0]||null),Yt===J?ft.call(t,U?`html`:`body`)[0]:U?t.documentElement:a},Mn=function(e){let t=_e?_e(e):e.ownerDocument;return ut.call(t||e,e,l.SHOW_ELEMENT|l.SHOW_COMMENT|l.SHOW_TEXT|l.SHOW_PROCESSING_INSTRUCTION|l.SHOW_CDATA_SECTION,null)},Nn=function(e){return e=fe(e,mt,` `),e=fe(e,ht,` `),e=fe(e,gt,` `),e},Pn=function(e){var t;Fn(e);let n=(t=e.querySelectorAll)==null?void 0:t.call(e,`template`);n&&_(n,e=>{Z(e.content)&&Pn(e.content)})},Fn=function(e){e.normalize();let t=_e?_e(e):e.ownerDocument,n=ut.call(t||e,e,l.SHOW_TEXT|l.SHOW_COMMENT|l.SHOW_CDATA_SECTION|l.SHOW_PROCESSING_INSTRUCTION,null),r=n.nextNode();for(;r;)r.data=Nn(r.data),r=n.nextNode()},In=function(e){let t=D?D(e):null;return typeof t!=`string`||Y(t)!==`form`?!1:typeof e.nodeName!=`string`||typeof e.textContent!=`string`||typeof e.removeChild!=`function`||e.attributes!==C(e)||typeof e.removeAttribute!=`function`||typeof e.removeAttributeNode!=`function`||typeof e.getAttributeNode!=`function`||typeof e.setAttribute!=`function`||typeof e.namespaceURI!=`string`||typeof e.insertBefore!=`function`||typeof e.hasChildNodes!=`function`||e.nodeType!==E(e)||e.childNodes!==b(e)},Z=function(e){if(!E||typeof e!=`object`||!e)return!1;try{return E(e)===j.documentFragment}catch(e){return!1}},Ln=function(e){if(!E||typeof e!=`object`||!e)return!1;try{return typeof E(e)==`number`}catch(e){return!1}};function Q(e,n,r){e.length!==0&&_(e,e=>{e.call(t,n,r,sn)})}let Rn=function(e,t){return!!(H&&e.hasChildNodes()&&!Ln(e.firstElementChild)&&w(He,e.textContent)&&w(He,e.innerHTML)||H&&Ke[t]&&N(e)===j.element&&et(e)===J&&(Ln(e.firstElementChild)||typeof e.textContent==`string`&&w(He,e.textContent))||e.nodeType===j.processingInstruction||H&&e.nodeType===j.comment&&w(Ue,e.data))},zn=function(e,t){return e instanceof RegExp?w(e,t):e instanceof Function&&!!e(t,...[...arguments].slice(2))},Bn=function(e,t,n){if(!Tt[t]&&Gn(t)&&zn(z.tagNameCheck,t))return!1;if(Bt&&!q[t]&&!q[y(t)]){let t=x(e),r=b(e);if(r&&t){let i=r.length;for(let a=i-1;a>=0;--a){let i=e===n?ee(r[a],!0):r[a];t.insertBefore(i,he(e))}}}return X(e),!0},Vn=function(e,t,n,r){return e.length===0?t:t===n||t===r?k(t):t},$=function(e,t){return e===t||x(e)!==null?!1:(Vt&&Sn(e),!0)},Hn=function(e,n){if(On(e),Q(I.beforeSanitizeElements,e,null),$(e,n))return!0;if(In(e))return X(e),!0;let r=Y(Qe(e));if(L=Vn(I.uponSanitizeElement,L,Ct,Mt),Q(I.uponSanitizeElement,e,{tagName:r,allowedTags:L}),$(e,n))return!0;if(Rn(e,r))return X(e),!0;if(Tt[r]||!(B.tagCheck instanceof Function&&B.tagCheck(r))&&!L[r]){let t=Bn(e,r,n);return t===!1&&(Q(I.afterSanitizeElements,e,null),$(e,n))?!0:t}if(N(e)===j.element&&!gn(e)||(r===`noscript`||r===`noembed`||r===`noframes`)&&w(We,e.innerHTML))return X(e),!0;if(V&&e.nodeType===j.text){let n=Nn(e.textContent);e.textContent!==n&&(ie(t.removed,{element:e.cloneNode()}),e.textContent=n)}return Q(I.afterSanitizeElements,e,null),$(e,n)},Un=function(e,t,r){if(Et[t]||kn(t,e)||Lt&&(t===`id`||t===`name`)&&(r in n||r in cn))return!1;let i=R[t]||B.attributeCheck instanceof Function&&B.attributeCheck(t,e);return Ot&&w(_t,t)||Dt&&w(vt,t)?!0:i?Gt[t]||w(St,fe(r,bt,``))||(t===`src`||t===`xlink:href`||t===`href`)&&e!==`script`&&pe(r,`data:`)===0&&Ut[e]||kt&&!w(yt,fe(r,bt,``))?!0:!r:Gn(e)&&zn(z.tagNameCheck,e)&&zn(z.attributeNameCheck,t,e)||t===`is`&&z.allowCustomizedBuiltInElements&&zn(z.tagNameCheck,r)},Wn=O({},[`annotation-xml`,`color-profile`,`font-face`,`font-face-format`,`font-face-name`,`font-face-src`,`font-face-uri`,`missing-glyph`]),Gn=function(e){return!Wn[y(e)]&&w(xt,e)},Kn=function(e,t,n,r){if(P&&typeof d==`object`&&typeof d.getAttributeType==`function`&&!n)switch(d.getAttributeType(e,t)){case`TrustedHTML`:return at(r);case`TrustedScriptURL`:return ot(r)}return r},qn=function(e,t,n,r){try{return n?e.setAttributeNS(n,t,r):e.setAttribute(t,r),!In(e)||(X(e),!1)}catch(n){return yn(t,e),!1}},Jn=function(e,t){return H&&w(/((--!?|])>)|<\/(style|script|title|xmp|textarea|noscript|iframe|noembed|noframes)/i,t)?!0:y(e)===`attributename`&&de(t,`href`)!==null},Yn=function(e,n){if(Q(I.beforeSanitizeAttributes,e,null),$(e,n))return;let r=e.attributes;if(!r||In(e))return;R=Vn(I.uponSanitizeAttribute,R,wt,Nt);let i={attrName:``,attrValue:``,keepAttr:!0,allowedAttributes:R,forceKeepAttr:void 0},a=r.length,o=Y(e.nodeName);for(;a--;){let n=r[a],s=n.name,c=n.namespaceURI,l=n.value,u=Y(s),d=l,f=s===`value`?d:me(d),p=!1;i.attrName=u,i.attrValue=f,i.keepAttr=!0,i.forceKeepAttr=void 0,Q(I.uponSanitizeAttribute,e,i),f=i.attrValue,Rt&&(u===`id`||u===`name`)&&pe(f,zt)!==0&&(yn(s,e,n),f=zt+f,p=!0),Jn(s,f)?yn(s,e,n):i.forceKeepAttr||(i.keepAttr?!At&&w(Ge,f)?yn(s,e,n):(V&&(f=Nn(f)),Un(o,u,f)?(f=Kn(o,u,c,f),f!==d&&qn(e,s,c,f)&&p&&re(t.removed)):yn(s,e,n)):yn(s,e,n))}Q(I.afterSanitizeAttributes,e,null),$(e,n)},Xn=function(e){let t=null,n=Mn(e);for(Q(I.beforeSanitizeShadowDOM,e,null);t=n.nextNode();)if(Q(I.uponSanitizeShadowNode,t,null),Hn(t,e),Yn(t,e),Z(t.content)&&Xn(t.content),N(t)===j.element){let e=ge(t);Z(e)&&(Zn(e),Xn(e))}V&&Fn(e),Q(I.afterSanitizeShadowDOM,e,null)},Zn=function(e){let t=[{node:e,shadow:null}];for(;t.length>0;){let e=t.pop();if(e.shadow){Xn(e.shadow);continue}let n=e.node,r=N(n)===j.element,i=b(n);if(i)for(let e=i.length-1;e>=0;--e)t.push({node:i[e],shadow:null});if(r){let e=D?D(n):null;if(typeof e==`string`&&Y(e)===`template`){let e=n.content;Z(e)&&t.push({node:e,shadow:null})}}if(r){let e=ge(n);Z(e)&&t.push({node:null,shadow:e},{node:e,shadow:null})}}};return t.sanitize=function(e){let n=arguments.length>1&&arguments[1]!==void 0?arguments[1]:{},i=null,a=null,o=null,s=null;if(Xt=!e,Xt&&(e=`<!-->`),typeof e!=`string`&&!Ln(e)&&(e=ve(e),typeof e!=`string`))throw T(`dirty is not a string, aborting`);if(!t.isSupported)return e;jt?(L=Mt,R=Nt):un(n),(I.uponSanitizeElement.length>0||I.uponSanitizeAttribute.length>0)&&(L=k(L)),I.uponSanitizeAttribute.length>0&&(R=k(R)),t.removed=[];let c=Vt&&typeof e!=`string`&&Ln(e),l=[],u=G;if(c){An(e);let t=Qe(e);if(typeof t==`string`){let n=Y(t);if(!L[n]||Tt[n])throw vn(e),T(`root node is forbidden and cannot be sanitized in-place`)}if(In(e))throw vn(e),T(`root node is clobbered and cannot be sanitized in-place`);l=Cn(e),G=se()}else if(Ln(e))i=jn(`<!---->`),a=i.ownerDocument.importNode(e,!0),a.nodeType===j.element&&a.nodeName===`BODY`||a.nodeName===`HTML`?i=a:i.appendChild(a),Zn(i);else{if(!W&&!V&&!U&&e.indexOf(`<`)===-1)return P&&It?at(e):e;if(i=jn(e),!i)return W?null:It?F:``}i&&Pt&&X(i.firstChild);let d=c?e:i;try{c&&Zn(e);let t=Mn(d);for(;o=t.nextNode();)Hn(o,d),Yn(o,d),Z(o.content)&&Xn(o.content);c&&En(e,l)}catch(t){throw c&&(vn(e),Tn(e,l)),t}finally{G=u}if(c){if(Tn(e,l))throw T(`a node selected for removal could not be safely returned; refusing to sanitize in place`);return V&&Pn(e),e}if(W){if(V&&Pn(i),Ft)for(s=dt.call(i.ownerDocument);i.firstChild;)s.appendChild(i.firstChild);else s=i;return(R.shadowroot||R.shadowrootmode)&&(s=pt.call(r,s,!0)),s}let f=U?i.outerHTML:i.innerHTML;return U&&L[`!doctype`]&&i.ownerDocument&&i.ownerDocument.doctype&&i.ownerDocument.doctype.name&&w(Be,i.ownerDocument.doctype.name)&&(f=`<!DOCTYPE `+i.ownerDocument.doctype.name+`>
+`+f),V&&(f=Nn(f)),P&&It?at(f):f},t.setConfig=function(){let e=arguments.length>0&&arguments[0]!==void 0?arguments[0]:{};un(e),jt=!0,Mt=L,Nt=R},t.clearConfig=function(){sn=null,jt=!1,Mt=null,Nt=null,P=tt,F=``},t.isValidAttribute=function(e,t,n){sn||un({});let r=Y(e),i=Y(t);return typeof n==`string`&&(Jn(t,n)||!At&&w(Ge,n))?!1:Un(r,i,n)},t.addHook=function(e,t){typeof t==`function`&&S(I,e)&&ie(I[e],t)},t.removeHook=function(e,t){if(S(I,e)){if(t!==void 0){let n=ne(I[e],t);return n===-1?void 0:oe(I[e],n,1)[0]}return re(I[e])}},t.removeHooks=function(e){S(I,e)&&(I[e]=[])},t.removeAllHooks=function(){I=Ye()},t}return Ze()});
+
+</script>
+    <script>
+      "use strict";
+      const $ = (id) => document.getElementById(id);
+      const safe = (value) =>
+        String(value ?? "").replace(
+          /[&<>"']/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+        );
+      const icons = {
+        folder: "M3 6h6l2 2h10v12H3z",
+        folderOpen: "M3 8V5h6l2 2h8v3m-16 0h19l-3 10H3z",
+        download: "M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5",
+        compass: "M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Zm-7-4-2 6-5 2 2-6Z",
+        spark: "m12 2 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z",
+        chart: "M4 4v16h16M8 15v-4m5 4V7m5 8v-6",
+        file: "M14 2H5v20h14V7l-5-5Zm0 0v6h5M8 13h8m-8 4h6",
+        grid: "M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z",
+        clock: "M12 8v5l3 2M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0",
+        shield: "m12 2 8 4v6c0 5-8 10-8 10S4 17 4 12V6ZM8 12l3 3 5-6",
+        layers: "m12 3 9 5-9 5-9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5",
+        database: "M3 5c0-4 18-4 18 0s-18 4-18 0Zm0 0v14c0 4 18 4 18 0V5M3 12c0 4 18 4 18 0",
+        team: "M12 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M11 7a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm4 7c4 0 6 1 6 5m-6-15a3 3 0 0 1 0 6",
+        book: "M3 4h7l2 2 2-2h7v16h-7l-2 2-2-2H3ZM12 6v16",
+        branch:
+          "M6 8v8m3-11a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm0 14a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm12-13a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM6 16c0-5 12-1 12-7",
+        chevron: "m9 5 7 7-7 7",
+        play: "m8 4 12 8-12 8Z",
+        history: "M3 11a9 9 0 1 1 2 7M3 4v7h7m2-4v6l4 2",
+        search: "M16 16l5 5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z",
+        box: "m12 2 9 5v10l-9 5-9-5V7Zm-9 5 9 5 9-5M12 12v10",
+        type: "M4 5h16v3M12 5v15m-4 0h8",
+        braces:
+          "M9 3H7v5a4 4 0 0 1-3 4 4 4 0 0 1 3 4v5h2m6-18h2v5a4 4 0 0 0 3 4 4 4 0 0 0-3 4v5h-2",
+        lock: "M7 10V7a5 5 0 0 1 10 0v3M5 10h14v11H5Zm7 4v3",
+        save: "M3 3h15l3 3v15H3Zm4 0v6h9V3M7 21v-8h10v8",
+        upload: "M12 15V3m-5 5 5-5 5 5M4 15v5h16v-5",
+        plus: "M12 5v14M5 12h14",
+        edit: "m4 16-1 5 5-1L20 8l-4-4Zm10-10 4 4",
+        cross: "m6 6 12 12M18 6 6 18",
+        copy: "M8 7h12v14H8Zm-4 9H3V3h12v1",
+        wrap: "M3 6h17M3 11h13a3 3 0 0 1 0 6h-5m3-3-3 3 3 3M3 17h3",
+        check: "m4 12 5 5L21 5",
+        user: "M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Zm-13 14v-2c0-6 18-6 18 0v2",
+        settings: "M4 6h16M4 12h16M4 18h16M8 3v6m8 0v6m-8 0v6",
+        arrow: "M4 12h16m-6-6 6 6-6 6",
+        terminal: "m4 7 5 5-5 5m8 0h8",
+        flag: "M5 21V3c5-4 10 5 15 0v11c-5 5-10-4-15 0",
+      };
+      function icon(key) {
+        return `<svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="${icons[key] || icons.file}"></path></svg>`;
+      }
+      function pill(label, tone = "", glyph = "") {
+        return `<span class="pill ${tone}">${glyph ? icon(glyph) : ""}${safe(label)}</span>`;
+      }
+      function btn(action, label, glyph = "", variant = "", extra = "") {
+        return `<button type="button" class="btn ${variant}" data-action="${action}" ${extra}>${glyph ? icon(glyph) : ""}${safe(label)}</button>`;
+      }
+
+      const LOCAL = JSON.parse($("local-catalog").textContent);
+      const initialPath = "tasks/business_report/scenes/weekly/finance.md";
+      const taskNames = {
+        business_qa: "经营问答",
+        data_analysis: "数据分析",
+        dashboard: "看板创建",
+        business_report: "经营报告",
+      };
+      const dirNames = {
+        tasks: "任务",
+        ...taskNames,
+        scenes: "场景",
+        weekly: "周报",
+        metric_lookup: "指标快查",
+        period_comparison: "周期对比",
+        channel_overview: "渠道概览",
+        shared: "共享",
+        support: "辅助",
+        fragments: "片段",
+        stages: "阶段",
+        tools: "工具",
+        skills: "Skill",
+        routing: "路由",
+        session: "会话",
+        subagent: "子任务",
+        starters: "提问模板",
+      };
+      const samples = {
+        period: "上周",
+        unit: "万元",
+        audience: "经营团队",
+        count: "3",
+        include_risk: "是",
+      };
+      const labels = {
+        period: "报告期间",
+        unit: "金额单位",
+        audience: "读者",
+        count: "摘要条数",
+        include_risk: "包含风险项",
+      };
+      const usage = {
+        [initialPath]: "华东零售 / 财务部 · 经营报告 / 周报",
+        "tasks/business_report/scenes/weekly/report.md": "使用通用周报的工作空间 · 经营报告 / 周报",
+        "shared/fragments/retail.md": "华东零售 · 使用零售口径的任务",
+        "shared/fragments/base.md": "全部租户 · 四类分析任务",
+        "shared/tools/database-query.md": "调用已授权数据库查询工具的任务",
+        "shared/skills/metric-check.md": "已授权指标核对且可读取所需数据的任务",
+        "shared/skills/report-outline.md": "经营报告 · 周报提纲可用时",
+      };
+      function useAt(path) {
+        if (usage[path]) return usage[path];
+        if (!Object.hasOwn(LOCAL, path)) return "尚未接入 · 等待代码引用此路径";
+        const [group, name, segment, scene] = path.split("/");
+        if (group === "tasks")
+          return (
+            taskNames[name] +
+            (segment === "scenes" ? " / " + (dirNames[scene] || scene) : " · 任务通用指令")
+          );
+        if (group === "shared") return "匹配该执行阶段的分析任务";
+        return (dirNames[name] || name) + " · Compass 辅助调用";
+      }
+      const key = "compass.lesson21.promptops.file-library.v1";
+      function empty() {
+        return { revision: 0, files: {}, snapshots: [] };
+      }
+      function read() {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : empty();
+      }
+      let db,
+        storeIssue = false;
+      try {
+        db = read();
+      } catch {
+        db = empty();
+        storeIssue = true;
+      }
+      const ui = {
+        path: initialPath,
+        screen: "library",
+        mode: "preview",
+        filter: "",
+        folder: initialPath.split("/").slice(0, -1).join("/"),
+        expanded: new Set([
+          "tasks",
+          "tasks/business_report",
+          "tasks/business_report/scenes",
+          "tasks/business_report/scenes/weekly",
+        ]),
+        mobileOpen: false,
+        focusPath: initialPath,
+        buffers: new Map(),
+      };
+      function record(state, path) {
+        return Object.hasOwn(state.files, path) ? state.files[path] : null;
+      }
+      function blank() {
+        return { stamp: 0, local: null, draft: null, active: null, versions: [] };
+      }
+      function file(state, path) {
+        let f = record(state, path);
+        if (!f) {
+          f = blank();
+          state.files[path] = f;
+        }
+        return f;
+      }
+      function revision(f, id = f?.active) {
+        return f?.versions.find((v) => v.no === id);
+      }
+      function effective(state, path) {
+        return revision(record(state, path));
+      }
+      function bodyFor(state, path) {
+        const f = record(state, path);
+        return (
+          f?.draft?.body ??
+          revision(f)?.body ??
+          f?.versions.at(-1)?.body ??
+          f?.local ??
+          LOCAL[path] ??
+          ""
+        );
+      }
+      function visibleText(path) {
+        return ui.buffers.get(path)?.text ?? bodyFor(db, path);
+      }
+      function draftBuffer(path) {
+        let b = ui.buffers.get(path);
+        if (!b) {
+          const text = bodyFor(db, path);
+          b = { text, original: text, stamp: record(db, path)?.stamp || 0 };
+          ui.buffers.set(path, b);
+        }
+        return b;
+      }
+      function dirty(path) {
+        const b = ui.buffers.get(path);
+        return !!b && b.text !== b.original;
+      }
+      function paths(s = db) {
+        return [...new Set([...Object.keys(LOCAL), ...Object.keys(s.files)])].sort();
+      }
+      function fileTitle(text, path) {
+        return text.match(/^#\s+(.+?)\s*$/m)?.[1] || path.split("/").at(-1);
+      }
+      function variables(s) {
+        return [...new Set([...s.matchAll(/\{\{([A-Za-z_]\w*)\}\}/g)].map((v) => v[1]))];
+      }
+      function invalid(s) {
+        if (!s.trim()) return "正文为空，请补全 Markdown。";
+        const known = /\{\{([A-Za-z_]\w*)\}\}/g;
+        if (/\{\{|\}\}/.test(s.replace(known, "")))
+          return "模板变量请写成 {{period}} 这样的完整名称。";
+        const bad = variables(s).filter((k) => !Object.hasOwn(samples, k));
+        return bad.length
+          ? "未支持的模板变量 " +
+              bad.join("、") +
+              "。可用 " +
+              Object.keys(samples).join("、") +
+              "。"
+          : "";
+      }
+      function validPath(input) {
+        const p = input.trim().normalize("NFC");
+        if (
+          !p ||
+          p.startsWith("/") ||
+          p.includes("\\") ||
+          !p.endsWith(".md") ||
+          p
+            .split("/")
+            .some(
+              (s) =>
+                !s ||
+                s === "." ||
+                s === ".." ||
+                s === "__proto__" ||
+                s === "constructor" ||
+                s === "prototype" ||
+                s.trim() !== s ||
+                /[<>:"|?*\u0000-\u001f]/.test(s),
+            ) ||
+          p
+            .split("/")
+            .slice(0, -1)
+            .some((s) => s.endsWith(".md")) ||
+          p.split("/").at(-1) === ".md"
+        )
+          throw Error("请使用 prompts/ 下的相对目录和 .md 文件名。");
+        return p;
+      }
+      function allDirs(list) {
+        const set = new Set([""]);
+        for (const p of list) {
+          const a = p.split("/");
+          for (let i = 1; i < a.length; i++) set.add(a.slice(0, i).join("/"));
+        }
+        return [...set].sort();
+      }
+      function parents(path) {
+        const a = path.split("/");
+        return a.slice(0, -1).map((_, i) => a.slice(0, i + 1).join("/"));
+      }
+      function sameText(a, b) {
+        return a === b;
+      }
+      function manifest(state) {
+        return Object.fromEntries(
+          Object.entries(state.files)
+            .filter(([, f]) => f.active !== null)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([p, f]) => [p, f.active]),
+        );
+      }
+      function manifestDiff(a, b) {
+        return [...new Set([...Object.keys(a), ...Object.keys(b)])]
+          .sort()
+          .filter((p) => a[p] !== b[p]);
+      }
+      function version(n) {
+        return n == null ? "未发布" : "v" + n;
+      }
+      function tag(path) {
+        const f = record(db, path);
+        if (dirty(path)) return pill("未保存", "warm");
+        if (f?.draft) return pill("待发布", "warm");
+        if (f?.active) return pill("生效 " + version(f.active), "ok");
+        return pill(f?.versions.length ? "未生效" : "本地基线");
+      }
+      const clockLabel = (t) =>
+        new Intl.DateTimeFormat("zh-CN", {
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }).format(new Date(t));
+      function note(message = "", isError = false) {
+        const n = $("notice");
+        n.textContent = message;
+        n.className = "status" + (isError ? " alert" : "");
+        n.setAttribute("role", isError ? "alert" : "status");
+      }
+      function saveChange(edit) {
+        const change = () => {
+          if (storeIssue) throw Error("浏览器存储不可用，请恢复存储后重试。");
+          if ($("identity").value !== "admin") throw Error("当前账号没有管理权限。");
+          const next = read();
+          const result = edit(next);
+          next.revision++;
+          localStorage.setItem(key, JSON.stringify(next));
+          db = next;
+          return result;
+        };
+        return navigator.locks
+          ? navigator.locks.request(key, change)
+          : Promise.resolve().then(change);
+      }
+      function checkFile(state, path, expected) {
+        if ((record(state, path)?.stamp || 0) !== expected)
+          throw Error("该文件已在其他窗口更新，请比较最新正文后继续。");
+      }
+      function checkLibrary(state, expected) {
+        if (state.revision !== expected)
+          throw Error("文件库已更新，请关闭并重新核对本次发布清单。");
+      }
+      function addVersion(f, noteText) {
+        if (!f.draft) throw Error("此文件没有已保存的草稿。");
+        const reason = invalid(f.draft.body);
+        if (reason) throw Error(reason);
+        if (f.draft.base !== f.active) throw Error("生效版本已变化，请在编辑页核对并保存草稿。");
+        const no = (f.versions.at(-1)?.no || 0) + 1;
+        f.versions.push({
+          no,
+          body: f.draft.body,
+          at: Date.now(),
+          author: "平台管理员",
+          note: noteText,
+        });
+        f.active = no;
+        f.draft = null;
+        f.stamp++;
+        return no;
+      }
+      function addSnapshot(s, noteText, restored = null) {
+        const id = "S" + String(s.snapshots.length + 1).padStart(3, "0");
+        s.snapshots.push({
+          id,
+          files: manifest(s),
+          at: Date.now(),
+          author: "平台管理员",
+          note: noteText,
+          restored,
+        });
+        return id;
+      }
+      function bulkPlan(s) {
+        const pending = Object.keys(s.files)
+            .filter((p) => s.files[p].draft)
+            .sort(),
+          target = manifest(s),
+          issues = [];
+        for (const p of pending) {
+          const f = s.files[p],
+            why =
+              invalid(f.draft.body) ||
+              (f.draft.base !== f.active ? "生效版本已变化，请核对草稿。" : "");
+          if (why) issues.push([p, why]);
+          target[p] = (f.versions.at(-1)?.no || 0) + 1;
+        }
+        const prior = s.snapshots.at(-1);
+        return {
+          pending,
+          target,
+          issues,
+          prior,
+          changed: manifestDiff(prior?.files || {}, target),
+        };
+      }
+      function md(text) {
+        const cleaned = DOMPurify.sanitize(
+          marked.parse(text, { gfm: true, renderer: markdownRenderer }),
+          {
+            ALLOWED_TAGS: [
+              "h1",
+              "h2",
+              "h3",
+              "h4",
+              "h5",
+              "h6",
+              "p",
+              "ol",
+              "ul",
+              "li",
+              "blockquote",
+              "code",
+              "pre",
+              "table",
+              "thead",
+              "tbody",
+              "tr",
+              "td",
+              "th",
+              "hr",
+              "br",
+              "a",
+              "em",
+              "strong",
+              "del",
+            ],
+            ALLOWED_ATTR: ["href", "title", "start", "align"],
+          },
+        );
+        const view = document.createElement("div");
+        view.innerHTML = cleaned;
+        for (const table of view.querySelectorAll("table")) {
+          const wrap = document.createElement("div");
+          wrap.className = "table-scroll";
+          wrap.tabIndex = 0;
+          wrap.setAttribute("aria-label", "Markdown 表格");
+          table.replaceWith(wrap);
+          wrap.append(table);
+        }
+        for (const pre of view.querySelectorAll("pre")) pre.tabIndex = 0;
+        for (const a of view.querySelectorAll("a")) {
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+        }
+        const walker = document.createTreeWalker(view, NodeFilter.SHOW_TEXT);
+        const leaves = [];
+        while (walker.nextNode()) leaves.push(walker.currentNode);
+        for (const leaf of leaves) {
+          if (leaf.parentElement?.closest("pre,code") || !/\{\{\w+\}\}/.test(leaf.textContent))
+            continue;
+          const frag = document.createDocumentFragment();
+          for (const part of leaf.textContent.split(/(\{\{\w+\}\})/)) {
+            if (part.startsWith("{{")) {
+              const el = document.createElement("span");
+              el.className = "var-token";
+              el.textContent = part;
+              frag.append(el);
+            } else frag.append(part);
+          }
+          leaf.replaceWith(frag);
+        }
+        return '<div class="markdown">' + view.innerHTML + "</div>";
+      }
+      const markdownRenderer = new marked.Renderer();
+      markdownRenderer.html = ({ text }) => safe(text);
+      markdownRenderer.image = ({ text }) => safe(text);
+      function src(text) {
+        return `<pre class="source" tabindex="0">${safe(text)}</pre>`;
+      }
+      function compareText(before, after) {
+        return `<div class="diff"><div><h3>原正文</h3>${src(before || "（无）")}</div><div><h3>候选正文</h3>${src(after || "（空）")}</div></div>`;
+      }
+
+      function renderChrome() {
+        const admin = $("identity").value === "admin";
+        $("rail").innerHTML =
+          `<span class="rail-mark">${icon("compass")}</span>` +
+          ["spark", "file", "layers", "clock", "chart"]
+            .map((x) => `<span class="rail-item">${icon(x)}</span>`)
+            .join("") +
+          (admin
+            ? `<span class="rail-rule"></span><span class="rail-item current">${icon("shield")}</span>`
+            : "") +
+          `<span class="rail-profile">${icon("user")}</span>`;
+        $("side-title").textContent = admin ? "管理与治理" : "经营工作台";
+        $("side-caption").textContent = admin ? "配置、运行与治理" : "当前工作空间";
+        const groups = admin
+          ? [
+              ["grid", "控制总览"],
+              ["database", "数据与语义"],
+              ["layers", "Agent 与能力"],
+              ["clock", "运行与调度"],
+              ["flag", "质量与发布"],
+              ["shield", "安全与审计"],
+              ["book", "记忆与资产"],
+              ["team", "组织设置"],
+              ["user", "个人设置"],
+              ["settings", "平台管理"],
+            ]
+          : [
+              ["spark", "分析空间"],
+              ["file", "报告"],
+              ["grid", "看板"],
+            ];
+        $("side-items").innerHTML = groups
+          .map(
+            ([g, n]) =>
+              `<div class="navitem ${n === "平台管理" ? "current" : ""}">${icon(g)}${n}</div>`,
+          )
+          .join("");
+        $("breadcrumb").innerHTML =
+          icon("compass") +
+          `<span class="wide">Compass</span>` +
+          icon("chevron") +
+          (admin
+            ? `<span>平台管理</span>${icon("chevron")}<strong>PromptOps</strong>`
+            : "<strong>访问说明</strong>");
+        $("foot").innerHTML = icon("database") + "演示数据保存在当前浏览器。";
+      }
+
+      const treeOrder = ["tasks", ...Object.keys(taskNames), "shared", "support"];
+      function choose(path) {
+        ui.path = path;
+        ui.focusPath = path;
+        ui.folder = path.split("/").slice(0, -1).join("/");
+        parents(path).forEach((d) => ui.expanded.add(d));
+        ui.mode = "preview";
+        ui.screen = "library";
+        ui.mobileOpen = false;
+      }
+      function navButton(action, label, current, iconKey, count) {
+        return `<button type="button" data-action="${action}"${current ? ' aria-current="page"' : ""}>${iconKey ? icon(iconKey) : ""}${safe(label)}${count == null ? "" : `<span class="count">${count}</span>`}</button>`;
+      }
+      function treeData() {
+        const root = new Map(),
+          q = ui.filter.trim().toLocaleLowerCase(),
+          list = paths();
+        for (const path of list) {
+          const title = fileTitle(bodyFor(db, path), path);
+          const segments = path.split("/");
+          if (
+            q &&
+            ![path, title, ...segments.map((k) => dirNames[k] || "")]
+              .join(" ")
+              .toLocaleLowerCase()
+              .includes(q)
+          )
+            continue;
+          let map = root;
+          segments.forEach((name, i) => {
+            if (!map.has(name))
+              map.set(name, {
+                name,
+                path: segments.slice(0, i + 1).join("/"),
+                folder: i < segments.length - 1,
+                children: new Map(),
+              });
+            map = map.get(name).children;
+          });
+        }
+        const nodes = [];
+        function walk(children, level) {
+          const ordered = [...children.values()].sort((a, b) => {
+            if (a.folder !== b.folder) return a.folder ? -1 : 1;
+            const rank = (name) => (treeOrder.includes(name) ? treeOrder.indexOf(name) : 100);
+            return rank(a.name) - rank(b.name) || a.name.localeCompare(b.name);
+          });
+          ordered.forEach((item, i) => {
+            const open = item.folder && (q || ui.expanded.has(item.path));
+            nodes.push({ ...item, level, pos: i + 1, size: ordered.length, open: !!open });
+            if (open) walk(item.children, level + 1);
+          });
+        }
+        walk(root, 1);
+        return nodes;
+      }
+      function drawTree(restoreScroll = true) {
+        const tree = $("file-tree");
+        if (!tree) return;
+        const top = restoreScroll ? tree.scrollTop : 0;
+        const list = treeData(),
+          chosen = list.some((n) => n.path === ui.focusPath) ? ui.focusPath : list[0]?.path;
+        tree.innerHTML =
+          list
+            .map((n) => {
+              const path = safe(n.path),
+                isFolder = n.folder,
+                saved = record(db, n.path)?.draft;
+              return `<button type="button" role="treeitem" aria-label="${safe(n.name + (isFolder ? " 目录" : ""))}" aria-level="${n.level}" aria-posinset="${n.pos}" aria-setsize="${n.size}" ${isFolder ? `aria-expanded="${n.open}"` : `aria-selected="${n.path === ui.path}"`} tabindex="${n.path === chosen ? 0 : -1}" data-node="${path}" data-folder="${isFolder}" style="--depth:${n.level - 1}" class="tree-row${!isFolder && n.path === ui.path ? " selected" : ""}" title="prompts/${path}">${isFolder ? icon("chevron").replace('class="ico"', 'class="ico angle"') : '<span class="angle"></span>'}${icon(isFolder ? (n.open ? "folderOpen" : "folder") : "file")}<span class="tree-name">${safe(n.name)}</span>${isFolder && Object.hasOwn(dirNames, n.name) ? `<span class="alias">${safe(dirNames[n.name])}</span>` : ""}${!isFolder && (saved || dirty(n.path)) ? '<span class="dot" title="有编辑或草稿" aria-label="有编辑或草稿"></span>' : ""}</button>`;
+            })
+            .join("") || '<p class="tree-empty">没有匹配的文件。可搜索文件名、路径或标题。</p>';
+        tree.scrollTop = top;
+      }
+      function drawLibrary() {
+        $("view").innerHTML =
+          `<div class="library"><aside class="file-side" data-open="${ui.mobileOpen}" aria-label="提示词文件目录"><div class="side-head"><h2>文件目录</h2><div class="inline">${btn("mobile-tree", ui.mobileOpen ? "收起目录" : "展开目录", "folder", "quiet mobile-tree", `aria-expanded="${ui.mobileOpen}"`)}<button class="mini new-tree" type="button" data-action="new" title="新建提示词" aria-label="新建提示词">${icon("plus")} 新建</button></div></div>
+    <div class="tree-content"><label class="searchbox">${icon("search")}<input type="search" id="tree-search" aria-label="搜索文件" placeholder="搜索文件或路径" value="${safe(ui.filter)}"></label>
+    <div class="tree-root"><span>prompts/ <span class="count">${paths().length}</span></span><button type="button" class="mini" data-action="expand-tree">${ui.expanded.size ? "收起全部" : "展开全部"}</button></div>
+    <div id="file-tree" class="tree-scroll" role="tree" aria-label="prompts 文件树"></div></div></aside><section class="detail" id="file-detail" aria-label="文件内容" tabindex="-1"></section></div>`;
+        drawTree(false);
+        drawDetail();
+      }
+      function pathMarkup(path) {
+        return ["prompts", ...path.split("/")].map(safe).join("/<wbr>");
+      }
+      function drawDetail() {
+        const p = ui.path,
+          f = record(db, p),
+          buffer = ui.buffers.get(p),
+          changed = dirty(p);
+        const selected = visibleText(p),
+          isLocal = Object.hasOwn(LOCAL, p) || f?.local != null;
+        const hist = f?.versions || [],
+          active = f?.active || null,
+          kind = f?.draft
+            ? "已保存草稿"
+            : active
+              ? "生效正文"
+              : hist.length
+                ? "历史正文"
+                : "本地文件";
+        let contents = "";
+        if (ui.mode === "history") {
+          contents = hist.length
+            ? hist
+                .slice()
+                .reverse()
+                .map(
+                  (v) =>
+                    `<div class="history-row"><div><strong>${version(v.no)}</strong>${v.no === active ? pill("当前生效", "ok") : ""}<p>${safe(v.note)}</p><small>${safe(v.author)} · ${clockLabel(v.at)}</small></div><div class="actions">${btn("inspect-file", "查看正文", "file", "quiet", `data-no="${v.no}"`)}${v.no !== active ? btn("recover-file", "恢复为草稿", "history", "", `data-no="${v.no}"`) : ""}</div></div>`,
+                )
+                .join("")
+            : '<p class="muted">此文件尚无发布版本。保存草稿并发布后可在这里回看。</p>';
+        } else if (ui.mode === "edit") {
+          const b = draftBuffer(p),
+            conflict =
+              b.stamp !== (f?.stamp || 0) ||
+              !!(f?.draft && f.draft.base !== f.active && !b.reviewed);
+          contents = `<label class="label" for="edit-text">Markdown 源码<textarea id="edit-text" class="editor" spellcheck="false">${safe(b.text)}</textarea></label>
+      ${conflict ? `<div class="status alert">此文件的基线已更新。${btn("reconcile", "比较最新正文", "history", "quiet")}</div>` : ""}<p class="field-error" role="alert" id="edit-error" hidden></p>
+      <div class="doc-foot"><span id="edit-state" class="subtle">${changed ? "有未保存的修改" : kind}</span><div class="actions">${btn("cancel-edit", "取消编辑", "", "quiet")}${btn("save-file", "保存草稿", "save", "primary")}</div></div>`;
+        } else {
+          contents = md(selected) || "";
+          if (!selected.trim())
+            contents = '<p class="muted">正文为空。可在“编辑源码”中填写提示词。</p>';
+          const vars = variables(selected);
+          contents += `<div class="doc-foot"><span class="subtle">${changed ? "未保存预览" : kind}${vars.length ? " · " + vars.length + " 个模板变量" : ""}</span><div class="actions">${vars.length ? btn("sample", "试填变量", "braces", "quiet") : ""}${btn("download", "下载 Markdown", "download", "quiet")}${changed ? btn("save-file", "保存草稿", "save") : ""}</div></div>`;
+        }
+        const publish = f?.draft
+          ? btn(
+              "publish-file",
+              "发布此文件",
+              "upload",
+              "primary",
+              changed ? 'disabled title="请先保存当前修改"' : "",
+            )
+          : "";
+        const best =
+          ui.mode === "preview" && !publish ? btn("mode-edit", "编辑提示词", "edit") : "";
+        $("file-detail").innerHTML =
+          `<div class="detail-head"><div class="path">${icon("folder")}${pathMarkup(p)}</div><div class="file-meta"><div class="file-name"><h2>${safe(p.split("/").at(-1))}</h2>${tag(p)}${f?.draft && active ? pill("生效 " + version(active), "ok") : ""}${!isLocal ? pill("线上新增") : ""}</div><div class="actions">${best}${publish}</div></div><div class="usage">使用位置 · ${safe(useAt(p))}</div><nav class="subtabs" aria-label="文件视图">${navButton("mode-preview", "Markdown 预览", ui.mode === "preview")}${navButton("mode-edit", "编辑源码", ui.mode === "edit")}${navButton("mode-history", "文件版本", ui.mode === "history", null, hist.length)}</nav></div><div class="editor-area">${contents}</div>`;
+      }
+      function drawSnapshots() {
+        const plan = bulkPlan(db),
+          latest = plan.prior;
+        const since = manifestDiff(latest?.files || {}, manifest(db)).length;
+        const content = db.snapshots.length
+          ? db.snapshots
+              .slice()
+              .reverse()
+              .map(
+                (s) =>
+                  `<article class="snapshot-row"><div><strong class="mono">${s.id}</strong>${s === latest ? pill("最近快照", "ok") : ""}${s.restored ? pill("恢复自 " + s.restored) : ""}<p>${safe(s.note)}</p><small>${Object.keys(s.files).length} 个文件 · ${safe(s.author)} · ${clockLabel(s.at)}</small></div><div class="actions">${btn("inspect-snap", "查看快照", "layers", "", `data-id="${s.id}"`)}${manifestDiff(s.files, manifest(db)).length ? btn("recover-snap", "恢复快照", "history", "quiet", `data-id="${s.id}"`) : ""}</div></article>`,
+              )
+              .join("")
+          : '<p class="muted">尚无整库快照。整体发布后可按路径查看当时的文件版本。</p>';
+        $("view").innerHTML =
+          `<section class="panel"><div class="panel-head"><h2>整库快照</h2>${pill(since ? since + " 个生效文件尚未记入最近快照" : latest ? "与最近快照一致" : "尚未建立快照", since ? "warm" : "")}</div>${content}</section>`;
+      }
+      function draw() {
+        renderChrome();
+        const admin = $("identity").value === "admin";
+        $("page-head").innerHTML = "";
+        $("tabs").innerHTML = "";
+        if (!admin) {
+          note();
+          $("view").innerHTML =
+            `<section class="panel"><h2>当前账号没有 PromptOps 管理权限</h2><p class="muted">可用平台管理员演示身份查看文件库。</p></section>`;
+          return;
+        }
+        $("page-head").innerHTML =
+          `<div class="page-tabs"><span>平台租户管理</span><span>平台模型管理</span><span class="current">PromptOps</span></div><div class="titlebar"><div><h1>PromptOps</h1><p>按本地目录维护提示词和发布版本。</p></div><div class="actions">${btn("import", "导入本地基线", "folder")}${btn("bulk", "整体发布", "upload", "primary")}</div></div>`;
+        $("tabs").innerHTML =
+          navButton("library", "文件库", ui.screen === "library", "book") +
+          navButton(
+            "snapshots",
+            "整库快照",
+            ui.screen === "snapshots",
+            "layers",
+            db.snapshots.length,
+          );
+        if (ui.screen === "snapshots") drawSnapshots();
+        else drawLibrary();
+      }
+
+      const pop = $("dialog");
+      let formState = null,
+        back = null,
+        refreshAfterClose = false;
+      const savingFiles = new Set();
+      function rememberFocus(el) {
+        if (!el) return null;
+        if (el.id) return "#" + CSS.escape(el.id);
+        if (el.dataset.node) return `[data-node="${CSS.escape(el.dataset.node)}"]`;
+        if (el.dataset.action) {
+          let s = `[data-action="${CSS.escape(el.dataset.action)}"]`;
+          for (const k of ["id", "no", "path"])
+            if (el.dataset[k]) s += `[data-${k}="${CSS.escape(el.dataset[k])}"]`;
+          return s;
+        }
+        return null;
+      }
+      function modal(title, html, confirm = "", run = null, focus = "") {
+        if (!pop.open) back = rememberFocus(document.activeElement);
+        formState = { run, busy: false };
+        $("dialog-title").textContent = title;
+        $("dialog-body").innerHTML = html;
+        $("dialog-error").textContent = "";
+        $("close-dialog").innerHTML = icon("cross");
+        $("dialog-actions").innerHTML =
+          btn("close", confirm ? "取消" : "关闭", "", "quiet") +
+          (confirm
+            ? `<button type="submit" id="confirm" class="btn primary">${safe(confirm)}</button>`
+            : "");
+        if (!pop.open) pop.showModal();
+        pop.scrollTop = 0;
+        $(focus || "close-dialog")?.focus({ preventScroll: true });
+      }
+      function stopModal() {
+        if (pop.open) pop.close();
+      }
+      function err(msg) {
+        $("dialog-error").textContent = msg;
+      }
+      function finish(msg) {
+        note(msg);
+        draw();
+        stopModal();
+      }
+      function fieldErr(id, msg) {
+        $(id)?.setAttribute("aria-invalid", "true");
+        $(id)?.setAttribute("aria-describedby", "dialog-error");
+        $(id)?.focus();
+        throw Error(msg);
+      }
+      function requiredNote() {
+        const value = $("operation-note").value.trim();
+        if (!value) fieldErr("operation-note", "请填写本次操作的说明。");
+        return value;
+      }
+      const noteField = (label = "发布说明") =>
+        `<label class="label">${label}<input id="operation-note" maxlength="160" autocomplete="off"></label>`;
+      function editorError(msg) {
+        const el = $("edit-error");
+        if (el) {
+          el.hidden = false;
+          el.textContent = msg;
+          el.focus();
+        } else note(msg, true);
+      }
+      async function saveEditor() {
+        const p = ui.path,
+          b = ui.buffers.get(p);
+        if (!b || savingFiles.has(p)) return;
+        const f = record(db, p);
+        if (b.stamp !== (f?.stamp || 0) || (f?.draft && f.draft.base !== f.active && !b.reviewed)) {
+          reconcile();
+          return;
+        }
+        const submitted = b.text;
+        savingFiles.add(p);
+        const saveButton = $("file-detail")?.querySelector('[data-action="save-file"]');
+        if (saveButton) {
+          saveButton.disabled = true;
+          saveButton.textContent = "保存中…";
+        }
+        if ($("edit-text")) $("edit-text").readOnly = true;
+        try {
+          await saveChange((state) => {
+            checkFile(state, p, b.stamp);
+            const r = file(state, p);
+            const active = revision(r);
+            if (active && sameText(active.body, submitted)) r.draft = null;
+            else r.draft = { body: submitted, base: r.active };
+            r.stamp++;
+          });
+          if (b.text === submitted) ui.buffers.delete(p);
+          else {
+            b.original = submitted;
+            b.stamp = record(db, p).stamp;
+          }
+          if (ui.path === p && !dirty(p)) ui.mode = "preview";
+          note("已保存 " + p.split("/").at(-1) + " 的编辑。");
+          draw();
+        } catch (e) {
+          try {
+            db = read();
+          } catch {}
+          draw();
+          editorError(e.message);
+        } finally {
+          savingFiles.delete(p);
+        }
+      }
+      function reconcile() {
+        const p = ui.path,
+          b = draftBuffer(p),
+          latest = read(),
+          f = record(latest, p),
+          current = bodyFor(latest, p),
+          active = effective(latest, p);
+        db = latest;
+        modal(
+          "比较最新正文",
+          `<p class="path">prompts/${safe(p)}</p><div class="diff"><div><h3>线上最新草稿或正文</h3>${src(current)}</div><div><h3>我的编辑</h3>${src(b.text)}</div></div>${active && current !== active.body ? `<details><summary>查看当前生效的 ${version(active.no)}</summary>${src(active.body)}</details>` : ""}<p class="muted">继续后保留你的输入，可在编辑器中合并再保存。</p>`,
+          "保留我的输入继续编辑",
+          () => {
+            b.stamp = f?.stamp || 0;
+            b.original = current;
+            b.reviewed = true;
+            ui.mode = "edit";
+            finish("已核对最新内容，可继续编辑并保存。");
+          },
+        );
+      }
+      function newFile() {
+        const dirs = allDirs(paths());
+        modal(
+          "新建提示词",
+          `<label class="label">所在目录<input id="new-dir" list="folder-options" value="${safe(ui.folder)}" placeholder="例如 tasks/business_report/scenes/weekly"></label><datalist id="folder-options">${dirs.map((k) => `<option value="${safe(k)}"></option>`).join("")}</datalist>
+    <label class="label">文件名<input id="new-name" placeholder="例如 summary.md"></label><label class="label">Markdown 正文<textarea id="new-text" rows="6" placeholder="# 提示词标题"></textarea></label>`,
+          "创建草稿",
+          async () => {
+            const name = $("new-name").value.trim(),
+              dir = $("new-dir").value.trim();
+            if (!name || name.includes("/")) fieldErr("new-name", "请填写单个 .md 文件名。");
+            let p;
+            try {
+              p = validPath((dir ? dir + "/" : "") + name);
+            } catch (e) {
+              fieldErr("new-name", e.message);
+            }
+            const text = $("new-text").value;
+            await saveChange((state) => {
+              if (paths(state).includes(p))
+                fieldErr("new-name", "同一目录已有这个文件，请修改名称或打开已有文件。");
+              const f = file(state, p);
+              f.draft = { body: text, base: null };
+              f.stamp++;
+            });
+            ui.filter = "";
+            choose(p);
+            finish("已创建文件草稿。");
+          },
+          "new-name",
+        );
+      }
+      function trySample() {
+        const p = ui.path,
+          body = visibleText(p),
+          keys = variables(body);
+        const message = invalid(body);
+        if (message) {
+          modal("试填变量", `<p class="status alert">${safe(message)}</p>`);
+          return;
+        }
+        modal(
+          "试填模板变量",
+          `<p class="path">prompts/${safe(p)}</p>${keys.map((k) => `<label class="label">${safe(labels[k])} · ${safe(k)}<input data-sample="${safe(k)}" value="${safe(samples[k])}"></label>`).join("")}<div id="sample-output" aria-live="polite"></div>`,
+        );
+        renderSample(body);
+      }
+      function renderSample(body = visibleText(ui.path)) {
+        const values = Object.fromEntries(
+          [...pop.querySelectorAll("[data-sample]")].map((el) => [el.dataset.sample, el.value]),
+        );
+        const missing = Object.keys(values).find((k) => !values[k].trim());
+        $("sample-output").innerHTML = missing
+          ? `<p class="status alert">请填写${safe(labels[missing])}。</p>`
+          : md(body.replace(/\{\{(\w+)\}\}/g, (_, k) => values[k] ?? ""));
+      }
+      function download() {
+        const p = ui.path,
+          url = URL.createObjectURL(
+            new Blob([visibleText(p)], { type: "text/markdown;charset=utf-8" }),
+          ),
+          a = document.createElement("a");
+        a.href = url;
+        a.download = p.split("/").at(-1);
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1500);
+        note("已导出 " + a.download + "。本地对应路径为 prompts/" + p + "。");
+      }
+      function publishOne() {
+        const p = ui.path,
+          f = record(db, p);
+        if (!f?.draft || dirty(p)) return;
+        const why =
+          invalid(f.draft.body) ||
+          (f.draft.base !== f.active ? "生效版已变化，请核对草稿后再发布。" : "");
+        if (why) {
+          modal(
+            "此文件需要修改",
+            `<p class="path">prompts/${safe(p)}</p><p class="status alert">${safe(why)}</p>`,
+          );
+          return;
+        }
+        modal(
+          "发布此文件",
+          `<p class="path">prompts/${safe(p)}</p><p><strong>${version(f.active)} → ${version((f.versions.at(-1)?.no || 0) + 1)}</strong></p><p class="muted">使用位置 · ${safe(useAt(p))}</p>${compareText(revision(f)?.body, f.draft.body)}${noteField()}`,
+          "确认发布此文件",
+          async () => {
+            const n = requiredNote(),
+              no = await saveChange((s) => {
+                checkFile(s, p, f.stamp);
+                return addVersion(file(s, p), n);
+              });
+            ui.buffers.delete(p);
+            finish(p.split("/").at(-1) + " 已发布为 " + version(no) + "，其他文件各自保留。");
+          },
+        );
+      }
+      function inspectRevision(p, no) {
+        const v = revision(record(db, p), no);
+        if (!v) return;
+        modal(
+          "文件版本 " + version(no),
+          `<p class="path">prompts/${safe(p)}</p><p class="subtle">${safe(v.note)} · ${clockLabel(v.at)} · ${safe(v.author)}</p>${md(v.body)}`,
+        );
+      }
+      function recoverFile(no) {
+        const p = ui.path,
+          f = record(db, p),
+          v = revision(f, no);
+        if (!v) return;
+        modal(
+          "恢复为文件草稿",
+          `<p class="path">prompts/${safe(p)}</p><p>将 ${version(no)} 的正文放回此文件的草稿，保存后可核对并单独发布。</p>${f.draft || dirty(p) ? '<p class="status alert">确认后会替换此文件已有的草稿与未保存编辑。</p>' : ""}${compareText(bodyFor(db, p), v.body)}`,
+          "恢复为草稿",
+          async () => {
+            await saveChange((s) => {
+              checkFile(s, p, f.stamp);
+              const row = file(s, p);
+              row.draft = { body: v.body, base: row.active };
+              row.stamp++;
+            });
+            ui.buffers.delete(p);
+            ui.mode = "preview";
+            finish("已将 " + version(no) + " 的正文恢复为草稿，当前生效版本不变。");
+          },
+        );
+      }
+      let importSelection = null,
+        importSequence = 0;
+      function importRows(entries, s) {
+        return Object.entries(entries).map(([p, body]) => {
+          const f = record(s, p),
+            working = f?.draft?.body ?? revision(f)?.body;
+          const absent = !f,
+            unchanged = f?.local != null && sameText(f.local, body),
+            matches = working != null && sameText(working, body);
+          const conflict =
+            !absent &&
+            !unchanged &&
+            !matches &&
+            working != null &&
+            (f?.local == null || !sameText(working, f.local));
+          const status = unchanged
+            ? "已对齐本地基线"
+            : matches
+              ? "正文已一致"
+              : conflict
+                ? "两端均有修改"
+                : absent
+                  ? "新增文件"
+                  : "本地有更新";
+          return { p, body, status, conflict, unchanged, matches };
+        });
+      }
+      function importPanel() {
+        if (!$("import-list") || !importSelection) return;
+        const rows = importRows(importSelection, db),
+          conflicts = rows.filter((r) => r.conflict).length;
+        $("import-count").textContent = rows.length + " 个 Markdown 文件";
+        const details = $("import-list").closest("details");
+        details.open = conflicts > 0;
+        details.querySelector("summary").textContent = conflicts
+          ? "核对文件 · " + conflicts + " 处需要选择"
+          : "核对文件和冲突";
+        $("import-list").innerHTML = rows
+          .map(
+            (r) =>
+              `<div class="changes"><div><span class="path">${safe(r.p)}</span> ${pill(r.status, r.conflict ? "warm" : "")}${r.conflict ? `<label class="checkrow"><input type="checkbox" data-import-path="${safe(r.p)}">采用此本地正文作为草稿</label><details><summary>比较双方正文</summary>${compareText(bodyFor(db, r.p), r.body)}</details>` : ""}</div></div>`,
+          )
+          .join("");
+      }
+      function openImport() {
+        const expected = db.revision;
+        importSelection = LOCAL;
+        importSequence++;
+        modal(
+          "导入本地基线",
+          `<p>按 <code>prompts/</code> 的相对路径核对文件。新增或更新的正文先保存为草稿。</p><label class="label">可选择自己的 prompts 目录<input type="file" id="folder-picker" webkitdirectory directory multiple></label>
+    <div class="between"><strong id="import-count"></strong><span class="subtle" id="import-source">随包本地目录</span></div><details><summary>核对文件和冲突</summary><div id="import-list"></div></details>`,
+          "确认导入",
+          async () => {
+            if (!importSelection) throw Error("请先完成目录读取。");
+            const choices = new Set(
+              [...pop.querySelectorAll("[data-import-path]:checked")].map(
+                (n) => n.dataset.importPath,
+              ),
+            );
+            let updated = 0;
+            await saveChange((s) => {
+              checkLibrary(s, expected);
+              for (const r of importRows(importSelection, s)) {
+                if (r.unchanged || (r.conflict && !choices.has(r.p))) continue;
+                const f = file(s, r.p);
+                if (!r.matches) {
+                  f.draft = { body: r.body, base: f.active };
+                  updated++;
+                }
+                f.local = r.body;
+                f.stamp++;
+              }
+            });
+            finish(
+              updated ? `已导入 ${updated} 个文件草稿。` : "本地目录已核对，现有版本与草稿保留。",
+            );
+          },
+        );
+        importPanel();
+      }
+      async function pickDirectory(input) {
+        if (!input.files?.length) return;
+        const turn = ++importSequence;
+        importSelection = null;
+        $("confirm").disabled = true;
+        try {
+          const entries = new Map(),
+            files = [...input.files];
+          for (const item of files) {
+            const parts = (item.webkitRelativePath || item.name).split("/");
+            const rel = parts.length > 1 ? parts.slice(1).join("/") : parts[0];
+            if (!rel.endsWith(".md")) continue;
+            const p = validPath(rel);
+            if (entries.has(p)) throw Error("同一相对路径重复，请重新选择目录。");
+            entries.set(p, await item.text());
+          }
+          if (!entries.size) throw Error("目录中没有 .md 文件，请重新选择。");
+          if (turn !== importSequence || !pop.open) return;
+          importSelection = Object.fromEntries(entries);
+          $("import-source").textContent = files[0].webkitRelativePath.split("/")[0] || "选定目录";
+          err("");
+          importPanel();
+          $("confirm").disabled = false;
+        } catch (e) {
+          if (turn === importSequence && pop.open) {
+            err(e.message);
+            $("import-count").textContent = "目录尚未载入";
+            $("import-list").innerHTML = "";
+          }
+        }
+      }
+
+      function manifestTable(map, snapshot) {
+        return `<div class="table-scroll"><table class="registry"><thead><tr><th>文件路径</th><th>文件版本</th><th>正文</th></tr></thead><tbody>${Object.keys(
+          map,
+        )
+          .sort()
+          .map(
+            (p) =>
+              `<tr><td class="path">${safe(p)}</td><td>${version(map[p])}</td><td>${btn("snap-file", "查看", "", "quiet", `data-path="${safe(p)}" data-no="${map[p]}" data-id="${snapshot}" aria-label="查看 ${safe(p)} ${version(map[p])}"`)}</td></tr>`,
+          )
+          .join("")}</tbody></table></div>`;
+      }
+      function bulk() {
+        const expected = db.revision,
+          plan = bulkPlan(db),
+          prior = plan.prior?.files || {};
+        if (!Object.keys(plan.target).length) {
+          modal(
+            "整体发布",
+            `<p>还没有可发布的文件。可以先导入本地目录，或创建并保存第一份提示词。</p>${btn("import", "导入本地基线", "folder")}`,
+          );
+          return;
+        }
+        if (plan.issues.length) {
+          modal(
+            "整体发布需要处理文件",
+            `<p>本次候选全部保留为草稿。</p>${plan.issues.map(([p, why]) => `<div class="changes"><div><p class="path">${safe(p)}</p><p class="field-error">${safe(why)}</p>${btn("open-error-file", "打开文件", "edit", "quiet", `data-path="${safe(p)}"`)}</div></div>`).join("")}`,
+          );
+          return;
+        }
+        if (!plan.changed.length && plan.prior) {
+          inspectSnapshot(plan.prior.id);
+          return;
+        }
+        const unsaved = [...ui.buffers.keys()].filter(dirty);
+        const rows = plan.changed
+          .map((p) => {
+            const f = record(db, p),
+              pending = !!f?.draft;
+            return `<div><p class="path">${safe(p)}</p><small>${version(prior[p])} → ${version(plan.target[p])} · ${pending ? "本次发布草稿" : "已单独发布，纳入快照"}</small>${pending ? `<details><summary>核对草稿正文</summary>${compareText(revision(f)?.body, f.draft.body)}</details>` : ""}</div>`;
+          })
+          .join("");
+        modal(
+          "整体发布并创建快照",
+          `<p><strong>${plan.pending.length} 份草稿</strong>将一起发布，快照收录 <strong>${Object.keys(plan.target).length} 个生效文件</strong>。未改文件保留原版本号。</p>${unsaved.length ? `<p class="status alert">以下文件有未保存编辑，本次仅纳入已保存内容。${safe(unsaved.join("、"))}</p>` : ""}<details open><summary>相对${plan.prior ? plan.prior.id : "空库"}的 ${plan.changed.length} 项变化</summary><div class="changes">${rows}</div></details>${noteField()}`,
+          "确认整体发布",
+          async () => {
+            const message = requiredNote();
+            const id = await saveChange((s) => {
+              checkLibrary(s, expected);
+              for (const p of plan.pending) addVersion(s.files[p], message);
+              return addSnapshot(s, message);
+            });
+            for (const p of plan.pending) if (!dirty(p)) ui.buffers.delete(p);
+            ui.screen = "snapshots";
+            finish("整体发布成功，已生成快照 " + id + "。");
+          },
+        );
+      }
+      function inspectSnapshot(id) {
+        const s = db.snapshots.find((x) => x.id === id);
+        if (!s) return;
+        modal(
+          "整库快照 " + id,
+          `<p>${safe(s.note)}</p><p class="subtle">${Object.keys(s.files).length} 个文件 · ${clockLabel(s.at)} · ${safe(s.author)}</p>${manifestTable(s.files, s.id)}`,
+        );
+      }
+      function restoreSnapshot(id) {
+        const target = db.snapshots.find((x) => x.id === id),
+          expected = db.revision;
+        if (!target) return;
+        const old = manifest(db),
+          changes = manifestDiff(old, target.files);
+        if (!changes.length) {
+          inspectSnapshot(id);
+          return;
+        }
+        modal(
+          "恢复整库快照 " + id,
+          `<p>确认后按这份完整清单恢复，新受理的任务使用恢复后的组合。以后新增的文件保留历史和草稿。</p><div class="changes">${changes.map((p) => `<div><p class="path">${safe(p)}</p><small>${version(old[p])} → ${target.files[p] ? version(target.files[p]) : "退出生效清单"}</small></div>`).join("")}</div>${noteField("恢复说明")}`,
+          "确认恢复快照",
+          async () => {
+            const message = requiredNote(),
+              newId = await saveChange((s) => {
+                checkLibrary(s, expected);
+                for (const p of changes) {
+                  const f = record(s, p),
+                    no = target.files[p] ?? null;
+                  if (!f || (no !== null && !revision(f, no)))
+                    throw Error("历史文件版本暂不可读，已保留整个生效清单。");
+                  f.active = no;
+                  f.stamp++;
+                }
+                return addSnapshot(s, message, id);
+              });
+            finish("已恢复 " + id + " 的文件组合，并记录快照 " + newId + "。");
+          },
+        );
+      }
+      function focusNode(path) {
+        const row = [...document.querySelectorAll("[data-node]")].find(
+          (n) => n.dataset.node === path,
+        );
+        if (!row) return;
+        for (const el of document.querySelectorAll("[data-node][tabindex='0']")) el.tabIndex = -1;
+        row.tabIndex = 0;
+        ui.focusPath = path;
+        row.focus({ preventScroll: true });
+        row.scrollIntoView({ block: "nearest" });
+      }
+      function treeToggle(p) {
+        if (ui.filter) {
+          ui.filter = "";
+          $("tree-search").value = "";
+          parents(p).forEach((x) => ui.expanded.add(x));
+        }
+        if (ui.expanded.has(p)) ui.expanded.delete(p);
+        else ui.expanded.add(p);
+        ui.folder = p;
+        ui.focusPath = p;
+        drawTree();
+        focusNode(p);
+      }
+      function showFile(p) {
+        choose(p);
+        note();
+        drawLibrary();
+        if (matchMedia("(max-width:680px)").matches)
+          $("file-detail").focus({ preventScroll: true });
+        else focusNode(p);
+      }
+      document.addEventListener("keydown", (e) => {
+        const n = e.target.closest("[data-node]");
+        if (!n || pop.open) return;
+        const rows = [...$("file-tree").querySelectorAll("[data-node]")],
+          at = rows.indexOf(n),
+          p = n.dataset.node;
+        const goal = {
+          ArrowUp: Math.max(0, at - 1),
+          ArrowDown: Math.min(rows.length - 1, at + 1),
+          Home: 0,
+          End: rows.length - 1,
+        };
+        if (Object.hasOwn(goal, e.key)) {
+          e.preventDefault();
+          focusNode(rows[goal[e.key]].dataset.node);
+        } else if (e.key === "ArrowRight" && n.dataset.folder === "true") {
+          e.preventDefault();
+          if (n.getAttribute("aria-expanded") === "false") treeToggle(p);
+          else if (rows[at + 1]) focusNode(rows[at + 1].dataset.node);
+        } else if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          if (n.getAttribute("aria-expanded") === "true") treeToggle(p);
+          else if (p.includes("/")) focusNode(p.split("/").slice(0, -1).join("/"));
+        }
+      });
+      document.addEventListener("click", (e) => {
+        const target = e.target.closest("button");
+        if (!target || target.disabled) return;
+        if (target.id === "close-dialog" || target.dataset.action === "close") {
+          if (!formState?.busy) stopModal();
+          return;
+        }
+        if ($("identity").value !== "admin") return;
+        if (target.hasAttribute("data-node")) {
+          if (target.dataset.folder === "true") treeToggle(target.dataset.node);
+          else showFile(target.dataset.node);
+          return;
+        }
+        const a = target.dataset.action;
+        if (!a) return;
+        const p = ui.path;
+        switch (a) {
+          case "library":
+          case "snapshots":
+            ui.screen = a;
+            note();
+            draw();
+            document.querySelector(`[data-action="${a}"]`)?.focus({ preventScroll: true });
+            break;
+          case "mode-preview":
+          case "mode-edit":
+          case "mode-history":
+            ui.mode = a.slice(5);
+            note();
+            drawDetail();
+            if (ui.mode === "edit") $("edit-text").focus({ preventScroll: true });
+            else
+              document
+                .querySelector(`.subtabs [data-action="${a}"]`)
+                ?.focus({ preventScroll: true });
+            break;
+          case "mobile-tree":
+            ui.mobileOpen = !ui.mobileOpen;
+            drawLibrary();
+            document.querySelector('[data-action="mobile-tree"]')?.focus({ preventScroll: true });
+            break;
+          case "expand-tree":
+            ui.filter = "";
+            if (ui.expanded.size) ui.expanded.clear();
+            else
+              allDirs(paths())
+                .filter(Boolean)
+                .forEach((x) => ui.expanded.add(x));
+            drawLibrary();
+            document.querySelector('[data-action="expand-tree"]')?.focus({ preventScroll: true });
+            break;
+          case "new":
+            newFile();
+            break;
+          case "cancel-edit":
+            ui.buffers.delete(p);
+            ui.mode = "preview";
+            drawLibrary();
+            break;
+          case "save-file":
+            saveEditor();
+            break;
+          case "reconcile":
+            reconcile();
+            break;
+          case "sample":
+            trySample();
+            break;
+          case "download":
+            download();
+            break;
+          case "publish-file":
+            publishOne();
+            break;
+          case "inspect-file":
+            inspectRevision(p, Number(target.dataset.no));
+            break;
+          case "recover-file":
+            recoverFile(Number(target.dataset.no));
+            break;
+          case "import":
+            openImport();
+            break;
+          case "bulk":
+            bulk();
+            break;
+          case "inspect-snap":
+            inspectSnapshot(target.dataset.id);
+            break;
+          case "recover-snap":
+            restoreSnapshot(target.dataset.id);
+            break;
+          case "snap-file": {
+            const path = target.dataset.path,
+              no = Number(target.dataset.no),
+              id = target.dataset.id,
+              v = revision(record(db, path), no);
+            if (!v) break;
+            modal(
+              id + " · " + version(no),
+              `<p class="path">prompts/${safe(path)}</p>${md(v.body)}${btn("inspect-snap", "返回快照 " + id, "layers", "quiet", `data-id="${safe(id)}"`)}`,
+            );
+            break;
+          }
+          case "open-error-file":
+            stopModal();
+            ui.filter = "";
+            choose(target.dataset.path);
+            ui.mode = "edit";
+            draw();
+            break;
+        }
+      });
+      document.addEventListener("input", (e) => {
+        if (e.target.id === "tree-search") {
+          ui.filter = e.target.value;
+          drawTree(false);
+        } else if (e.target.id === "edit-text") {
+          draftBuffer(ui.path).text = e.target.value;
+          $("edit-state").textContent = dirty(ui.path) ? "有未保存的修改" : "修改已与原文一致";
+          const publish = $("file-detail").querySelector('[data-action="publish-file"]');
+          if (publish) publish.disabled = dirty(ui.path);
+          const currentTag = $("file-detail").querySelector(".file-name>.pill");
+          if (currentTag) currentTag.outerHTML = tag(ui.path);
+          drawTree();
+        } else if (e.target.hasAttribute("data-sample")) renderSample();
+      });
+      document.addEventListener("change", (e) => {
+        if (e.target.id === "folder-picker") {
+          pickDirectory(e.target);
+          return;
+        }
+        if (e.target.id === "identity") {
+          stopModal();
+          note();
+          draw();
+        }
+      });
+      $("dialog-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const state = formState;
+        if (!state?.run || state.busy || $("identity").value !== "admin") return;
+        state.busy = true;
+        const button = $("confirm"),
+          old = button?.textContent;
+        if (button) {
+          button.disabled = true;
+          button.textContent = "处理中…";
+        }
+        err("");
+        try {
+          await state.run();
+        } catch (error) {
+          err(error.message);
+          try {
+            db = read();
+          } catch {}
+        } finally {
+          state.busy = false;
+          if (formState === state && button?.isConnected) {
+            button.disabled = false;
+            button.textContent = old;
+          }
+        }
+      });
+      pop.addEventListener("cancel", (e) => {
+        if (formState?.busy) e.preventDefault();
+      });
+      pop.addEventListener("close", () => {
+        if (pop.open) return;
+        formState = null;
+        importSequence++;
+        if (refreshAfterClose) {
+          refreshAfterClose = false;
+          db = read();
+          draw();
+        }
+        (
+          (back && document.querySelector(back)) ||
+          document.querySelector('.subtabs [aria-current="page"]') ||
+          $("main")
+        ).focus({ preventScroll: true });
+        back = null;
+      });
+      window.addEventListener("storage", (e) => {
+        if (e.key !== key || !e.newValue) return;
+        try {
+          db = read();
+          if (pop.open) {
+            refreshAfterClose = true;
+            err("另一个窗口已保存变更。本次提交会核对此文件或整库的版本。");
+            return;
+          }
+          const editing = document.activeElement?.id === "edit-text",
+            start = editing ? $("edit-text").selectionStart : 0,
+            end = editing ? $("edit-text").selectionEnd : 0;
+          draw();
+          if (editing && $("edit-text")) {
+            $("edit-text").focus({ preventScroll: true });
+            $("edit-text").setSelectionRange(start, end);
+          }
+          if ($("identity").value === "admin") note("已载入另一窗口保存的变更。");
+        } catch {
+          note("无法读取最新文件，请刷新后再试。", true);
+        }
+      });
+      window.addEventListener("beforeunload", (e) => {
+        if ([...ui.buffers.keys()].some(dirty)) {
+          e.preventDefault();
+          e.returnValue = "";
+        }
+      });
+      draw();
+      if (storeIssue) note("当前浏览器无法读取存储，请启用本地存储后重开。", true);
+    </script>
+  </body>
+</html>

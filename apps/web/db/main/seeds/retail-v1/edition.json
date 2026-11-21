@@ -1,0 +1,57 @@
+{
+  "locator": "compass-retail/semantic-content",
+  "version": "1",
+  "release": "diagnostic-v3-20261019",
+  "tenants": [
+    {
+      "key": "101",
+      "tenant": "99500000-0000-4000-8000-000000000010",
+      "workspace": "99500000-0000-4000-8000-000000000020",
+      "source": "retail:101",
+      "departments": ["sales", "finance", "marketing"]
+    },
+    {
+      "key": "102",
+      "tenant": "99500000-0000-4000-8000-000000000011",
+      "workspace": "99500000-0000-4000-8000-000000000022",
+      "source": "retail:102",
+      "departments": ["sales", "finance", "marketing"]
+    }
+  ],
+  "editor": "99500000-0000-4000-8000-000000000001",
+  "personal": {
+    "scope": "101.personal",
+    "tenant": "101",
+    "user": "99500000-0000-4000-8000-000000000003"
+  },
+  "policies": [
+    { "scope": "platform", "pins": ["platform/sales.order_count"] },
+    {
+      "scope": "101",
+      "pins": ["101/term.sales_amount", "101/sales.net_gmv", "101/inventory.closing_available_qty"]
+    },
+    { "scope": "102", "pins": ["102/term.sales_amount", "102/sales.net_gmv"] },
+    {
+      "scope": "101.sales",
+      "term": "101/term.sales_amount",
+      "default": "101.sales/sales.paid_gmv",
+      "pins": ["101.sales/sales.paid_gmv", "101/channel.reported_paid_amount"]
+    },
+    {
+      "scope": "101.finance",
+      "term": "101/term.sales_amount",
+      "default": "101.finance/finance.recognized_revenue",
+      "pins": ["101.finance/finance.recognized_revenue"]
+    },
+    {
+      "scope": "102.sales",
+      "term": "102/term.sales_amount",
+      "default": "102/sales.net_gmv",
+      "pins": ["102/sales.net_gmv"]
+    },
+    {
+      "scope": "101.marketing",
+      "pins": ["101.marketing/marketing.net_roas", "101.marketing/term.ad_return"]
+    }
+  ]
+}

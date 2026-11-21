@@ -1,7 +1,7 @@
 {
-  "version": "2c16fee116a7536b",
-  "scenes": [
-    {
+  "scenes": {
+    "SC-01": {
+      "description": "经营与渠道 / 经营指标快查：已发布指标及目标期间汇总；指标表和简短解读\n",
       "scene_id": "SC-01",
       "category_id": "business_channel",
       "category_name": "经营与渠道",
@@ -10,9 +10,10 @@
       "difficulty": "L1",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "已发布指标及目标期间汇总；指标表和简短解读"
+      "examples": []
     },
-    {
+    "SC-02": {
+      "description": "经营与渠道 / 趋势与达成对比：同口径期间指标和比较基准；变化额、变化率、摘要\n",
       "scene_id": "SC-02",
       "category_id": "business_channel",
       "category_name": "经营与渠道",
@@ -21,9 +22,10 @@
       "difficulty": "L1",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "同口径期间指标和比较基准；变化额、变化率、摘要"
+      "examples": []
     },
-    {
+    "SC-03": {
+      "description": "经营与渠道 / 销售下降诊断：销售、流量、转化、退款和库存样例；诊断结论、待验证假设、排查计划\n",
       "scene_id": "SC-03",
       "category_id": "business_channel",
       "category_name": "经营与渠道",
@@ -32,9 +34,10 @@
       "difficulty": "L3",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "销售、流量、转化、退款和库存样例；诊断结论、待验证假设、排查计划"
+      "examples": []
     },
-    {
+    "SC-04": {
+      "description": "经营与渠道 / 促销收入与贡献拆解：净销售、成本、费用与促销对照；贡献分解和重点原因\n",
       "scene_id": "SC-04",
       "category_id": "business_channel",
       "category_name": "经营与渠道",
@@ -43,9 +46,10 @@
       "difficulty": "L3",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "净销售、成本、费用与促销对照；贡献分解和重点原因"
+      "examples": []
     },
-    {
+    "SC-05": {
+      "description": "营销与会员 / 成熟退款后的活动回报：活动订单群、退款观察窗和费用口径；可比活动回报与成熟度说明\n",
       "scene_id": "SC-05",
       "category_id": "marketing_members",
       "category_name": "营销与会员",
@@ -54,9 +58,10 @@
       "difficulty": "L3",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "活动订单群、退款观察窗和费用口径；可比活动回报与成熟度说明"
+      "examples": []
     },
-    {
+    "SC-06": {
+      "description": "营销与会员 / 获客渠道表现比较：新客定义、获客费用与观察窗口；渠道获客和回报对照\n",
       "scene_id": "SC-06",
       "category_id": "marketing_members",
       "category_name": "营销与会员",
@@ -65,9 +70,10 @@
       "difficulty": "L2",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "新客定义、获客费用与观察窗口；渠道获客和回报对照"
+      "examples": []
     },
-    {
+    "SC-07": {
+      "description": "营销与会员 / 投放与人群建议：渠道效果、人群、业务限制；可审阅的建议及取舍\n",
       "scene_id": "SC-07",
       "category_id": "marketing_members",
       "category_name": "营销与会员",
@@ -76,9 +82,10 @@
       "difficulty": "L3",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "渠道效果、人群、业务限制；可审阅的建议及取舍"
+      "examples": []
     },
-    {
+    "SC-08": {
+      "description": "电商与产品 / 固定漏斗查看：已统一会话口径的漏斗汇总；漏斗表或摘要\n",
       "scene_id": "SC-08",
       "category_id": "commerce_product",
       "category_name": "电商与产品",
@@ -87,9 +94,10 @@
       "difficulty": "L1",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "已统一会话口径的漏斗汇总；漏斗表或摘要"
+      "examples": []
     },
-    {
+    "SC-09": {
+      "description": "电商与产品 / 流量增长转化下降：流量漏斗、价格、库存和订单样例；瓶颈位置和排查建议\n",
       "scene_id": "SC-09",
       "category_id": "commerce_product",
       "category_name": "电商与产品",
@@ -98,9 +106,10 @@
       "difficulty": "L3",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "流量漏斗、价格、库存和订单样例；瓶颈位置和排查建议"
+      "examples": []
     },
-    {
+    "SC-10": {
+      "description": "交易与履约 / 订单支付退款对账：订单、支付、退款状态及对账规则；差异清单和差异类别\n",
       "scene_id": "SC-10",
       "category_id": "transactions_fulfillment",
       "category_name": "交易与履约",
@@ -109,9 +118,10 @@
       "difficulty": "L2",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "订单、支付、退款状态及对账规则；差异清单和差异类别"
+      "examples": []
     },
-    {
+    "SC-11": {
+      "description": "商品与库存 / 库存及热门尺码盘点：尺码、地点可售库存和热销阈值；缺码清单与库存分布\n",
       "scene_id": "SC-11",
       "category_id": "product_inventory",
       "category_name": "商品与库存",
@@ -120,9 +130,10 @@
       "difficulty": "L2",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "尺码、地点可售库存和热销阈值；缺码清单与库存分布"
+      "examples": []
     },
-    {
+    "SC-12": {
+      "description": "商品与库存 / 补货与调拨方案：缺口、可调库存、到货计划和运输限制；补货或调拨草案\n",
       "scene_id": "SC-12",
       "category_id": "product_inventory",
       "category_name": "商品与库存",
@@ -131,9 +142,10 @@
       "difficulty": "L3",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "缺口、可调库存、到货计划和运输限制；补货或调拨草案"
+      "examples": []
     },
-    {
+    "SC-13": {
+      "description": "商品与库存 / 库存老化与动销：库存批次、历史估值和动销窗口；库龄分组与滞销清单\n",
       "scene_id": "SC-13",
       "category_id": "product_inventory",
       "category_name": "商品与库存",
@@ -142,9 +154,10 @@
       "difficulty": "L2",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "库存批次、历史估值和动销窗口；库龄分组与滞销清单"
+      "examples": []
     },
-    {
+    "SC-14": {
+      "description": "商品与库存 / 需求预测与备货估计：可用历史销量、活动和缺货标记；预测区间、假设和回测方案\n",
       "scene_id": "SC-14",
       "category_id": "product_inventory",
       "category_name": "商品与库存",
@@ -153,9 +166,10 @@
       "difficulty": "L3",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "可用历史销量、活动和缺货标记；预测区间、假设和回测方案"
+      "examples": []
     },
-    {
+    "SC-15": {
+      "description": "区域与门店 / 新老门店增长拆解：开闭店记录、可比规则和销售；全店/同店趋势及增长贡献\n",
       "scene_id": "SC-15",
       "category_id": "regions_stores",
       "category_name": "区域与门店",
@@ -164,9 +178,10 @@
       "difficulty": "L2",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "开闭店记录、可比规则和销售；全店/同店趋势及增长贡献"
+      "examples": []
     },
-    {
+    "SC-16": {
+      "description": "区域与门店 / 门店排名与目标差距：门店指标和明确排名规则；门店榜单与目标差额\n",
       "scene_id": "SC-16",
       "category_id": "regions_stores",
       "category_name": "区域与门店",
@@ -175,9 +190,10 @@
       "difficulty": "L1",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "门店指标和明确排名规则；门店榜单与目标差额"
+      "examples": []
     },
-    {
+    "SC-17": {
+      "description": "营销与会员 / 会员复购与留存：会员身份与同期完整观察窗口；复购/留存及分组对照\n",
       "scene_id": "SC-17",
       "category_id": "marketing_members",
       "category_name": "营销与会员",
@@ -186,9 +202,10 @@
       "difficulty": "L2",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "会员身份与同期完整观察窗口；复购/留存及分组对照"
+      "examples": []
     },
-    {
+    "SC-18": {
+      "description": "营销与会员 / 会员分群与运营建议：获准的会员聚合、偏好和历史行为；人群策略及验证建议\n",
       "scene_id": "SC-18",
       "category_id": "marketing_members",
       "category_name": "营销与会员",
@@ -197,9 +214,10 @@
       "difficulty": "L3",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "获准的会员聚合、偏好和历史行为；人群策略及验证建议"
+      "examples": []
     },
-    {
+    "SC-19": {
+      "description": "交易与履约 / 退货与商品问题诊断：完整退货观察窗和明细；异常分组、假设与排查项\n",
       "scene_id": "SC-19",
       "category_id": "transactions_fulfillment",
       "category_name": "交易与履约",
@@ -208,9 +226,10 @@
       "difficulty": "L3",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "完整退货观察窗和明细；异常分组、假设与排查项"
+      "examples": []
     },
-    {
+    "SC-20": {
+      "description": "交易与履约 / 履约瓶颈与补货延迟：出库、运输、签收与库存事件；瓶颈诊断和待补数据\n",
       "scene_id": "SC-20",
       "category_id": "transactions_fulfillment",
       "category_name": "交易与履约",
@@ -219,9 +238,10 @@
       "difficulty": "L3",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "出库、运输、签收与库存事件；瓶颈诊断和待补数据"
+      "examples": []
     },
-    {
+    "SC-21": {
+      "description": "数据与语义 / 指标定义与口径解释：已发布指标说明；定义、适用范围和例子\n",
       "scene_id": "SC-21",
       "category_id": "data_semantics",
       "category_name": "数据与语义",
@@ -230,9 +250,10 @@
       "difficulty": "L1",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "已发布指标说明；定义、适用范围和例子"
+      "examples": []
     },
-    {
+    "SC-22": {
+      "description": "数据与语义 / 只读 SQL 生成：Schema、口径、业务和知识截止；sql、parameters 和校验说明\n",
       "scene_id": "SC-22",
       "category_id": "data_semantics",
       "category_name": "数据与语义",
@@ -241,9 +262,10 @@
       "difficulty": "L2",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "Schema、口径、业务和知识截止；sql、parameters 和校验说明"
+      "examples": []
     },
-    {
+    "SC-23": {
+      "description": "数据与语义 / 数据新鲜度与质量检查：刷新水位、覆盖率和质量样例；就绪状态与缺口清单\n",
       "scene_id": "SC-23",
       "category_id": "data_semantics",
       "category_name": "数据与语义",
@@ -252,9 +274,10 @@
       "difficulty": "L2",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "刷新水位、覆盖率和质量样例；就绪状态与缺口清单"
+      "examples": []
     },
-    {
+    "SC-24": {
+      "description": "数据与语义 / 文件清洗与数据整理：字段映射和清洗规则；清洗方案及质量摘要\n",
       "scene_id": "SC-24",
       "category_id": "data_semantics",
       "category_name": "数据与语义",
@@ -263,9 +286,10 @@
       "difficulty": "L2",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "字段映射和清洗规则；清洗方案及质量摘要"
+      "examples": []
     },
-    {
+    "SC-25": {
+      "description": "报告与协作 / 图表选择与呈现：已核对结果表和展示目标；图表规格与说明\n",
       "scene_id": "SC-25",
       "category_id": "reports_collaboration",
       "category_name": "报告与协作",
@@ -274,9 +298,10 @@
       "difficulty": "L1",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "已核对结果表和展示目标；图表规格与说明"
+      "examples": []
     },
-    {
+    "SC-26": {
+      "description": "报告与协作 / 经营报告与摘要：已核对指标、结论和报告结构；简报、摘要或报告文本\n",
       "scene_id": "SC-26",
       "category_id": "reports_collaboration",
       "category_name": "报告与协作",
@@ -285,9 +310,10 @@
       "difficulty": "L1",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "已核对指标、结论和报告结构；简报、摘要或报告文本"
+      "examples": []
     },
-    {
+    "SC-27": {
+      "description": "报告与协作 / 结论核对与冲突检查：结论、来源片段与来源 ID；支持/不足/冲突及引用\n",
       "scene_id": "SC-27",
       "category_id": "reports_collaboration",
       "category_name": "报告与协作",
@@ -296,9 +322,10 @@
       "difficulty": "L2",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "结论、来源片段与来源 ID；支持/不足/冲突及引用"
+      "examples": []
     },
-    {
+    "SC-28": {
+      "description": "营销与会员 / 实验与因果评估：实验方案或对照数据及方法约束；效果分析方案和局限\n",
       "scene_id": "SC-28",
       "category_id": "marketing_members",
       "category_name": "营销与会员",
@@ -307,9 +334,10 @@
       "difficulty": "L3",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "实验方案或对照数据及方法约束；效果分析方案和局限"
+      "examples": []
     },
-    {
+    "SC-29": {
+      "description": "报告与协作 / 周报模板与定时意图：报告范围、频率、数据条件与受众；任务配置草案\n",
       "scene_id": "SC-29",
       "category_id": "reports_collaboration",
       "category_name": "报告与协作",
@@ -318,9 +346,10 @@
       "difficulty": "L2",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "报告范围、频率、数据条件与受众；任务配置草案"
+      "examples": []
     },
-    {
+    "SC-30": {
+      "description": "报告与协作 / 异常监测与效果跟踪：监测对象、规则和评估窗口；监测规则及追踪方案\n",
       "scene_id": "SC-30",
       "category_id": "reports_collaboration",
       "category_name": "报告与协作",
@@ -329,9 +358,10 @@
       "difficulty": "L2",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "监测对象、规则和评估窗口；监测规则及追踪方案"
+      "examples": []
     },
-    {
+    "SC-31": {
+      "description": "平台运行 / 性能与故障诊断：获准的脱敏调用和运行记录；故障分析与排查建议\n",
       "scene_id": "SC-31",
       "category_id": "platform_operations",
       "category_name": "平台运行",
@@ -340,9 +370,10 @@
       "difficulty": "L3",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "获准的脱敏调用和运行记录；故障分析与排查建议"
+      "examples": []
     },
-    {
+    "SC-32": {
+      "description": "电商与产品 / 产品流程改进排序：流程指标、用户反馈和限制；改进优先级及验证计划\n",
       "scene_id": "SC-32",
       "category_id": "commerce_product",
       "category_name": "电商与产品",
@@ -351,9 +382,10 @@
       "difficulty": "L3",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "流程指标、用户反馈和限制；改进优先级及验证计划"
+      "examples": []
     },
-    {
+    "SC-33": {
+      "description": "输入边界 / 关键条件缺失：澄清后形成完整任务；最少必要的澄清问题\n",
       "scene_id": "SC-33",
       "category_id": "input_boundary",
       "category_name": "输入边界",
@@ -362,9 +394,10 @@
       "difficulty": "undetermined",
       "response_mode": "clarify",
       "required_capabilities": [],
-      "description": "澄清后形成完整任务；最少必要的澄清问题"
+      "examples": []
     },
-    {
+    "SC-34": {
+      "description": "输入边界 / 多轮承接与指代：可用的成功会话上下文；继承后的完整任务或澄清\n",
       "scene_id": "SC-34",
       "category_id": "input_boundary",
       "category_name": "输入边界",
@@ -373,9 +406,10 @@
       "difficulty": "L1",
       "response_mode": "answer",
       "required_capabilities": [],
-      "description": "可用的成功会话上下文；继承后的完整任务或澄清"
+      "examples": []
     },
-    {
+    "SC-35": {
+      "description": "输入边界 / 数据不足与未到齐：所需数据及覆盖状态；缺口清单与等待条件\n",
       "scene_id": "SC-35",
       "category_id": "input_boundary",
       "category_name": "输入边界",
@@ -384,9 +418,10 @@
       "difficulty": "undetermined",
       "response_mode": "clarify",
       "required_capabilities": [],
-      "description": "所需数据及覆盖状态；缺口清单与等待条件"
+      "examples": []
     },
-    {
+    "SC-36": {
+      "description": "输入边界 / 外部执行与审批入口：对象、操作和授权状态；操作识别及业务流程交接\n",
       "scene_id": "SC-36",
       "category_id": "input_boundary",
       "category_name": "输入边界",
@@ -395,9 +430,10 @@
       "difficulty": "undetermined",
       "response_mode": "handoff",
       "required_capabilities": [],
-      "description": "对象、操作和授权状态；操作识别及业务流程交接"
+      "examples": []
     },
-    {
+    "SC-37": {
+      "description": "输入边界 / 越权及受限数据请求：受信身份和范围判定；明确拒绝\n",
       "scene_id": "SC-37",
       "category_id": "input_boundary",
       "category_name": "输入边界",
@@ -406,9 +442,10 @@
       "difficulty": "undetermined",
       "response_mode": "refuse",
       "required_capabilities": [],
-      "description": "受信身份和范围判定；明确拒绝"
+      "examples": []
     },
-    {
+    "SC-38": {
+      "description": "输入边界 / 平台配置与管理操作：配置对象和操作意图；转到管理入口\n",
       "scene_id": "SC-38",
       "category_id": "input_boundary",
       "category_name": "输入边界",
@@ -417,9 +454,10 @@
       "difficulty": "undetermined",
       "response_mode": "handoff",
       "required_capabilities": [],
-      "description": "配置对象和操作意图；转到管理入口"
+      "examples": []
     },
-    {
+    "SC-39": {
+      "description": "输入边界 / 业务范围外请求：当前问题；说明范围或转到对应服务\n",
       "scene_id": "SC-39",
       "category_id": "input_boundary",
       "category_name": "输入边界",
@@ -428,9 +466,10 @@
       "difficulty": "undetermined",
       "response_mode": "refuse",
       "required_capabilities": [],
-      "description": "当前问题；说明范围或转到对应服务"
+      "examples": []
     },
-    {
+    "SC-40": {
+      "description": "输入边界 / 复合任务拆分：明确的子目标及输入；子任务与执行边界\n",
       "scene_id": "SC-40",
       "category_id": "input_boundary",
       "category_name": "输入边界",
@@ -439,7 +478,7 @@
       "difficulty": "L3",
       "response_mode": "clarify",
       "required_capabilities": [],
-      "description": "明确的子目标及输入；子任务与执行边界"
+      "examples": []
     }
-  ]
+  }
 }

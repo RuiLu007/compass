@@ -4,11 +4,13 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from compass_agent.harness.context import AgentDefinition, build_messages, model_input
+from compass_agent.prompt_assets import prompt_text
 from compass_agent.schemas import (
     RUN_STREAM_LIMITS,
     AnalysisRunInput,
     ChatMessage,
     GenerateInput,
+    ModelTokenLimits,
     ToolDefinition,
 )
 from compass_agent.tools.catalog import definitions as catalog_definitions
@@ -26,6 +28,12 @@ class RunRoute:
     thinking: bool
     deepseek: bool = False
     tools_enabled: bool = False
+    deliverable: str | None = None
+    limits: ModelTokenLimits | None = None
+    requires_plan: bool = False
+    vendor: str = ""
+    model: str = ""
+    task_type: str = ""
 
 
 def initial_messages(
@@ -38,12 +46,10 @@ def initial_messages(
 ):
     instructions = route.route_prompt
     if command.constraints and command.constraints.plan == "required":
-        instructions += "\n本轮先调用 todo_write 登记计划，执行后依据实际结果回答用户。"
+        instructions += "\n" + prompt_text("shared/fragments/plan-required.md")
     if workflow:
-        instructions += (
-            f"\n每轮最多发出 {RUN_STREAM_LIMITS['toolsPerStep']} 个工具调用。"
-            "工具列表中若有符合目标和参数的个人工作流，可直接调用以获取本次结果。"
-            "用户要求沉淀已验证的方法时，在最终回答前调用 create_workflow。"
+        instructions += "\n" + prompt_text("shared/fragments/workflow.md").replace(
+            "{{tool_limit}}", str(RUN_STREAM_LIMITS["toolsPerStep"])
         )
     return build_messages(definition, command, instructions)
 
@@ -64,6 +70,7 @@ def generate_input(
     *,
     controlled=False,
     extra_tools: tuple[ToolDefinition, ...] = (),
+    defer_budget=False,
 ) -> GenerateInput:
     return model_input(
         messages,
@@ -73,6 +80,7 @@ def generate_input(
         thinking=route.thinking,
         controlled=controlled,
         deepseek=route.deepseek,
+        defer_budget=defer_budget,
     )
 
 

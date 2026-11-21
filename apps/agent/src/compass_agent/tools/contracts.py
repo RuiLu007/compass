@@ -6,7 +6,7 @@ import asyncio
 import json
 from collections.abc import Awaitable, Callable, MutableMapping
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 from uuid import UUID
 
 from compass_agent.schemas import (
@@ -15,6 +15,9 @@ from compass_agent.schemas import (
     ToolDefinition,
     TrustedContext,
 )
+
+if TYPE_CHECKING:
+    from compass_agent.observability.observer import Observation
 
 
 class StopRequested(Exception):
@@ -165,6 +168,7 @@ class ToolExecutionEvent:
     reason_code: str | None = None
     environment_id: str | None = None
     output_json: str | None = field(default=None, repr=False)
+    operation: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,6 +192,10 @@ class ToolExecutionContext:
     emit: Callable[[ToolExecutionEvent], None] = field(default=lambda _: None, repr=False)
     call_id: str = ""
     on_start: Callable[[PreparedToolCall], None] = field(default=lambda _: None, repr=False)
+    observation: Observation | None = field(default=None, repr=False)
+    search_dispatch: Callable[..., Awaitable[ExecutionReceipt]] | None = field(
+        default=None, repr=False
+    )
 
     @property
     def owner(self) -> tuple[UUID, UUID, UUID]:
@@ -257,7 +265,7 @@ class RegisteredTool:
     timeout_s: float = 20
     revalidate: Callable[[ToolExecutionContext], Awaitable[None]] | None = None
     prepare_approval: (
-        Callable[[object, ToolExecutionContext], Awaitable[PreparedApproval]] | None
+        Callable[[object, ToolExecutionContext], Awaitable[PreparedApproval | None]] | None
     ) = None
     local_effect: bool = False
 

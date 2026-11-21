@@ -117,9 +117,9 @@ Agent 决策权标签页使用 `public/resources/agent-authority-architecture.pn
 
 ## 课程资料维护
 
-“课程资料”栏目位于 `/resources`，左侧按第 11–20 课呈现可折叠的课程树，点击子项后右侧 iframe 加载对应 HTML。阅读地址使用课号和文档 ID，例如 `/resources?lesson=15&doc=technical-design`，支持直接打开、刷新和浏览器前进后退。无课号时默认第 11 课，已知课号下省略或填错文档 ID 时打开该课首份文档。索引真源为 [lesson-resources.json](src/lib/lesson-resources.json)，每课的 `artifacts` 数组可登记多个 HTML 产物；每项记录稳定 ID、展示标题、Compass 根目录下的源路径和访问地址。
+“课程资料”栏目位于 `/resources`，左侧按第 11–23 课呈现可折叠的课程树，点击子项后右侧 iframe 加载对应 HTML。阅读地址使用课号和文档 ID，例如 `/resources?lesson=15&doc=technical-design`，支持直接打开、刷新和浏览器前进后退。无课号时默认第 11 课，已知课号下省略或填错文档 ID 时打开该课首份文档。索引真源为 [lesson-resources.json](src/lib/lesson-resources.json)，每课的 `artifacts` 数组可登记多个 HTML 产物；每项记录稳定 ID、展示标题、Compass 根目录下的源路径和访问地址。
 
-当前第 11、12 课使用 `TECH_DESIGN.compact.html`；第 13–20 课使用各自 `design/TECH_DESIGN.html` 的学员阅读版。设计与 HTML 继续在对应 Feature 维护。`dev` / `build` 通过 [lesson-resources.mjs](scripts/lesson-resources.mjs) 将登记文件同步到 `public/resources/lessons/<课号>/<产物>.html`，生成文件不提交 Git。新增产物时同步登记 `turbo.json` 的 build / test 源文件输入，确保更新后刷新构建缓存。
+当前第 11、12 课使用 `TECH_DESIGN.compact.html`；第 13–20 课使用各自 `design/TECH_DESIGN.html` 的学员阅读版。第 21–23 课分别收录 Context Runtime 与 PromptOps、企业经营语义层与零售语义资产、Agentic Search。设计与 HTML 继续在对应 Feature 维护。`dev` / `build` 通过 [lesson-resources.mjs](scripts/lesson-resources.mjs) 将登记文件同步到 `public/resources/lessons/<课号>/<产物>.html`，生成文件不提交 Git。新增产物时同步登记 `turbo.json` 的 build / test 源文件输入，确保更新后刷新构建缓存。
 
 第 16 课的技术方案登记了可选的 `markdown` 下载项。构建将源 Markdown 原样复制到 `/resources/lessons/16/technical-design.md`。
 

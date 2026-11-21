@@ -1,0 +1,478 @@
+{
+  "members": {
+    "shared/fragments/output-json.md": {
+      "path": "shared/policies.json",
+      "keys": ["rules", "output-json"]
+    },
+    "shared/fragments/output-schema.md": {
+      "path": "shared/policies.json",
+      "keys": ["rules", "output-schema"]
+    },
+    "shared/fragments/plan-required.md": {
+      "path": "shared/policies.json",
+      "keys": ["rules", "plan-required"]
+    },
+    "shared/fragments/retail.md": {
+      "path": "shared/policies.json",
+      "keys": ["rules", "retail"]
+    },
+    "shared/fragments/semantic-governance.md": {
+      "path": "shared/policies.json",
+      "keys": ["rules", "semantic-governance"]
+    },
+    "shared/fragments/search-protocol.md": {
+      "path": "shared/execution.json",
+      "keys": ["stages", "search-protocol"]
+    },
+    "shared/fragments/semantics.md": {
+      "path": "shared/policies.json",
+      "keys": ["rules", "semantics"]
+    },
+    "shared/fragments/tool-limit.md": {
+      "path": "shared/policies.json",
+      "keys": ["rules", "tool-limit"]
+    },
+    "shared/fragments/workflow.md": {
+      "path": "shared/policies.json",
+      "keys": ["rules", "workflow"]
+    },
+    "shared/skills/agentic-search.md": {
+      "path": "shared/execution.json",
+      "keys": ["skills", "agentic-search"]
+    },
+    "shared/skills/metric-check.md": {
+      "path": "shared/execution.json",
+      "keys": ["skills", "metric-check"]
+    },
+    "shared/skills/report-outline.md": {
+      "path": "shared/execution.json",
+      "keys": ["skills", "report-outline"]
+    },
+    "shared/stages/analyze.md": {
+      "path": "shared/execution.json",
+      "keys": ["stages", "analyze"]
+    },
+    "shared/stages/generate.md": {
+      "path": "shared/execution.json",
+      "keys": ["stages", "generate"]
+    },
+    "shared/stages/identify.md": {
+      "path": "shared/execution.json",
+      "keys": ["stages", "identify"]
+    },
+    "shared/stages/plan.md": {
+      "path": "shared/execution.json",
+      "keys": ["stages", "plan"]
+    },
+    "shared/stages/query.md": {
+      "path": "shared/execution.json",
+      "keys": ["stages", "query"]
+    },
+    "shared/tools/database-query.md": {
+      "path": "shared/tool-guidance.json",
+      "keys": ["instructions", "database-query"]
+    },
+    "shared/tools/definitions/create-workflow-args.md": {
+      "path": "tools/create_workflow.json",
+      "keys": ["function", "parameters", "properties", "args", "description"]
+    },
+    "shared/tools/definitions/create-workflow-parameters.md": {
+      "path": "tools/create_workflow.json",
+      "keys": ["function", "parameters", "properties", "parameters", "description"]
+    },
+    "shared/tools/definitions/create_workflow.md": {
+      "path": "tools/create_workflow.json",
+      "keys": ["function", "description"]
+    },
+    "shared/tools/definitions/database_query.md": {
+      "path": "tools/database_query.json",
+      "keys": ["function", "description"]
+    },
+    "shared/tools/definitions/discover_semantic_candidates.md": {
+      "path": "tools/discover_semantic_candidates.json",
+      "keys": ["function", "description"]
+    },
+    "shared/tools/definitions/get_metric_definition.md": {
+      "path": "tools/get_metric_definition.json",
+      "keys": ["function", "description"]
+    },
+    "shared/tools/definitions/python_analysis.md": {
+      "path": "tools/python_analysis.json",
+      "keys": ["function", "description"]
+    },
+    "shared/tools/definitions/query_metric.md": {
+      "path": "tools/query_metric.json",
+      "keys": ["function", "description"]
+    },
+    "shared/tools/definitions/resolve_semantics.md": {
+      "path": "tools/resolve_semantics.json",
+      "keys": ["function", "description"]
+    },
+    "shared/tools/definitions/review_semantic_change.md": {
+      "path": "tools/review_semantic_change.json",
+      "keys": ["function", "description"]
+    },
+    "shared/tools/definitions/schedule_read.md": {
+      "path": "tools/schedule_read.json",
+      "keys": ["function", "description"]
+    },
+    "shared/tools/definitions/schedule_write.md": {
+      "path": "tools/schedule_write.json",
+      "keys": ["function", "description"]
+    },
+    "shared/tools/definitions/search_semantics.md": {
+      "path": "tools/search_semantics.json",
+      "keys": ["function", "description"]
+    },
+    "shared/tools/definitions/sub_agent.md": {
+      "path": "tools/sub_agent.json",
+      "keys": ["function", "description"]
+    },
+    "shared/tools/definitions/submit_semantic_change.md": {
+      "path": "tools/submit_semantic_change.json",
+      "keys": ["function", "description"]
+    },
+    "shared/tools/definitions/todo_write.md": {
+      "path": "tools/todo_write.json",
+      "keys": ["function", "description"]
+    },
+    "shared/tools/schedule-guidance.md": {
+      "path": "shared/tool-guidance.json",
+      "keys": ["instructions", "schedule-guidance"]
+    },
+    "shared/tools/schedule-unavailable.md": {
+      "path": "shared/tool-guidance.json",
+      "keys": ["instructions", "schedule-unavailable"]
+    },
+    "shared/tools/workflow-label.md": {
+      "path": "shared/tool-guidance.json",
+      "keys": ["instructions", "workflow-label"]
+    },
+    "support/routing/business.md": {
+      "path": "support/routing/instructions.json",
+      "keys": ["instructions", "business"]
+    },
+    "support/routing/clarify.md": {
+      "path": "support/routing/instructions.json",
+      "keys": ["instructions", "clarify"]
+    },
+    "support/routing/classify-flash-managed.md": {
+      "path": "support/routing/instructions.json",
+      "keys": ["instructions", "classify-flash-managed"]
+    },
+    "support/routing/classify-flash.md": {
+      "path": "support/routing/instructions.json",
+      "keys": ["instructions", "classify-flash"]
+    },
+    "support/routing/classify-jev.md": {
+      "path": "support/routing/instructions.json",
+      "keys": ["instructions", "classify-jev"]
+    },
+    "support/routing/deliverable.md": {
+      "path": "support/routing/instructions.json",
+      "keys": ["instructions", "deliverable"]
+    },
+    "support/routing/handoff.md": {
+      "path": "support/routing/instructions.json",
+      "keys": ["instructions", "handoff"]
+    },
+    "support/routing/off-topic.md": {
+      "path": "support/routing/instructions.json",
+      "keys": ["instructions", "off-topic"]
+    },
+    "support/routing/restricted.md": {
+      "path": "support/routing/instructions.json",
+      "keys": ["instructions", "restricted"]
+    },
+    "support/routing/scenes/sc-01.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-01", "description"]
+    },
+    "support/routing/scenes/sc-02.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-02", "description"]
+    },
+    "support/routing/scenes/sc-03.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-03", "description"]
+    },
+    "support/routing/scenes/sc-04.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-04", "description"]
+    },
+    "support/routing/scenes/sc-05.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-05", "description"]
+    },
+    "support/routing/scenes/sc-06.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-06", "description"]
+    },
+    "support/routing/scenes/sc-07.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-07", "description"]
+    },
+    "support/routing/scenes/sc-08.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-08", "description"]
+    },
+    "support/routing/scenes/sc-09.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-09", "description"]
+    },
+    "support/routing/scenes/sc-10.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-10", "description"]
+    },
+    "support/routing/scenes/sc-11.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-11", "description"]
+    },
+    "support/routing/scenes/sc-12.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-12", "description"]
+    },
+    "support/routing/scenes/sc-13.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-13", "description"]
+    },
+    "support/routing/scenes/sc-14.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-14", "description"]
+    },
+    "support/routing/scenes/sc-15.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-15", "description"]
+    },
+    "support/routing/scenes/sc-16.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-16", "description"]
+    },
+    "support/routing/scenes/sc-17.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-17", "description"]
+    },
+    "support/routing/scenes/sc-18.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-18", "description"]
+    },
+    "support/routing/scenes/sc-19.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-19", "description"]
+    },
+    "support/routing/scenes/sc-20.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-20", "description"]
+    },
+    "support/routing/scenes/sc-21.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-21", "description"]
+    },
+    "support/routing/scenes/sc-22.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-22", "description"]
+    },
+    "support/routing/scenes/sc-23.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-23", "description"]
+    },
+    "support/routing/scenes/sc-24.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-24", "description"]
+    },
+    "support/routing/scenes/sc-25.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-25", "description"]
+    },
+    "support/routing/scenes/sc-26.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-26", "description"]
+    },
+    "support/routing/scenes/sc-27.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-27", "description"]
+    },
+    "support/routing/scenes/sc-28.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-28", "description"]
+    },
+    "support/routing/scenes/sc-29.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-29", "description"]
+    },
+    "support/routing/scenes/sc-30.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-30", "description"]
+    },
+    "support/routing/scenes/sc-31.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-31", "description"]
+    },
+    "support/routing/scenes/sc-32.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-32", "description"]
+    },
+    "support/routing/scenes/sc-33.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-33", "description"]
+    },
+    "support/routing/scenes/sc-34.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-34", "description"]
+    },
+    "support/routing/scenes/sc-35.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-35", "description"]
+    },
+    "support/routing/scenes/sc-36.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-36", "description"]
+    },
+    "support/routing/scenes/sc-37.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-37", "description"]
+    },
+    "support/routing/scenes/sc-38.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-38", "description"]
+    },
+    "support/routing/scenes/sc-39.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-39", "description"]
+    },
+    "support/routing/scenes/sc-40.md": {
+      "path": "support/routing/scenes.json",
+      "keys": ["scenes", "SC-40", "description"]
+    },
+    "support/starters/analysis/channel-comparison.md": {
+      "path": "support/starters/analysis.json",
+      "keys": ["questions", "channel-comparison"]
+    },
+    "support/starters/analysis/channel-diagnosis.md": {
+      "path": "support/starters/analysis.json",
+      "keys": ["questions", "channel-diagnosis"]
+    },
+    "support/starters/analysis/confirm-query.md": {
+      "path": "support/starters/analysis.json",
+      "keys": ["questions", "confirm-query"]
+    },
+    "support/starters/analysis/inventory-health.md": {
+      "path": "support/starters/analysis.json",
+      "keys": ["questions", "inventory-health"]
+    },
+    "support/starters/analysis/parallel-queries.md": {
+      "path": "support/starters/analysis.json",
+      "keys": ["questions", "parallel-queries"]
+    },
+    "support/starters/analysis/pos-first-report-amount.md": {
+      "path": "support/starters/analysis.json",
+      "keys": ["questions", "pos-first-report-amount"]
+    },
+    "support/starters/analysis/pos-first-report-brief.md": {
+      "path": "support/starters/analysis.json",
+      "keys": ["questions", "pos-first-report-brief"]
+    },
+    "support/starters/analysis/queue-daily.md": {
+      "path": "support/starters/analysis.json",
+      "keys": ["questions", "queue-daily"]
+    },
+    "support/starters/analysis/queue-diagnosis.md": {
+      "path": "support/starters/analysis.json",
+      "keys": ["questions", "queue-diagnosis"]
+    },
+    "support/starters/analysis/resume-run.md": {
+      "path": "support/starters/analysis.json",
+      "keys": ["questions", "resume-run"]
+    },
+    "support/starters/analysis/sales-growth.md": {
+      "path": "support/starters/analysis.json",
+      "keys": ["questions", "sales-growth"]
+    },
+    "support/starters/analysis/sandbox-python.md": {
+      "path": "support/starters/analysis.json",
+      "keys": ["questions", "sandbox-python"]
+    },
+    "support/starters/analysis/saved-workflow.md": {
+      "path": "support/starters/analysis.json",
+      "keys": ["questions", "saved-workflow"]
+    },
+    "support/starters/analysis/workflow-compare.md": {
+      "path": "support/starters/analysis.json",
+      "keys": ["questions", "workflow-compare"]
+    },
+    "support/starters/analysis/workflow-create.md": {
+      "path": "support/starters/analysis.json",
+      "keys": ["questions", "workflow-create"]
+    },
+    "support/starters/models/escalation/escalate-instructions.md": {
+      "path": "support/starters/models/escalation.json",
+      "keys": ["values", "escalate-instructions"]
+    },
+    "support/starters/models/escalation/state.md": {
+      "path": "support/starters/models/escalation.json",
+      "keys": ["values", "state"]
+    },
+    "support/starters/models/intent-routing/intent-criteria.md": {
+      "path": "support/starters/models/intent-routing.json",
+      "keys": ["values", "intent-criteria"]
+    },
+    "support/starters/models/intent-routing/intent-instructions.md": {
+      "path": "support/starters/models/intent-routing.json",
+      "keys": ["values", "intent-instructions"]
+    },
+    "support/starters/models/intent-routing/state.md": {
+      "path": "support/starters/models/intent-routing.json",
+      "keys": ["values", "state"]
+    },
+    "support/starters/models/multi-question/department-criteria.md": {
+      "path": "support/starters/models/multi-question.json",
+      "keys": ["values", "department-criteria"]
+    },
+    "support/starters/models/multi-question/department-instructions.md": {
+      "path": "support/starters/models/multi-question.json",
+      "keys": ["values", "department-instructions"]
+    },
+    "support/starters/models/multi-question/escalate-instructions.md": {
+      "path": "support/starters/models/multi-question.json",
+      "keys": ["values", "escalate-instructions"]
+    },
+    "support/starters/models/multi-question/severity-criteria.md": {
+      "path": "support/starters/models/multi-question.json",
+      "keys": ["values", "severity-criteria"]
+    },
+    "support/starters/models/multi-question/severity-instructions.md": {
+      "path": "support/starters/models/multi-question.json",
+      "keys": ["values", "severity-instructions"]
+    },
+    "support/starters/models/multi-question/state.md": {
+      "path": "support/starters/models/multi-question.json",
+      "keys": ["values", "state"]
+    },
+    "support/starters/models/new-choice-criteria.md": {
+      "path": "support/starters/models/defaults.json",
+      "keys": ["values", "new-choice-criteria"]
+    },
+    "support/starters/models/sales-tool-description.md": {
+      "path": "support/starters/models/defaults.json",
+      "keys": ["values", "sales-tool-description"]
+    },
+    "support/starters/models/severity/severity-criteria.md": {
+      "path": "support/starters/models/severity.json",
+      "keys": ["values", "severity-criteria"]
+    },
+    "support/starters/models/severity/severity-instructions.md": {
+      "path": "support/starters/models/severity.json",
+      "keys": ["values", "severity-instructions"]
+    },
+    "support/starters/models/severity/state.md": {
+      "path": "support/starters/models/severity.json",
+      "keys": ["values", "state"]
+    }
+  },
+  "policy_digests": [
+    "d5575c265450e0bb62e40f8bfa925b1f498ac091afa0b760f248e9ad42734caf",
+    "04c629644c5adc3ac4a8cd995e157045cd8d5a48cb2eca01128fb5f7985c1cf2",
+    "3d67e05e650d5b593b6fa131403bcb37ffc4d5b8948fb9a59d003c7bc56ce553",
+    "f0f6f4ac927468562c1f19ccddd7d603e4b650afb9e309a8ede66dfc49d91978"
+  ]
+}

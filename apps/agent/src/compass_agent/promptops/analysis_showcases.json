@@ -1,0 +1,15 @@
+[
+  {
+    "title": "第 21 课 · Context Runtime 与 PromptOps",
+    "suggestions": [
+      {
+        "label": "同一句“销售额”，我部门怎么算？",
+        "path": "analysis/pos-first-report-amount.md"
+      },
+      {
+        "label": "这笔实付能写进周会定稿吗？",
+        "path": "analysis/pos-first-report-brief.md"
+      }
+    ]
+  }
+]

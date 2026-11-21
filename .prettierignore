@@ -33,6 +33,8 @@ uv.lock
 **/reference/
 **/public/
 /tools/data-seed/src/compass_data_seed/catalogs/
+# Published Markdown is a byte-preserving model input. Keep the exact factory contents.
+/apps/agent/src/compass_agent/prompts/**/*.md
 
 # Preserve the imported React Bits source and its upstream provenance.
 /apps/home/src/components/GhostFibers.jsx

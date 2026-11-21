@@ -26,121 +26,8 @@ import { AnalysisRunTurn } from "./analysis-run-turn";
 import { AnalysisTodoPanel, planResolved } from "./analysis-todo-panel";
 import { useDocumentSession } from "./shell/session-boundary";
 
-type PromptSuggestion = {
-  label: string;
-  question: string;
-  constraints?: RunConstraints;
-};
-
-type PromptCard = {
-  title: string;
-  suggestions: readonly PromptSuggestion[];
-};
-
-const workflowSuggestions = [
-  {
-    label: "对比渠道实付并保存",
-    question:
-      "请比较 Retail 两周的渠道实付额，找出差额绝对值最大的渠道。直接用 database_query 执行下面这一条只读 SQL，返回渠道 ID、两期金额和差额（金额单位为分）。仅使用渠道商品日报，无需查表目录、维表或拆商品。\n\nWITH latest AS ( SELECT DISTINCT ON (tenant_id, report_date, channel_id, sku_id, region_id) report_date, channel_id, paid_amount_cent FROM core.channel_product_daily WHERE report_date BETWEEN DATE '2025-11-17' AND DATE '2025-11-23' OR report_date BETWEEN DATE '2025-11-24' AND DATE '2025-11-30' ORDER BY tenant_id, report_date, channel_id, sku_id, region_id, report_version DESC ) SELECT channel_id, COALESCE(SUM(paid_amount_cent) FILTER (WHERE report_date BETWEEN DATE '2025-11-17' AND DATE '2025-11-23'), 0) AS baseline_cent, COALESCE(SUM(paid_amount_cent) FILTER (WHERE report_date BETWEEN DATE '2025-11-24' AND DATE '2025-11-30'), 0) AS current_cent FROM latest GROUP BY channel_id ORDER BY ABS(COALESCE(SUM(paid_amount_cent) FILTER (WHERE report_date BETWEEN DATE '2025-11-24' AND DATE '2025-11-30'), 0) - COALESCE(SUM(paid_amount_cent) FILTER (WHERE report_date BETWEEN DATE '2025-11-17' AND DATE '2025-11-23'), 0)) DESC, channel_id LIMIT 1\n\n查到结果后，请立即调用 create_workflow 创建并试跑「两周渠道实付对比」。将两期各自的起止日期设为四个 YYYY-MM-DD 字符串入参，脚本用本次入参填入同一条 SQL，只调度一个 sub_agent，prompt 明确要求直接执行这条 SQL 并返回查询结果。试跑成功后简要汇报结果并提示我确认保存。",
-  },
-  {
-    label: "换两周对比渠道实付",
-    question:
-      "用 Retail 渠道商品日报比较 2025-11-03 至 2025-11-09 和 2025-11-10 至 2025-11-16。每个租户、日期、渠道、SKU 和区域取最新报表版本。找出实付额差额绝对值最大的渠道，只报告渠道 ID、两期金额和差额（单位为分）。",
-  },
-] as const;
-
-const diagnoseRetail =
-  "比较 2025-11-17 至 11-23 和 11-24 至 11-30 两周的渠道实付金额，找出变化最大的渠道，再分析主要商品的贡献。";
-
-const promptCards: readonly PromptCard[] = [
-  {
-    title: "第 15 课 · Agent 执行内核",
-    suggestions: [
-      {
-        label: "两周渠道与商品对比",
-        question:
-          "比较 2025-11-17 至 11-23 和 11-24 至 11-30 两周，哪个渠道的实付金额变化最大？变化主要来自哪些商品？",
-      },
-    ],
-  },
-  {
-    title: "第 16 课 · 受控自主执行",
-    suggestions: [
-      {
-        label: "先列计划 · 渠道与商品诊断",
-        question: diagnoseRetail,
-        constraints: { plan: "required" },
-      },
-      {
-        label: "最多两轮 · 渠道与商品诊断",
-        question: diagnoseRetail,
-        constraints: { plan: "required", maxSteps: 2 },
-      },
-      {
-        label: "5 秒超时 · 渠道与商品诊断",
-        question: diagnoseRetail,
-        constraints: { timeoutSeconds: 5 },
-      },
-    ],
-  },
-  {
-    title: "第 17 课 · 混合工作流",
-    suggestions: workflowSuggestions,
-  },
-  {
-    title: "第 18 课 · 工具执行与 Sandbox",
-    suggestions: [
-      {
-        label: "在 Sandbox 中执行 Python",
-        question:
-          "使用当前工作区已授权的 Retail 数据连接。先用 database_query 执行 SELECT COUNT(*) AS row_count, COALESCE(SUM(paid_amount_cent), 0) AS paid_cent FROM core.channel_product_daily WHERE report_date = DATE '2025-11-24'。拿到 resultId 后，调用 python_analysis，把 resultId 填到 source_query_id。请在 Sandbox 中运行 Python，读取 data 的第一行，把实付金额从分换算成元，将行数和换算结果写入 result。工具返回后报告结果。",
-      },
-      {
-        label: "并行查询两个日期",
-        question:
-          "请在同一次模型响应中发出两个互不依赖的 database_query 调用，使用当前工作区已授权的 Retail 数据连接。第一个执行 SELECT COUNT(*) AS row_count FROM core.channel_product_daily WHERE report_date = DATE '2025-11-24'，第二个执行 SELECT COUNT(*) AS row_count FROM core.channel_product_daily WHERE report_date = DATE '2025-11-25'。拿到两份结果后按日期分别汇报。",
-      },
-    ],
-  },
-  {
-    title: "第 19 课 · 持久运行与人工确认",
-    suggestions: [
-      {
-        label: "暂停、刷新与继续",
-        question:
-          "比较 Retail 在 2025-11-17 至 11-23 和 11-24 至 11-30 两周的渠道实付额，找出变化最大的渠道，分析主要商品的贡献，并生成一张可下载的差额图。请标明对比口径和数据缺口。",
-      },
-      {
-        label: "人工确认后查一个数",
-        question:
-          "查一下 Retail 在 2025-11-24 的实付总额，只返回这一个数和金额单位。请使用已配置为需要审批的 MCP 只读查询工具，先提交查询请求供我在审批卡片上确认，批准后再执行查询。如果当前没有合适的审批工具，请告诉我并结束本次任务。",
-      },
-    ],
-  },
-  {
-    title: "第 20 课 · 异步队列与 Worker",
-    suggestions: [
-      {
-        label: "任务 A · 先提交渠道诊断",
-        question:
-          "比较 Retail 在 2025-11-17 至 11-23 和 11-24 至 11-30 两周的渠道实付额。列出变化最大的三个渠道，分析其中变化最大渠道的商品贡献，并给出差额图。",
-      },
-      {
-        label: "任务 B · 另开会话观察排队",
-        question:
-          "汇总 Retail 在 2025-11-24 至 11-30 的每日实付额，找出实付额最高的一天，报告日期和金额。",
-      },
-    ],
-  },
-  {
-    title: "通用分析",
-    suggestions: ["如何拆解销售增长的影响因素？", "怎样评估库存健康度？"].map((question) => ({
-      label: question,
-      question,
-    })),
-  },
-];
+import { useStarters, type StarterCards } from "@/features/promptops/use-starters";
+import { isModelContract } from "@/contracts/model-contract";
 
 function AnalysisErrorToast({ message }: { message: string }) {
   const [visible, setVisible] = useState(true);
@@ -181,8 +68,17 @@ export function AnalysisComposer({
   const [navigating, setNavigating] = useState(false);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState("");
-  const [question, setQuestion] = useState(
-    workflow ? `使用已保存的工作流「${workflow.name}」分析所选时段。` : "",
+  const [question, setQuestion] = useState("");
+  const workflowPrefilled = useRef(false);
+  const workflowName = workflow?.name;
+  const prefillWorkflow = useCallback(
+    (cards: StarterCards) => {
+      if (!workflowName || workflowPrefilled.current) return;
+      workflowPrefilled.current = true;
+      if (!api.dirty && cards.workflow_parts?.length)
+        setQuestion(cards.workflow_parts.join(workflowName));
+    },
+    [api, workflowName],
   );
   const [entry, setEntry] = useState<AnalysisRunEntry>(
     workflow ? { workflowAssetRef: workflow.ref } : {},
@@ -196,6 +92,12 @@ export function AnalysisComposer({
   const [formError, setFormError] = useState("");
   const allowed = payload.session.capabilities.includes("models.invoke");
   const { tenantId, workspaceId } = payload.session.scope;
+  const starters = useStarters(
+    allowed && tenantId && workspaceId
+      ? "analysis/prompt-starters?" + new URLSearchParams({ tenantId, workspaceId })
+      : null,
+    prefillWorkflow,
+  );
   const workflowScope = tenantId && workspaceId ? { tenantId, workspaceId } : undefined;
   const sessionId = new URL(payload.viewKey, "https://compass.local").searchParams.get("session");
   const conversation = useDurableConversation(api, sessionId, workflowScope);
@@ -506,6 +408,15 @@ export function AnalysisComposer({
                 <AnalysisRunTurn
                   key={turn.id}
                   turn={turn}
+                  retry={
+                    busy || question.trim()
+                      ? undefined
+                      : () => {
+                          setQuestion(turn.question);
+                          api.setDirty(true);
+                          input.current?.focus();
+                        }
+                  }
                   onDownload={downloadFile}
                   onReveal={revealOutput}
                   scope={workflowScope}
@@ -726,7 +637,15 @@ export function AnalysisComposer({
         )}
         {!started && (
           <div className="analysis-suggestions" role="group" aria-label="候选提示词">
-            {promptCards.map((card) => (
+            {starters.failed && (
+              <p role="status">
+                预填问题暂时无法读取，可直接输入。{" "}
+                <button className="secondary compact" onClick={starters.retry}>
+                  重新加载预填
+                </button>
+              </p>
+            )}
+            {starters.cards?.analysis?.map((card) => (
               <section className="analysis-prompt-card" key={card.title} aria-label={card.title}>
                 <h3>{card.title}</h3>
                 <ul>
@@ -738,7 +657,11 @@ export function AnalysisComposer({
                         disabled={busy}
                         onClick={() => {
                           setQuestion(question);
-                          setEntry(constraints ? { constraints } : {});
+                          setEntry(
+                            constraints && isModelContract("RunConstraints", constraints)
+                              ? { constraints: constraints as RunConstraints }
+                              : {},
+                          );
                           api.setDirty(true);
                           input.current?.focus();
                         }}

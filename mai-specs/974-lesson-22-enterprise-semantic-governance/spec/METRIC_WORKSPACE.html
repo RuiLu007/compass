@@ -1,0 +1,5364 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="color-scheme" content="light" />
+    <title>指标口径 · Compass</title>
+    <style>
+      :root {
+        --font:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei",
+          sans-serif;
+        --font-code: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        --canvas: #f8f9f6;
+        --surface: #fff;
+        --surface-subtle: #f3f6f2;
+        --ink: #202b27;
+        --muted: #62716a;
+        --primary: #1c5145;
+        --primary-hover: #153e35;
+        --primary-soft: #e5eee7;
+        --border: #dce2da;
+        --border-strong: #788b80;
+        --danger: #a34236;
+        --danger-soft: #fff4f1;
+        --warning: #745018;
+        --warning-soft: #fff4de;
+        --focus-ring: #28725e;
+        --side-w: 250px;
+        --rail-w: 54px;
+        --header-h: 60px;
+        color-scheme: light;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--canvas);
+        color: var(--ink);
+        font: 14px/1.55 var(--font);
+        -webkit-font-smoothing: antialiased;
+      }
+      button,
+      input,
+      textarea,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      button,
+      select {
+        cursor: pointer;
+      }
+      button {
+        background: transparent;
+      }
+      button:disabled {
+        cursor: not-allowed;
+      }
+      a {
+        color: inherit;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      button:focus-visible,
+      a:focus-visible,
+      select:focus-visible,
+      textarea:focus-visible,
+      input:focus-visible,
+      summary:focus-visible,
+      [tabindex]:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 3px;
+      }
+      button,
+      input,
+      textarea,
+      select {
+        accent-color: var(--primary);
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .sr-only,
+      .skip-link:not(:focus) {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        clip-path: inset(50%);
+      }
+      .skip-link:focus {
+        position: fixed;
+        left: 8px;
+        top: 8px;
+        z-index: 100;
+        padding: 8px 16px;
+        border-radius: 6px;
+        background: #fff;
+      }
+      .glyph {
+        display: inline-block;
+        vertical-align: middle;
+        flex-shrink: 0;
+      }
+      .layout {
+        min-height: 100vh;
+      }
+      .side {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: var(--side-w);
+        display: grid;
+        grid-template-columns: var(--rail-w) 1fr;
+        z-index: 10;
+      }
+      .rail {
+        display: flex;
+        align-items: center;
+        flex-direction: column;
+        padding: 13px 0;
+        background: #f0f3ee;
+        border-right: 1px solid #dfe5dc;
+      }
+      .brand-mark {
+        width: 35px;
+        height: 35px;
+        display: grid;
+        place-items: center;
+        color: white;
+        background: var(--primary);
+        border-radius: 11px;
+        box-shadow: 0 2px 5px #123c2b1a;
+      }
+      .rail-center {
+        display: grid;
+        gap: 8px;
+        margin-top: 28px;
+      }
+      .rail-center a,
+      .rail-help,
+      .mobile-hide,
+      #showNav {
+        width: 40px;
+        height: 40px;
+        border: 0;
+        display: grid;
+        place-items: center;
+        border-radius: 8px;
+        color: #52665b;
+      }
+      .rail-center a[aria-current] {
+        background: #dce8db;
+        color: var(--primary);
+        position: relative;
+      }
+      .rail-center a[aria-current]::before {
+        content: "";
+        position: absolute;
+        left: -7px;
+        background: var(--primary);
+        width: 3px;
+        height: 17px;
+        border-radius: 0 3px 3px 0;
+      }
+      .rail-center a:hover,
+      .rail-help:hover,
+      #showNav:hover,
+      .mobile-hide:hover {
+        background: var(--primary-soft);
+      }
+      .rail-help {
+        margin-top: auto;
+      }
+      .nav-pane {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        background: #f5f7f2;
+        border-right: 1px solid var(--border);
+      }
+      .nav-brand {
+        height: var(--header-h);
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 18px;
+        color: #234437;
+        font-size: 23px;
+        font-weight: 680;
+        letter-spacing: -1px;
+      }
+      .nav-body {
+        padding: 22px 10px 8px;
+      }
+      .nav-lbl {
+        font-size: 12px;
+        font-weight: 600;
+        color: #647267;
+        margin: 0 10px 7px;
+      }
+      .nav-lbl.after {
+        border-top: 1px solid #dde5da;
+        margin: 24px 0 7px;
+        padding: 22px 10px 0;
+      }
+      .nav-body a {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 11px;
+        margin-bottom: 3px;
+        border-radius: 8px;
+        text-decoration: none;
+        color: #4e6055;
+        font-weight: 500;
+      }
+      .nav-body a i,
+      .workspace-icon,
+      .crumb i,
+      .top-right {
+        display: inline-flex;
+        align-items: center;
+      }
+      .nav-body a[aria-current] {
+        background: #e0eadd;
+        color: #1b4c39;
+        font-weight: 650;
+      }
+      .nav-body a:hover {
+        background: #e8eee4;
+      }
+      .workspace-card {
+        margin: auto 12px 16px;
+        display: flex;
+        gap: 9px;
+        align-items: center;
+        padding: 12px 3px 0;
+        border-top: 1px solid var(--border);
+      }
+      .workspace-icon {
+        width: 32px;
+        height: 32px;
+        justify-content: center;
+        background: #e5ece2;
+        border: 1px solid #d8e0d4;
+        border-radius: 8px;
+        color: #415748;
+      }
+      .workspace-card strong,
+      .workspace-card small {
+        display: block;
+      }
+      .workspace-card strong {
+        font-size: 13px;
+      }
+      .workspace-card small {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .surface-main {
+        margin-left: var(--side-w);
+        min-width: 0;
+      }
+      .app-header {
+        height: var(--header-h);
+        background: #fff;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 clamp(16px, 2.7vw, 40px);
+        position: relative;
+        z-index: 4;
+      }
+      .crumb,
+      .top-right {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+      .crumb {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .crumb strong {
+        font-weight: 550;
+        color: var(--ink);
+      }
+      .crumb i {
+        color: #8b978e;
+      }
+      .top-right {
+        font-size: 13px;
+        gap: 9px;
+      }
+      .demo-badge {
+        border: 1px solid #dce4d8;
+        background: #f5f8f1;
+        border-radius: 20px;
+        padding: 3px 9px;
+        color: #496047;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 28px;
+      }
+      .demo-badge span {
+        height: 6px;
+        width: 6px;
+        border-radius: 50%;
+        background: #719064;
+      }
+      .top-divider {
+        height: 17px;
+        width: 1px;
+        background: var(--border);
+        margin: 0 4px;
+      }
+      .avatar {
+        width: 29px;
+        height: 29px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: #eadfce;
+        color: #644f35;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .user-name {
+        font-weight: 550;
+      }
+      .identity-switch {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 3px 7px;
+        min-height: 44px;
+        color: var(--ink);
+        border-radius: 9px;
+        cursor: pointer;
+      }
+      .identity-switch:hover {
+        background: #f4f6f1;
+      }
+      .identity-switch:focus-within {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+      .identity-switch i {
+        display: flex;
+        color: var(--muted);
+      }
+      .identity-switch select {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        cursor: pointer;
+      }
+      .identity-text {
+        display: grid;
+        gap: 2px;
+        line-height: 1.2;
+        text-align: left;
+      }
+      .identity-text strong {
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .identity-text small {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      @media (max-width: 540px) {
+        .identity-switch {
+          gap: 4px;
+          padding: 0 2px;
+        }
+        .identity-text strong {
+          display: none;
+        }
+        .identity-text small {
+          font-size: 12px;
+        }
+        .identity-switch .avatar {
+          display: none;
+        }
+      }
+      .info-pop {
+        position: fixed;
+        z-index: 30;
+        right: 20px;
+        top: 57px;
+        max-width: min(320px, calc(100vw - 30px));
+        padding: 16px;
+        background: white;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        box-shadow: 0 10px 35px #2030271b;
+      }
+      .info-pop p {
+        margin: 7px 0 12px;
+        color: var(--muted);
+      }
+      .info-pop button {
+        border: 1px solid var(--border);
+        padding: 6px 12px;
+        border-radius: 7px;
+      }
+      .mobile-hide,
+      #showNav {
+        display: none;
+      }
+      .nav-scrim {
+        display: none;
+      }
+      main {
+        min-width: 0;
+      }
+      main:focus:not(:focus-visible) {
+        outline: none;
+      }
+      body.chat-mode {
+        background: #fbfcfa;
+      }
+      .chat-page {
+        height: calc(100dvh - var(--header-h));
+        display: flex;
+        flex-direction: column;
+      }
+      .chat-history {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+      }
+      .chat-wrap,
+      .compose-wrap {
+        width: min(100% - 56px, 810px);
+        margin: 0 auto;
+      }
+      .chat-wrap {
+        padding: 21px 0 28px;
+      }
+      .chat-day {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: #6c786f;
+        font-size: 12px;
+        margin-bottom: 17px;
+      }
+      .chat-day:before,
+      .chat-day:after {
+        content: "";
+        height: 1px;
+        background: #e5eae1;
+        flex: 1;
+      }
+      .u-line {
+        display: flex;
+        justify-content: flex-end;
+        margin: 10px 0 15px;
+      }
+      .u-text {
+        display: inline-block;
+        max-width: 88%;
+        padding: 10px 15px;
+        border-radius: 14px 14px 3px 14px;
+        background: #e8f0e4;
+        color: #213f34;
+        font-size: 15px;
+        line-height: 1.6;
+        overflow-wrap: anywhere;
+      }
+      .assistant-head {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        color: #244438;
+        font-size: 14px;
+        font-weight: 650;
+        margin: 11px 0;
+      }
+      .assistant-emblem {
+        color: white;
+        background: var(--primary);
+        width: 28px;
+        height: 28px;
+        display: grid;
+        place-items: center;
+        border-radius: 8px;
+      }
+      .run-line {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--muted);
+        font-size: 12px;
+        margin: 8px 0;
+      }
+      .compose-block {
+        padding: 9px 0 16px;
+        background: linear-gradient(0deg, #fbfcfa 90%, #fbfcfaee);
+        border-top: 1px solid #e3e8df;
+      }
+      .compose-wrap {
+        position: relative;
+      }
+      .composer {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border: 1px solid #bfccbf;
+        border-radius: 13px;
+        background: white;
+        padding: 7px 8px 7px 15px;
+        box-shadow: 0 2px 8px #24443408;
+      }
+      .composer:focus-within {
+        border-color: var(--focus-ring);
+      }
+      .composer textarea {
+        flex: 1;
+        resize: none;
+        min-width: 0;
+        border: none;
+        outline: 0 !important;
+        padding: 5px 0;
+        background: transparent;
+        line-height: 1.45;
+        height: 34px;
+        font-size: 15px;
+      }
+      .composer button {
+        width: 38px;
+        height: 38px;
+        border: none;
+        border-radius: 9px;
+        background: var(--primary);
+        color: white;
+        display: grid;
+        place-items: center;
+      }
+      .composer button:disabled {
+        background: #e4eae2;
+        color: #79877c;
+      }
+      .composer-note {
+        min-height: 0;
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 4px;
+      }
+      .composer-note:empty {
+        display: none;
+      }
+      @media (min-width: 1600px) {
+        :root {
+          --side-w: 284px;
+          --rail-w: 60px;
+        }
+      }
+      @media (max-width: 1140px) and (min-width: 901px) {
+        :root {
+          --side-w: 220px;
+          --rail-w: 48px;
+        }
+        .nav-body a {
+          padding-left: 9px;
+          font-size: 13px;
+        }
+      }
+      @media (max-width: 900px) {
+        :root {
+          --side-w: 0px;
+          --header-h: 54px;
+        }
+        .side {
+          display: none;
+          width: min(290px, 85vw);
+          grid-template-columns: 50px 1fr;
+        }
+        .side.mobile-open {
+          display: grid;
+          z-index: 23;
+        }
+        .nav-scrim:not([hidden]) {
+          display: block;
+          position: fixed;
+          inset: 0;
+          border: 0;
+          background: #152d224d;
+          z-index: 22;
+        }
+        .mobile-hide,
+        #showNav {
+          display: grid;
+        }
+        .app-header {
+          padding: 0 12px 0 6px;
+        }
+        .crumb {
+          gap: 6px;
+        }
+        .nav-brand {
+          padding: 0 10px 0 16px;
+        }
+        .top-right {
+          gap: 6px;
+        }
+        .chat-wrap,
+        .compose-wrap {
+          width: min(100% - 32px, 790px);
+        }
+      }
+      @media (max-width: 540px) {
+        .user-name,
+        .top-divider {
+          display: none;
+        }
+        .top-right {
+          gap: 7px;
+        }
+        .crumb {
+          font-size: 12px;
+        }
+        .demo-badge {
+          font-size: 12px;
+          padding: 2px 6px;
+        }
+        .avatar {
+          width: 26px;
+          height: 26px;
+        }
+        .chat-wrap,
+        .compose-wrap {
+          width: calc(100% - 24px);
+        }
+        .chat-wrap {
+          padding: 12px 0 22px;
+        }
+        .chat-day {
+          margin-bottom: 10px;
+        }
+        .u-text {
+          font-size: 14px;
+        }
+        .compose-block {
+          padding-bottom: max(8px, env(safe-area-inset-bottom));
+        }
+        .composer button,
+        .rail-center a,
+        .rail-help,
+        #showNav,
+        .mobile-hide {
+          min-height: 44px;
+          min-width: 44px;
+        }
+        .demo-badge {
+          min-height: 40px;
+        }
+        .nav-body {
+          padding-top: 15px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *:before,
+        *:after {
+          scroll-behavior: auto !important;
+          transition: none !important;
+          animation-duration: 0.01ms !important;
+        }
+      }
+
+      .reset-actions {
+        display: flex;
+        gap: 8px;
+      }
+      .reset-actions #resetDemo {
+        color: var(--muted);
+        border-color: transparent;
+      }
+      .reset-actions #clearDemo {
+        color: var(--danger);
+        border-color: #dbc4bd;
+      }
+      .info-pop #resetConfirm {
+        margin-top: 12px;
+        padding-top: 6px;
+        border-top: 1px solid var(--border);
+      }
+
+      .rg-app {
+        --rg-line: #dde4dd;
+        --rg-soft: #f2f6f0;
+        --rg-ink: #202d27;
+        --rg-green: #1c5145;
+        --rg-muted: #62716a;
+        width: 100%;
+        max-width: 1570px;
+        min-width: 0;
+        margin: 0 auto;
+        padding: 30px clamp(20px, 2.5vw, 40px) 40px;
+        color: var(--rg-ink);
+        font-family: var(
+          --font,
+          -apple-system,
+          BlinkMacSystemFont,
+          "PingFang SC",
+          "Microsoft YaHei",
+          sans-serif
+        );
+        font-size: 14px;
+        line-height: 1.55;
+      }
+      .rg-app * {
+        box-sizing: border-box;
+      }
+      .rg-app button,
+      .rg-app input,
+      .rg-app select,
+      .rg-app textarea {
+        font: inherit;
+        color: inherit;
+      }
+      .rg-app button {
+        cursor: pointer;
+      }
+      .rg-app :focus-visible {
+        outline: 2px solid #29705a;
+        outline-offset: 3px;
+      }
+      .rg-app h1,
+      .rg-app h2,
+      .rg-app h3,
+      .rg-app h4,
+      .rg-app p,
+      .rg-app dl,
+      .rg-app dd,
+      .rg-app ol {
+        margin: 0;
+      }
+      .rg-app h1 {
+        font-size: clamp(26px, 2.4vw, 34px);
+        line-height: 1.2;
+        font-weight: 680;
+        letter-spacing: -0.05em;
+      }
+      .rg-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 21px;
+      }
+      .rg-head p {
+        font-size: 13px;
+        color: var(--rg-muted);
+        margin-top: 7px;
+      }
+      .rg-app .rg-btn {
+        min-height: 38px;
+        border: 1px solid #ccd6cd;
+        padding: 8px 13px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        background: white;
+        color: var(--rg-green);
+        font-size: 13px;
+        font-weight: 620;
+        line-height: 1.4;
+        white-space: nowrap;
+      }
+      .rg-app .rg-btn:hover {
+        background: #f1f5ef;
+        border-color: #8ea598;
+      }
+      .rg-app .rg-primary {
+        background: var(--rg-green);
+        border-color: var(--rg-green);
+        color: white;
+        box-shadow: 0 2px 3px #1c514516;
+      }
+      .rg-app .rg-primary:hover {
+        background: #153f35;
+        color: white;
+      }
+      .rg-stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin: 0 0 20px;
+      }
+      .rg-app .rg-stat {
+        position: relative;
+        text-align: left;
+        min-height: 88px;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+        padding: 15px 17px;
+        border: 1px solid var(--rg-line);
+        border-radius: 12px;
+        background: #fff;
+        color: var(--rg-ink);
+      }
+      .rg-app .rg-stat:hover {
+        background: #f9fbf8;
+        border-color: #aabdad;
+      }
+      .rg-stat-icon,
+      .rg-symbol {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+      }
+      .rg-stat-icon {
+        width: 37px;
+        height: 37px;
+        border-radius: 10px;
+        background: #e6efe6;
+        color: #286148;
+      }
+      .rg-stat-live .rg-stat-icon {
+        background: #eaf0f5;
+        color: #49647d;
+      }
+      .rg-stat-drafts .rg-stat-icon {
+        background: #f5eee3;
+        color: #85683b;
+      }
+      .rg-stat-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        align-items: flex-start;
+        white-space: nowrap;
+      }
+      .rg-stat-meta > span {
+        font-size: 12px;
+        color: #55665c;
+        font-weight: 560;
+      }
+      .rg-stat-meta strong {
+        font-size: 26px;
+        line-height: 1.06;
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.04em;
+      }
+      .rg-app .rg-stat small {
+        color: #607169;
+        font-size: 11px;
+        font-weight: 450;
+        white-space: normal;
+        align-self: end;
+      }
+      .rg-live:empty {
+        display: none;
+      }
+      .rg-live:not(:empty) {
+        background: #e8f3e9;
+        border: 1px solid #cadfcf;
+        color: #22553d;
+        padding: 10px 13px;
+        border-radius: 7px;
+        margin: 0 0 12px;
+      }
+      .rg-split {
+        display: grid;
+        grid-template-columns: minmax(0, 1.52fr) minmax(285px, 1fr);
+        gap: 15px;
+        align-items: start;
+      }
+      .rg-directory,
+      .rg-inspect,
+      .rg-form {
+        min-width: 0;
+        background: #fff;
+        border: 1px solid var(--rg-line);
+        border-radius: 14px;
+        box-shadow: 0 3px 9px #182d1e04;
+      }
+      .rg-directory {
+        overflow: hidden;
+      }
+      .rg-directory-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 18px 17px 9px;
+      }
+      .rg-app .rg-directory-title h2,
+      .rg-app .rg-inspect h2 {
+        font-size: 18px;
+        font-weight: 660;
+        line-height: 1.35;
+      }
+      .rg-count {
+        border-radius: 5px;
+        background: #edf2ec;
+        color: #516a55;
+        min-width: 22px;
+        padding: 1px 6px;
+        text-align: center;
+        font-size: 11px;
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
+      }
+      .rg-tools {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 5px 16px 14px;
+        align-items: center;
+      }
+      .rg-search,
+      .rg-filter {
+        display: flex;
+        position: relative;
+        margin: 0;
+        align-items: center;
+        border: 1px solid #d8dfd8;
+        border-radius: 7px;
+        background: white;
+        color: #56695e;
+        min-height: 33px;
+      }
+      .rg-search {
+        flex: 1 1 135px;
+        min-width: 112px;
+        gap: 6px;
+        padding: 0 8px;
+      }
+      .rg-search input {
+        min-width: 0;
+        width: 100%;
+        height: 32px;
+        padding: 0;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: var(--rg-ink);
+        font-size: 12px;
+      }
+      .rg-search:focus-within,
+      .rg-filter:focus-within {
+        outline: 2px solid #32745d;
+        outline-offset: 1px;
+      }
+      .rg-app .rg-search input:focus-visible,
+      .rg-app .rg-filter select:focus-visible {
+        outline: 0;
+      }
+      .rg-filter select {
+        appearance: none;
+        background: transparent;
+        border: 0;
+        outline: 0;
+        min-width: 0;
+        height: 32px;
+        padding: 0 21px 0 8px;
+        font-size: 11.5px;
+        cursor: pointer;
+      }
+      .rg-filter > svg {
+        position: absolute;
+        pointer-events: none;
+        right: 6px;
+      }
+      .rg-table {
+        width: 100%;
+      }
+      .rg-table table {
+        width: 100%;
+        border-spacing: 0;
+        border-collapse: separate;
+        table-layout: fixed;
+      }
+      .rg-table th,
+      .rg-table td {
+        text-align: left;
+        border: 0;
+      }
+      .rg-table th {
+        background: #f5f7f3;
+        border-top: 1px solid #e6eae4;
+        border-bottom: 1px solid #e1e7df;
+        font-size: 11.5px;
+        color: #627069;
+        font-weight: 570;
+        line-height: 1.3;
+        padding: 9px 5px;
+      }
+      .rg-table th:first-child {
+        width: 58%;
+        padding-left: 18px;
+      }
+      .rg-table th:nth-child(2) {
+        width: 23%;
+      }
+      .rg-table tr td {
+        border-bottom: 1px solid #e9ede7;
+        vertical-align: middle;
+        height: 64px;
+        padding: 4px 5px;
+        font-size: 12px;
+      }
+      .rg-table tbody tr {
+        cursor: pointer;
+        background: white;
+      }
+      .rg-table tbody tr:hover {
+        background: #f6f9f4;
+      }
+      .rg-table tbody tr.rg-current {
+        background: #edf4ed;
+      }
+      .rg-table tbody tr.rg-current td:first-child {
+        box-shadow: inset 3px 0 #2d7055;
+      }
+      .rg-table td:first-child {
+        padding-left: 16px;
+      }
+      .rg-app .rg-metric {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        text-align: left;
+        gap: 9px;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        padding: 3px 0;
+        width: 100%;
+        min-width: 0;
+        line-height: 1.36;
+      }
+      .rg-metric > span:last-child {
+        display: block;
+        min-width: 0;
+      }
+      .rg-metric b,
+      .rg-metric code {
+        display: block;
+        text-overflow: ellipsis;
+        overflow: hidden;
+        white-space: nowrap;
+      }
+      .rg-metric b {
+        font-weight: 610;
+        font-size: 13.5px;
+        color: #26382d;
+      }
+      .rg-metric code,
+      .rg-stable {
+        font-family: var(--font-code, "SFMono-Regular", Consolas, monospace);
+        font-weight: 400;
+        font-size: 10.2px;
+        letter-spacing: -0.025em;
+        color: #5d6c62;
+      }
+      .rg-metric code {
+        margin-top: 4px;
+      }
+      .rg-symbol {
+        width: 31px;
+        height: 32px;
+        border-radius: 8px;
+        background: #e3eee5;
+        color: #356348;
+      }
+      .rg-finance {
+        background: #e8edf7;
+        color: #53638b;
+      }
+      .rg-marketing {
+        background: #f1eaf5;
+        color: #755782;
+      }
+      .rg-inventory {
+        background: #f4eddf;
+        color: #8b6938;
+      }
+      .rg-status {
+        display: inline-flex;
+        gap: 5px;
+        align-items: center;
+        line-height: 1.55;
+        border-radius: 5px;
+        padding: 2px 6px;
+        background: #eaf4ea;
+        color: #306047;
+        font-size: 10.5px;
+        white-space: nowrap;
+        font-weight: 590;
+      }
+      .rg-status i {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #47845a;
+      }
+      .rg-draft {
+        color: #805c27;
+        background: #fbf2e2;
+      }
+      .rg-draft i {
+        background: #aa7a36;
+      }
+      .rg-scope {
+        color: #51625a;
+        white-space: nowrap;
+        font-size: 12px;
+      }
+      .rg-foot {
+        padding: 11px 17px;
+        font-size: 11.5px;
+        color: var(--rg-muted);
+      }
+      .rg-inspect {
+        overflow: hidden;
+      }
+      .rg-inspect-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 18px 19px 11px;
+      }
+      .rg-kicker,
+      .rg-version,
+      .rg-formula header,
+      .rg-form-heading {
+        display: flex;
+        gap: 7px;
+        align-items: center;
+      }
+      .rg-kicker {
+        font-size: 12px;
+        font-weight: 570;
+        color: #5a6d60;
+      }
+      .rg-version {
+        font: 11px/1.5 var(--font-code, monospace);
+        padding: 2px 6px;
+        border: 1px solid #d7e0d7;
+        border-radius: 5px;
+        color: #53665a;
+      }
+      .rg-detail-title,
+      .rg-stable {
+        margin: 0 19px;
+      }
+      .rg-detail-title {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 9px;
+      }
+      .rg-app .rg-detail-title h2 {
+        font-size: 21px;
+        letter-spacing: -0.045em;
+      }
+      .rg-stable {
+        font-size: 11px;
+        overflow-wrap: anywhere;
+        margin-top: 5px;
+      }
+      .rg-tabs {
+        display: flex;
+        gap: 16px;
+        padding: 0 19px;
+        margin-top: 13px;
+        border-bottom: 1px solid var(--rg-line);
+      }
+      .rg-app .rg-tabs button {
+        min-height: 38px;
+        padding: 0 3px;
+        position: relative;
+        font-size: 12px;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        color: #67756c;
+      }
+      .rg-app .rg-tabs .rg-on {
+        color: var(--rg-green);
+        font-weight: 650;
+      }
+      .rg-tabs .rg-on::after {
+        content: "";
+        position: absolute;
+        bottom: -1px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        border-radius: 2px;
+        background: #31674d;
+      }
+      .rg-detail-body {
+        padding: 16px 18px;
+        min-height: 205px;
+      }
+      .rg-app .rg-def {
+        color: #43594c;
+        line-height: 1.68;
+        font-size: 13px;
+      }
+      .rg-formula {
+        background: #20362c;
+        color: #eaf3e8;
+        border-radius: 8px;
+        padding: 12px 13px;
+        margin-top: 12px;
+        overflow-wrap: anywhere;
+      }
+      .rg-formula header {
+        color: #bfd3bd;
+        font-size: 10.5px;
+        font-weight: 560;
+      }
+      .rg-formula > div {
+        font: 12px/1.65 var(--font-code, "SFMono-Regular", Consolas, monospace);
+        margin: 7px 0 4px;
+        color: #f1f7ed;
+      }
+      .rg-formula small {
+        color: #b7c9b8;
+        font: 10.5px/1.55 var(--font-code, "SFMono-Regular", Consolas, monospace);
+      }
+      .rg-app .rg-props {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px 10px;
+        margin: 15px 0 13px;
+      }
+      .rg-props dt,
+      .rg-alias,
+      .rg-dim h4,
+      .rg-detail-body h4 {
+        color: #66766b;
+        font-weight: 510;
+        font-size: 11.5px;
+      }
+      .rg-props dd {
+        color: #31483a;
+        font-weight: 550;
+        font-size: 12px;
+        overflow-wrap: anywhere;
+        line-height: 1.5;
+        margin-top: 3px;
+      }
+      .rg-app .rg-props-wide {
+        grid-template-columns: 1fr;
+      }
+      .rg-dim {
+        padding-top: 11px;
+        border-top: 1px solid #e5eae4;
+      }
+      .rg-dim span {
+        display: inline-block;
+        margin: 5px 4px 0 0;
+        padding: 2px 7px;
+        border-radius: 5px;
+        background: #f1f4ef;
+        color: #435a4b;
+        font-size: 11px;
+      }
+      .rg-dim small,
+      .rg-alias {
+        font-size: 11px;
+      }
+      .rg-alias {
+        margin-top: 9px;
+      }
+      .rg-alias span {
+        color: #3e5246;
+        margin-left: 5px;
+      }
+      .rg-detail-actions {
+        display: flex;
+        border-top: 1px solid var(--rg-line);
+        padding: 11px 18px;
+        background: #fbfcfa;
+      }
+      .rg-detail-actions .rg-btn {
+        min-height: 33px;
+        font-size: 12px;
+      }
+      .rg-source {
+        display: flex;
+        align-items: flex-start;
+        gap: 9px;
+        border: 1px solid var(--rg-line);
+        border-radius: 8px;
+        margin: 8px 0;
+        padding: 11px;
+        color: #39644d;
+      }
+      .rg-source b,
+      .rg-source small {
+        display: block;
+      }
+      .rg-source b {
+        font: 12px/1.4 var(--font-code, monospace);
+        overflow-wrap: anywhere;
+      }
+      .rg-source small {
+        font-size: 11.5px;
+        margin-top: 4px;
+        color: var(--rg-muted);
+      }
+      .rg-app .rg-history {
+        padding: 0 0 0 13px;
+        margin-top: 16px;
+      }
+      .rg-history li {
+        position: relative;
+        padding: 0 0 18px 13px;
+        border-left: 1px solid #cddbcc;
+        list-style: none;
+      }
+      .rg-history li:before {
+        content: "";
+        position: absolute;
+        width: 8px;
+        height: 8px;
+        left: -5px;
+        top: 4px;
+        border: 2px solid white;
+        border-radius: 50%;
+        background: #2e7051;
+        box-shadow: 0 0 0 1px #9db7a2;
+      }
+      .rg-history li.rg-old:before {
+        background: #b7c6b9;
+      }
+      .rg-history li div {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .rg-history li strong {
+        font-size: 12px;
+      }
+      .rg-history li small {
+        color: var(--rg-muted);
+        font-size: 10px;
+      }
+      .rg-history li p {
+        font-size: 12px;
+        margin-top: 4px;
+        color: #4f6254;
+      }
+      .rg-empty {
+        text-align: center;
+        padding: 42px 12px;
+        color: var(--rg-muted);
+      }
+      .rg-empty > svg {
+        margin-bottom: 5px;
+      }
+      .rg-empty h3 {
+        font-size: 15px;
+      }
+      .rg-empty p {
+        font-size: 12px;
+        margin: 5px 0 11px;
+      }
+      .rg-no-detail {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .rg-no-detail .rg-detail-host {
+        display: none;
+      }
+      .rg-app .rg-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: transparent;
+        border: 0;
+        color: #42634f;
+        font-size: 12px;
+        margin-bottom: 14px;
+        padding: 4px 0;
+      }
+      .rg-form {
+        max-width: 950px;
+        padding: 0;
+        overflow: hidden;
+      }
+      .rg-form section {
+        padding: 19px 23px;
+      }
+      .rg-form section + section {
+        border-top: 1px solid var(--rg-line);
+      }
+      .rg-form-heading {
+        color: #315e47;
+        margin-bottom: 14px;
+      }
+      .rg-form .rg-form-heading h2 {
+        font-size: 16px;
+        color: var(--rg-ink);
+      }
+      .rg-fields {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 13px 16px;
+      }
+      .rg-wide {
+        grid-column: 1/-1;
+      }
+      .rg-form .rg-field {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        min-width: 0;
+        font-size: 12.5px;
+        font-weight: 550;
+        color: #425647;
+      }
+      .rg-field em {
+        font-style: normal;
+        color: #98564c;
+      }
+      .rg-form .rg-field input,
+      .rg-form .rg-field select,
+      .rg-form .rg-field textarea {
+        width: 100%;
+        min-height: 37px;
+        border: 1px solid #c9d4cb;
+        border-radius: 7px;
+        background: white;
+        color: var(--rg-ink);
+        padding: 6px 8px;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      .rg-form .rg-field textarea {
+        resize: vertical;
+      }
+      .rg-form .rg-field input[readonly] {
+        background: #f4f6f2;
+        color: var(--rg-muted);
+      }
+      .rg-form [aria-invalid="true"] {
+        outline: 1px solid #a34236;
+        border-color: #a34236;
+      }
+      .rg-form-actions {
+        padding: 14px 22px;
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        align-items: center;
+        background: #f8faf7;
+        border-top: 1px solid var(--rg-line);
+      }
+      .rg-error {
+        margin-right: auto;
+        color: #964a3c;
+        font-size: 12px;
+      }
+      .rg-sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      @container (max-width:970px) {
+        .rg-app .rg-stat small {
+          display: none;
+        }
+      }
+      @media (max-width: 1200px) {
+        .rg-app .rg-stat {
+          grid-template-columns: auto 1fr;
+        }
+        .rg-app .rg-stat small {
+          display: none;
+        }
+        .rg-split {
+          grid-template-columns: minmax(0, 1.45fr) minmax(255px, 1fr);
+        }
+        .rg-symbol {
+          width: 26px;
+          height: 28px;
+        }
+        .rg-tools {
+          gap: 5px;
+        }
+      }
+      @media (max-width: 925px) {
+        .rg-split {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .rg-stats {
+          gap: 9px;
+        }
+        .rg-app .rg-stat {
+          min-height: 72px;
+          padding: 12px;
+        }
+        .rg-app {
+          padding: 22px 16px;
+        }
+        .rg-detail-body {
+          min-height: 0;
+        }
+        .rg-table th:first-child {
+          width: 57%;
+        }
+        .rg-scope {
+          white-space: normal;
+        }
+        .rg-props {
+          max-width: 600px;
+        }
+      }
+      @media (max-width: 570px) {
+        .rg-app {
+          padding: 18px 10px 28px;
+        }
+        .rg-head {
+          margin-bottom: 14px;
+          align-items: flex-start;
+        }
+        .rg-head h1 {
+          font-size: 26px;
+        }
+        .rg-head p {
+          max-width: 19em;
+          font-size: 11.5px;
+        }
+        .rg-app .rg-stat {
+          display: flex;
+          min-height: 64px;
+          gap: 7px;
+          justify-content: flex-start;
+          padding: 8px;
+        }
+        .rg-stats {
+          gap: 5px;
+          margin-bottom: 12px;
+        }
+        .rg-stat-icon {
+          display: none;
+        }
+        .rg-stat-meta > span {
+          font-size: 11px;
+        }
+        .rg-stat-meta strong {
+          font-size: 21px;
+        }
+        .rg-table td:first-child {
+          padding-left: 9px;
+        }
+        .rg-table th:first-child {
+          width: 55%;
+          padding-left: 10px;
+        }
+        .rg-metric b {
+          font-size: 12px;
+        }
+        .rg-metric code {
+          font-size: 9px;
+        }
+        .rg-symbol {
+          display: none;
+        }
+        .rg-tools {
+          padding: 3px 10px 11px;
+        }
+        .rg-search {
+          flex: 1 1 100%;
+        }
+        .rg-app .rg-directory-title {
+          padding: 13px 10px 7px;
+        }
+        .rg-directory-title,
+        .rg-detail-body,
+        .rg-inspect-top,
+        .rg-detail-actions {
+          padding-inline: 13px;
+        }
+        .rg-head .rg-btn,
+        .rg-app .rg-btn,
+        .rg-filter select,
+        .rg-app .rg-tabs button {
+          min-height: 44px;
+        }
+        .rg-search input {
+          height: 42px;
+        }
+        .rg-search {
+          min-height: 44px;
+        }
+        .rg-app .rg-metric {
+          min-height: 44px;
+        }
+        .rg-table tr td {
+          height: 55px;
+        }
+        .rg-fields {
+          grid-template-columns: 1fr;
+        }
+        .rg-wide {
+          grid-column: auto;
+        }
+        .rg-form section {
+          padding: 15px;
+        }
+        .rg-form-actions {
+          padding: 12px;
+          flex-wrap: wrap;
+        }
+        .rg-error:not(:empty) {
+          width: 100%;
+        }
+        .rg-form .rg-field input,
+        .rg-form .rg-field select {
+          min-height: 44px;
+        }
+        .rg-detail-host {
+          scroll-margin-top: 60px;
+        }
+      }
+
+      .rg-access-tabs {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin: 0 16px 10px;
+        padding: 3px;
+        width: fit-content;
+        border: 1px solid #dee6dc;
+        border-radius: 9px;
+        background: #f3f6f1;
+      }
+      .rg-access-tabs button {
+        border: 0;
+        border-radius: 6px;
+        line-height: 1.4;
+        min-height: 30px;
+        padding: 4px 10px;
+        font-size: 12px;
+        color: #52665a;
+        background: transparent;
+      }
+      .rg-access-tabs button[aria-pressed="true"] {
+        color: #204e3b;
+        background: white;
+        box-shadow: 0 1px 4px #2236261c;
+        font-weight: 650;
+      }
+      .rg-app .rg-table th:first-child {
+        width: 45%;
+      }
+      .rg-app .rg-table th:nth-child(2) {
+        width: 21%;
+      }
+      .rg-app .rg-table th:nth-child(3) {
+        width: 16%;
+      }
+      .rg-app .rg-table th:nth-child(4) {
+        width: 18%;
+      }
+      .rg-row-owner,
+      .rg-row-scope {
+        display: block;
+        line-height: 1.4;
+        font-size: 11px;
+        overflow-wrap: anywhere;
+      }
+      .rg-row-owner {
+        color: #334e3e;
+        font-weight: 600;
+      }
+      .rg-row-scope {
+        color: #65756b;
+        margin-top: 3px;
+      }
+      .rg-app .rg-row-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        color: #5b6c60;
+        font-size: 12px;
+        line-height: 1.3;
+        border: 1px solid #dce5da;
+        background: white;
+        padding: 5px 7px;
+        min-height: 30px;
+        border-radius: 6px;
+        white-space: nowrap;
+      }
+      .rg-app .rg-row-action.rg-editable {
+        color: #245a40;
+        background: #f1f7ef;
+        border-color: #c7d9c8;
+        font-weight: 630;
+      }
+      .rg-app .rg-row-action:hover {
+        border-color: #7a9882;
+        background: #e9f2e7;
+      }
+      .rg-app .rg-rights {
+        margin: 13px 18px 0;
+        padding: 10px 12px;
+        background: #f4f7f1;
+        border: 1px solid #dce6d8;
+        border-radius: 8px;
+        display: grid;
+        gap: 6px;
+        font-size: 11.5px;
+      }
+      .rg-rights > div {
+        display: grid;
+        grid-template-columns: 4.5em minmax(0, 1fr);
+        align-items: baseline;
+        gap: 5px;
+      }
+      .rg-rights dt {
+        color: #5f7163;
+      }
+      .rg-rights dd {
+        color: #314938;
+        overflow-wrap: anywhere;
+      }
+      .rg-rights strong {
+        display: inline-block;
+        font-size: 10px;
+        font-weight: 600;
+        border-radius: 4px;
+        padding: 1px 5px;
+        margin-left: 6px;
+      }
+      .rg-rights strong.editable {
+        background: #dcebdc;
+        color: #24543b;
+      }
+      .rg-rights strong.readonly {
+        background: #e7ece6;
+        color: #495c50;
+      }
+      .rg-form-lock {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        font-size: 12.5px;
+        color: #425647;
+      }
+      .rg-form-lock strong {
+        padding: 7px 8px;
+        min-height: 37px;
+        border: 1px solid #e0e7de;
+        background: #f7f9f5;
+        border-radius: 7px;
+        font-size: 12px;
+        font-weight: 550;
+      }
+      @media (max-width: 570px) {
+        .rg-access-tabs {
+          margin: 0 10px 9px;
+        }
+        .rg-access-tabs button {
+          min-height: 44px;
+        }
+        .rg-app .rg-table th:first-child {
+          width: 42%;
+        }
+        .rg-app .rg-table th:nth-child(2) {
+          width: 22%;
+        }
+        .rg-app .rg-table th:nth-child(3) {
+          width: 16%;
+        }
+        .rg-app .rg-table th:nth-child(4) {
+          width: 20%;
+        }
+        .rg-app .rg-row-action {
+          padding: 3px 5px;
+          min-height: 44px;
+          min-width: 44px;
+        }
+        .rg-app .rg-row-action svg {
+          display: none;
+        }
+      }
+      .df-chat {
+        color: var(--ink, #202b27);
+        min-width: 0;
+      }
+      .df-answer {
+        font-size: 15px;
+        line-height: 1.7;
+        margin: 9px 0 12px;
+      }
+      .df-card,
+      .df-result,
+      .df-outcome,
+      .df-offer {
+        border: 1px solid #ccd9d0;
+        border-radius: 14px;
+        background: #fff;
+        overflow: hidden;
+        max-width: 100%;
+      }
+      .df-card {
+        box-shadow: 0 4px 14px rgba(25, 54, 39, 0.04);
+      }
+      .df-card-head,
+      .df-identity,
+      .df-result-title,
+      .df-actions,
+      .df-card-foot small,
+      .df-scope,
+      .df-badge,
+      .df-link,
+      .df-btn,
+      .df-emblem,
+      .df-result-foot span {
+        display: flex;
+        align-items: center;
+      }
+      .df-card-head {
+        gap: 10px;
+        padding: 13px 19px;
+        border-bottom: 1px solid #dce6df;
+        background: linear-gradient(95deg, #edf4ee 0%, #f8faf7 89%);
+      }
+      .df-emblem {
+        width: 33px;
+        height: 33px;
+        border: 1px solid #ccdcd2;
+        border-radius: 9px;
+        justify-content: center;
+        flex: none;
+        background: #fff;
+        color: #275344;
+      }
+      .df-card-head h3 {
+        font-size: 16px;
+        color: #1c3b30;
+        margin: 0;
+        line-height: 1.35;
+        letter-spacing: 0.01em;
+      }
+      .df-badge {
+        margin-left: auto;
+        flex: none;
+        gap: 5px;
+        border: 1px solid #e6d3a7;
+        background: #fff6de;
+        color: #795614;
+        border-radius: 20px;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 620;
+      }
+      .df-badge i {
+        width: 5px;
+        height: 5px;
+        background: #a67624;
+        border-radius: 50%;
+      }
+      .df-card-body {
+        padding: 16px 20px 0;
+      }
+      .df-identity {
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 13px;
+        align-items: center;
+      }
+      .df-identity h4 {
+        font-size: 21px;
+        line-height: 1.45;
+        letter-spacing: -0.025em;
+        margin: 0;
+        color: #1e3027;
+        font-weight: 650;
+        overflow-wrap: anywhere;
+      }
+      .df-identity code {
+        color: #60736a;
+        font:
+          12px/1.55 ui-monospace,
+          SFMono-Regular,
+          Consolas,
+          monospace;
+        overflow-wrap: anywhere;
+      }
+      .df-scope {
+        gap: 5px;
+        color: #405b4c;
+        border: 1px solid #dce4dd;
+        padding: 3px 8px;
+        font-size: 12px;
+        font-weight: 560;
+        border-radius: 6px;
+        white-space: nowrap;
+      }
+      .df-formula {
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+        background: #f3f6f2;
+        border: 1px solid #e5eae5;
+        border-radius: 7px;
+        padding: 9px 12px;
+        line-height: 1.5;
+      }
+      .df-formula span,
+      .df-field dt {
+        font-size: 12px;
+        color: #56685f;
+        font-weight: 500;
+      }
+      .df-formula span {
+        flex: none;
+      }
+      .df-formula strong {
+        color: #243e32;
+        font-size: 14px;
+        font-weight: 620;
+      }
+      .df-fields {
+        margin: 0;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        column-gap: 18px;
+        padding: 8px 0;
+      }
+      .df-field {
+        display: grid;
+        grid-template-columns: 75px minmax(0, 1fr);
+        align-items: baseline;
+        gap: 6px;
+        line-height: 1.5;
+        padding: 4px 0;
+        min-width: 0;
+      }
+      .df-field dd {
+        margin: 0;
+        font-size: 13px;
+        color: #273e32;
+        overflow-wrap: anywhere;
+      }
+      .df-source,
+      .df-more {
+        border-top: 1px solid #e6ebe5;
+        color: #56685f;
+        font-size: 12px;
+      }
+      .df-chat details > summary {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        cursor: pointer;
+        list-style: none;
+        min-height: 34px;
+        font-weight: 550;
+        padding: 5px 0;
+        margin: 0;
+      }
+      .df-chat details > summary::-webkit-details-marker {
+        display: none;
+      }
+      .df-chat details > summary::after {
+        content: "";
+        width: 6px;
+        height: 6px;
+        margin-left: auto;
+        border: solid currentColor;
+        border-width: 0 1.4px 1.4px 0;
+        transform: rotate(45deg);
+        flex: none;
+      }
+      .df-chat details[open] > summary::after {
+        transform: rotate(225deg);
+      }
+      .df-chat details summary svg {
+        flex: none;
+      }
+      .df-source summary strong {
+        font-size: 12px;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 520;
+      }
+      .df-source-status,
+      .df-result-title span {
+        font-size: 11px;
+        padding: 1px 5px;
+        border-radius: 4px;
+        background: #edf3ea;
+        color: #3e644c;
+        white-space: nowrap;
+      }
+      .df-source-body,
+      .df-more > div {
+        padding: 3px 0 10px;
+        line-height: 1.6;
+      }
+      .df-source-body p,
+      .df-more p {
+        margin: 0;
+      }
+      .df-card-foot {
+        margin: 0 -20px;
+        padding: 11px 20px 15px;
+        background: #fafbf9;
+        border-top: 1px solid #e1e7df;
+      }
+      .df-card-foot small {
+        gap: 5px;
+        color: #57685d;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .df-actions {
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 8px;
+      }
+      .df-btn,
+      .df-link {
+        appearance: none;
+        font: inherit;
+        justify-content: center;
+        cursor: pointer;
+        gap: 6px;
+        transition: background 0.14s ease;
+        border-radius: 7px;
+        font-weight: 580;
+        line-height: 1.35;
+      }
+      .df-btn {
+        border: 1px solid #d2dcd3;
+        background: white;
+        color: #304a3a;
+        min-height: 38px;
+        padding: 8px 13px;
+        font-size: 13px;
+      }
+      .df-btn:hover {
+        background: #f0f5ef;
+      }
+      .df-primary {
+        background: #1c5145;
+        color: #fff;
+        border-color: #1c5145;
+      }
+      .df-primary:hover {
+        background: #153e35;
+        color: white;
+      }
+      .df-quiet,
+      .df-link {
+        border-color: transparent;
+        background: transparent;
+        color: #53685b;
+      }
+      .df-link {
+        border: 0;
+        padding: 4px 0;
+        min-height: 32px;
+        color: #1c5145;
+        font-size: 12px;
+      }
+      .df-link:hover {
+        background: transparent;
+        text-decoration: underline;
+      }
+      .df-btn:focus-visible,
+      .df-link:focus-visible,
+      .df-chat summary:focus-visible,
+      .df-chat :is(select, input, textarea):focus-visible {
+        outline: 2px solid #28725e;
+        outline-offset: 2px;
+      }
+      .df-diff {
+        border: 1px solid #dce5dc;
+        border-radius: 8px;
+        overflow: hidden;
+        margin-bottom: 10px;
+      }
+      .df-diff-head,
+      .df-diff-row {
+        display: grid;
+        grid-template-columns: 0.58fr 1.05fr 1.35fr;
+      }
+      .df-diff-head {
+        background: #f6f8f5;
+        color: #5b6d61;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .df-diff-head span,
+      .df-diff-row > * {
+        padding: 8px 10px;
+        text-align: start;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .df-diff-row {
+        font-size: 13px;
+        line-height: 1.55;
+        border-top: 1px solid #e1e6df;
+      }
+      .df-diff-row strong {
+        font-weight: 550;
+      }
+      .df-diff-row span:last-child {
+        background: #f3f8f2;
+        color: #275738;
+      }
+      .df-diff-row span:nth-child(2) {
+        color: #5a6b60;
+      }
+      .df-form {
+        padding: 0 0 17px;
+      }
+      .df-form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px 14px;
+      }
+      .df-control {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+        font-size: 12px;
+        font-weight: 550;
+        color: #4c6053;
+        margin: 0;
+      }
+      .df-control-wide {
+        grid-column: 1/-1;
+      }
+      .df-control :is(input, textarea, select) {
+        font: inherit;
+        font-size: 14px;
+        color: #213d2d;
+        width: 100%;
+        min-width: 0;
+        min-height: 38px;
+        padding: 7px 9px;
+        background: white;
+        border: 1px solid #adbbb0;
+        border-radius: 6px;
+        resize: vertical;
+      }
+      .df-error {
+        font-size: 13px;
+        color: #a34236;
+        margin: 5px 0;
+      }
+      .df-error:empty {
+        display: none;
+      }
+      .df-result {
+        margin: 12px 0;
+        background: white;
+        padding: 14px 16px;
+      }
+      .df-result-title {
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .df-result-title strong,
+      .df-offer strong,
+      .df-outcome strong {
+        font-size: 15px;
+        line-height: 1.45;
+      }
+      .df-result table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .df-result th,
+      .df-result td {
+        padding: 7px;
+        text-align: right;
+        border-bottom: 1px solid #e5ebe4;
+        font-variant-numeric: tabular-nums;
+      }
+      .df-result th:first-child {
+        text-align: left;
+      }
+      .df-result thead {
+        background: #f4f7f2;
+        font-size: 12px;
+        color: #526758;
+      }
+      .df-result-foot {
+        margin-top: 9px;
+        font-size: 12px;
+        color: #3b6851;
+      }
+      .df-result-foot span {
+        gap: 5px;
+      }
+      .df-offer,
+      .df-outcome {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 16px;
+        margin: 11px 0;
+        background: #fbfcfa;
+      }
+      .df-offer p,
+      .df-outcome p,
+      .df-note {
+        font-size: 13px;
+        line-height: 1.65;
+        color: #53685a;
+        margin: 4px 0 0;
+      }
+      .df-offer .df-actions {
+        margin-top: 10px;
+      }
+      .df-outcome {
+        align-items: center;
+      }
+      .df-formula strong,
+      .df-field dd,
+      .df-result td,
+      .df-diff-row span {
+        font-variant-numeric: tabular-nums;
+      }
+      @media (max-width: 640px) {
+        .df-card-head {
+          padding: 10px 12px;
+          gap: 8px;
+        }
+        .df-card-body {
+          padding: 12px 12px 0;
+        }
+        .df-card-foot {
+          margin: 0 -12px;
+          padding: 10px 12px 12px;
+        }
+        .df-identity {
+          align-items: flex-start;
+        }
+        .df-identity h4 {
+          font-size: 18px;
+        }
+        .df-identity code {
+          font-size: 11px;
+        }
+        .df-scope {
+          font-size: 11px;
+        }
+        .df-formula {
+          display: block;
+        }
+        .df-formula span,
+        .df-formula strong {
+          display: block;
+        }
+        .df-formula strong {
+          margin-top: 3px;
+        }
+        .df-fields {
+          column-gap: 10px;
+        }
+        .df-field {
+          display: block;
+        }
+        .df-field dd {
+          margin-top: 2px;
+        }
+        .df-diff-head,
+        .df-diff-row {
+          grid-template-columns: 0.7fr 1fr 1.2fr;
+        }
+        .df-diff-head span,
+        .df-diff-row > * {
+          padding: 6px;
+        }
+        .df-btn,
+        .df-chat summary,
+        .df-link {
+          min-height: 44px !important;
+        }
+        .df-actions {
+          gap: 4px;
+        }
+        .df-btn {
+          padding: 7px 10px;
+        }
+        .df-result {
+          padding: 12px 7px;
+        }
+        .df-result td,
+        .df-result th {
+          padding: 5px;
+        }
+      }
+      @media (max-width: 400px) {
+        .df-form-grid {
+          grid-template-columns: 1fr;
+        }
+        .df-control-wide {
+          grid-column: auto;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .df-chat * {
+          transition: none !important;
+        }
+      }
+
+      .chx-thread {
+        min-width: 0;
+        color: var(--ink, #202b27);
+      }
+      .chx-card,
+      .chx-settled,
+      .chx-result {
+        box-sizing: border-box;
+        background: var(--surface, #fff);
+        border: 1px solid var(--border, #dce2da);
+        border-radius: 14px;
+        margin: 13px 0 0;
+        min-width: 0;
+      }
+      .chx-card {
+        box-shadow: 0 2px 6px rgba(29, 60, 43, 0.045);
+        overflow: hidden;
+      }
+      .chx-card-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 20px 20px 15px;
+      }
+      .chx-glyph,
+      .chx-small-icon {
+        display: inline-grid;
+        place-items: center;
+        flex: 0 0 auto;
+        background: #e8f0e9;
+        color: var(--primary, #1c5145);
+        border: 1px solid #d9e6db;
+        border-radius: 9px;
+        width: 36px;
+        height: 36px;
+      }
+      .chx-head-copy {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .chx-head-copy h3,
+      .chx-settled h3,
+      .chx-result h3,
+      .chx-result p,
+      .chx-settled p,
+      .chx-head-copy p {
+        margin: 0;
+      }
+      .chx-head-copy h3 {
+        font-size: 18px;
+        font-weight: 670;
+        line-height: 1.4;
+        letter-spacing: -0.35px;
+      }
+      .chx-head-copy p {
+        color: var(--muted, #62716a);
+        font-size: 13px;
+        line-height: 1.6;
+        margin-top: 3px;
+      }
+      .chx-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+        border-radius: 20px;
+        background: #fcf2dd;
+        color: #73501e;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        font-size: 11px;
+        line-height: 1.6;
+        padding: 3px 8px;
+      }
+      .chx-status i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #a86d15;
+      }
+      .chx-options {
+        padding: 0 20px 16px;
+        margin: 0;
+        border: 0;
+        min-width: 0;
+        display: grid;
+        gap: 7px;
+      }
+      .chx-sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      .chx-option {
+        box-sizing: border-box;
+        display: grid;
+        position: relative;
+        grid-template-columns: 18px minmax(0, 1fr);
+        align-items: start;
+        gap: 12px;
+        padding: 11px 13px;
+        background: #fff;
+        border: 1px solid #dce2da;
+        border-radius: 8px;
+        cursor: pointer;
+        margin: 0;
+        color: var(--ink, #202b27);
+        text-align: start;
+        transition:
+          background-color 120ms,
+          border-color 120ms;
+      }
+      .chx-option:hover {
+        background: #f7f9f5;
+        border-color: #a3b5a9;
+      }
+      .chx-option:has(:checked) {
+        background: #f0f6ef;
+        border-color: var(--primary, #1c5145);
+        box-shadow: inset 0 0 0 0.5px var(--primary, #1c5145);
+      }
+      .chx-option:has(:focus-visible) {
+        outline: 2px solid var(--focus-ring, #28725e);
+        outline-offset: 2px;
+      }
+      .chx-option input.chx-radio {
+        appearance: none;
+        -webkit-appearance: none;
+        display: block;
+        box-sizing: border-box;
+        margin: 3px 0 0;
+        padding: 0;
+        width: 17px;
+        min-width: 17px;
+        height: 17px;
+        min-height: 17px;
+        border-radius: 50%;
+        border: 1.5px solid #889a8f;
+        background: #fff;
+        cursor: pointer;
+      }
+      .chx-option .chx-radio:checked {
+        border: 5px solid var(--primary, #1c5145);
+      }
+      .chx-radio:focus-visible {
+        outline: none;
+      }
+      .chx-option-body {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: baseline;
+        gap: 3px 12px;
+        min-width: 0;
+      }
+      .chx-title-row {
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 7px;
+        grid-row: 1;
+        grid-column: 1;
+      }
+      .chx-title-row strong {
+        font-size: 15px;
+        line-height: 1.5;
+        font-weight: 650;
+      }
+      .chx-ver {
+        font: 11px/1.5 var(--font-code, ui-monospace, monospace);
+        color: #59685f;
+      }
+      .chx-desc {
+        color: #47564c;
+        font-size: 13px;
+        line-height: 1.55;
+        grid-row: 2;
+        grid-column: 1 / -1;
+      }
+      .chx-meta {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 6px;
+        color: #5b6b61;
+        font-size: 12px;
+        line-height: 1.5;
+        grid-row: 1;
+        grid-column: 2;
+      }
+      .chx-meta-sep {
+        width: 3px;
+        height: 3px;
+        border-radius: 50%;
+        background: #8c9c90;
+      }
+      .chx-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+        padding: 8px 20px;
+        border-top: 1px solid var(--border, #dce2da);
+        background: #fafbf8;
+      }
+      .chx-right {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: auto;
+        flex-wrap: wrap;
+      }
+      .chx-btn,
+      .chx-text-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border: 1px solid #c8d1c7;
+        border-radius: 8px;
+        padding: 7px 13px;
+        min-height: 40px;
+        background: white;
+        color: var(--ink, #202b27);
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.4;
+        cursor: pointer;
+        white-space: normal;
+        transition: background-color 120ms;
+      }
+      .chx-text-btn {
+        color: #58675e;
+        background: transparent;
+        border-color: transparent;
+        padding-inline: 5px;
+      }
+      .chx-btn:hover,
+      .chx-text-btn:hover {
+        background: #edf2ec;
+      }
+      .chx-btn.chx-primary {
+        background: var(--primary, #1c5145);
+        border-color: var(--primary, #1c5145);
+        color: white;
+      }
+      .chx-btn.chx-primary:hover {
+        background: var(--primary-hover, #153e35);
+      }
+      .chx-btn.chx-primary:disabled {
+        background: #e5ebe4;
+        color: #617065;
+        border-color: #d7dfd6;
+        opacity: 1;
+        cursor: not-allowed;
+      }
+      .chx-btn:focus-visible,
+      .chx-text-btn:focus-visible,
+      .chx-details summary:focus-visible {
+        outline: 2px solid var(--focus-ring, #28725e);
+        outline-offset: 2px;
+      }
+      .chx-settled {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 16px;
+        background: #f3f7f0;
+      }
+      .chx-settled h3 {
+        font-size: 14px;
+        font-weight: 650;
+      }
+      .chx-settled p {
+        font-size: 13px;
+        color: var(--muted, #62716a);
+        line-height: 1.55;
+        margin-top: 2px;
+      }
+      .chx-settled .chx-text-btn {
+        margin-left: auto;
+        flex-shrink: 0;
+      }
+      .chx-small-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+      }
+      .chx-result {
+        padding: 18px 20px 12px;
+      }
+      .chx-result-sub {
+        font-size: 12px;
+        color: var(--muted, #62716a);
+      }
+      .chx-result h3 {
+        font-size: 15px;
+        margin-top: 5px;
+      }
+      .chx-figure {
+        font-size: clamp(25px, 4vw, 34px);
+        line-height: 1.4;
+        font-weight: 650;
+        letter-spacing: -0.045em;
+        font-variant-numeric: tabular-nums;
+        color: var(--primary, #1c5145);
+      }
+      .chx-figure span {
+        color: #5c6b61;
+        font-size: 13px;
+        font-weight: 500;
+        letter-spacing: 0;
+      }
+      .chx-result p {
+        margin: 5px 0 13px;
+        font-size: 13px;
+        color: #49594e;
+      }
+      .chx-details {
+        border-top: 1px solid var(--border, #dce2da);
+        font-size: 13px;
+      }
+      .chx-details summary {
+        color: var(--primary, #1c5145);
+        cursor: pointer;
+        padding-block: 10px;
+        width: fit-content;
+      }
+      .chx-details dl {
+        margin: 2px 0 10px;
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 7px 15px;
+      }
+      .chx-details dt {
+        color: var(--muted, #62716a);
+      }
+      .chx-details dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .chx-details code {
+        font-size: 12px;
+      }
+      .chx-reply {
+        margin: 12px 0 0;
+        padding: 12px 14px;
+        background: #f2f5ef;
+        border-radius: 10px;
+        color: #405448;
+        font-size: 14px;
+      }
+      @media (max-width: 720px) {
+        .chx-option-body {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 2px;
+        }
+        .chx-meta {
+          margin-top: 3px;
+          justify-content: flex-start;
+          flex-wrap: wrap;
+        }
+        .chx-card-head {
+          flex-wrap: wrap;
+          padding: 15px 14px 12px;
+          gap: 8px;
+        }
+        .chx-head-copy {
+          flex: 1 0 8rem;
+        }
+        .chx-glyph {
+          width: 30px;
+          height: 30px;
+        }
+        .chx-head-copy h3 {
+          font-size: 16px;
+        }
+        .chx-options {
+          padding: 0 13px 13px;
+        }
+        .chx-option {
+          padding: 10px;
+          gap: 8px;
+        }
+        .chx-actions {
+          padding: 6px 12px;
+        }
+        .chx-btn,
+        .chx-text-btn,
+        .chx-details summary {
+          min-height: 44px;
+        }
+        .chx-btn {
+          padding-inline: 10px;
+        }
+        .chx-status {
+          padding: 2px 6px;
+        }
+        .chx-settled {
+          flex-wrap: wrap;
+        }
+        .chx-settled > div {
+          flex: 1 1 7rem;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .chx-option,
+        .chx-btn,
+        .chx-text-btn {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a href="#main" class="skip-link" id="skip">跳至工作区</a>
+    <div class="layout">
+      <aside id="side" class="side" aria-label="工作区导航">
+        <div class="rail">
+          <a
+            href="#registry"
+            class="brand-mark"
+            aria-label="Compass 指标管理"
+            data-symbol="compass"
+          ></a>
+          <div class="rail-center">
+            <a
+              href="#choose"
+              data-rail="chat"
+              title="分析 Chat"
+              aria-label="分析 Chat"
+              data-symbol="messages-square"
+            ></a>
+            <a
+              href="#registry"
+              data-rail="registry"
+              title="管理与治理"
+              aria-label="管理与治理"
+              data-symbol="panels-top-left"
+            ></a>
+          </div>
+          <button
+            class="rail-help"
+            title="原型说明"
+            aria-label="查看原型说明"
+            data-info
+            data-symbol="circle-help"
+          ></button>
+        </div>
+        <div class="nav-pane">
+          <div class="nav-brand">
+            <span>Compass</span
+            ><button
+              class="mobile-hide"
+              id="hideNav"
+              aria-label="关闭导航"
+              data-symbol="x"
+            ></button>
+          </div>
+          <nav class="nav-body" aria-label="主要入口">
+            <div class="nav-lbl">数据与语义</div>
+            <a href="#registry" data-page="registry"><i data-symbol="layers-3"></i>指标口径</a>
+            <div class="nav-lbl after">分析 Chat</div>
+            <a href="#create" data-page="create"
+              ><i data-symbol="message-square-plus"></i>创建指标草稿</a
+            >
+            <a href="#edit" data-page="edit"><i data-symbol="square-pen"></i>修改指标口径</a>
+            <a href="#choose" data-page="choose"><i data-symbol="list-checks"></i>销售额口径确认</a>
+          </nav>
+          <div class="workspace-card">
+            <span class="workspace-icon" data-symbol="building-2"></span>
+            <div><strong>星野零售</strong><small>经营分析工作区</small></div>
+          </div>
+        </div>
+      </aside>
+      <button class="nav-scrim" id="scrim" tabindex="-1" aria-label="收起导航" hidden></button>
+      <div class="surface-main">
+        <header class="app-header">
+          <div class="crumb">
+            <button
+              id="showNav"
+              aria-label="展开导航"
+              aria-controls="side"
+              aria-expanded="false"
+              data-symbol="panel-left-open"
+            ></button
+            ><span id="parentCrumb"></span><i data-symbol="chevron-right"></i
+            ><strong id="currentCrumb"></strong>
+          </div>
+          <div class="top-right">
+            <button
+              class="demo-badge"
+              data-info
+              id="demoBtn"
+              aria-expanded="false"
+              aria-controls="demoInfo"
+            >
+              <span></span>演示数据</button
+            ><span class="top-divider"></span>
+            <label class="identity-switch" title="切换演示身份">
+              <b class="avatar" id="actorAvatar" aria-hidden="true">林</b>
+              <span class="identity-text"
+                ><strong id="actorName">林澈</strong><small id="actorRole">租户管理员</small></span
+              >
+              <i data-symbol="chevron-down" aria-hidden="true"></i>
+              <select id="actorSelect" aria-label="切换演示身份"></select>
+            </label>
+          </div>
+        </header>
+        <div class="info-pop" id="demoInfo" hidden>
+          <strong>本地演示工作区</strong>
+          <p>
+            可在右上角切换演示身份，体验个人、部门、租户和平台指标的维护权限。草稿保存在当前浏览器。
+          </p>
+          <div class="reset-actions">
+            <button id="infoClose" type="button">知道了</button
+            ><button id="resetDemo" type="button">重置演示</button>
+          </div>
+          <div id="resetConfirm" hidden>
+            <p>清除本原型保存的草稿和选择记录，恢复四个场景的初始画面？</p>
+            <div class="reset-actions">
+              <button id="keepDemo" type="button">保留记录</button
+              ><button id="clearDemo" type="button">确认重置</button>
+            </div>
+          </div>
+        </div>
+        <main id="main" tabindex="-1"></main>
+      </div>
+    </div>
+    <div class="sr-only" aria-live="polite" id="routeLive"></div>
+    <script>
+      /* Lucide icon license
+ISC License
+
+Copyright (c) 2026 Lucide Icons and Contributors
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+---
+
+The following Lucide icons are derived from the Feather project:
+
+airplay, alert-circle, alert-octagon, alert-triangle, aperture, arrow-down-circle, arrow-down-left, arrow-down-right, arrow-down, arrow-left-circle, arrow-left, arrow-right-circle, arrow-right, arrow-up-circle, arrow-up-left, arrow-up-right, arrow-up, at-sign, calendar, cast, check, chevron-down, chevron-left, chevron-right, chevron-up, chevrons-down, chevrons-left, chevrons-right, chevrons-up, circle, clipboard, clock, code, columns, command, compass, corner-down-left, corner-down-right, corner-left-down, corner-left-up, corner-right-down, corner-right-up, corner-up-left, corner-up-right, crosshair, database, divide-circle, divide-square, dollar-sign, download, external-link, feather, frown, hash, headphones, help-circle, info, italic, key, layout, life-buoy, link-2, link, loader, lock, log-in, log-out, maximize, meh, minimize, minimize-2, minus-circle, minus-square, minus, monitor, moon, more-horizontal, more-vertical, move, music, navigation-2, navigation, octagon, pause-circle, percent, plus-circle, plus-square, plus, power, radio, rss, search, server, share, shopping-bag, sidebar, smartphone, smile, square, table-2, tablet, target, terminal, trash-2, trash, triangle, tv, type, upload, x-circle, x-octagon, x-square, x, zoom-in, zoom-out
+
+The MIT License (MIT) (for the icons listed above)
+
+Copyright (c) 2013-present Cole Bemis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+*/
+      const iconMarkup = {
+        "circle-dot":
+          '<circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="12" r="10"></circle>',
+        "building-2":
+          '<path d="M10 12h4"></path><path d="M10 8h4"></path><path d="M14 21v-3a2 2 0 0 0-4 0v3"></path><path d="M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"></path><path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"></path>',
+        "arrow-up": '<path d="m5 12 7-7 7 7"></path><path d="M12 19V5"></path>',
+        compass:
+          '<circle cx="12" cy="12" r="10"></circle><path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"></path>',
+        workflow:
+          '<rect width="8" height="8" x="3" y="3" rx="2"></rect><path d="M7 11v4a2 2 0 0 0 2 2h4"></path><rect width="8" height="8" x="13" y="13" rx="2"></rect>',
+        "chart-no-axes-combined":
+          '<path d="M12 16v5"></path><path d="M16 14.639V21"></path><path d="M20 10.656V21"></path><path d="m22 3-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.707 0L2 15"></path><path d="M4 18.463V21"></path><path d="M8 14.656V21"></path>',
+        megaphone:
+          '<path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"></path><path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14"></path><path d="M8 6v8"></path>',
+        landmark:
+          '<path d="M10 18v-7"></path><path d="M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z"></path><path d="M14 18v-7"></path><path d="M18 18v-7"></path><path d="M3 22h18"></path><path d="M6 18v-7"></path>',
+        package:
+          '<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path><path d="M12 22V12"></path><polyline points="3.29 7 12 12 20.71 7"></polyline><path d="m7.5 4.27 9 5.15"></path>',
+        check: '<path d="M20 6 9 17l-5-5"></path>',
+        "git-branch":
+          '<path d="M15 6a9 9 0 0 0-9 9V3"></path><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle>',
+        "shield-check":
+          '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="m9 12 2 2 4-4"></path>',
+        layers:
+          '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"></path><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"></path><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"></path>',
+        "chart-column":
+          '<path d="M3 3v16a2 2 0 0 0 2 2h16"></path><path d="M18 17V9"></path><path d="M13 17V5"></path><path d="M8 17v-3"></path>',
+        users:
+          '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><path d="M16 3.128a4 4 0 0 1 0 7.744"></path><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><circle cx="9" cy="7" r="4"></circle>',
+        "file-check":
+          '<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="m9 15 2 2 4-4"></path>',
+        "layers-3":
+          '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"></path><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"></path><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"></path>',
+        "clock-3": '<circle cx="12" cy="12" r="10"></circle><path d="M12 6v6h4"></path>',
+        "receipt-text":
+          '<path d="M13 16H8"></path><path d="M14 8H8"></path><path d="M16 12H8"></path><path d="M4 3a1 1 0 0 1 1-1 1.3 1.3 0 0 1 .7.2l.933.6a1.3 1.3 0 0 0 1.4 0l.934-.6a1.3 1.3 0 0 1 1.4 0l.933.6a1.3 1.3 0 0 0 1.4 0l.933-.6a1.3 1.3 0 0 1 1.4 0l.934.6a1.3 1.3 0 0 0 1.4 0l.933-.6A1.3 1.3 0 0 1 19 2a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1 1.3 1.3 0 0 1-.7-.2l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.934.6a1.3 1.3 0 0 1-1.4 0l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-1.4 0l-.934-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-.7.2 1 1 0 0 1-1-1z"></path>',
+        "circle-check":
+          '<circle cx="12" cy="12" r="10"></circle><path d="m16 9-5.5 5.5L8 12"></path>',
+        "circle-help":
+          '<circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path>',
+        "layers-2":
+          '<path d="M13 13.74a2 2 0 0 1-2 0L2.5 8.87a1 1 0 0 1 0-1.74L11 2.26a2 2 0 0 1 2 0l8.5 4.87a1 1 0 0 1 0 1.74z"></path><path d="m20 14.285 1.5.845a1 1 0 0 1 0 1.74L13 21.74a2 2 0 0 1-2 0l-8.5-4.87a1 1 0 0 1 0-1.74l1.5-.845"></path>',
+        "check-circle-2":
+          '<circle cx="12" cy="12" r="10"></circle><path d="m16 9-5.5 5.5L8 12"></path>',
+        "pencil-line":
+          '<path d="M13 21h8"></path><path d="m15 5 4 4"></path><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"></path>',
+        "file-pen-line":
+          '<path d="M14.364 13.634a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506l4.013-4.009a1 1 0 0 0-3.004-3.004z"></path><path d="M14.487 7.858A1 1 0 0 1 14 7V2"></path><path d="M20 19.645V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l2.516 2.516"></path><path d="M8 18h1"></path>',
+        "chevron-down": '<path d="m6 9 6 6 6-6"></path>',
+        plus: '<path d="M5 12h14"></path><path d="M12 5v14"></path>',
+        search: '<path d="m21 21-4.34-4.34"></path><circle cx="11" cy="11" r="8"></circle>',
+        "square-function":
+          '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><path d="M9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3"></path><path d="M9 11.2h5.7"></path>',
+        database:
+          '<ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M3 5V19A9 3 0 0 0 21 19V5"></path><path d="M3 12A9 3 0 0 0 21 12"></path>',
+        "panel-right":
+          '<rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M15 3v18"></path>',
+        group:
+          '<path d="M3 7V5c0-1.1.9-2 2-2h2"></path><path d="M17 3h2c1.1 0 2 .9 2 2v2"></path><path d="M21 17v2c0 1.1-.9 2-2 2h-2"></path><path d="M7 21H5c-1.1 0-2-.9-2-2v-2"></path><rect width="7" height="5" x="7" y="7" rx="1"></rect><rect width="7" height="5" x="10" y="12" rx="1"></rect>',
+        edit: '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"></path>',
+        pencil:
+          '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"></path><path d="m15 5 4 4"></path>',
+        copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>',
+        code: '<path d="m16 18 6-6-6-6"></path><path d="m8 6-6 6 6 6"></path>',
+        "arrow-left": '<path d="m12 19-7-7 7-7"></path><path d="M19 12H5"></path>',
+        tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"></path><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"></circle>',
+        form: '<path d="M4 14h6"></path><path d="M4 2h10"></path><rect x="4" y="18" width="16" height="4" rx="1"></rect><rect x="4" y="6" width="16" height="4" rx="1"></rect>',
+        "file-plus-2":
+          '<path d="M11.35 22H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v5.35"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M14 19h6"></path><path d="M17 16v6"></path>',
+        list: '<path d="M3 5h.01"></path><path d="M3 12h.01"></path><path d="M3 19h.01"></path><path d="M8 5h13"></path><path d="M8 12h13"></path><path d="M8 19h13"></path>',
+        save: '<path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"></path><path d="M7 3v4a1 1 0 0 0 1 1h7"></path>',
+        "bookmark-plus":
+          '<path d="M12 7v6"></path><path d="M15 10H9"></path><path d="M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2z"></path>',
+        "circle-minus": '<circle cx="12" cy="12" r="10"></circle><path d="M8 12h8"></path>',
+        "arrow-right": '<path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path>',
+        radio:
+          '<path d="M16.247 7.761a6 6 0 0 1 0 8.478"></path><path d="M19.075 4.933a10 10 0 0 1 0 14.134"></path><path d="M4.925 19.067a10 10 0 0 1 0-14.134"></path><path d="M7.753 16.239a6 6 0 0 1 0-8.478"></path><circle cx="12" cy="12" r="2"></circle>',
+        layout:
+          '<rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M3 9h18"></path><path d="M9 21V9"></path>',
+        "messages-square":
+          '<path d="M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path><path d="M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1"></path>',
+        "panels-top-left":
+          '<rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M3 9h18"></path><path d="M9 21V9"></path>',
+        x: '<path d="M18 6 6 18"></path><path d="m6 6 12 12"></path>',
+        "message-square-plus":
+          '<path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"></path><path d="M12 8v6"></path><path d="M9 11h6"></path>',
+        "square-pen":
+          '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"></path>',
+        "list-checks":
+          '<path d="M13 5h8"></path><path d="M13 12h8"></path><path d="M13 19h8"></path><path d="m3 17 2 2 4-4"></path><path d="m3 7 2 2 4-4"></path>',
+        "panel-left-open":
+          '<rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M9 3v18"></path><path d="m14 9 3 3-3 3"></path>',
+        "chevron-right": '<path d="m9 18 6-6-6-6"></path>',
+        history:
+          '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M12 7v5l4 2"></path>',
+        send: '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"></path><path d="m21.854 2.147-10.94 10.939"></path>',
+      };
+      window.h = (value) =>
+        String(value ?? "").replace(
+          /[&<>"']/g,
+          (character) =>
+            ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character],
+        );
+      window.icon = function (name, size = 18) {
+        const key = String(name)
+          .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+          .toLowerCase();
+        const symbol = iconMarkup[key] || iconMarkup["circle-dot"];
+        return (
+          '<svg width="' +
+          Number(size) +
+          '" height="' +
+          Number(size) +
+          '" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="glyph">' +
+          symbol +
+          "</svg>"
+        );
+      };
+      const demoPrefix = "compass.metric-studio.974.v1.";
+      const demoMemory = Object.create(null);
+      window.demoRead = function (key, fallback) {
+        try {
+          const raw = localStorage.getItem(demoPrefix + key);
+          if (raw !== null) return JSON.parse(raw);
+        } catch {}
+        return Object.hasOwn(demoMemory, key) ? demoMemory[key] : fallback;
+      };
+      window.demoWrite = function (key, value) {
+        demoMemory[key] = value;
+        try {
+          localStorage.setItem(demoPrefix + key, JSON.stringify(value));
+        } catch {}
+      };
+      const demoActors = [
+        {
+          id: "lin",
+          name: "林澈",
+          role: "租户管理员",
+          tenantId: "xingye",
+          departments: ["销售部", "财务部"],
+          managedDepartments: ["销售部"],
+          mayShare: ["销售部共享", "租户公共"],
+        },
+        {
+          id: "zhou",
+          name: "周宁",
+          role: "普通成员",
+          tenantId: "xingye",
+          departments: ["销售部"],
+          managedDepartments: [],
+          mayShare: ["销售部共享"],
+        },
+        {
+          id: "yao",
+          name: "姚辰",
+          role: "部门管理员",
+          tenantId: "xingye",
+          departments: ["财务部"],
+          managedDepartments: ["财务部"],
+          mayShare: ["财务部共享"],
+        },
+        {
+          id: "qiao",
+          name: "乔安",
+          role: "平台管理员",
+          tenantId: "xingye",
+          departments: [],
+          managedDepartments: [],
+          mayShare: [],
+        },
+      ];
+      let actorId = demoRead("actor", "lin");
+      function activeActor() {
+        return demoActors.find((person) => person.id === actorId) || demoActors[0];
+      }
+      function newManagements() {
+        const actor = activeActor();
+        return [
+          "personal",
+          ...(actor.managedDepartments.length ? ["department"] : []),
+          ...(actor.role === "租户管理员" ? ["tenant"] : []),
+          ...(actor.role === "平台管理员" ? ["platform"] : []),
+        ];
+      }
+      function canEditMetric(metric) {
+        if (!metric) return false;
+        const actor = activeActor();
+        if (metric.management === "platform") return actor.role === "平台管理员";
+        if (metric.tenantId !== actor.tenantId) return false;
+        if (metric.management === "personal") return metric.creatorId === actor.id;
+        if (metric.management === "tenant") return actor.role === "租户管理员";
+        return (
+          metric.management === "department" && actor.managedDepartments.includes(metric.department)
+        );
+      }
+      function canUseMetric(metric) {
+        if (!metric || metric.status !== "已发布") return false;
+        if (metric.management === "platform" && metric.scope === "全局预置") return true;
+        const actor = activeActor();
+        if (actor.tenantId !== metric.tenantId) return false;
+        if (metric.scope === "仅本人")
+          return metric.management === "personal" && metric.creatorId === actor.id;
+        return (
+          metric.scope === "租户公共" ||
+          actor.departments.some((dept) => metric.scope === dept + "共享")
+        );
+      }
+      function canViewMetric(metric) {
+        return canEditMetric(metric) || canUseMetric(metric);
+      }
+      function usageScopes(metric) {
+        const actor = activeActor();
+        if (!metric || metric.management === "personal") return ["仅本人", ...actor.mayShare];
+        if (metric.management === "platform")
+          return actor.role === "平台管理员" ? ["全局预置"] : [];
+        if (metric.management === "tenant" && actor.role === "租户管理员")
+          return ["租户公共", ...actor.managedDepartments.map((dept) => dept + "共享")];
+        if (metric.management === "department")
+          return actor.managedDepartments
+            .filter((dept) => !metric.department || metric.department === dept)
+            .map((dept) => dept + "共享");
+        return [];
+      }
+      function managementLabel(metric) {
+        if (metric.management === "personal") {
+          const author = demoActors.find((person) => person.id === metric.creatorId);
+          return (author?.name || metric.owner || "创建者") + "（本人维护）";
+        }
+        if (metric.management === "platform") return "平台管理员";
+        if (metric.management === "tenant") return "星野零售 · 租户管理员";
+        return (metric.department || "部门") + "管理员";
+      }
+      window.metricAccess = {
+        actor: activeActor,
+        canView: canViewMetric,
+        canUse: canUseMetric,
+        canEdit: canEditMetric,
+        usageScopes,
+        newManagements,
+        managementLabel,
+      };
+      function allStoredDrafts() {
+        const raw = demoRead("drafts", []);
+        if (!Array.isArray(raw)) return [];
+        return raw
+          .filter((d) => d && typeof d.id === "string" && typeof d.name === "string")
+          .map((d) => {
+            if (d.management) return d;
+            // The original single-user prototype stored Lin's drafts without management metadata.
+            const base = (window.metricPublished || []).find(
+              (m) => m.code === d.code && (d.baseVersion || d.id.startsWith("revision-")),
+            );
+            return {
+              ...d,
+              management: base?.management || "personal",
+              creatorId: base?.creatorId || "lin",
+              tenantId: base?.tenantId || "xingye",
+              department: base?.department,
+              baseId: base?.id,
+              lastEditorId: "lin",
+            };
+          });
+      }
+      Object.defineProperty(window, "localMetricDrafts", {
+        get: () => allStoredDrafts().filter(canViewMetric),
+      });
+      window.saveMetricDraft = function (draft, original = null) {
+        if (!draft?.id || !draft.name?.trim()) return null;
+        const actor = activeActor();
+        const rows = allStoredDrafts();
+        const published = window.metricPublished || [];
+        const existing = rows.find((row) => row.id === draft.id);
+        const trusted =
+          original &&
+          (rows.find((row) => row.id === original.id) ||
+            published.find((row) => row.id === original.id));
+        if (original && (!trusted || !canEditMetric(trusted))) return null;
+        if (published.some((row) => row.id === draft.id)) return null;
+        if (existing && (!canEditMetric(existing) || !trusted || trusted.id !== existing.id))
+          return null;
+        if (existing && (original.draftRevision || 0) !== (existing.draftRevision || 0))
+          return null;
+        if (trusted?.status === "草稿" && trusted.id !== draft.id) return null;
+        const baseId = trusted?.status === "已发布" ? trusted.id : trusted?.baseId;
+        const openRevision = baseId && rows.find((row) => row.baseId === baseId);
+        if (openRevision && openRevision.id !== draft.id) return null;
+        if (!trusted && draft.baseId) return null;
+        const management = trusted?.management || draft.management || "personal";
+        const department =
+          trusted?.department || (management === "department" ? draft.department : undefined);
+        if (
+          !trusted &&
+          (!newManagements().includes(management) ||
+            (management === "department" && !actor.managedDepartments.includes(department)))
+        )
+          return null;
+        const saved = {
+          ...draft,
+          management,
+          department,
+          creatorId: trusted?.creatorId || actor.id,
+          tenantId: trusted
+            ? trusted.tenantId
+            : management === "platform"
+              ? undefined
+              : actor.tenantId,
+          baseId,
+          draftRevision: (existing?.draftRevision || 0) + 1,
+          lastEditorId: actor.id,
+          status: "草稿",
+          date: "2025-11-05",
+        };
+        if (!canEditMetric(saved) || !usageScopes(saved).includes(saved.scope)) return null;
+        demoWrite("drafts", [saved, ...rows.filter((row) => row.id !== saved.id)]);
+        return saved;
+      };
+      window.userBubble = (text) =>
+        '<div class="u-line"><p class="u-text">' + h(text) + "</p></div>";
+      window.agentHead = () =>
+        '<div class="assistant-head"><span class="assistant-emblem">' +
+        icon("compass", 18) +
+        "</span>Compass</div>";
+      window.runLine = (text) =>
+        '<div class="run-line">' + icon("workflow", 14) + "<span>" + h(text) + "</span></div>";
+
+      (function () {
+        const records = [
+          {
+            code: "sales.paid_gmv",
+            management: "department",
+            department: "销售部",
+            tenantId: "xingye",
+            creatorId: "lin",
+            name: "支付 GMV",
+            domain: "销售",
+            scope: "销售部共享",
+            version: "v1.2",
+            owner: "林澈",
+            unit: "元",
+            grain: "成功支付事件",
+            time: "支付日",
+            timeField: "payment.attempted_at",
+            formula: "SUM(payment.amount_cent) / 100",
+            condition: "payment.status = 'SUCCEEDED'",
+            desc: "按支付日汇总成功支付的金额，保留原始支付额，退款另行统计。",
+            dims: ["渠道", "销售地区", "销售门店"],
+            aliases: ["销售额", "支付成交额"],
+            source: "payment",
+            join: "通过 order_id 关联订单头，取原销售门店和渠道。",
+            date: "2025-10-16",
+            prev: "v1.1",
+            change: "补充成功状态过滤和时间字段说明。",
+          },
+          {
+            code: "sales.net_gmv",
+            management: "tenant",
+            tenantId: "xingye",
+            creatorId: "lin",
+            name: "现金流净 GMV",
+            domain: "销售",
+            scope: "租户公共",
+            version: "v1.1",
+            owner: "林澈",
+            unit: "元",
+            grain: "支付事件、退款事件",
+            time: "支付日 / 退款日",
+            timeField: "payment.attempted_at / refund.attempted_at",
+            formula: "成功支付额 − 成功退款额",
+            condition: "支付、退款分别按事件发生日归期",
+            desc: "当期成功支付总额，扣除同期成功退款。跨月退款归入实际退款发生月。",
+            dims: ["渠道", "销售地区"],
+            aliases: ["退款后成交额"],
+            source: "payment · refund",
+            join: "支付与退款独立聚合，再按共同销售维度对齐。",
+            date: "2025-10-12",
+            prev: "v1.0",
+            change: "明确退款按实际退款日计入。",
+          },
+          {
+            code: "finance.recognized_revenue",
+            management: "department",
+            department: "财务部",
+            tenantId: "xingye",
+            creatorId: "cheng",
+            name: "确认收入",
+            domain: "财务",
+            scope: "财务部共享",
+            version: "v1.0",
+            owner: "财务分析组",
+            unit: "元",
+            grain: "收入分录",
+            time: "确认日",
+            timeField: "revenue_entry.recognized_at",
+            formula: "SUM(revenue_entry.amount_cent) / 100",
+            condition: "妥投分录计正，退货受理分录计负",
+            desc: "汇总已入账收入分录，妥投时确认，退货受理时冲减。",
+            dims: ["渠道", "销售地区", "销售门店", "品类"],
+            aliases: ["销售额", "营收"],
+            source: "revenue_entry",
+            join: "收入分录经商品单件关联原订单。",
+            date: "2025-10-09",
+            change: "首次发布财务确认口径。",
+          },
+          {
+            code: "sales.order_count",
+            management: "platform",
+            creatorId: "qiao",
+            name: "下单订单数",
+            domain: "销售",
+            scope: "全局预置",
+            version: "v1.0",
+            owner: "平台语义组",
+            unit: "单",
+            grain: "一笔订单",
+            time: "下单日",
+            timeField: "order_header.ordered_at",
+            formula: "COUNT(DISTINCT order_id)",
+            condition: "创建成功的订单，包括后续取消的订单",
+            desc: "按下单时间统计创建的订单，每笔订单仅计一次。",
+            dims: ["渠道", "销售地区", "销售门店"],
+            aliases: ["下单数", "订单数"],
+            source: "order_header",
+            join: "按租户和订单标识去重。全局定义在本工作区绑定零售数据源。",
+            date: "2025-10-08",
+            change: "首次发布公共订单数定义。",
+          },
+          {
+            code: "marketing.net_roas",
+            management: "tenant",
+            tenantId: "xingye",
+            creatorId: "jing",
+            name: "平台归因净回报倍数",
+            domain: "营销",
+            scope: "租户公共",
+            version: "v1.0",
+            owner: "增长分析组",
+            unit: "倍",
+            grain: "活动 × 渠道 × 归因日",
+            time: "归因日",
+            timeField: "campaign_attribution_daily.cohort_date",
+            formula: "（归因支付额 − 归因退款额）/ 投放消耗",
+            condition: "固定归因模型及可见报表版本，分母为零返回不可计算",
+            desc: "按平台归因汇总净回款和投放消耗，按期间总额计算净 ROAS。",
+            dims: ["渠道", "活动"],
+            aliases: ["净 ROAS"],
+            source: "campaign_attribution_daily · campaign_daily",
+            join: "投放消耗先汇总到活动渠道日。归因金额只支持全租户汇总。",
+            date: "2025-10-06",
+            change: "登记平台归因规则与有效报表版本。",
+          },
+          {
+            code: "inventory.closing_available_qty",
+            management: "tenant",
+            tenantId: "xingye",
+            creatorId: "yuan",
+            name: "期末可用库存件数",
+            domain: "库存",
+            scope: "租户公共",
+            version: "v1.0",
+            owner: "供应链分析组",
+            unit: "件",
+            grain: "地点 × SKU × 快照日",
+            time: "库存快照日",
+            timeField: "inventory_snapshot.as_of",
+            formula: "SUM(期末快照可用件数)",
+            condition: "同地点、SKU 只取期末最新可见快照",
+            desc: "在给定期末汇总可用库存件数。跨天查看取期末快照，缺快照时标记不完整。",
+            dims: ["持货地点", "地区", "品类"],
+            aliases: ["期末可用库存"],
+            source: "inventory_snapshot",
+            join: "以地点、SKU 为自然键选取期末快照。",
+            date: "2025-10-03",
+            change: "登记库存时点与汇总规则。",
+          },
+          {
+            id: "personal.lin.channel_gmv",
+            code: "personal.channel_paid_gmv",
+            name: "渠道支付额占比",
+            domain: "销售",
+            scope: "仅本人",
+            management: "personal",
+            tenantId: "xingye",
+            creatorId: "lin",
+            owner: "林澈",
+            version: "v1.0",
+            unit: "%",
+            grain: "渠道 × 日",
+            time: "支付日",
+            timeField: "payment.attempted_at",
+            formula: "渠道成功支付额 / 同期授权范围成功支付总额",
+            condition: "分母为零时不计算占比",
+            desc: "比较各渠道支付额在本人获准查询渠道中的占比。",
+            dims: ["渠道", "销售地区"],
+            aliases: ["渠道支付占比"],
+            source: "payment",
+            join: "按支付事实聚合，渠道由原订单取得。",
+            date: "2025-10-21",
+            change: "首次保存并启用个人渠道分析口径。",
+          },
+          {
+            id: "personal.zhou.orders",
+            code: "personal.channel_order_count",
+            name: "渠道下单量",
+            domain: "销售",
+            scope: "仅本人",
+            management: "personal",
+            tenantId: "xingye",
+            creatorId: "zhou",
+            owner: "周宁",
+            version: "v1.0",
+            unit: "单",
+            grain: "渠道 × 日",
+            time: "下单日",
+            timeField: "order_header.ordered_at",
+            formula: "按渠道计数去重订单",
+            condition: "每笔订单归属原销售渠道",
+            desc: "按渠道观察每日下单量，包含随后取消的订单。",
+            dims: ["渠道"],
+            aliases: ["我的渠道订单"],
+            source: "order_header",
+            join: "按租户、原销售渠道、订单标识去重。",
+            date: "2025-10-18",
+            change: "首次保存并启用个人渠道订单口径。",
+          },
+          {
+            id: "personal.zhou.refund_count",
+            code: "personal.successful_refund_count",
+            name: "成功退款笔数",
+            domain: "销售",
+            scope: "销售部共享",
+            management: "personal",
+            tenantId: "xingye",
+            creatorId: "zhou",
+            owner: "周宁",
+            version: "v1.0",
+            unit: "笔",
+            grain: "成功退款事件",
+            time: "退款日",
+            timeField: "refund.attempted_at",
+            formula: "COUNT(DISTINCT refund_id)",
+            condition: "仅纳入成功退款，按退款事件计数",
+            desc: "跟踪所选期间已成功退款的笔数，同一订单的多次退款分别计入。周宁将这项个人口径共享给销售部。",
+            dims: ["渠道", "销售地区"],
+            aliases: ["退款笔数"],
+            source: "refund",
+            join: "退款事件归属原销售订单，经过授权后可按原销售维度查看。",
+            date: "2025-10-22",
+            change: "周宁发布个人口径，开放给销售部使用。",
+          },
+        ].map((m) => ({ ...m, id: m.id || m.code, lastEditorId: m.creatorId, status: "已发布" }));
+        window.metricPublished = records;
+        const fields = ["销售", "营销", "库存", "财务"];
+        const managementNames = {
+          personal: "个人管理",
+          department: "部门管理",
+          tenant: "租户管理",
+          platform: "平台管理",
+        };
+        const personNames = {
+          lin: "林澈",
+          zhou: "周宁",
+          yao: "姚辰",
+          qiao: "乔安",
+          cheng: "程遥",
+          jing: "沈菁",
+          yuan: "梁远",
+        };
+        const access = () => window.metricAccess;
+        const colors = { 销售: "sales", 营销: "marketing", 财务: "finance", 库存: "inventory" };
+        const glyphs = {
+          销售: "chart-no-axes-combined",
+          营销: "megaphone",
+          财务: "landmark",
+          库存: "package",
+        };
+        const txt = (v) => window.h(String(v ?? ""));
+        const ico = (n, s) => window.icon(n, s || 17);
+        const list = (v) =>
+          (Array.isArray(v) ? v : String(v || "").split(/[、,，]/))
+            .map((x) => String(x).trim())
+            .filter(Boolean);
+        const badge = (m) =>
+          '<span class="rg-status ' +
+          (m.status === "草稿" ? "rg-draft" : "") +
+          '"><i></i>' +
+          txt(m.status) +
+          "</span>";
+        const symbol = (d) =>
+          '<span class="rg-symbol rg-' +
+          (colors[d] || "sales") +
+          '">' +
+          ico(glyphs[d] || "layers", 17) +
+          "</span>";
+        function getDrafts() {
+          return (window.localMetricDrafts || []).map((m) => ({
+            ...m,
+            id: String(m.id),
+            status: "草稿",
+            title: m.name,
+            owner: m.owner || "林澈",
+            version: m.version || "草稿",
+            domain: m.domain || "销售",
+            scope: m.scope || "销售部共享",
+            dims: list(m.dims || m.dimensions),
+            aliases: list(m.aliases),
+            desc: m.desc || m.definition || m.description || "",
+            time: m.time || m.timeField || "",
+            timeField: m.timeField || m.time || "",
+            source: m.source || m.sourceRef || "",
+            date: m.date || "本次会话",
+            condition: m.condition || m.filters || "",
+            change: "已保存为草稿，等待校验与评审。",
+          }));
+        }
+        window.renderRegistry = function (mount) {
+          const root = document.createElement("div");
+          mount.replaceChildren(root);
+          const all = () =>
+            [...records, ...getDrafts()]
+              .filter((m) => access().canView(m))
+              .sort((a, b) => Number(access().canEdit(b)) - Number(access().canEdit(a)));
+          let selected = window.metricToInspect || all()[0]?.id;
+          delete window.metricToInspect;
+          const freshFilters = () => ({
+            scope: "全部范围",
+            domain: "全部业务域",
+            status: "全部状态",
+            access: "全部指标",
+            q: "",
+          });
+          let filters = freshFilters(),
+            tab = "definition",
+            editing = null,
+            message = "";
+          const current = () => all().find((m) => m.id === selected);
+          function selectOptions(values, value) {
+            return values
+              .map((v) => "<option" + (v === value ? " selected" : "") + ">" + txt(v) + "</option>")
+              .join("");
+          }
+          function scopeLabel(scope) {
+            return (scope || "").includes("部") ? "部门共享" : scope;
+          }
+          function usageLabel(m) {
+            if (m.scope === "仅本人") return (personNames[m.creatorId] || m.owner) + "本人";
+            if (m.scope === "全局预置") return "所有租户成员可读定义，按各自工作区授权取数";
+            if (m.scope === "租户公共") return "星野零售成员可用，按各自数据权限取数";
+            return (m.scope || "").replace(/共享$/, "") + "成员可用，按各自数据权限取数";
+          }
+          function shortMaintainer(m) {
+            if (m.management === "personal")
+              return (personNames[m.creatorId] || m.owner || "创建者") + "维护";
+            return m.management === "department"
+              ? m.department + "管理员"
+              : m.management === "tenant"
+                ? "租户管理员"
+                : "平台管理员";
+          }
+          function accessTabs() {
+            return (
+              '<div class="rg-access-tabs" role="group" aria-label="指标维护权限">' +
+              ["全部指标", "我可编辑", "只读指标"]
+                .map(
+                  (label) =>
+                    '<button type="button" data-access-filter="' +
+                    label +
+                    '" aria-pressed="' +
+                    (filters.access === label) +
+                    '">' +
+                    label +
+                    "</button>",
+                )
+                .join("") +
+              "</div>"
+            );
+          }
+          function opt(name, title, items) {
+            return (
+              '<label class="rg-filter"><span class="rg-sr">' +
+              title +
+              '</span><select data-filter="' +
+              name +
+              '">' +
+              selectOptions(items, filters[name]) +
+              "</select>" +
+              ico("chevron-down", 13) +
+              "</label>"
+            );
+          }
+          function stat(filter, title, value, foot, iconName, style) {
+            return (
+              '<button type="button" data-summary="' +
+              filter +
+              '" class="rg-stat ' +
+              style +
+              '"><span class="rg-stat-icon">' +
+              ico(iconName, 19) +
+              '</span><span class="rg-stat-meta"><span>' +
+              title +
+              "</span><strong>" +
+              value +
+              "</strong></span><small>" +
+              foot +
+              "</small></button>"
+            );
+          }
+          function hero() {
+            const visible = all();
+            return (
+              '<div class="rg-head"><div><h1 tabindex="-1">指标口径</h1><p>星野零售的指标定义、共享范围与生效版本</p></div><button type="button" data-action="create" class="rg-btn rg-primary">' +
+              ico("plus", 17) +
+              "新建指标</button></div>" +
+              '<div class="rg-stats">' +
+              stat(
+                "all",
+                "可见口径",
+                visible.length,
+                "覆盖 " + new Set(visible.map((m) => m.domain)).size + " 个业务域",
+                "layers",
+                "rg-stat-all",
+              ) +
+              stat(
+                "editable",
+                "我可编辑",
+                visible.filter((m) => access().canEdit(m)).length,
+                "含本人或获委派的口径",
+                "pencil",
+                "rg-stat-live",
+              ) +
+              stat(
+                "drafts",
+                "指标草稿",
+                visible.filter((m) => m.status === "草稿").length,
+                "待完善或送审",
+                "file-pen-line",
+                "rg-stat-drafts",
+              ) +
+              "</div>"
+            );
+          }
+          function toolbar() {
+            return (
+              '<div class="rg-tools"><label class="rg-search">' +
+              ico("search", 16) +
+              '<span class="rg-sr">搜索指标</span><input id="rg-search" type="search" value="' +
+              txt(filters.q) +
+              '" placeholder="搜索名称、别名或编码"></label>' +
+              opt("domain", "业务域", ["全部业务域", ...fields]) +
+              opt("scope", "共享范围", ["全部范围", "仅本人", "全局预置", "租户公共", "部门共享"]) +
+              opt("status", "发布状态", ["全部状态", "已发布", "草稿"]) +
+              "</div>"
+            );
+          }
+          function results() {
+            const needle = filters.q.toLowerCase().trim();
+            return all().filter(
+              (m) =>
+                (filters.access === "全部指标" ||
+                  (filters.access === "我可编辑" ? access().canEdit(m) : !access().canEdit(m))) &&
+                (filters.domain === "全部业务域" || m.domain === filters.domain) &&
+                (filters.scope === "全部范围" || scopeLabel(m.scope) === filters.scope) &&
+                (filters.status === "全部状态" || m.status === filters.status) &&
+                (!needle ||
+                  [m.name, m.code, ...list(m.aliases)].some((v) =>
+                    (v || "").toLowerCase().includes(needle),
+                  )),
+            );
+          }
+          function rows(found) {
+            return (
+              '<div class="rg-table"><table aria-label="可见指标目录"><thead><tr><th>指标名称</th><th>维护与使用</th><th>状态</th><th>操作</th></tr></thead><tbody>' +
+              found
+                .map(
+                  (m) =>
+                    '<tr class="' +
+                    (selected === m.id ? "rg-current" : "") +
+                    '" data-metric="' +
+                    txt(m.id) +
+                    '"><td><button type="button" class="rg-metric" aria-pressed="' +
+                    (selected === m.id) +
+                    '">' +
+                    symbol(m.domain) +
+                    "<span><b>" +
+                    txt(m.name) +
+                    "</b><code>" +
+                    txt(m.code) +
+                    '</code></span></button></td><td><span class="rg-row-owner" title="' +
+                    txt(access().managementLabel(m)) +
+                    '">' +
+                    txt(shortMaintainer(m)) +
+                    '</span><small class="rg-row-scope">' +
+                    txt(m.scope) +
+                    "</small></td><td>" +
+                    badge(m) +
+                    '</td><td><button type="button" class="rg-row-action ' +
+                    (access().canEdit(m) ? "rg-editable" : "") +
+                    '" data-record-action="' +
+                    (access().canEdit(m) ? "edit" : "view") +
+                    '" data-record-id="' +
+                    txt(m.id) +
+                    '" aria-label="' +
+                    (access().canEdit(m) ? "编辑" : "查看") +
+                    txt(m.name) +
+                    '">' +
+                    ico(access().canEdit(m) ? "pencil" : "panel-right", 13) +
+                    (access().canEdit(m) ? "编辑" : "查看") +
+                    "</button></td></tr>",
+                )
+                .join("") +
+              "</tbody></table>" +
+              (!found.length
+                ? '<div class="rg-empty">' +
+                  ico("search", 24) +
+                  '<h3>没有匹配的指标</h3><p>换个名称，或清除筛选后再查找。</p><button type="button" class="rg-btn" data-action="clear">清除筛选</button></div>'
+                : "") +
+              "</div>"
+            );
+          }
+          function keyval(k, v) {
+            return "<div><dt>" + k + "</dt><dd>" + txt(v || "待补充") + "</dd></div>";
+          }
+          function definition(m) {
+            return (
+              '<div class="rg-detail-body">' +
+              (m.desc ? '<p class="rg-def">' + txt(m.desc) + "</p>" : "") +
+              '<div class="rg-formula"><header>' +
+              ico("square-function", 16) +
+              "计算口径</header><div>" +
+              txt(m.formula || "待补充公式") +
+              "</div>" +
+              (m.condition ? "<small>" + txt(m.condition) + "</small>" : "") +
+              "</div>" +
+              '<dl class="rg-props">' +
+              keyval("业务域", m.domain) +
+              keyval("统计粒度", m.grain) +
+              keyval("业务时间", m.time) +
+              keyval("显示单位", m.unit) +
+              keyval("业务责任人", m.owner) +
+              keyval("口径归属", managementNames[m.management] || "个人管理") +
+              "</dl>" +
+              '<div class="rg-dim"><h4>可分析维度</h4>' +
+              ((m.dims || []).length
+                ? m.dims.map((d) => "<span>" + txt(d) + "</span>").join("")
+                : "<small>待补充</small>") +
+              "</div>" +
+              ((m.aliases || []).length
+                ? '<div class="rg-alias">别名 <span>' + txt(m.aliases.join("、")) + "</span></div>"
+                : "") +
+              "</div>"
+            );
+          }
+          function source(m) {
+            return (
+              '<div class="rg-detail-body"><h4>数据来源</h4><div class="rg-source">' +
+              ico("database", 18) +
+              "<div><b>" +
+              txt(m.source || "待指定数据源") +
+              '</b><small>星野零售 · 授权零售数据</small></div></div><dl class="rg-props rg-props-wide">' +
+              keyval("业务时间字段", m.timeField) +
+              keyval("绑定与关联", m.join || "提交评审前，由数据负责人核验来源、关联与执行绑定。") +
+              keyval("统计时区", "Asia/Shanghai") +
+              "</dl></div>"
+            );
+          }
+          function version(m) {
+            const parent = records.find((r) => r.id === m.baseId && access().canView(r));
+            function item(title, body, date, old) {
+              return (
+                '<li class="' +
+                (old ? "rg-old" : "") +
+                '"><div><strong>' +
+                txt(title) +
+                "</strong><small>" +
+                txt(date) +
+                "</small></div><p>" +
+                txt(body) +
+                "</p></li>"
+              );
+            }
+            return (
+              '<div class="rg-detail-body"><h4>版本记录</h4><ol class="rg-history">' +
+              item(m.version + " · " + m.status, m.change || "当前指标定义", m.date, false) +
+              (m.status === "草稿" && parent
+                ? item(parent.version + " · 生效中", "正式查询继续引用此版本。", parent.date, true)
+                : m.prev
+                  ? item(
+                      m.prev + " · 历史版本",
+                      "此版本已归档，可追溯历史分析口径。",
+                      "历史记录",
+                      true,
+                    )
+                  : "") +
+              "</ol></div>"
+            );
+          }
+          function inspector(m) {
+            const writable = access().canEdit(m);
+            const maintainer = access().managementLabel(m);
+            const hasRevision =
+              m.status === "已发布" &&
+              getDrafts().some((d) => d.baseId === m.id && access().canEdit(d));
+            return (
+              '<aside class="rg-inspect" aria-label="指标详情"><div class="rg-inspect-top"><span class="rg-kicker">' +
+              ico("panel-right", 15) +
+              '口径详情</span><span class="rg-version">' +
+              txt(m.version) +
+              "</span></div>" +
+              '<div class="rg-detail-title"><h2 tabindex="-1">' +
+              txt(m.name) +
+              "</h2>" +
+              badge(m) +
+              '</div><div class="rg-stable">' +
+              txt(m.code) +
+              "</div>" +
+              '<dl class="rg-rights"><div><dt>维护权限</dt><dd>' +
+              txt(maintainer) +
+              '<strong class="' +
+              (writable ? "editable" : "readonly") +
+              '">' +
+              (writable ? "我可编辑" : "只读") +
+              "</strong></dd></div><div><dt>使用范围</dt><dd>" +
+              txt(usageLabel(m)) +
+              "</dd></div><div><dt>创建者</dt><dd>" +
+              txt(personNames[m.creatorId] || m.creatorId) +
+              "</dd></div><div><dt>最近编辑</dt><dd>" +
+              txt(personNames[m.lastEditorId || m.creatorId] || m.owner) +
+              " · " +
+              txt(m.date) +
+              "</dd></div></dl>" +
+              '<div class="rg-tabs" role="group" aria-label="详情内容">' +
+              [
+                ["definition", "定义"],
+                ["source", "数据来源"],
+                ["versions", "版本"],
+              ]
+                .map(
+                  ([key, label]) =>
+                    '<button type="button" data-tab="' +
+                    key +
+                    '" aria-pressed="' +
+                    (tab === key) +
+                    '" class="' +
+                    (tab === key ? "rg-on" : "") +
+                    '">' +
+                    label +
+                    "</button>",
+                )
+                .join("") +
+              "</div>" +
+              (tab === "definition" ? definition(m) : tab === "source" ? source(m) : version(m)) +
+              '<div class="rg-detail-actions"><button type="button" data-action="edit" class="rg-btn ' +
+              (writable ? "rg-primary" : "") +
+              '">' +
+              ico(writable ? "pencil" : "copy", 15) +
+              (writable
+                ? m.status === "草稿" || hasRevision
+                  ? "继续编辑草稿"
+                  : "创建修订"
+                : "派生为新指标") +
+              "</button></div></aside>"
+            );
+          }
+          function syncListing() {
+            const found = results();
+            if (found.length && !found.some((m) => m.id === selected)) {
+              selected = found[0].id;
+              tab = "definition";
+            }
+            root.querySelector(".rg-table-host").innerHTML = rows(found);
+            root.querySelector(".rg-count").textContent = String(found.length);
+            root.querySelector(".rg-foot").textContent =
+              found.length === all().length
+                ? "共 " + found.length + " 条记录"
+                : "显示 " + found.length + " / " + all().length + " 条记录";
+            root.querySelector(".rg-detail-host").innerHTML = found.length
+              ? inspector(current())
+              : "";
+            root.querySelector(".rg-split").classList.toggle("rg-no-detail", !found.length);
+          }
+          function overview() {
+            editing = null;
+            root.innerHTML =
+              '<div class="rg-app">' +
+              hero() +
+              '<div class="rg-live" role="status">' +
+              txt(message) +
+              '</div><div class="rg-split"><section class="rg-directory"><div class="rg-directory-title"><h2>指标目录</h2><span class="rg-count"></span></div>' +
+              accessTabs() +
+              toolbar() +
+              '<div class="rg-table-host"></div><div class="rg-foot"></div></section><div class="rg-detail-host"></div></div></div>';
+            syncListing();
+          }
+          function field(label, name, value, required = false, options = null, wide = false) {
+            const id = "rg-" + name;
+            const area = ["formula", "desc", "condition"].includes(name);
+            return (
+              '<label class="rg-field ' +
+              (wide ? "rg-wide" : "") +
+              '" for="' +
+              id +
+              '"><span>' +
+              label +
+              (required ? " <em>*</em>" : "") +
+              "</span>" +
+              (options
+                ? '<select name="' +
+                  name +
+                  '" id="' +
+                  id +
+                  '">' +
+                  selectOptions(options, value) +
+                  "</select>"
+                : area
+                  ? '<textarea rows="2" name="' +
+                    name +
+                    '" id="' +
+                    id +
+                    '" ' +
+                    (required ? "required" : "") +
+                    ">" +
+                    txt(value) +
+                    "</textarea>"
+                  : '<input id="' +
+                    id +
+                    '" name="' +
+                    name +
+                    '" value="' +
+                    txt(value) +
+                    '" ' +
+                    (required ? "required" : "") +
+                    (name === "code" &&
+                    editing &&
+                    (editing.isRevision || editing.original?.status === "草稿")
+                      ? " readonly"
+                      : "") +
+                    ">") +
+              "</label>"
+            );
+          }
+          function restrictionFields(meta) {
+            const manager = txt(access().managementLabel(meta));
+            return (
+              '<div class="rg-form-lock"><span>维护者</span><strong>' + manager + "</strong></div>"
+            );
+          }
+          function managementSelect(allowed) {
+            return (
+              '<label class="rg-field"><span>管理归属</span><select name="management" id="rg-management">' +
+              allowed
+                .map(
+                  (kind) =>
+                    '<option value="' +
+                    txt(kind) +
+                    '"' +
+                    (kind === "personal" ? " selected" : "") +
+                    ">" +
+                    txt(managementNames[kind]) +
+                    "</option>",
+                )
+                .join("") +
+              "</select></label>"
+            );
+          }
+          function metadata(type, department) {
+            const actor = access().actor();
+            return {
+              management: type,
+              creatorId: actor.id,
+              owner: actor.name,
+              tenantId: type === "platform" ? undefined : actor.tenantId,
+              department:
+                type === "department" ? department || actor.managedDepartments[0] : undefined,
+            };
+          }
+          function firstScope(meta, allowed) {
+            const preferred = {
+              personal: "仅本人",
+              department: (meta.department || "销售部") + "共享",
+              tenant: "租户公共",
+              platform: "全局预置",
+            };
+            return allowed.includes(preferred[meta.management])
+              ? preferred[meta.management]
+              : allowed[0];
+          }
+          function editor(original) {
+            if (original && !access().canView(original)) return;
+            const fork = Boolean(original && !access().canEdit(original));
+            const existing =
+              original?.status === "已发布" &&
+              !fork &&
+              getDrafts().find(
+                (draft) =>
+                  draft.baseId === original.id &&
+                  access().canView(draft) &&
+                  access().canEdit(draft),
+              );
+            if (existing) {
+              editor(existing);
+              return;
+            }
+            const isRevision = Boolean(original && original.status === "已发布" && !fork);
+            editing = { original, isRevision, fork };
+            const d = original || {};
+            const chooseManagement = !original || fork;
+            const allowedManagement = access().newManagements();
+            const meta = chooseManagement ? metadata("personal") : d;
+            const scopes = access().usageScopes(meta);
+            const title = fork
+              ? "派生指标"
+              : isRevision
+                ? "修订指标"
+                : original
+                  ? "编辑草稿"
+                  : "新建指标";
+            root.innerHTML =
+              '<div class="rg-app rg-form-app"><button class="rg-back" data-action="back">' +
+              ico("arrow-left", 16) +
+              '返回指标目录</button><div class="rg-head"><div><h1 tabindex="-1">' +
+              title +
+              "</h1><p>" +
+              txt(
+                isRevision
+                  ? d.name + " · 基于生效版本 " + d.version + " 创建修订草稿"
+                  : fork
+                    ? "沿用原定义，保存到有权维护的范围。"
+                    : original
+                      ? "继续完善已保存的指标定义。"
+                      : "为工作区定义可复用的经营口径。",
+              ) +
+              "</p></div></div>" +
+              '<form class="rg-form" novalidate><section><div class="rg-form-heading">' +
+              ico("tag", 18) +
+              '<h2>基本信息</h2></div><div class="rg-fields">' +
+              field("指标名称", "name", fork ? d.name + "（派生）" : d.name, true) +
+              field("指标编码", "code", fork ? "" : d.code, true) +
+              field("业务域", "domain", d.domain || "销售", true, fields) +
+              (chooseManagement
+                ? managementSelect(allowedManagement)
+                : '<div class="rg-form-lock"><span>管理归属</span><strong>' +
+                  txt(managementNames[meta.management]) +
+                  "</strong></div>") +
+              '<div id="rg-management-owner">' +
+              restrictionFields(meta) +
+              "</div>" +
+              '<div id="rg-management-department" hidden></div>' +
+              field(
+                "共享范围",
+                "scope",
+                !chooseManagement && scopes.includes(d.scope) ? d.scope : firstScope(meta, scopes),
+                true,
+                scopes,
+              ) +
+              field("业务定义", "desc", d.desc || "", false, null, true) +
+              "</div></section>" +
+              '<section><div class="rg-form-heading">' +
+              ico("square-function", 18) +
+              '<h2>计算规则</h2></div><div class="rg-fields">' +
+              field("计算口径", "formula", d.formula, false, null, true) +
+              field("统计粒度", "grain", d.grain) +
+              field("业务时间", "time", d.time) +
+              field("业务时间字段", "timeField", d.timeField || "") +
+              field("单位", "unit", d.unit) +
+              field("数据来源", "source", d.source) +
+              field("可分析维度（顿号分隔）", "dims", list(d.dims).join("、")) +
+              field("别名（顿号分隔）", "aliases", list(d.aliases).join("、")) +
+              field("固定过滤条件", "condition", d.condition, false, null, true) +
+              "</div></section>" +
+              '<div class="rg-form-actions"><span role="alert" class="rg-error"></span><button type="button" data-action="back" class="rg-btn">取消</button><button type="submit" class="rg-btn rg-primary">' +
+              ico("check", 16) +
+              "保存草稿</button></div></form></div>";
+            root.querySelector("#rg-name").focus();
+            const managementInput = root.querySelector("#rg-management");
+            const syncScope = () => {
+              const currentDept = root.querySelector("#rg-management-department select")?.value;
+              const chosen = metadata(managementInput.value, currentDept);
+              const allowed = access().usageScopes(chosen);
+              const scopeInput = root.querySelector("#rg-scope");
+              scopeInput.innerHTML = selectOptions(allowed, firstScope(chosen, allowed));
+              root.querySelector("#rg-management-owner").innerHTML = restrictionFields(chosen);
+            };
+            if (managementInput) {
+              managementInput.onchange = () => {
+                const deptZone = root.querySelector("#rg-management-department");
+                deptZone.hidden = managementInput.value !== "department";
+                deptZone.innerHTML = deptZone.hidden
+                  ? ""
+                  : field(
+                      "管理部门",
+                      "department",
+                      access().actor().managedDepartments[0],
+                      true,
+                      access().actor().managedDepartments,
+                    );
+                const dept = deptZone.querySelector("select");
+                if (dept) dept.onchange = syncScope;
+                syncScope();
+              };
+            }
+            root.querySelector("form").onsubmit = (e) => {
+              e.preventDefault();
+              const form = e.currentTarget;
+              const data = Object.fromEntries(new FormData(form).entries());
+              for (const key of Object.keys(data)) data[key] = String(data[key]).trim();
+              const fail = (key, msg) => {
+                const input = form.elements[key];
+                input.setAttribute("aria-invalid", "true");
+                form.querySelector(".rg-error").textContent = msg;
+                input.focus();
+              };
+              const management = chooseManagement
+                ? metadata(data.management, data.department)
+                : {
+                    management: d.management,
+                    creatorId: d.creatorId,
+                    tenantId: d.tenantId,
+                    department: d.department,
+                    owner: d.owner,
+                  };
+              if (
+                (chooseManagement && !access().newManagements().includes(management.management)) ||
+                (!chooseManagement && !access().canEdit(d)) ||
+                !access().usageScopes(management).includes(data.scope)
+              ) {
+                fail("scope", "当前身份无权在此范围保存，请重新选择。");
+                return;
+              }
+              for (const field of ["name", "code"])
+                if (!data[field]) {
+                  fail(field, "请填写" + (field === "name" ? "指标名称" : "指标编码") + "。");
+                  return;
+                }
+              if (!/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(data.code)) {
+                fail("code", "编码请使用小写业务域和名称，例如 sales.paid_gmv。");
+                return;
+              }
+              if (
+                !isRevision &&
+                original?.status !== "草稿" &&
+                all().some(
+                  (x) =>
+                    x.code === data.code &&
+                    x.id !== original?.id &&
+                    x.management === management.management &&
+                    (management.management === "personal"
+                      ? x.creatorId === management.creatorId
+                      : management.management === "department"
+                        ? x.department === management.department &&
+                          x.tenantId === management.tenantId
+                        : x.tenantId === management.tenantId),
+                )
+              ) {
+                fail("code", "当前共享范围已存在相同编码，请调整编码。");
+                return;
+              }
+              const baseVersion = original?.version || "";
+              const nextVersion = baseVersion.replace(/(\d+)$/, (d) => String(Number(d) + 1));
+              const id =
+                original?.status === "草稿" && !fork
+                  ? original.id
+                  : isRevision
+                    ? "revision-" + d.id
+                    : "metric-" + access().actor().id + "-" + Date.now();
+              const saved = {
+                ...(!fork && original ? original : {}),
+                ...data,
+                ...management,
+                id,
+                definition: data.desc,
+                dimensions: list(data.dims),
+                version: isRevision
+                  ? nextVersion
+                  : original?.status === "草稿" && !fork
+                    ? d.version
+                    : "v0.1",
+                baseId: isRevision ? d.id : fork ? undefined : d.baseId,
+                baseVersion: isRevision ? d.version : fork ? undefined : d.baseVersion,
+                dims: list(data.dims),
+                aliases: list(data.aliases),
+                status: "草稿",
+                date: "本次会话",
+                timeField: data.timeField,
+                change: isRevision
+                  ? "修订提案，生效版本 " + baseVersion + " 继续使用。"
+                  : "已保存指标草稿。",
+              };
+              if (fork) {
+                saved.parentId = d.id;
+                saved.parentCode = d.code;
+                saved.parentVersion = d.version;
+              }
+              const committed = window.saveMetricDraft(saved, chooseManagement ? null : original);
+              if (!committed) {
+                fail("scope", "保存权限或原版本已发生变化，请返回目录核对。");
+                return;
+              }
+              filters = freshFilters();
+              selected = committed.id;
+              tab = "definition";
+              message =
+                "已保存「" +
+                data.name +
+                "」草稿。" +
+                (isRevision ? "当前生效版本仍为 " + baseVersion + "。" : "");
+              overview();
+              root.querySelector(".rg-inspect h2")?.focus();
+            };
+          }
+          root.onclick = (e) => {
+            const control = e.target.closest(
+              "[data-action],[data-record-action],[data-access-filter],[data-filter],[data-summary],[data-tab],[data-metric]",
+            );
+            if (!control || !root.contains(control)) return;
+            if (control.dataset.summary) {
+              filters = freshFilters();
+              if (control.dataset.summary === "editable") filters.access = "我可编辑";
+              if (control.dataset.summary === "drafts") filters.status = "草稿";
+              message = "";
+              overview();
+              root.querySelector('[data-summary="' + control.dataset.summary + '"]')?.focus();
+            } else if (control.dataset.accessFilter) {
+              filters.access = control.dataset.accessFilter;
+              message = "";
+              overview();
+              root
+                .querySelector('[data-access-filter="' + filters.access + '"]')
+                ?.focus({ preventScroll: true });
+            } else if (control.dataset.recordAction) {
+              const item = all().find((r) => r.id === control.dataset.recordId);
+              if (!item) return;
+              selected = item.id;
+              tab = "definition";
+              message = "";
+              if (control.dataset.recordAction === "edit" && access().canEdit(item)) {
+                editor(item);
+              } else {
+                syncListing();
+                root
+                  .querySelector(".rg-inspect h2")
+                  ?.focus({ preventScroll: window.innerWidth > 925 });
+              }
+            } else if (control.dataset.metric) {
+              selected = control.dataset.metric;
+              tab = "definition";
+              message = "";
+              syncListing();
+              if (window.innerWidth < 790) root.querySelector(".rg-inspect h2")?.focus();
+              else
+                [...root.querySelectorAll("[data-metric]")]
+                  .find((r) => r.dataset.metric === selected)
+                  ?.querySelector("button")
+                  ?.focus({ preventScroll: true });
+            } else if (control.dataset.tab) {
+              tab = control.dataset.tab;
+              syncListing();
+              root.querySelector('[data-tab="' + tab + '"]')?.focus({ preventScroll: true });
+            } else if (control.dataset.action === "create") {
+              message = "";
+              editor(null);
+            } else if (control.dataset.action === "edit") {
+              message = "";
+              editor(current());
+            } else if (control.dataset.action === "back") {
+              overview();
+              root.querySelector(".rg-head h1")?.focus();
+            } else if (control.dataset.action === "clear") {
+              filters = freshFilters();
+              overview();
+              root.querySelector("#rg-search")?.focus();
+            }
+          };
+          root.oninput = (e) => {
+            if (e.target.id === "rg-search") {
+              filters.q = e.target.value;
+              syncListing();
+            } else if (e.target.hasAttribute("aria-invalid")) {
+              e.target.removeAttribute("aria-invalid");
+              root.querySelector(".rg-error").textContent = "";
+            }
+          };
+          root.onchange = (e) => {
+            if (e.target.dataset.filter) {
+              filters[e.target.dataset.filter] = e.target.value;
+              syncListing();
+            }
+          };
+          overview();
+        };
+      })();
+
+      (() => {
+        const spec = {
+          create: {
+            id: "chat-draft-net-per-order",
+            name: "每单净支付额",
+            code: "sales.net_amount_per_paid_order",
+            formula: "（成功支付额 − 成功退款额）÷ 去重支付订单数",
+            scope: "销售部共享",
+            domain: "销售",
+            grain: "按期间、渠道汇总",
+            unit: "元/单",
+            time: "支付日 / 退款日",
+            owner: "林澈",
+            definition:
+              "每个统计期按支付日、退款日分别汇总成功交易，以当期现金流净额除以当期成功支付的去重订单数。分母为零时不出值。",
+            dimensions: "渠道",
+            aliases: "每单净额",
+            version: "v0.1",
+            status: "草稿",
+          },
+          edit: {
+            id: "chat-revision-net-gmv",
+            name: "现金流净 GMV",
+            code: "sales.net_gmv",
+            formula: "成功支付额 − 同期成功退款额",
+            scope: "租户公共",
+            domain: "销售",
+            grain: "支付事件、退款事件",
+            unit: "元",
+            time: "支付日 / 退款日",
+            owner: "林澈",
+            definition: "成功支付与成功退款分别按事件发生日归期，退款归原订单的销售维度。",
+            dimensions: "渠道、销售地区、销售门店",
+            aliases: "退款后成交额、净成交额",
+            version: "v1.2",
+            baseVersion: "v1.1",
+            status: "草稿",
+          },
+        };
+        const base = { ...spec.edit, dimensions: "渠道、销售地区", aliases: "退款后成交额" };
+        const fieldNames = {
+          name: "指标名称",
+          definition: "业务定义",
+          formula: "计算公式",
+          dimensions: "可分析维度",
+          aliases: "别名",
+          scope: "共享范围",
+          unit: "单位",
+          grain: "统计粒度",
+          time: "业务时间",
+        };
+        const demos = new Map();
+        const h = (value) => window.h(String(value ?? ""));
+        const icon = (name, size = 16) => window.icon(name, size);
+        const act = (id, label, cls = "df-btn") =>
+          '<button type="button" data-df="' + id + '" class="' + cls + '">' + label + "</button>";
+        const row = (label, value) =>
+          '<div class="df-field"><dt>' + h(label) + "</dt><dd>" + h(value) + "</dd></div>";
+        function draftSource() {
+          return window.metricPublished?.find((metric) => metric.code === spec.edit.code);
+        }
+        function chatKey(mode) {
+          return "draft-chat-" + mode + "-" + activeActor().id;
+        }
+        function choicesForDraft(draft) {
+          return window.metricAccess.usageScopes(draft);
+        }
+        function state(mode) {
+          const key = chatKey(mode);
+          if (!demos.has(key)) {
+            const actor = activeActor();
+            const source = mode === "edit" ? draftSource() : null;
+            const id =
+              mode === "edit" ? "revision-" + spec.edit.code : spec.create.id + "-" + actor.id;
+            const saved = window.localMetricDrafts.find(
+              (d) =>
+                d.id === id ||
+                (source && d.baseId === source.id) ||
+                (mode === "create" && actor.id === "lin" && d.id === spec.create.id),
+            );
+            const definition = {
+              ...spec[mode],
+              id,
+              management: source?.management || "personal",
+              creatorId: source?.creatorId || actor.id,
+              department: source?.department,
+              tenantId: source?.tenantId || actor.tenantId,
+              owner: source?.owner || actor.name,
+              scope: source?.scope || "仅本人",
+              baseId: source?.id,
+            };
+            const initial = {
+              draft: definition,
+              stage: "preview",
+              editing: false,
+              adjustment: "",
+              reply: "",
+              fromRequest: true,
+              revision: 1,
+            };
+            const restored = window.demoRead(key, null);
+            const previous =
+              restored?.draft?.id === id &&
+              ["preview", "result", "offer", "skipped", "canceled"].includes(restored.stage) &&
+              choicesForDraft(definition).includes(restored.draft.scope)
+                ? restored
+                : initial;
+            demos.set(key, saved ? { ...initial, stage: "saved", saved } : previous);
+          }
+          const active = demos.get(key);
+          if (active.stage === "saved") {
+            const latest = window.localMetricDrafts.find((d) => d.id === active.saved?.id);
+            if (latest) active.saved = latest;
+          }
+          return active;
+        }
+        function source(mode, s) {
+          if (mode === "edit") return "";
+          return (
+            '<details class="df-source"><summary>' +
+            icon("database") +
+            '<span>来源查询</span><strong>10 月分渠道每单净支付额</strong><span class="df-source-status">结果已确认</span></summary><div class="df-source-body"><p>临时分析 · 2025.10.01–10.31 · 按渠道汇总。数据截至 2025.11.05 09:00（上海）。日期和渠道作为查询参数保留。</p>' +
+            act("replay", "回放结果确认与保存邀请", "df-link") +
+            "</div></details>"
+          );
+        }
+        function changed(d) {
+          return Object.keys(fieldNames).filter((key) => d[key] !== base[key]);
+        }
+        function diff(d) {
+          const items = changed(d);
+          return (
+            '<div class="df-diff"><div class="df-diff-head"><span>变更项</span><span>现行 v1.1</span><span>修订草稿 v1.2</span></div>' +
+            items
+              .map(
+                (key) =>
+                  '<div class="df-diff-row"><strong>' +
+                  h(fieldNames[key]) +
+                  '</strong><span data-label="现行">' +
+                  h(base[key] || "未填写") +
+                  '</span><span data-label="修订后">' +
+                  h(d[key] || "未填写") +
+                  "</span></div>",
+              )
+              .join("") +
+            "</div>"
+          );
+        }
+        function form(s) {
+          const d = s.draft;
+          function field(key, wide = false) {
+            const textarea = key === "formula" || key === "definition";
+            return (
+              '<label class="df-control' +
+              (wide ? " df-control-wide" : "") +
+              '"><span>' +
+              fieldNames[key] +
+              "</span>" +
+              (textarea
+                ? '<textarea name="' +
+                  key +
+                  '" rows="2" maxlength="300">' +
+                  h(d[key]) +
+                  "</textarea>"
+                : '<input name="' +
+                  key +
+                  '" autocomplete="off" maxlength="80" value="' +
+                  h(d[key]) +
+                  '">') +
+              "</label>"
+            );
+          }
+          return (
+            '<form class="df-form" data-df-form><div class="df-form-grid">' +
+            field("name") +
+            '<label class="df-control"><span>共享范围</span><select name="scope">' +
+            choicesForDraft(d)
+              .map((o) => "<option" + (o === d.scope ? " selected" : "") + ">" + h(o) + "</option>")
+              .join("") +
+            "</select></label>" +
+            field("formula", true) +
+            field("definition", true) +
+            field("dimensions") +
+            field("aliases") +
+            field("time") +
+            field("unit") +
+            '</div><p data-df-error class="df-error" role="alert"></p><div class="df-actions"><button class="df-btn df-primary" type="submit">应用到预览</button>' +
+            act("discard-edit", "取消编辑", "df-btn df-quiet") +
+            "</div></form>"
+          );
+        }
+        function card(mode, s) {
+          const d = s.draft,
+            isEdit = mode === "edit";
+          const head =
+            '<header class="df-card-head"><span class="df-emblem">' +
+            icon(isEdit ? "git-branch" : "file-plus-2", 20) +
+            "</span><h3>" +
+            (isEdit ? "确认指标修订" : "确认创建指标") +
+            '</h3><span class="df-badge"><i></i>待确认</span></header>';
+          const identity =
+            '<div class="df-identity"><div><h4>' +
+            h(d.name) +
+            "</h4><code>" +
+            h(d.code) +
+            '</code></div><span class="df-scope">' +
+            icon("users", 14) +
+            h(d.scope) +
+            "</span></div>";
+          let body;
+          if (s.editing) body = form(s);
+          else {
+            const content = isEdit
+              ? diff(d)
+              : '<div class="df-formula"><span>计算公式</span><strong>' +
+                h(d.formula) +
+                '</strong></div><dl class="df-fields">' +
+                row("统计粒度", d.grain) +
+                row("单位", d.unit) +
+                row("业务时间", d.time) +
+                row("可分析维度", d.dimensions) +
+                "</dl>";
+            const detail =
+              '<details class="df-more"><summary>' +
+              icon("list", 15) +
+              "口径详情</summary><div><p>" +
+              h(d.definition) +
+              '</p><dl class="df-fields">' +
+              row("维护归属", window.metricAccess.managementLabel(d)) +
+              row("发布后使用范围", d.scope) +
+              row("业务域 / 负责人", d.domain + " / " + d.owner) +
+              row("别名", d.aliases || "未设置") +
+              (isEdit ? row("计算公式", d.formula) : row("执行绑定", "待数据负责人验证")) +
+              "</dl></div></details>";
+            body =
+              content +
+              detail +
+              source(mode, s) +
+              '<footer class="df-card-foot"><small>' +
+              icon("shield-check", 15) +
+              (isEdit ? "修订经审批发布后生效。" : "保存后进入指标管理，发布前需完成审批。") +
+              '</small><div class="df-actions">' +
+              act(
+                "save",
+                icon("check", 16) + (isEdit ? "确认保存修订草稿" : "确认保存草稿"),
+                "df-btn df-primary",
+              ) +
+              act("edit", "编辑口径", "df-btn") +
+              act("cancel", "取消", "df-btn df-quiet") +
+              "</div></footer>";
+          }
+          return (
+            '<section class="df-card" aria-label="' +
+            (isEdit ? "指标修订确认卡" : "指标创建确认卡") +
+            '">' +
+            head +
+            '<div class="df-card-body">' +
+            identity +
+            body +
+            "</div></section>"
+          );
+        }
+        function resultStage(s) {
+          const confirmed = s.stage === "offer" || s.stage === "skipped";
+          const result =
+            '<div class="df-result"><div class="df-result-title"><strong>10 月分渠道每单净支付额</strong><span>临时分析</span></div><table><thead><tr><th>渠道</th><th>现金流净额</th><th>支付订单数</th><th>每单净支付额</th></tr></thead><tbody><tr><th>自营商城</th><td>¥36,000</td><td>240</td><td>¥150</td></tr><tr><th>线下门店</th><td>¥24,000</td><td>200</td><td>¥120</td></tr></tbody></table><div class="df-result-foot">' +
+            (confirmed
+              ? "<span>" + icon("check", 15) + " 你已确认查询结果</span>"
+              : act("confirm-result", "确认查询结果", "df-btn")) +
+            "</div></div>";
+          const invitation =
+            s.stage === "offer"
+              ? '<div class="df-offer"><span class="df-emblem">' +
+                icon("bookmark-plus", 18) +
+                '</span><div><strong>将这次计算保存为指标？</strong><p>公式可以按不同期间和渠道复用。当前可见目录中还没有相同口径。</p><div class="df-actions">' +
+                act("open-preview", "预览指标定义", "df-btn df-primary") +
+                act("skip", "暂不保存", "df-btn df-quiet") +
+                "</div></div></div>"
+              : "";
+          return (
+            window.userBubble("算一下 10 月各渠道每个支付订单平均带来多少净支付额。") +
+            window.agentHead() +
+            window.runLine("开放查询已完成") +
+            result +
+            invitation +
+            (s.stage === "skipped"
+              ? '<p class="df-note" role="status">已保留查询结果。' +
+                act("request-again", "从这次查询创建指标", "df-link") +
+                "</p>"
+              : "")
+          );
+        }
+        function summary(mode, s) {
+          if (s.stage === "canceled")
+            return (
+              '<div class="df-outcome" role="status">' +
+              icon("circle-minus", 20) +
+              "<div><strong>已取消本次保存</strong><p>原分析记录已保留。</p>" +
+              act("reopen", "重新查看口径", "df-link") +
+              "</div></div>"
+            );
+          const d = s.saved || s.draft;
+          return (
+            '<div class="df-outcome" role="status"><span class="df-emblem">' +
+            icon("check", 19) +
+            "</span><div><strong>" +
+            (mode === "edit" ? "修订草稿已保存" : "指标草稿已创建") +
+            "</strong><p>" +
+            h(d.name) +
+            " · " +
+            h(d.scope) +
+            " · " +
+            h(d.version || "草稿") +
+            "</p>" +
+            act("manage", "在指标管理中查看 " + icon("arrow-right", 14), "df-link") +
+            "</div></div>"
+          );
+        }
+        function draw(root, mode) {
+          const s = state(mode);
+          if (mode === "edit" && !window.metricAccess.canEdit(draftSource())) {
+            root.innerHTML =
+              '<div class="df-chat">' +
+              window.agentHead() +
+              '<section class="df-card"><header class="df-card-head"><span class="df-emblem">' +
+              icon("shield-check", 20) +
+              '</span><h3>当前口径仅可查看</h3></header><div class="df-card-body"><p class="df-answer">现金流净 GMV 由星野零售的租户管理员维护。你可查看已发布定义，或在指标管理中派生自己的指标。</p><button class="df-btn" type="button" data-open-original>查看指标定义</button></div></section></div>';
+            root.querySelector("[data-open-original]").onclick = () => {
+              window.metricToInspect = draftSource()?.id;
+              window.go("registry");
+            };
+            return;
+          }
+          window.demoWrite(chatKey(mode), { ...s, editing: false });
+          const isEdit = mode === "edit";
+          const query = isEdit
+            ? "给现金流净 GMV 加一个「净成交额」别名，再加上销售门店维度。"
+            : s.fromRequest
+              ? "把刚才按渠道算的每单净支付额，保存为我的指标。"
+              : "查看刚才那次开放查询的指标定义。";
+          let html;
+          if (["result", "offer", "skipped"].includes(s.stage))
+            html =
+              resultStage(s) +
+              (s.reply ? '<p class="df-note" role="status">' + h(s.reply) + "</p>" : "");
+          else {
+            const latest = s.adjustment ? window.userBubble(s.adjustment) + window.agentHead() : "";
+            const text =
+              s.reply ||
+              (isEdit
+                ? "本次修改涉及别名和可分析维度，计算公式沿用现行版本。"
+                : "已从你确认的开放查询提取口径，10 月和渠道筛选已保留为可替换参数。");
+            html =
+              window.userBubble(query) +
+              window.agentHead() +
+              window.runLine(isEdit ? "已读取现行口径与版本" : "已提取查询回执并检查重复口径") +
+              latest +
+              (s.stage === "saved" || s.stage === "canceled"
+                ? summary(mode, s)
+                : '<p class="df-answer" role="status">' + h(text) + "</p>" + card(mode, s));
+          }
+          root.innerHTML = '<div class="df-chat">' + html + "</div>";
+          root
+            .querySelectorAll("[data-df]")
+            .forEach((el) =>
+              el.addEventListener("click", () => dispatch(root, mode, el.dataset.df)),
+            );
+          const editor = root.querySelector("[data-df-form]");
+          if (editor)
+            editor.addEventListener("submit", (e) => {
+              e.preventDefault();
+              const values = Object.fromEntries(
+                Array.from(new FormData(editor), ([key, value]) => [key, value.trim()]),
+              );
+              const missing = ["name", "formula", "definition", "unit", "time"].find(
+                (key) => !values[key],
+              );
+              if (missing) {
+                editor.querySelector("[data-df-error]").textContent =
+                  "请填写" + fieldNames[missing] + "。";
+                editor.elements[missing].focus();
+                return;
+              }
+              if (!choicesForDraft(s.draft).includes(values.scope)) return;
+              Object.assign(s.draft, values);
+              s.revision++;
+              s.editing = false;
+              s.reply = "已更新口径预览，请核对后保存。";
+              draw(root, mode);
+              root.querySelector('[data-df="save"]')?.focus({ preventScroll: true });
+            });
+        }
+        function dispatch(root, mode, action) {
+          const s = state(mode);
+          if (action === "replay") {
+            s.stage = "result";
+            s.fromRequest = false;
+            s.adjustment = "";
+            s.reply = "";
+          }
+          if (action === "confirm-result") s.stage = "offer";
+          if (action === "skip") s.stage = "skipped";
+          if (action === "request-again" || action === "open-preview" || action === "reopen") {
+            s.stage = "preview";
+            s.editing = false;
+            s.reply = "";
+          }
+          if (action === "edit") s.editing = true;
+          if (action === "discard-edit") s.editing = false;
+          if (action === "cancel") {
+            s.stage = "canceled";
+            s.editing = false;
+          }
+          if (action === "save" && s.stage === "preview" && !s.editing) {
+            const record = {
+              ...s.draft,
+              status: "草稿",
+              source: mode === "edit" ? "Chat · 修订现行 v1.1" : "Chat · 已确认的开放查询",
+            };
+            const confirmed = window.saveMetricDraft(
+              record,
+              mode === "edit" ? draftSource() : null,
+            );
+            if (!confirmed) {
+              s.reply = "草稿或维护权限已变更，请打开指标管理核对。";
+              draw(root, mode);
+              return;
+            }
+            s.saved = confirmed;
+            s.stage = "saved";
+          }
+          if (action === "manage") {
+            window.metricToInspect = (s.saved || s.draft).id;
+            window.go("registry");
+            return;
+          }
+          draw(root, mode);
+          const focus =
+            action === "edit"
+              ? '[name="name"]'
+              : action === "save"
+                ? '[data-df="manage"]'
+                : action === "cancel"
+                  ? '[data-df="reopen"]'
+                  : action === "replay"
+                    ? '[data-df="confirm-result"]'
+                    : action === "confirm-result"
+                      ? '[data-df="open-preview"]'
+                      : action === "skip"
+                        ? '[data-df="request-again"]'
+                        : '[data-df="save"]';
+          root.querySelector(focus)?.focus({ preventScroll: true });
+        }
+        window.renderDraftChat = (root, mode) => draw(root, mode === "edit" ? "edit" : "create");
+        window.handleDraftMessage = (text, mode, root) => {
+          const s = state(mode),
+            q = text.trim();
+          if (!q || (mode === "edit" && !window.metricAccess.canEdit(draftSource()))) return false;
+          if (s.stage === "offer" && /暂不|跳过|不保存|不用保存|不要保存/.test(q)) {
+            dispatch(root, mode, "skip");
+            return true;
+          }
+          if (s.stage === "result" && /不正确|有误|有问题|不确认|不对/.test(q)) {
+            s.reply = "已保留临时查询。请核对数据来源和计算规则后，再确认结果。";
+            draw(root, mode);
+            return true;
+          }
+          if (
+            ["result", "offer", "skipped"].includes(s.stage) &&
+            !/暂不|不用|不要|不保存/.test(q) &&
+            /保存|创建指标|建.*指标/.test(q)
+          ) {
+            s.fromRequest = true;
+            s.stage = "preview";
+            s.reply = "我已将该次查询整理成草稿预览。";
+            draw(root, mode);
+            return true;
+          }
+          if (s.stage === "result" && /确认|正确|没问题/.test(q)) {
+            dispatch(root, mode, "confirm-result");
+            return true;
+          }
+
+          if (["result", "offer", "skipped"].includes(s.stage)) {
+            s.reply =
+              s.stage === "result"
+                ? "请先核对并确认查询结果，或明确提出要创建的指标。"
+                : "可以预览指标定义，或保留这次查询结果。";
+            draw(root, mode);
+            return true;
+          }
+          if (s.stage === "saved" || s.stage === "canceled") {
+            if (s.stage === "saved" && /查看|打开|指标管理/.test(q)) {
+              window.metricToInspect = s.saved.id;
+              window.go("registry");
+              return true;
+            }
+            if (s.stage === "canceled" && /重新|继续|创建|修改|预览/.test(q)) {
+              dispatch(root, mode, "reopen");
+              return true;
+            }
+            root.querySelector(".df-response-help")?.remove();
+            const help = document.createElement("p");
+            help.className = "df-note df-response-help";
+            help.setAttribute("role", "status");
+            help.textContent =
+              s.stage === "saved"
+                ? "这份草稿已保存，可打开指标管理继续编辑。"
+                : "这次保存已取消，可点击「重新查看口径」继续。";
+            root.append(help);
+            return true;
+          }
+          s.stage = "preview";
+          s.editing = false;
+          s.adjustment = q;
+          const requestedScope = /仅本人|仅自己|个人可见/.test(q)
+            ? "仅本人"
+            : /全局|平台公共/.test(q)
+              ? "全局预置"
+              : /财务部/.test(q)
+                ? "财务部共享"
+                : /销售部/.test(q)
+                  ? "销售部共享"
+                  : /租户/.test(q)
+                    ? "租户公共"
+                    : null;
+          const direct = q.match(
+            /(?:把|将)?(公式|单位|业务时间|统计粒度)(?:改为|改成|设为|设置为)[「“]?(.{1,140}?)[」”。！!]?$/,
+          );
+          const match = q.match(
+            /(?:改名为|改名叫|(?:名称|名字)(?:改成|改为|设为|叫)|叫做)[「“"‘']?(.{1,42}?)['’”」"。！!]?$/,
+          );
+          const alias = q.match(
+            /(?:别名(?:改成|改为|设为)|(?:新增|增加|添加|加一个|加个)别名[：:]?)[「“"‘']?(.{1,40}?)['’”」"。！!]?$/,
+          );
+          const apply = (key, value) => {
+            s.draft[key] = value.trim();
+            s.revision++;
+            s.reply = "已更新「" + fieldNames[key] + "」。请核对最新预览后保存。";
+          };
+          if (requestedScope && /范围|共享|可见|公开|仅自己|仅本人/.test(q)) {
+            if (choicesForDraft(s.draft).includes(requestedScope)) apply("scope", requestedScope);
+            else s.reply = "这份指标可选的使用范围为" + choicesForDraft(s.draft).join("、") + "。";
+          } else if (match) apply("name", match[1]);
+          else if (direct)
+            apply(
+              { 公式: "formula", 单位: "unit", 业务时间: "time", 统计粒度: "grain" }[direct[1]],
+              direct[2],
+            );
+          else if (alias)
+            apply(
+              "aliases",
+              /新增|增加|添加|加个|加一个/.test(q)
+                ? [
+                    ...new Set([...(s.draft.aliases || "").split("、").filter(Boolean), alias[1]]),
+                  ].join("、")
+                : alias[1],
+            );
+          else if (/增加|加上|新增|添加/.test(q) && /门店维度|销售门店/.test(q))
+            apply(
+              "dimensions",
+              [
+                ...new Set([...(s.draft.dimensions || "").split("、").filter(Boolean), "销售门店"]),
+              ].join("、"),
+            );
+          else {
+            s.reply =
+              "可以说「把名称改为月度每单净额」或「共享范围改为销售部」。其他调整可在下方编辑口径。";
+            s.editing = true;
+          }
+          draw(root, mode);
+          return true;
+        };
+      })();
+
+      (() => {
+        const storageKey = "metric-choice-october";
+        const options = [
+          {
+            key: "paid",
+            name: "支付 GMV",
+            scope: "销售部共享",
+            version: "v1.2",
+            time: "支付日",
+            explanation: "汇总成功支付的金额，保留后续发生退款的交易。",
+            code: "sales.paid_gmv",
+            value: "1,286,450.00",
+            calculation: "汇总期内成功支付金额。",
+            clues: ["支付gmv", "支付日", "不扣退款", "支付总额"],
+          },
+          {
+            key: "net",
+            name: "现金流净 GMV",
+            scope: "租户公共",
+            version: "v1.1",
+            time: "支付日 / 退款日",
+            explanation: "成功支付额减同期成功退款额，各自按发生日归期。",
+            code: "sales.net_gmv",
+            value: "1,213,970.00",
+            calculation: "成功支付 1,286,450.00 元，减同期成功退款 72,480.00 元。",
+            clues: ["净gmv", "扣退款", "扣除退款", "现金流", "退款后"],
+          },
+          {
+            key: "recognized",
+            name: "确认收入",
+            scope: "财务部共享",
+            version: "v1.0",
+            time: "财务入账日",
+            explanation: "妥投时确认收入，受理退货时冲减，按财务入账日归期。",
+            code: "finance.recognized_revenue",
+            value: "1,182,360.00",
+            calculation: "汇总妥投确认与受理退货冲减产生的收入分录。",
+            clues: ["确认收入", "财务", "入账", "妥投"],
+          },
+        ];
+        const initial = () => ({ stage: "waiting", selected: "", note: "", reply: "" });
+        let state = initial();
+        let mountedRoot;
+        const visibleOptions = () =>
+          options.filter((option) =>
+            window.metricAccess.canUse(window.metricPublished?.find((m) => m.code === option.code)),
+          );
+        const current = () => visibleOptions().find((option) => option.key === state.selected);
+
+        function restore() {
+          state = initial();
+          const saved = window.demoRead(
+            storageKey + "-" + activeActor().id,
+            activeActor().id === "lin" ? window.demoRead(storageKey, null) : null,
+          );
+          if (!saved || !["waiting", "complete", "clarify", "canceled"].includes(saved.stage))
+            return;
+          state = { ...initial(), ...saved };
+          if (!current()) {
+            state.selected = "";
+            if (state.stage === "complete") state.stage = "waiting";
+          }
+        }
+
+        function persist() {
+          window.demoWrite(storageKey + "-" + activeActor().id, { ...state });
+        }
+        function update(root, patch, focus) {
+          state = { ...state, ...patch };
+          persist();
+          draw(root);
+          if (focus) root.querySelector(focus)?.focus({ preventScroll: true });
+        }
+
+        function optionRow(option) {
+          return `<label class="chx-option">
+      <input type="radio" class="chx-radio" name="chx-metric" value="${option.key}" ${state.selected === option.key ? "checked" : ""}>
+      <span class="chx-option-body">
+        <span class="chx-title-row"><strong>${option.name}</strong><span class="chx-ver">${option.version}</span></span>
+        <span class="chx-desc">${option.explanation}</span>
+        <span class="chx-meta"><span>${option.scope}</span><span class="chx-meta-sep" aria-hidden="true"></span><span>${option.time}</span></span>
+      </span>
+    </label>`;
+        }
+
+        function waitingCard() {
+          return `<article class="chx-card" aria-labelledby="chx-card-title">
+      <div class="chx-card-head">
+        <span class="chx-glyph" aria-hidden="true">${window.icon("git-branch", 21)}</span>
+        <div class="chx-head-copy"><h3 id="chx-card-title">选择指标口径</h3><p>「销售额」匹配到以下 ${visibleOptions().length} 个可用指标。你想用哪一个？</p></div>
+        <span class="chx-status"><i></i>待选择</span>
+      </div>
+      <fieldset class="chx-options"><legend class="chx-sr">本次销售额使用的口径</legend>${visibleOptions().map(optionRow).join("")}</fieldset>
+      <div class="chx-actions"><button type="button" class="chx-text-btn" data-choice-action="cancel">取消查询</button>
+        <span class="chx-right"><button type="button" class="chx-btn" data-choice-action="other">都不适用</button>
+        <button type="button" class="chx-btn chx-primary" data-choice-action="confirm" ${current() ? "" : "disabled"}>选择并继续 ${window.icon("arrow-right", 15)}</button></span>
+      </div>
+    </article>`;
+        }
+
+        function settledCard() {
+          const option = current();
+          const complete = state.stage === "complete" && option;
+          let label = "查询已取消",
+            detail = "本次查询已结束。";
+          if (complete) {
+            label = "已确认指标口径";
+            if (visibleOptions().length === 1) label = "已匹配可用指标";
+            detail = option.name + " · " + option.scope + " · " + option.version;
+          } else if (state.stage === "clarify") {
+            label = "等待补充口径";
+            detail = "请在对话中描述统计事件和退款处理方式，或返回候选列表。";
+          }
+          return `<article class="chx-settled" aria-live="polite">
+      <span class="chx-small-icon">${window.icon(complete ? "check" : "git-branch", 17)}</span>
+      <div><h3 tabindex="-1" data-choice-feedback>${label}</h3><p>${detail}</p></div>
+      ${visibleOptions().length > 1 ? '<button class="chx-text-btn" type="button" data-choice-action="reset">' + (complete ? "重新体验" : "重新选择") + "</button>" : ""}
+    </article>`;
+        }
+
+        function resultView(option) {
+          return `<article class="chx-result" aria-label="已确认口径的查询结果">
+      <div class="chx-result-sub">2025 年 10 月 · 星野零售</div>
+      <h3>${option.name}</h3><div class="chx-figure">${option.value} <span>元</span></div>
+      <p>${option.calculation}</p>
+      <details class="chx-details"><summary>查看本次计算口径</summary>
+      <dl><dt>指标版本</dt><dd><code>${option.code}</code> · ${option.version}</dd>
+      <dt>业务期间</dt><dd>2025-10-01 至 2025-10-31（上海时区）</dd>
+      <dt>归期事件</dt><dd>${option.time}</dd>
+      <dt>数据截至</dt><dd>2025-11-05 09:30（上海时区）</dd>
+      <dt>数据范围</dt><dd>星野零售 · 当前账号授权范围</dd></dl></details>
+    </article>`;
+        }
+
+        function draw(root) {
+          const wait = state.stage === "waiting";
+          const result = state.stage === "complete" && current();
+          const title =
+            wait || state.stage === "clarify"
+              ? "已检索指标 · 等待口径确认"
+              : result
+                ? "分析已完成 · 已按选定口径查询"
+                : "本次分析已取消";
+          root.innerHTML = `<div class="chx-thread">${window.userBubble("帮我看一下上个月的销售额。")}
+      ${window.agentHead()}${window.runLine(title)}
+      ${wait ? waitingCard() : settledCard()}
+      ${result ? resultView(result) : ""}
+      ${state.note ? window.userBubble(state.note) : ""}
+      ${state.reply ? `<p class="chx-reply" role="status">${window.h(state.reply)}</p>` : ""}
+    </div>`;
+          const thread = root.querySelector(".chx-thread");
+          thread.addEventListener("change", (event) => {
+            const radio = event.target.closest(".chx-radio");
+            if (!radio || state.stage !== "waiting") return;
+            state.selected = radio.value;
+            persist();
+            thread.querySelector('[data-choice-action="confirm"]').disabled = !current();
+          });
+          thread.addEventListener("click", (event) => {
+            const action = event.target.closest("button[data-choice-action]")?.dataset.choiceAction;
+            if (action === "confirm" && current() && state.stage === "waiting") {
+              update(root, { stage: "complete", note: "", reply: "" }, "[data-choice-feedback]");
+            } else if (action === "other") {
+              update(
+                root,
+                { stage: "clarify", selected: "", note: "", reply: "" },
+                "[data-choice-feedback]",
+              );
+            } else if (action === "cancel") {
+              update(
+                root,
+                { stage: "canceled", selected: "", note: "", reply: "" },
+                "[data-choice-feedback]",
+              );
+            } else if (action === "reset") update(root, initial(), ".chx-radio");
+          });
+        }
+
+        window.renderChoiceChat = function (root) {
+          mountedRoot = root;
+          restore();
+          const available = visibleOptions();
+          if (available.length === 1 && state.stage === "waiting") {
+            state = { ...initial(), stage: "complete", selected: available[0].key };
+          }
+          draw(root);
+        };
+
+        window.handleChoiceMessage = function (text, root = mountedRoot) {
+          const note = String(text || "").trim();
+          if (!note || !root) return false;
+          const norm = note.toLowerCase().replace(/\s+/g, "");
+          const matches = visibleOptions().filter((item) =>
+            item.clues.some((clue) => norm.includes(clue)),
+          );
+          if (state.stage === "complete" || state.stage === "canceled") {
+            update(root, {
+              note,
+              reply: "这次查询已结束。要用另一个口径查看上月销售额，可以重新选择。",
+            });
+          } else if (matches.length === 1) {
+            const option = matches[0];
+            update(root, {
+              stage: "waiting",
+              selected: option.key,
+              note,
+              reply: "已按你的说明标记「" + option.name + "」。点击“选择并继续”后查询。",
+            });
+          } else {
+            update(root, {
+              stage: "waiting",
+              selected: "",
+              note,
+              reply: "请根据上方当前可用的指标定义，选择所需统计口径。",
+            });
+          }
+          return true;
+        };
+      })();
+
+      const routes = {
+        registry: { parent: "数据与语义", label: "指标口径" },
+        create: {
+          parent: "分析 Chat",
+          label: "创建指标草稿",
+          placeholder: "补充指标名称、口径或共享范围…",
+        },
+        edit: {
+          parent: "分析 Chat",
+          label: "修改指标口径",
+          placeholder: "描述要修改的维度、别名或范围…",
+        },
+        choose: {
+          parent: "分析 Chat",
+          label: "上月销售额复盘",
+          placeholder: "补充你想查询的销售额口径…",
+        },
+      };
+      let routeName;
+      const get = (id) => document.getElementById(id);
+      const main = get("main");
+      const smallScreen = matchMedia("(max-width:900px)");
+      function setMobileNav(open, restoreFocus = false) {
+        get("side").classList.toggle("mobile-open", open);
+        get("scrim").hidden = !open;
+        get("showNav").setAttribute("aria-expanded", String(open));
+        const hiddenBehind = open && smallScreen.matches;
+        document.querySelector(".surface-main").inert = hiddenBehind;
+        if (hiddenBehind) get("side").querySelector("[data-page][aria-current]")?.focus();
+        else if (restoreFocus) get("showNav").focus();
+      }
+      function showInfo(open, anchor) {
+        const box = get("demoInfo");
+        box.hidden = !open;
+        get("resetConfirm").hidden = true;
+        get("resetDemo").hidden = false;
+        get("demoBtn").setAttribute("aria-expanded", String(open));
+        if (open) {
+          box.lastTrigger = anchor;
+          get("infoClose").focus();
+        }
+      }
+      function resolveRoute() {
+        const key = location.hash.slice(1);
+        return Object.hasOwn(routes, key) ? key : "registry";
+      }
+      window.go = function (route) {
+        if (!Object.hasOwn(routes, route)) return;
+        if (location.hash === "#" + route) renderPage(true);
+        else location.hash = route;
+      };
+      function renderPage(moveFocus = false) {
+        routeName = resolveRoute();
+        const route = routes[routeName],
+          isChat = routeName !== "registry";
+        setMobileNav(false);
+        showInfo(false);
+        document.title = route.label + " · Compass";
+        document.body.classList.toggle("chat-mode", isChat);
+        get("parentCrumb").textContent = route.parent;
+        get("currentCrumb").textContent = route.label;
+        document.querySelectorAll("[data-page],[data-rail]").forEach((el) => {
+          const active = el.dataset.page
+            ? el.dataset.page === routeName
+            : el.dataset.rail === (isChat ? "chat" : "registry");
+          if (active) el.setAttribute("aria-current", "page");
+          else el.removeAttribute("aria-current");
+        });
+        main.onclick = null;
+        main.oninput = null;
+        main.onchange = null;
+        if (!isChat) {
+          window.renderRegistry(main);
+        } else {
+          main.innerHTML =
+            '<div class="chat-page"><div class="chat-history" id="history"><div class="chat-wrap"><div class="chat-day"><time datetime="2025-11-05">2025 年 11 月 5 日</time></div><div id="thread" aria-label="分析对话"></div></div></div><div class="compose-block"><div class="compose-wrap"><form class="composer" id="composer"><textarea id="chatText" rows="1" maxlength="500" aria-label="发送给 Compass" placeholder="' +
+            h(route.placeholder) +
+            '"></textarea><button type="submit" id="send" aria-label="发送消息" disabled>' +
+            icon("arrow-up", 20) +
+            '</button></form><div class="composer-note" id="composerNote" role="status"></div></div></div></div>';
+          const thread = get("thread"),
+            field = get("chatText");
+          if (routeName === "choose") window.renderChoiceChat(thread);
+          else window.renderDraftChat(thread, routeName);
+          if (
+            routeName === "edit" &&
+            !window.metricAccess.canEdit(
+              window.metricPublished?.find((m) => m.code === "sales.net_gmv"),
+            )
+          ) {
+            field.disabled = true;
+            field.placeholder = "当前身份仅可查看此指标";
+          }
+          field.addEventListener("input", () => {
+            get("send").disabled = !field.value.trim();
+          });
+          field.addEventListener("keydown", (event) => {
+            if (
+              event.key === "Enter" &&
+              !event.shiftKey &&
+              !event.isComposing &&
+              event.keyCode !== 229
+            ) {
+              event.preventDefault();
+              if (field.value.trim()) get("composer").requestSubmit();
+            }
+          });
+          get("composer").addEventListener("submit", (event) => {
+            event.preventDefault();
+            const value = field.value.trim();
+            if (!value) return;
+            if (routeName === "choose") window.handleChoiceMessage(value, thread);
+            else window.handleDraftMessage(value, routeName, thread);
+            field.value = "";
+            if (!field.isConnected) return;
+            get("send").disabled = true;
+            field.focus();
+            requestAnimationFrame(() => {
+              const target =
+                thread.querySelector('[role="status"]:last-of-type') || thread.lastElementChild;
+              if (target) {
+                const scroll = get("history");
+                const r = target.getBoundingClientRect(),
+                  c = scroll.getBoundingClientRect();
+                if (r.top > c.bottom - 50) scroll.scrollTop += r.top - c.top - 40;
+              }
+            });
+          });
+        }
+        window.scrollTo(0, 0);
+        if (moveFocus) {
+          main.focus({ preventScroll: true });
+          get("routeLive").textContent = "已打开" + route.label;
+        }
+      }
+      document
+        .querySelectorAll("[data-symbol]")
+        .forEach(
+          (el) =>
+            (el.innerHTML = icon(
+              el.dataset.symbol,
+              el.classList.contains("brand-mark")
+                ? 25
+                : el.closest(".crumb") && !el.matches("button")
+                  ? 13
+                  : el.matches(".rail-center a")
+                    ? 20
+                    : 17,
+            )),
+        );
+      const actorSelect = get("actorSelect");
+      for (const person of demoActors)
+        actorSelect.add(new Option(person.name + " · " + person.role, person.id));
+      function showIdentity() {
+        const actor = activeActor();
+        actorSelect.value = actor.id;
+        get("actorName").textContent = actor.name;
+        get("actorRole").textContent = actor.role;
+        get("actorAvatar").textContent = actor.name[0];
+      }
+      showIdentity();
+      actorSelect.onchange = () => {
+        actorId = actorSelect.value;
+        demoWrite("actor", actorId);
+        delete window.metricToInspect;
+        showIdentity();
+        renderPage();
+        get("routeLive").textContent = "已切换为" + activeActor().name + "，" + activeActor().role;
+      };
+      get("showNav").onclick = () => setMobileNav(true);
+      get("hideNav").onclick = get("scrim").onclick = () => setMobileNav(false, true);
+      get("side").addEventListener("click", (e) => {
+        if (e.target.closest("a") && smallScreen.matches) setMobileNav(false, true);
+      });
+      get("skip").addEventListener("click", (e) => {
+        e.preventDefault();
+        main.focus();
+      });
+      document.querySelectorAll("[data-info]").forEach(
+        (el) =>
+          (el.onclick = () => {
+            if (smallScreen.matches) setMobileNav(false);
+            showInfo(get("demoInfo").hidden, el);
+          }),
+      );
+      function closeInfo() {
+        const box = get("demoInfo");
+        showInfo(false);
+        const trigger = box.lastTrigger;
+        (trigger?.offsetWidth ? trigger : get("demoBtn"))?.focus();
+      }
+      get("infoClose").onclick = closeInfo;
+      get("resetDemo").onclick = () => {
+        get("resetConfirm").hidden = false;
+        get("resetDemo").hidden = true;
+        get("keepDemo").focus();
+      };
+      get("keepDemo").onclick = () => {
+        get("resetConfirm").hidden = true;
+        get("resetDemo").hidden = false;
+        get("resetDemo").focus();
+      };
+      get("clearDemo").onclick = () => {
+        try {
+          for (const key of Object.keys(localStorage)) {
+            if (key.startsWith(demoPrefix)) localStorage.removeItem(key);
+          }
+        } catch {}
+        location.reload();
+      };
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          if (!get("demoInfo").hidden) closeInfo();
+          else if (get("side").classList.contains("mobile-open")) setMobileNav(false, true);
+        }
+        if (e.key === "Tab" && get("side").classList.contains("mobile-open")) {
+          const items = [...get("side").querySelectorAll("a,button")].filter(
+            (el) => el.offsetWidth,
+          );
+          if (e.shiftKey && document.activeElement === items[0]) {
+            e.preventDefault();
+            items.at(-1).focus();
+          } else if (!e.shiftKey && document.activeElement === items.at(-1)) {
+            e.preventDefault();
+            items[0].focus();
+          }
+        }
+      });
+      document.addEventListener("click", (e) => {
+        if (!get("demoInfo").hidden && !e.target.closest("[data-info],#demoInfo")) showInfo(false);
+      });
+      smallScreen.addEventListener("change", () => setMobileNav(false));
+      window.addEventListener("hashchange", () => renderPage(true));
+      renderPage();
+    </script>
+  </body>
+</html>

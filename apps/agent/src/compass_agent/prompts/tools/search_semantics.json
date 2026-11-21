@@ -1,0 +1,85 @@
+{
+  "type": "function",
+  "function": {
+    "name": "search_semantics",
+    "description": "搜索当前发布及授权范围内的术语、指标和实体，按名称、别名和业务域检索。\n\n下一页沿用本次检索条件及返回的 cursor。更改条件时从第一页开始。",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "query": {
+          "maxLength": 256,
+          "title": "Query",
+          "type": "string"
+        },
+        "kinds": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kinds"
+        },
+        "domain": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Domain"
+        },
+        "scope_filter": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope Filter"
+        },
+        "cursor": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "const": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cursor"
+        },
+        "limit": {
+          "default": 12,
+          "maximum": 50,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
+      "required": ["query"],
+      "title": "Input",
+      "type": "object"
+    }
+  },
+  "examples": []
+}

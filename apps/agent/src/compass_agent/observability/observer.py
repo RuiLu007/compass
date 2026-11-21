@@ -93,6 +93,13 @@ class Observation:
             except Exception:
                 self.owner.instrumentation_errors += 1
 
+    def event(self, name, **attributes):
+        if self.span and not self.ended:
+            try:
+                self.span.add_event(name, fields(attributes))
+            except Exception:
+                self.owner.instrumentation_errors += 1
+
     def native(self, key, value):
         if self.span and not self.ended:
             try:

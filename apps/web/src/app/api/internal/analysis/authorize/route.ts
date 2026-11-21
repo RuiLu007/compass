@@ -24,6 +24,7 @@ const input = z.strictObject({
   }),
   approval: z.boolean(),
   visibility: z.boolean().optional(),
+  capabilityGrants: z.boolean().optional(),
 });
 export async function POST(request: Request) {
   const expected = process.env.COMPASS_AGENT_SERVICE_TOKEN;
@@ -38,9 +39,19 @@ export async function POST(request: Request) {
     return Response.json({ allowed: false }, { status: 403, headers });
   try {
     const value = input.parse(await readJson(request, 4096));
-    const visibility = await authorizeRuntime(value.context, value.approval);
+    const { details, revision, capabilityGrants } = await authorizeRuntime(
+      value.context,
+      value.approval,
+      value.capabilityGrants,
+    );
+    if (value.capabilityGrants && !capabilityGrants)
+      return Response.json({ allowed: false }, { status: 403, headers });
     return Response.json(
-      { allowed: true, ...(value.visibility ? { visibility } : {}) },
+      {
+        allowed: true,
+        ...(value.visibility ? { visibility: { details, revision } } : {}),
+        ...(value.capabilityGrants ? { capabilityGrants, revision } : {}),
+      },
       { headers },
     );
   } catch (error) {

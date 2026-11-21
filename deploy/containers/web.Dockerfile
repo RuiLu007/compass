@@ -22,6 +22,7 @@ WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=8100
 COPY --from=build --chown=node:node /app/apps/web/.next/standalone ./
 COPY --from=build --chown=node:node /app/apps/web/.next/static ./apps/web/.next/static
+RUN install -d -o node -g node -m 0700 /var/lib/compass/document-pins
 USER node
 EXPOSE 8100
 CMD ["node", "apps/web/server.js"]

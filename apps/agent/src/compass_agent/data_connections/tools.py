@@ -12,17 +12,32 @@ def provider(connections):
         if not isinstance(trusted.scope, TenantScope):
             return ()
 
+        from compass_agent.documents.client import restrict_connections, verify
+        from compass_agent.execution_context import current_execution
+
+        journal = current_execution.get()
+        snapshot = getattr(journal, "search_snapshot", None)
+        if snapshot and "detail" not in snapshot["kinds"]:
+            return ()
+
         async def current():
+            if snapshot and not await asyncio.to_thread(
+                verify, journal.store.source_settings, trusted, journal.run_id, kinds=["detail"]
+            ):
+                return ()
+
             loading = asyncio.create_task(
                 asyncio.to_thread(connections.bindings_for_run, trusted.scope)
             )
             try:
-                return await asyncio.shield(loading)
+                return restrict_connections(await asyncio.shield(loading), snapshot)
             except asyncio.CancelledError:
                 await asyncio.wait({loading}, timeout=0.5)
                 raise PhaseCanceled(cleanup_confirmed=loading.done()) from None
 
         bindings = await current()
+        if snapshot and not bindings:
+            return ()
         control.require_running()
         return (registration(bindings, emit=emit, current=current),)
 

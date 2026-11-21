@@ -2,7 +2,7 @@
 
 import base64
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select, tuple_
@@ -165,7 +165,7 @@ class MessageReader:
                             "runId": str(run.id),
                             "seq": None,
                             "requestId": str(run.request_id),
-                            "occurredAt": occurred_at.isoformat(),
+                            "occurredAt": occurred_at.astimezone(UTC).isoformat(),
                             "event": event,
                         }
                     )

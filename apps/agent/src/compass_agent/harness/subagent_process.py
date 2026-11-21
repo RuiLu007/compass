@@ -8,7 +8,6 @@ from uuid import UUID
 from compass_agent.harness.context import model_input
 from compass_agent.harness.contracts import AgentState, RunFailure, ToolResult
 from compass_agent.harness.executor import AgentLoop
-from compass_agent.harness.prompts import DATABASE_PROMPT
 from compass_agent.llm.contracts import AgentCallResponse
 from compass_agent.schemas import (
     RUN_STREAM_LIMITS,
@@ -47,6 +46,10 @@ class ChildExecutor(AgentLoop):
         value = exchange(
             {"type": "model", "request": request.model_dump(mode="json"), "index": step.index}
         )
+        if "response" in value:
+            messages = [ChatMessage.model_validate(m) for m in value["messages"]]
+            step.prepared_request = request.model_copy(update={"messages": messages})
+            value = value["response"]
         return AgentCallResponse.model_validate(value)
 
 
@@ -73,12 +76,7 @@ async def run(initial):
         [
             ChatMessage(
                 role="system",
-                content=(
-                    "你是独立的分析子 Agent。只完成当前子任务，返回简明、可供主 Agent "
-                    "继续使用的事实与结论，如有数据缺口请明确说明。"
-                    f"每轮最多发出 {RUN_STREAM_LIMITS['toolsPerStep']} 个工具调用。\n"
-                    + DATABASE_PROMPT
-                ),
+                content=initial["system"],
             ),
             ChatMessage(role="user", content=initial["prompt"]),
         ]

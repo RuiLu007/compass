@@ -1,0 +1,23 @@
+{
+  "type": "function",
+  "function": {
+    "name": "sub_agent",
+    "description": "将一个明确的只读分析子任务交给独立 Agent。在 prompt 提供必要背景、数据范围和预期输出。仅返回子任务结论。",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "prompt": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Prompt",
+          "type": "string"
+        }
+      },
+      "required": ["prompt"],
+      "title": "SubAgentInput",
+      "type": "object"
+    }
+  },
+  "examples": []
+}

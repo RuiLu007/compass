@@ -83,6 +83,13 @@ async def visibility(self, context):
     return {"details": True, "revision": "durable-test-fixture"}
 
 
+async def capabilities(self, context):
+    from .context_fixture import capability_grants
+
+    return await capability_grants(context)
+
+
+CurrentAccess.capabilities = capabilities
 CurrentAccess.check = allowed
 CurrentAccess.visibility = visibility
 

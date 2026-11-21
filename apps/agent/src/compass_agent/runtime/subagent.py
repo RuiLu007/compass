@@ -76,6 +76,9 @@ class SubAgent:
                 journal.parent.reset(parent)
 
     async def _process(self, prompt, context, node_id):
+        from compass_agent.prompt_assets import prompt_text
+        from compass_agent.schemas import RUN_STREAM_LIMITS
+
         bindings = self.bindings
         runtime = bindings.runtime
         assert runtime is not None
@@ -109,6 +112,15 @@ class SubAgent:
             await send(
                 {
                     "prompt": prompt,
+                    "system": "\n".join(
+                        (
+                            prompt_text("support/subagent/analysis.md"),
+                            prompt_text("shared/fragments/tool-limit.md").replace(
+                                "{{tool_limit}}", str(RUN_STREAM_LIMITS["toolsPerStep"])
+                            ),
+                            prompt_text("shared/tools/database-query.md"),
+                        )
+                    ),
                     "tools": [item.model_dump(mode="json") for item in declarations],
                     "controlled": bindings.controlled is not None,
                 }
@@ -133,7 +145,15 @@ class SubAgent:
                         raise ToolRejected("subagent_protocol_error")
                     step, model_node, response = await self._model(index, request, context, node_id)
                     steps[index] = (step, model_node, response.tool_calls)
-                    await send(response.model_dump(mode="json"))
+                    reply = response.model_dump(mode="json")
+                    if step.prepared_request is not None:
+                        reply = {
+                            "response": reply,
+                            "messages": [
+                                m.model_dump(mode="json") for m in step.prepared_request.messages
+                            ],
+                        }
+                    await send(reply)
                 elif kind == "tools" and index == len(steps) and index in steps:
                     step, model_node, calls = steps[index]
                     if not calls or tuple(
@@ -218,6 +238,8 @@ class SubAgent:
         runtime = self.bindings.runtime
         trace = self.bindings.state.trace
         assert runtime is not None
+        if step.prepared_request is not None:
+            names = names.intersection(t.function.name for t in step.prepared_request.tools)
         if trace and node:
             trace.steps[str(step.id)] = node
             trace.bind_calls(str(step.id), calls, ())
@@ -227,6 +249,7 @@ class SubAgent:
                 trace.begin_call(str(step.id), prepared.call_id)
 
         def event(value):
+            self.bindings.publish_execution(value)
             if trace and (identifier := trace.calls.get((str(step.id), value.tool_call_id))):
                 trace.finish(
                     identifier,

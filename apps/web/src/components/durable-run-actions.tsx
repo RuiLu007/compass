@@ -1,5 +1,6 @@
 "use client";
 import Image from "next/image";
+import { SemanticResultActions } from "@/features/semantic/result-actions";
 import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { ApiError } from "@/client/request-scope";
 import type { RunView } from "@/contracts/agent-response";
@@ -8,6 +9,7 @@ import { useDocumentSession } from "./shell/session-boundary";
 import { parseModelContract } from "@/contracts/model-contract";
 import type { components } from "@/generated/api";
 import { AnalysisMarkdown } from "./analysis-markdown";
+import { DeliveryAttachment } from "./delivery-attachment";
 import { UiButton } from "./ui/button";
 import { UiExecutionTimeline } from "./ui/execution-timeline";
 
@@ -54,6 +56,8 @@ export function DurableRunActions({
     /^((?:创建|修改)「[^\r\n]+?」[。][\s\S]*?)分析内容[：:]([\s\S]+)$/,
   );
   const [wait, setWait] = useState<components["schemas"]["WaitView"] | null>(null);
+  const [choice, setChoice] = useState<{ wait: string; id: string }>();
+  const [edits, setEdits] = useState<{ wait: string; data: Record<string, string> }>();
   const waitId = approval?.waitId;
   const scopeQuery = new URLSearchParams(scope).toString();
   useEffect(() => {
@@ -67,7 +71,9 @@ export function DurableRunActions({
       .then((value) => {
         if (!controller.signal.aborted) setWait(parseModelContract("WaitView", value));
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!controller.signal.aborted) setWait(null);
+      });
     return () => controller.abort();
   }, [api, run.runId, run.run?.version, scopeQuery, waitId]);
   const [clock, setClock] = useState(0);
@@ -147,6 +153,7 @@ export function DurableRunActions({
         </details>
       )}
       {children}
+      {value?.status === "completed" && <SemanticResultActions runId={run.runId} {...scope} />}
       {value &&
         approval?.status === "pending" &&
         approval.waitId !== resolvedWait &&
@@ -173,9 +180,107 @@ export function DurableRunActions({
             {busy && !action && <p role="status">正在提交…</p>}
             {wait && wait.waitId === waitId && (
               <div className="actions">
+                {(wait.semanticKind === "choice" || wait.semanticKind === "result") && (
+                  <fieldset>
+                    <legend>
+                      {wait.semanticKind === "result" ? "要保存的查询结果" : "本次查询口径"}
+                    </legend>
+                    {wait.options?.map((o) => (
+                      <label key={o.id}>
+                        <input
+                          type="radio"
+                          name={wait.waitId}
+                          value={o.id}
+                          checked={choice?.wait === wait.waitId && choice.id === o.id}
+                          onChange={() => setChoice({ wait: wait.waitId, id: o.id })}
+                        />{" "}
+                        {o.name}{" "}
+                        {wait.semanticKind === "choice" && (
+                          <>
+                            · v{o.version} · {o.unit}
+                          </>
+                        )}
+                        <span> {o.description}</span>
+                      </label>
+                    ))}
+                  </fieldset>
+                )}
+                {wait.semanticKind === "draft" && (
+                  <fieldset>
+                    <legend>指标草稿预览</legend>
+                    {Object.entries({
+                      name: "指标名称",
+                      code: "指标代码",
+                      domain: "业务域",
+                      timezone: "时区",
+                      aggregation: "聚合规则",
+                      summary: "业务含义",
+                      responsible: "负责人",
+                      formula: "公式",
+                      event_time: "业务时间",
+                      grain: "统计粒度",
+                      unit: "单位",
+                    }).map(([key, label]) => (
+                      <label key={key}>
+                        {label}
+                        <input
+                          value={
+                            (edits?.wait === wait.waitId ? edits.data[key] : undefined) ??
+                            String(wait.fields?.[key] ?? "")
+                          }
+                          onChange={(e) =>
+                            setEdits({
+                              wait: wait.waitId,
+                              data: {
+                                ...(edits?.wait === wait.waitId ? edits.data : {}),
+                                [key]: e.target.value,
+                              },
+                            })
+                          }
+                        />
+                      </label>
+                    ))}
+                    {(["owner_scope_id", "usage_scope_id"] as const).map((key) => (
+                      <label key={key}>
+                        {key === "owner_scope_id" ? "维护归属" : "发布后谁可用"}
+                        <select
+                          value={String(
+                            (edits?.wait === wait.waitId ? edits.data[key] : undefined) ??
+                              wait.fields?.[key] ??
+                              "",
+                          )}
+                          onChange={(e) =>
+                            setEdits({
+                              wait: wait.waitId,
+                              data: {
+                                ...(edits?.wait === wait.waitId ? edits.data : {}),
+                                [key]: e.target.value,
+                              },
+                            })
+                          }
+                        >
+                          <option value="">本人或当前归属</option>
+                          {wait.scopes
+                            ?.filter((s) => (key === "owner_scope_id" ? s.manage : s.share))
+                            .map((s) => (
+                              <option key={String(s.id)} value={String(s.id)}>
+                                {String(s.label)}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                    ))}
+                  </fieldset>
+                )}
                 {wait.allowedActions.includes("approve") && (
                   <button
-                    disabled={busy}
+                    disabled={
+                      busy ||
+                      ((wait.semanticKind === "choice" || wait.semanticKind === "result") &&
+                        (!choice ||
+                          choice.wait !== wait.waitId ||
+                          !wait.options?.some((o) => o.id === choice.id)))
+                    }
                     onClick={() =>
                       command("decisions", {
                         waitId: approval.waitId,
@@ -184,10 +289,20 @@ export function DurableRunActions({
                         proposalDigest: approval.proposalDigest,
                         decisionId: crypto.randomUUID(),
                         decision: "approve",
+                        ...(wait.semanticKind === "choice" || wait.semanticKind === "result"
+                          ? { choiceId: choice?.id }
+                          : {}),
+                        ...(wait.semanticKind === "draft" && edits?.wait === wait.waitId
+                          ? { draftEdits: edits.data }
+                          : {}),
                       })
                     }
                   >
-                    批准执行
+                    {wait.semanticKind === "choice" || wait.semanticKind === "result"
+                      ? "选择并继续"
+                      : wait.semanticKind === "draft"
+                        ? "确认保存草稿"
+                        : "批准执行"}
                   </button>
                 )}
                 {wait.allowedActions.includes("reject") && (
@@ -205,7 +320,11 @@ export function DurableRunActions({
                       })
                     }
                   >
-                    拒绝执行
+                    {wait.semanticKind === "choice" || wait.semanticKind === "result"
+                      ? "取消本次查询"
+                      : wait.semanticKind === "draft"
+                        ? "暂不保存"
+                        : "拒绝执行"}
                   </button>
                 )}
                 {wait.allowedActions.includes("reconcile") && (
@@ -229,6 +348,17 @@ export function DurableRunActions({
         .filter((o) => o.kind === "artifact")
         .map(({ value: artifact }) => {
           const href = `/api/web/v1/analysis/runs/${run.runId}/artifacts/${artifact.id}?${new URLSearchParams(scope)}`;
+          if (artifact.mediaType === "application/json" || artifact.mediaType === "text/markdown") {
+            return (
+              <DeliveryAttachment
+                key={artifact.id}
+                href={href}
+                name={artifact.name}
+                digest={artifact.sha256}
+                dashboard={artifact.mediaType === "application/json"}
+              />
+            );
+          }
           if (artifact.mediaType === "image/png")
             return (
               <figure className="analysis-chart" key={artifact.id}>

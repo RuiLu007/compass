@@ -1,6 +1,7 @@
 """Durable Session commands, Message JSON and the shared v2 Run SSE protocol."""
 
 import asyncio
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -8,6 +9,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import StreamingResponse
 
 from compass_agent.api.runs import Executor, RunContext
+from compass_agent.context_runtime.source_access import project_sources
 from compass_agent.models.errors import ModelError
 from compass_agent.runtime.commands import context_reset, control
 from compass_agent.runtime.durable_service import DurableRuntime
@@ -18,11 +20,16 @@ from compass_agent.runtime.session_management import update_session
 from compass_agent.runtime.store import TERMINAL
 from compass_agent.schemas import (
     AgentResponse,
+    CitationDetail,
     ControlCommand,
     ControlReceipt,
     DecisionCommand,
     ExternalRunEvent,
     ReconcileCommand,
+    RunCitations,
+    SemanticOpenResult,
+    SemanticResultDecision,
+    SemanticResults,
     SessionAccepted,
     SessionDeleted,
     SessionList,
@@ -46,6 +53,50 @@ def runtime(request: Request) -> DurableRuntime:
 
 
 Runtime = Annotated[DurableRuntime, Depends(runtime)]
+
+
+@router.get("/runs/{run_id}/citations", response_model=RunCitations)
+async def citations(run_id: UUID, context: RunContext, service: Runtime, response: Response):
+    from compass_agent.context_runtime.search_verification import read_citations
+
+    await service.access.check(context)
+    response.headers["Cache-Control"] = "no-store"
+    return await asyncio.to_thread(read_citations, service.store, run_id, context)
+
+
+@router.get("/runs/{run_id}/citations/{citation_id}", response_model=CitationDetail)
+async def citation_detail(
+    run_id: UUID, citation_id: UUID, context: RunContext, service: Runtime, response: Response
+):
+    from compass_agent.context_runtime.search_verification import read_citations
+
+    await service.access.check(context)
+    response.headers["Cache-Control"] = "no-store"
+    return await asyncio.to_thread(read_citations, service.store, run_id, context, citation_id)
+
+
+@router.get("/runs/{run_id}/semantic-results", response_model=SemanticResults)
+async def semantic_results(run_id: UUID, context: RunContext, service: Runtime, response: Response):
+    from compass_agent.semantic.results import list_results
+
+    await service.access.check(context)
+    response.headers["Cache-Control"] = "no-store"
+    return await asyncio.to_thread(list_results, service.store, context, run_id)
+
+
+@router.post("/runs/{run_id}/semantic-results", response_model=SemanticOpenResult)
+async def semantic_result_decision(
+    run_id: UUID,
+    command: SemanticResultDecision,
+    context: RunContext,
+    service: Runtime,
+    response: Response,
+):
+    from compass_agent.semantic.results import decide_result
+
+    await service.access.check(context)
+    response.headers["Cache-Control"] = "no-store"
+    return await asyncio.to_thread(decide_result, service.store, context, run_id, command)
 
 
 @router.post("/sessions/submit", status_code=202, response_model=SessionAccepted)
@@ -134,7 +185,8 @@ async def messages(
     result = await asyncio.to_thread(
         service.reader.messages, session_id, context, cursor=cursor, run_id=runId
     )
-    return visible_response(result, details=visibility["details"])
+    projected = await asyncio.to_thread(project_sources, service.store, result, context)
+    return visible_response(projected, details=visibility["details"])
 
 
 @router.patch("/sessions/{session_id}", response_model=SessionListItem)
@@ -167,6 +219,11 @@ async def delete_session(
 async def events(run_id: UUID, context: RunContext, service: Runtime, after: str = "0-0"):
     visibility = await service.access.visibility(context)
     run = await asyncio.to_thread(service.store.read_run, run_id, context)
+    live_since = (
+        datetime.now(UTC).isoformat()
+        if run.config_snapshot.get("contextRuntime") and run.status not in TERMINAL
+        else None
+    )
     try:
         await service.streams.validate(run, after)
     except ModelError as error:
@@ -213,6 +270,10 @@ async def events(run_id: UUID, context: RunContext, service: Runtime, after: str
                         "page": None,
                     }
                 )
+                if run.config_snapshot.get("contextRuntime"):
+                    response = await asyncio.to_thread(
+                        project_sources, service.store, response, context, live_since=live_since
+                    )
                 response = visible_response(response, details=visibility["details"])
                 body = response.model_dump_json(by_alias=True)
                 while len(body.encode()) > 256 * 1024 and len(visible) > 1:

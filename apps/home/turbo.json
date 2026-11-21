@@ -21,7 +21,12 @@
         "$TURBO_ROOT$/mai-specs/986-lesson-18-tool-execution-sandbox/design/TECH_DESIGN.html",
         "$TURBO_ROOT$/mai-specs/985-lesson-19-durable-runtime-hitl/design/TECH_DESIGN.html",
         "$TURBO_ROOT$/mai-specs/985-lesson-19-durable-runtime-hitl/design/HITL_DESIGN.html",
-        "$TURBO_ROOT$/mai-specs/984-lesson-20-production-agent-runtime/design/TECH_DESIGN.html"
+        "$TURBO_ROOT$/mai-specs/984-lesson-20-production-agent-runtime/design/TECH_DESIGN.html",
+        "$TURBO_ROOT$/mai-specs/975-lesson-21-context-runtime-promptops/design/TECH_DESIGN.html",
+        "$TURBO_ROOT$/mai-specs/975-lesson-21-context-runtime-promptops/design/PROMPTOPS_TECH_DESIGN.html",
+        "$TURBO_ROOT$/mai-specs/974-lesson-22-enterprise-semantic-governance/design/TECH_DESIGN.html",
+        "$TURBO_ROOT$/mai-specs/974-lesson-22-enterprise-semantic-governance/design/RETAIL_SEMANTIC_ASSETS.html",
+        "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/TECH_DESIGN.html"
       ],
       "outputs": [
         ".next/**",
@@ -55,7 +60,12 @@
         "$TURBO_ROOT$/mai-specs/986-lesson-18-tool-execution-sandbox/design/TECH_DESIGN.html",
         "$TURBO_ROOT$/mai-specs/985-lesson-19-durable-runtime-hitl/design/TECH_DESIGN.html",
         "$TURBO_ROOT$/mai-specs/985-lesson-19-durable-runtime-hitl/design/HITL_DESIGN.html",
-        "$TURBO_ROOT$/mai-specs/984-lesson-20-production-agent-runtime/design/TECH_DESIGN.html"
+        "$TURBO_ROOT$/mai-specs/984-lesson-20-production-agent-runtime/design/TECH_DESIGN.html",
+        "$TURBO_ROOT$/mai-specs/975-lesson-21-context-runtime-promptops/design/TECH_DESIGN.html",
+        "$TURBO_ROOT$/mai-specs/975-lesson-21-context-runtime-promptops/design/PROMPTOPS_TECH_DESIGN.html",
+        "$TURBO_ROOT$/mai-specs/974-lesson-22-enterprise-semantic-governance/design/TECH_DESIGN.html",
+        "$TURBO_ROOT$/mai-specs/974-lesson-22-enterprise-semantic-governance/design/RETAIL_SEMANTIC_ASSETS.html",
+        "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/TECH_DESIGN.html"
       ],
       "outputs": []
     }

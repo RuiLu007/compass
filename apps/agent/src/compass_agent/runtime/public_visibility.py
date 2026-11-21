@@ -7,6 +7,56 @@ from compass_agent.schemas import AgentResponse
 SUMMARY = {"policy": "summary", "inputPreview": None, "outputPreview": None, "language": "text"}
 
 
+def managed_events(store, tx, run, events):
+    """Only publish progress metadata. Authorized reads hydrate the final private answer."""
+    output = []
+    for event in events:
+        if event["type"] == "message.delta":
+            continue
+        if event["type"] == "view.upsert":
+            kind = event["payload"]["kind"]
+            if kind == "artifact":
+                output.append(event)
+                continue
+            from compass_agent.context_runtime.source_access import save_view
+
+            original = (
+                search_event(event)
+                if run.config_snapshot.get("searchSnapshot")
+                else public_event(event)
+            )
+            save_view(store, tx, run, original)
+            if kind == "execution.node":
+                event = public_event(event, details=False)
+                node = event["payload"]["value"]
+                node["title"] = {"model": "生成", "tool": "执行工具"}.get(node["kind"], "执行任务")
+                node["summary"] = None
+            else:
+                meta = original["payload"]
+                event = {
+                    "type": "view.upsert",
+                    "payload": {
+                        "objectId": meta["objectId"],
+                        "revision": meta["revision"],
+                        "kind": "timeline",
+                        "value": {
+                            "ordinal": meta["value"].get("ordinal", 1),
+                            "event": {
+                                "type": "stream.extension",
+                                "payload": {
+                                    "name": "compass.runtime.protected_view",
+                                    "version": 1,
+                                    "required": False,
+                                    "data": {},
+                                },
+                            },
+                        },
+                    },
+                }
+        output.append(event)
+    return output
+
+
 def public_event(event, *, details=True):
     value = deepcopy(event)
     if value["type"] != "view.upsert":
@@ -55,6 +105,40 @@ def public_event(event, *, details=True):
                         "data": {"status": payload["status"], "summary": "工具调用状态已更新。"},
                     },
                 }
+    return value
+
+
+def search_event(event):
+    """Expose execution metadata even to an authorized viewer; drafts stay private."""
+    value = public_event(event, details=False)
+    if value["type"] != "view.upsert":
+        return value
+    if value["payload"]["kind"] == "execution.node":
+        node = value["payload"]["value"]
+        if node["kind"] == "model":
+            node.update(title="分析请求", summary=None)
+        elif node["kind"] == "tool":
+            node["title"] = {
+                "search_semantics": "查找指标口径",
+                "get_metric_definition": "读取指标定义",
+                "resolve_semantics": "确认适用口径",
+                "query_metric": "查询指标",
+                "database_query": "查询经营数据",
+                "search_documents": "查找资料",
+                "read_document": "读取原文",
+                "todo_write": "更新任务计划",
+            }.get((node.get("origin") or {}).get("toolName") or "", "调用工具")
+    elif value["payload"]["kind"] == "timeline":
+        progress = value["payload"]["value"]["event"]
+        payload = progress["payload"]
+        if progress["type"] == "stream.extension" and payload["name"] == "compass.autonomy.action":
+            # Task goals are model-authored and can contain an unverified answer.
+            payload["data"] = {
+                **payload["data"],
+                "items": [],
+                "todoId": None,
+                "selectedTodoId": None,
+            }
     return value
 
 

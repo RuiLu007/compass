@@ -1,0 +1,34 @@
+{
+  "type": "function",
+  "function": {
+    "name": "get_metric_definition",
+    "description": "读取已发布定义、统计粒度、期间、单位、适用维度与可见关系。",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "format": "uuid",
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "version_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version Id"
+        }
+      },
+      "required": ["asset_id"],
+      "title": "Input",
+      "type": "object"
+    }
+  },
+  "examples": []
+}

@@ -62,18 +62,21 @@ async def complete_successor(runtime, worker, context):
 
 def test_m6_tool_budget_stops_after_one_real_sql_and_releases_slot(engine, monkeypatch):
     physical_reads = []
-    actual_query = database_query._query_database_live
+    actual_query = database_query.query_database_live
 
     async def audited_query(prepared, binding, control, **kwargs):
         physical_reads.append(prepared.id)
         return await actual_query(prepared, binding, control, **kwargs)
 
-    monkeypatch.setattr(database_query, "_query_database_live", audited_query)
+    monkeypatch.setattr(database_query, "query_database_live", audited_query)
 
     async def scenario():
         context = owner()
         assert isinstance(context.scope, TenantScope)
-        async with runtime_service(engine, compass_runtime_max_active=1) as runtime:
+        # This M6 fixture supplies its database directly, as pre-registry Runs did.
+        async with runtime_service(
+            engine, compass_runtime_max_active=1, compass_context_runtime_enabled=False
+        ) as runtime:
             executor, models, request = generic_case("tool-budget", trusted=context)
             run_id = UUID(runtime.store.submit(request, context)["runId"])
             await runtime.publisher.flush(run_id)

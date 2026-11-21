@@ -26,7 +26,12 @@ from compass_agent.runtime.entities import AgentRun
 from compass_agent.runtime.hitl import HumanDecisions
 from compass_agent.runtime.journal import BoundaryYield, ExecutionJournal, RecoveryStop
 from compass_agent.runtime.message_reader import MessageReader
-from compass_agent.runtime.observation import _log_progress, _log_terminal, _run_log
+from compass_agent.runtime.observation import (
+    _log_progress,
+    _log_terminal,
+    _run_log,
+    observe_tool_receipts,
+)
 from compass_agent.runtime.private_state import digest
 from compass_agent.runtime.redis_stream import OutboxPublisher, RedisStream
 from compass_agent.runtime.store import TERMINAL, RuntimeStore
@@ -49,7 +54,13 @@ class CurrentAccess:
         assert value is not None
         return value
 
-    async def authorize(self, context, *, approval=False, visibility=False):
+    async def capabilities(self, context):
+        grants = await self.authorize(context, capabilities=True)
+        if not isinstance(grants, dict):
+            raise ModelError("authorization_unavailable", 503)
+        return grants
+
+    async def authorize(self, context, *, approval=False, visibility=False, capabilities=False):
         try:
             async with httpx.AsyncClient(timeout=3, trust_env=False) as client:
                 response = await client.post(
@@ -59,6 +70,7 @@ class CurrentAccess:
                         "context": context.model_dump(mode="json"),
                         "approval": approval,
                         **({"visibility": True} if visibility else {}),
+                        **({"capabilityGrants": True} if capabilities else {}),
                     },
                 )
                 if response.status_code in {403, 404}:
@@ -74,6 +86,11 @@ class CurrentAccess:
                     ):
                         raise ModelError("authorization_unavailable", 503)
                     return value
+                if capabilities:
+                    grants = response.json().get("capabilityGrants", {})
+                    if not isinstance(grants, dict):
+                        raise ModelError("authorization_unavailable", 503)
+                    return {k: grants.get(k) is True for k in ("analysis", "model", "plugins")}
         except (httpx.HTTPError, ValueError):
             raise ModelError("authorization_unavailable", 503) from None
 
@@ -154,6 +171,7 @@ class ProgressSink:
                 except BaseException:
                     self.pending = events + self.pending
                     raise
+                observe_tool_receipts(self.service.observations.get(self.run_id), events)
             await self.service.publisher.flush(self.run_id)
 
 
@@ -162,7 +180,9 @@ class DurableRuntime:
         self, engine, settings, registry: RunRegistry, *, schedule_jobs=False, distributed=False
     ):
         self.settings, self.registry = settings, registry
-        self.store = RuntimeStore(engine, settings.compass_runtime_state_key.get_secret_value())
+        self.store = RuntimeStore(
+            engine, settings.compass_runtime_state_key.get_secret_value(), settings=settings
+        )
         self.store.distributed = distributed
         self.streams = RedisStream(
             settings.compass_redis_url, settings.compass_redis_password.get_secret_value()
@@ -177,7 +197,9 @@ class DurableRuntime:
 
             self.store.scheduler = RunScheduler(self.store, settings)
             self.store.scheduler.owner_boot_id = self.boot_id
-            self.policy = policy_fingerprint(settings, self.store.scheduler.overrides)
+            self.policy = policy_fingerprint(
+                settings, self.store.scheduler.overrides, self.store.metric_catalog
+            )
         self.owner = None
         self.tasks: dict[UUID, asyncio.Task] = {}
         self.pending_starts = {}
@@ -247,8 +269,15 @@ class DurableRuntime:
                 return saved.get("headers", {})
 
     async def wait_access(self, context, run_id, wait_id, *, approval):
-        scheduled = await asyncio.to_thread(self.hitl.authorization_kind, run_id, wait_id, context)
-        if scheduled:
+        kind = await asyncio.to_thread(self.hitl.authorization_kind, run_id, wait_id, context)
+        if kind in {
+            "semantic_choice",
+            "semantic_result_choice",
+            "semantic_draft",
+            "semantic_submit",
+        }:
+            await self.access.check(context)
+        elif kind == "schedule_owner":
             await self.access.check(context, purpose="schedule_owner")
         else:
             await self.access.check(context, approval=approval)
@@ -530,6 +559,7 @@ class DurableRuntime:
             journal = ExecutionJournal(
                 self.store, self.publisher, run_id, epoch, access=lambda: self.access.check(context)
             )
+            journal.capabilities = lambda: self.access.capabilities(context)
             journal.fault = self.fault
             if hasattr(executor.models, "repository"):
                 journal.model_secrets = executor.models.repository.secrets
@@ -569,7 +599,13 @@ class DurableRuntime:
                     run_id, "proposal", approved[1].private_proposal
                 )
             command = await asyncio.to_thread(self.store.history_command, run_id)
-            result = await executor.run(command, context, control, sink)
+            from compass_agent.prompt_assets import use_prompts
+
+            if journal.context_binding:
+                with use_prompts(journal.prompt):
+                    result = await executor.run(command, context, control, sink)
+            else:
+                result = await executor.run(command, context, control, sink)
             _log_terminal(control, result)
             if result.status == "completed" and result.file.status == "ready":
                 import base64
@@ -611,14 +647,37 @@ class DurableRuntime:
             elif control.stop_reason == "shutdown":
                 await self.pause_interrupted(run_id, epoch, "process_interrupted")
             else:
+                answer = getattr(result, "final_answer", None)
+                citations = getattr(result, "_citations", None)
+                if (
+                    result.status == "failed"
+                    and journal.context_binding
+                    and journal.context_binding.get("search")
+                ):
+                    from compass_agent.context_runtime.search_verification import partial_delivery
+
+                    if result.error_code in {
+                        "step_limit",
+                        "run_budget_exhausted",
+                        "run_timeout",
+                        "context_limit",
+                        "model_incomplete",
+                    }:
+                        try:
+                            partial = await asyncio.to_thread(partial_delivery, journal, context)
+                            answer, citations = partial.final_answer, partial._citations
+                        except (ValueError, ModelError):
+                            answer = None
                 await asyncio.to_thread(
                     self.store.finish,
                     run_id,
                     epoch,
                     result.status,
-                    answer=getattr(result, "final_answer", None),
+                    answer=answer,
                     reason=getattr(result, "error_code", None),
                     drafts=journal.pending_drafts,
+                    delivery=getattr(result, "_delivery", None),
+                    citations=citations,
                 )
             await self.publisher.flush(run_id)
         except BoundaryYield:

@@ -3,7 +3,7 @@ import { requirePermission, type AccessStore } from "../../access/public";
 import { reject } from "../../../platform/errors";
 
 export type ModelScope =
-  | { kind: "platform"; purpose: "manage" | "test" | "runtime_diagnostics" }
+  | { kind: "platform"; purpose: "manage" | "test" | "runtime_diagnostics" | "promptops_manage" }
   | {
       kind: "tenant";
       purpose:

@@ -11,7 +11,14 @@ from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter, SpanExportResult
 from opentelemetry.trace import SpanContext
 
-from compass_agent.observability.privacy import FIELDS, diagnostic, scalar
+from compass_agent.observability.privacy import (
+    CONTEXT_LISTS,
+    FIELDS,
+    META,
+    diagnostic,
+    safe_attribute,
+    safe_context_event,
+)
 
 
 def export_context(context):
@@ -37,7 +44,7 @@ class GuardedExporter(SpanExporter):
 
     def export(self, spans):
         valid = []
-        allowed = {"langfuse.observation.metadata." + key for key in FIELDS} | {
+        allowed = {META + key for key in FIELDS | CONTEXT_LISTS} | {
             "langfuse.observation.type",
             "langfuse.observation.level",
             "langfuse.environment",
@@ -65,8 +72,18 @@ class GuardedExporter(SpanExporter):
                 )
                 or not set(attrs).issubset(allowed | body)
                 or not content_valid
-                or any(scalar(value) is None for key, value in attrs.items() if key not in body)
-                or bool(span.events)
+                or not all(
+                    safe_attribute(span.name, key, value)
+                    for key, value in attrs.items()
+                    if key not in body
+                )
+                or (
+                    bool(span.events)
+                    and (
+                        span.name not in {"context.assemble", "context.decisions"}
+                        or not all(safe_context_event(event) for event in span.events)
+                    )
+                )
             ):
                 with self.lock:
                     self.rejected += 1

@@ -1,0 +1,212 @@
+"""Shared transport and human confirmation used by the seven registered tools."""
+
+import asyncio
+from uuid import uuid5
+
+import psycopg
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from compass_agent.models.errors import ModelError
+from compass_agent.prompt_assets import tool_text
+from compass_agent.runtime.private_state import digest
+from compass_agent.schemas import ToolApprovalProposal, ToolDefinition, ToolFunction
+from compass_agent.semantic.client import SourceUnavailable
+from compass_agent.semantic.draft_fields import result_preview
+from compass_agent.tools.catalog_contracts import ToolSpec
+from compass_agent.tools.contracts import (
+    ExecutionReceipt,
+    InProcessBinding,
+    PreparedApproval,
+    RegisteredTool,
+    ToolPolicy,
+    ToolRejected,
+)
+from compass_agent.tools.registry import bounded_payload, parse_arguments
+
+
+class Arguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class Parameters(Arguments):
+    start: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    end: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    as_of: str | None = Field(default=None, min_length=16, max_length=40)
+    group_by: str | None = Field(default=None, max_length=120)
+    filters: dict[str, str | int | bool] = Field(default_factory=dict, max_length=32)
+
+
+def tool(name, op, capability, args_type):
+    def definition(_context):
+        return ToolDefinition(
+            function=ToolFunction(
+                name=name,
+                description=tool_text(name),
+                parameters=args_type.model_json_schema(),
+            )
+        )
+
+    def register(context):
+        service = context.semantics
+        assert service is not None
+
+        def authorize(args, execution):
+            execution.require_running()
+            if execution.caller != "model":
+                raise ToolRejected("semantic_model_required")
+
+        def arguments(raw):
+            try:
+                return args_type.model_validate(raw).model_dump(mode="json", exclude_none=True)
+            except ValidationError:
+                raise ToolRejected("invalid_parameters") from None
+
+        async def execute(raw, execution):
+            try:
+                result = await service.run(op, arguments(raw), execution)
+                return ExecutionReceipt(execution.call_id, "ok", "confirmed", result)
+            except SourceUnavailable as exc:
+                if not getattr(getattr(service, "journal", None), "search_snapshot", None):
+                    raise ToolRejected(exc.code) from None
+                code = "rate_limited" if exc.status == 429 else "semantic_service_unavailable"
+                payload = {"status": "unavailable", "retryable": True, "code": code}
+                if exc.retry_after is not None:
+                    payload["retryAfterSeconds"] = exc.retry_after
+                return ExecutionReceipt(execution.call_id, "error", "confirmed", payload, code)
+            except ModelError as exc:
+                raise ToolRejected(exc.code) from None
+            except (psycopg.Error, KeyError, ValueError):
+                raise ToolRejected("semantic_source_unavailable") from None
+
+        async def prepare(raw, execution):
+            args = arguments(raw)
+            options = None
+            fields = None
+            if op == "resolve":
+                probe = {
+                    k: v for k, v in args.items() if k not in {"parameters", "historical_as_of"}
+                }
+                result = await service.api(op, probe)
+                if result["status"] != "no_match":
+                    await asyncio.to_thread(service.put, "formal", "protected", {})
+                if result["status"] != "needs_clarification":
+                    return None
+                saved = await asyncio.to_thread(service.choice, args["mention"])
+                if saved and any(
+                    (v["asset_id"], v["version_id"]) == (saved["asset_id"], saved["version_id"])
+                    for v in result["options"]
+                ):
+                    return None
+                selected = getattr(service.journal, "registry_selected", None)
+                if selected and any(
+                    v["asset_id"] == selected["asset_id"]
+                    and v["version_id"] == selected["version_id"]
+                    for v in result["options"]
+                ):
+                    return None
+                from compass_agent.semantic.clarification import options as choice_options
+
+                options = choice_options(result["options"])
+                if len(options) > 32:
+                    raise ToolRejected("semantic_narrow_selection")
+                kind = "semantic_choice"
+                summary = "请选择本次查询使用的指标口径。"
+            elif op == "discover" and (ref := await service.requested_result(args)):
+                ref, source = await asyncio.to_thread(service.open_result, ref)
+                args["result_ref"] = ref
+                from compass_agent.context_runtime.source_access import allows
+
+                if not await asyncio.to_thread(
+                    allows,
+                    service.store,
+                    service.trusted,
+                    source["refs"],
+                    epoch=service.journal.epoch,
+                ):
+                    raise ToolRejected("semantic_reference_expired")
+                from compass_agent.semantic.service import session_results
+
+                available = await asyncio.to_thread(
+                    session_results, service.journal, service.trusted
+                )
+                selected = next(
+                    (r for r in available if r["result_ref"] == args["result_ref"]), None
+                )
+                if not selected or (
+                    args.get("trigger") == "suggest"
+                    and (selected["status"] != "confirmed" or not selected["reusable"])
+                ):
+                    raise ToolRejected("semantic_invitation_unavailable")
+                chosen = await asyncio.to_thread(service.chosen_result)
+                if len(available) > 1 and chosen != args["result_ref"]:
+                    kind = "semantic_result_choice"
+                    options = [
+                        {
+                            "id": r["result_ref"],
+                            "versionId": r["result_ref"],
+                            "name": "、".join(r["columns"])[:160],
+                            "description": r["created_at"],
+                            "unit": "",
+                            "version": 1,
+                        }
+                        for r in available
+                    ]
+                    summary = "请选择要保存的临时查询结果。"
+                else:
+                    fields = result_preview(
+                        source.get("proposal", {}).get("fields", {}),
+                        args.get("fields"),
+                        args["result_ref"],
+                    )
+                    kind = "semantic_draft"
+                    summary = "请核对来自本次临时查询的定义，确认后保存为指标草稿。"
+            elif op == "submit":
+                view = await service.api("validate", {"version_id": args["version_id"]})
+                if view["digest"] != args["expected_digest"] or any(
+                    f["severity"] == "error" for f in view["findings"]
+                ):
+                    raise ToolRejected("semantic_validation_failed")
+                kind = "semantic_submit"
+                summary = "请确认将当前指标版本送交业务专家评审。"
+            else:
+                return None
+            proposal = ToolApprovalProposal(
+                proposalId=str(
+                    uuid5(execution.run_id, f"{name}:{execution.step_id}:{execution.call_id}")
+                ),
+                toolName=name,
+                toolCallId=execution.call_id,
+                argumentsDigest=digest(args),
+                summary=summary,
+            )
+            return PreparedApproval(
+                proposal,
+                {
+                    "kind": kind,
+                    "options": options,
+                    "fields": fields,
+                    **({"result_ref": args["result_ref"]} if args.get("result_ref") else {}),
+                },
+            )
+
+        return RegisteredTool(
+            name,
+            definition(context),
+            ToolPolicy(),
+            InProcessBinding(execute),
+            parse_arguments,
+            authorize,
+            bounded_payload,
+            prepare_approval=prepare if op in {"resolve", "submit", "discover"} else None,
+            local_effect=op in {"submit", "discover"},
+            parallel_safe=op in {"definition", "resolve", "query", "validate"},
+        )
+
+    return ToolSpec(
+        name,
+        "business",
+        "semantic_" + capability,
+        definition,
+        lambda ctx: ctx.semantics is not None,
+        context_factory=register,
+    )

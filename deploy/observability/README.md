@@ -47,6 +47,10 @@ flowchart LR
 
 Langfuse 通过 HTTP 接收 Span，不读取 Compass 的本地日志文件。Agent 不直连 Langfuse 数据表。Trace ID 通过响应头关联；持久 Run 的配置快照保存安全的 Trace carrier 和响应头，恢复执行沿用原 Trace，重复受理返回原关联。导出丢失时可继续按 call_id 查询模型调用记录。
 
+在 Langfuse 项目的 **Tracing** 页按 Trace ID 检索，打开某步的 `context.assemble`，在 **Attributes → Metadata** 展开数组。默认视图折叠长列表。展开 `prompts_used` 可以逐一查看 PromptOps 路径与版本，例如 `路径@v2`。`skills_selected` 是进入模型上下文的 Skill，`tools_selected` 是该步向模型开放的工具。持久任务的 `compass.tool.execute` 对应 Compass 已保存的终态回执，`tool_evidence=execution_receipt`。查看 `tool` 和 `tool_status` 可核对工具和结果，数据库工具还有 `tool_operation` 区分列出连接、读取表结构或执行查询。同一回执在任务恢复时只展示一次。关闭正文采集时，这些字段仍然可查。
+
+通过公开接口复核时，向 `GET /api/public/v2/observations` 提供 `traceId`、`fields=core,basic,metadata` 和 `expandMetadata=prompts_used,skills_selected,tools_selected,capabilities_excluded`。默认查询对单个长字段返回预览，展开后返回完整数组；按返回的 cursor 读取后续页。
+
 Span 的可读结构示例（实际传输为 protobuf）：
 
 ```json

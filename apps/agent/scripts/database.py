@@ -17,8 +17,10 @@ from alembic.config import Config
 from alembic.migration import MigrationContext
 from compass_agent.data_connections.entities import DataConnection, RetailConnection
 from compass_agent.models import entities
+from compass_agent.promptops.entities import PROMPT_TABLES
 from compass_agent.runtime.entities import RUNTIME_TABLES, SCHEDULER_TABLES
 from compass_agent.scheduler.entities import AgentSchedule, AgentScheduleTrigger, RuntimeControl
+from compass_agent.semantic import entities as semantic_entities
 from compass_agent.tools.mcp.entities import McpConnection
 from compass_agent.tools.sandbox.entities import SandboxAllocation
 from compass_agent.workflows.assets import UNIQUE_SCRIPT, WorkflowAsset
@@ -43,8 +45,14 @@ REVISIONS = {
     "0013": "0013_model_generation_profile.py",
     "0014": "0014_workflow_asset_deletion.py",
     "0015": "0015_scheduled_tasks.py",
+    "0016": "0016_prompt_context.py",
+    "0017": "0017_semantic_runtime.py",
 }
-TARGET = "0015"
+TARGET = "0017"
+SEMANTIC_TABLES = {
+    semantic_entities.SemanticRunBinding.__tablename__,
+    semantic_entities.SemanticMetricOffer.__tablename__,
+}
 MARKER = "compass:agent/main"
 OWNER = "compass_agent_owner"
 MIGRATOR = "compass_agent_migrator"
@@ -112,6 +120,7 @@ def inspect_version(connection, *, legacy: bool = False) -> str:
         UNION ALL SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
         WHERE n.nspname='public' AND c.relkind NOT IN ('r','i','p','I')
         AND NOT (c.relkind='v' AND c.relname='agent_scheduled_run_summary')
+        AND NOT (c.relkind='S' AND c.relname='prompt_generation_id_seq')
         UNION ALL SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
         WHERE n.nspname='public'
     """)
@@ -133,6 +142,9 @@ def inspect_version(connection, *, legacy: bool = False) -> str:
     if len(revisions) != 1 or revisions[0] not in REVISIONS:
         raise DatabaseError("Unknown Agent revision")
     revision = revisions[0]
+    sequences = set(inspect(connection).get_sequence_names(schema="public"))
+    if sequences != ({"prompt_generation_id_seq"} if revision >= "0016" else set()):
+        raise DatabaseError("Unexpected Agent identity sequence at current revision")
     expected = {"alembic_version", "demo_daily_sales"}
     if revision >= "0002":
         expected |= {"model_provider", "model_change", "model_call"}
@@ -150,6 +162,10 @@ def inspect_version(connection, *, legacy: bool = False) -> str:
         expected |= SCHEDULER_TABLES
     if revision >= "0015":
         expected |= PLAN_TABLES
+    if revision >= "0017":
+        expected |= SEMANTIC_TABLES
+    if revision >= "0016":
+        expected |= PROMPT_TABLES
     views = inspect(connection).get_view_names(schema="public")
     if views != ([SUMMARY_VIEW] if revision >= "0015" else []):
         raise DatabaseError("Agent view drift at current revision")
@@ -209,7 +225,16 @@ def inspect_version(connection, *, legacy: bool = False) -> str:
                     continue
                 if revision < "0015" and table.name in PLAN_TABLES:
                     continue
+                if revision < "0017" and table.name in SEMANTIC_TABLES:
+                    continue
+                if revision < "0016" and table.name in PROMPT_TABLES:
+                    continue
                 copied = table.to_metadata(metadata)
+                if revision < "0016":
+                    if table.name == "agent_step":
+                        copied._columns.remove(copied.c.prepared_context)
+                    if table.name == "agent_message":
+                        copied._columns.remove(copied.c.source_refs)
                 if revision < "0015":
                     if table.name == "agent_run":
                         for name in (
@@ -361,6 +386,19 @@ GRANT INSERT (id, schedule_id, schedule_revision, scheduled_at, detected_at, coa
     delivery_token, delivery_generation, delivery_expires_at, observed_run_status,
     observed_run_version, observed_reason_code, observed_at, finished_at)
     ON agent_schedule_trigger TO {SCHEDULER};"""
+    if target >= "0016":
+        grants += f"""
+GRANT SELECT, INSERT ON prompt_file, prompt_version, prompt_generation, prompt_command TO {RUNTIME};
+GRANT UPDATE (origin,edit_rev,max_version,active_epoch,draft_body,draft_base_version,
+    draft_base_epoch,last_import_body,last_import_hash,updated_by,updated_at)
+    ON prompt_file TO {RUNTIME};
+GRANT SELECT, UPDATE (generation,last_snapshot_no) ON prompt_head TO {RUNTIME};
+GRANT USAGE ON SEQUENCE prompt_generation_id_seq TO {RUNTIME};"""
+    if target >= "0017":
+        grants += (
+            f"\nGRANT SELECT, INSERT ON semantic_run_binding, semantic_metric_offer TO {RUNTIME};"
+        )
+        grants += f"\nGRANT UPDATE(status,private_payload) ON semantic_metric_offer TO {RUNTIME};"
     return grants
 
 
@@ -389,6 +427,8 @@ def sql_delivery(start: str, target: str = TARGET) -> str:
         "0013": "976",
         "0014": "977",
         "0015": "984",
+        "0016": "975",
+        "0017": "974",
     }[target]
     change = "transactional Retail copy" if target == "0006" else "additive schema"
     return (
@@ -416,14 +456,14 @@ def write_sql(*, check: bool = False) -> None:
         files[f"upgrades/{start}__0005.sql"] = sql_delivery(start, "0005")
     for start in ("0001", "0002", "0003", "0004", "0005"):
         files[f"upgrades/{start}__0006.sql"] = sql_delivery(start, "0006")
-    for target in ("0007", "0008", "0010", "0011", "0012", "0013", "0014", TARGET):
+    for target in ("0007", "0008", "0010", "0011", "0012", "0013", "0014", "0015", TARGET):
         for start in REVISIONS:
             if start < target:
                 files[f"upgrades/{start}__{target}.sql"] = sql_delivery(start, target)
     manifest = {
         "owner": "agent",
         "databaseKey": "main",
-        "feature": "984",
+        "feature": "975",
         "from": "empty",
         "to": TARGET,
         "engine": "PostgreSQL 17",

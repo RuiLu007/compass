@@ -1,0 +1,36 @@
+{
+  "title": "第 23 课 · Agentic Search",
+  "subtitle": "从经营问题到可签批的建议",
+  "brand": "Compass",
+  "label": "技术方案 · 设计待评审",
+  "source": "../TECH_DESIGN.md",
+  "guide": "guide.md",
+  "output": "../TECH_DESIGN.html",
+  "code": {
+    "layers": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "Fixed[\"随 Run 固定版本",
+      "language": "mermaid"
+    },
+    "feedback": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "Plan[\"Plan",
+      "language": "mermaid"
+    },
+    "verify-feedback": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "ev-rule-five-days",
+      "language": "json"
+    },
+    "architecture": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "Chat[\"经营者",
+      "language": "mermaid"
+    },
+    "wire-verify": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "def advance_after_verification(",
+      "language": "python"
+    }
+  }
+}

@@ -160,3 +160,56 @@ def test_visibility_requires_current_authority_and_closed_shape(monkeypatch):
         assert await access.visibility(CHAT) == {"details": False, "revision": "3"}
 
     asyncio.run(scenario())
+
+
+def test_search_projection_keeps_only_progress_metadata_for_authorized_users():
+    from compass_agent.runtime.public_visibility import search_event
+
+    raw = {
+        "type": "view.upsert",
+        "payload": {
+            "objectId": "plan",
+            "revision": 2,
+            "kind": "timeline",
+            "value": {
+                "ordinal": 1,
+                "event": {
+                    "type": "stream.extension",
+                    "payload": {
+                        "name": "compass.autonomy.action",
+                        "data": {
+                            "planVersion": 1,
+                            "selectedTodoId": "t1",
+                            "todoId": "t1",
+                            "items": [{"goal": "private draft"}],
+                        },
+                    },
+                },
+            },
+        },
+    }
+    public = search_event(raw)
+    data = public["payload"]["value"]["event"]["payload"]["data"]
+    assert data == {"planVersion": 1, "items": [], "todoId": None, "selectedTodoId": None}
+    assert "private draft" in str(raw)
+    assert search_event(public) == public
+
+
+@pytest.mark.parametrize("reason", ["blocked", "sufficient", "no_progress", "budget_exhausted"])
+def test_search_result_carries_stop_reason_and_physical_tool_allowance(reason):
+    from types import SimpleNamespace
+
+    from compass_agent.context_runtime.search_control import SearchProgress
+    from compass_agent.harness.autonomy import AutonomyLimits
+    from compass_agent.runtime.session import RuntimeSession
+    from compass_agent.schemas import RunAutonomyResult
+
+    session = RuntimeSession((), AutonomyLimits(tools=2))
+    session.budget.tools = 2
+    session.search_progress = SearchProgress({})
+    session.search_progress.stop_reason = reason
+    event = session.result_event(SimpleNamespace(status="completed"), None)
+    status = "budget_exhausted" if reason == "budget_exhausted" else "completed"
+    outcome = RunAutonomyResult.model_validate(event.payload.data)
+    assert outcome.outcome == status and outcome.reason == reason
+    assert outcome.budget.tools.model_dump() == {"limit": 2, "used": 2, "remaining": 0}

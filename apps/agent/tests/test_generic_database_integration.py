@@ -24,6 +24,7 @@ from cryptography.fernet import Fernet
 from psycopg import sql
 from sqlalchemy import create_engine
 
+from .context_fixture import install_prompts
 from .test_agent_run import CHAT, FakeModels, FakeRouting, model_result, run_command, selected_route
 from .test_database_tools_integration import db
 from .test_database_tools_integration import targets as targets
@@ -36,7 +37,7 @@ from .test_tool_runtime_integration import real_backend
 def data_source(targets):
     runtime, _ = targets("generic_tools")
     db.migrate()
-    engine = create_engine(runtime)
+    engine = install_prompts(create_engine(runtime))
     admin = urlsplit(os.environ["AGENT_TEST_ADMIN_URL"])
     admin_target = urlunsplit(admin._replace(path=urlsplit(runtime).path))
     role = "generic978_" + uuid4().hex[:12]
@@ -126,6 +127,61 @@ def data_source(targets):
             client.execute("DROP SCHEMA private_978 CASCADE")
             client.execute(sql.SQL("DROP OWNED BY {}").format(sql.Identifier(role)))
             client.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(role)))
+
+
+def test_registered_semantic_binding_requires_unchanged_row_policy_and_contract(data_source):
+    from compass_agent.semantic.execution import calculate
+    from compass_agent.tools.contracts import ToolRejected
+
+    _, _, adapter = data_source
+    statement = (
+        "SELECT sum(f.amount_cent)::text AS value FROM analytics_978.daily_fact f "
+        "WHERE f.day>=($1::jsonb->>'start')::date AND f.day<($1::jsonb->>'end')::date "
+        "AND jsonb_typeof($2::jsonb)='object'"
+    )
+    with psycopg.connect(adapter.dsn.get_secret_value()) as source:
+        expr = source.execute(
+            "SELECT pg_get_expr(polqual,polrelid) FROM pg_policy "
+            "WHERE polrelid='analytics_978.daily_fact'::regclass"
+        ).fetchone()
+    assert expr
+    plan = {
+        "sql_text": statement,
+        "target_hash": hashlib.sha256(statement.encode()).hexdigest(),
+        "parameter_schema": {"type": "object", "required": ["start", "end"]},
+        "result_schema": {
+            "type": "object",
+            "properties": {"value": {"type": "string"}},
+            "required": ["value"],
+        },
+        "access_requirements": {
+            "protocol": "postgres_readonly",
+            "identity": "verified_session_user",
+            "required_relations": ["daily_fact"],
+            "namespace_profiles": {"generic": ["pg_catalog", "analytics_978", "pg_temp"]},
+            "policy_expressions": {"daily_fact": [expr[0]]},
+        },
+    }
+    args = {"start": "2026-04-01", "end": "2026-05-01"}
+
+    async def scenario():
+        control = RunRegistry().register(OwnerKey.from_context(CHAT))
+        rows, witness = await calculate(adapter, plan, args, control)
+        assert rows == [{"value": "350"}]
+        assert witness["tables"] == ["daily_fact"]
+        wrong = {
+            **plan,
+            "access_requirements": {
+                **plan["access_requirements"],
+                "policy_expressions": {"daily_fact": ["false"]},
+            },
+        }
+        with pytest.raises(ToolRejected, match="semantic_source_unavailable"):
+            await calculate(adapter, wrong, args, control)
+        with pytest.raises(ToolRejected, match="semantic_binding_changed"):
+            await calculate(adapter, {**plan, "target_hash": "0" * 64}, args, control)
+
+    asyncio.run(scenario())
 
 
 def test_generic_connection_discovery_readonly_and_rls(data_source):

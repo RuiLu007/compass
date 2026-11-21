@@ -23,6 +23,7 @@ from compass_agent.llm.contracts import (
 from compass_agent.llm.errors import RuntimeFailure, error_code, recovery_for
 from compass_agent.llm.sdk import sdk
 from compass_agent.llm.transport import SingleAttemptTransport
+from compass_agent.prompt_assets import prompt_text
 from compass_agent.schemas import (
     ModelUsage,
     OutputValidation,
@@ -115,6 +116,20 @@ def complete_output(
     result.normal_eof = normal_eof
 
 
+def output_message(request, read=prompt_text):
+    if request.output_format == "text":
+        return None
+    instruction = read("shared/fragments/output-json.md")
+    if request.output_schema is not None:
+        instruction += (
+            " "
+            + read("shared/fragments/output-schema.md")
+            + " "
+            + json.dumps(request.output_schema, ensure_ascii=False)
+        )
+    return {"role": "system", "content": instruction}
+
+
 class LiteLLMChatAdapter:
     def __init__(self, continuation: ContinuationCodec, transport_factory=None):
         self.continuation = continuation
@@ -147,13 +162,9 @@ class LiteLLMChatAdapter:
         messages, private = restore(
             invocation.context.continuation_binding, request, self.continuation
         )
-        if request.output_format != "text":
-            instruction = "Return a JSON object."
-            if request.output_schema is not None:
-                instruction += " Follow this JSON Schema: " + json.dumps(
-                    request.output_schema, ensure_ascii=False
-                )
-            messages = [{"role": "system", "content": instruction}, *messages]
+        prefix = output_message(request)
+        if prefix:
+            messages = [prefix, *messages]
         # Keep the existing DeepSeek SDK-version workaround for its wire responses.
         # Other providers, including OpenAI Responses bridges, use native SDK normalization.
         info = (

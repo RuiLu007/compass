@@ -20,6 +20,8 @@ pnpm dev -F web
 
 本地演示可显式设置 `WEB_FIXTURE_PASSWORD` 后执行 `pnpm db:seed -F web -- --fixture teaching`，初始化 `teaching.platform/admin/analyst/viewer/auditor/outsider` 六个合成账号及两租户三空间；重复执行不重置账号或覆盖业务修改。默认 seed 不写演示数据。禁止在共享环境使用此 fixture。
 
+教学身份就绪后，可用 `pnpm db:seed -F web -- --fixture retail-semantics` 安装两家零售租户的语义资产。来源、指标口径、独立 SQL 与重复执行说明见 [Web 主库](db/main/README.md#零售语义教学包)。
+
 `WEB_DATABASE_URL` 仅供服务端运行；`WEB_MIGRATION_DATABASE_URL` 供迁移和受管账号工具；`WEB_PROVISION_DATABASE_URL` 仅供本地数据库供应。迁移与完整 SQL、权限、恢复见 [web/main](db/main/README.md)。`WEB_PUBLIC_ORIGIN` 必须与浏览器来源完全一致；正式环境使用 HTTPS，本地 HTTP 必须显式设置 `WEB_AUTH_ALLOW_LOCAL_HTTP=true` 并使用 loopback。会话固定有效期默认 12 小时，上限 12 小时。
 
 受管工具另支持 `reset-password --login-name ...`、`set-status --login-name ... --status disabled|active`、`set-platform-admin --login-name ... --platform-admin true|false`，安全变更撤销该用户全部会话并保护最后有效管理员。`cleanup-sessions` 清理过期或撤销超过 30 天的会话。审计不自动清理；部署方须安排受控备份、容量监测和保留策略，普通运行角色不能修改或删除历史。
@@ -108,3 +110,29 @@ Chat Run 与流式 Provider 诊断均在唯一终态及干净 EOF 后提交成�
 分析 Chat 使用 `UiExecutionTimeline` 展示运行事件。运行时默认折叠，单行显示最近更新的事件和用时。展开后按时间排列思考与工具等事件，支持独立查看公开详情。完成时自动折叠为完成状态和总用时。`/guide#ui-execution` 演示同一个组件的状态和详情交互。样式遵循[全局 UI 规范](../../docs/ui-style-guide.md)。
 
 课程案例按钮只填普通问题和通用约束。默认工具为 Todo、数据库查询与可用时的 Python，另按用户配置加载 MCP。Workflow 页面保留历史资产查看、改名、启停和脚本导出，旧执行契约已停止。临时课程能力按 [Showcase 规范](../../examples/showcases/README.md) 独立管理。
+
+第 21 课在新建分析输入框下提供两个案例，可用相同题面对照销售部与财务部的默认指标和实际取数，再由讲师单独发布一份经营问答提示词，比较同一周会填报请求的两版回复。[第 21 课课堂演示](../../docs/lesson-21-context-runtime.md)
+
+## 平台提示词管理
+
+平台管理员从「管理与治理 → 平台管理 → Prompts」进入资产库，也可访问 `/platform/promptops`。首次上线时，先导入 Agent 安装包中的 Markdown 与 JSON 资产，核对使用位置，再整体发布。场景目录集中在一个 JSON 中；工具编辑器展示完整声明，参数 Schema 由代码维护并只读，描述、参数说明与示例可在线编辑发布。阶段、公共规则和前端示例按职责归组。[资产结构与升级入口](../../mai-specs/975-lesson-21-context-runtime-promptops/design/ASSET_MODEL_UPDATE.md)
+
+线上修改先进入草稿；Markdown 可试填模板，JSON 使用源码与代码预览，工具使用专用表单。发布前查看受影响资产和版本，示例参数由服务端按代码 Schema 校验。发布后，新任务、分析预填和模型示例使用发布版本。整库快照可预览并恢复，已受理任务保留原先绑定的版本。
+
+Web 通过 Agent HTTP 契约访问提示词库。分析页只读取当前租户和工作区有权使用的预填，模型测试页按平台测试权限读取预设。预填服务暂不可用时，仍可在原页面手工输入问题。
+
+隔离的 PostgreSQL 测试库完成迁移后，使用 `COMPASS_PROMPTOPS_E2E=true` 运行 `tests/e2e/promptops.spec.ts`。该用例会在 Agent 测试库发布并恢复快照。四类交付的浏览器用例位于 `tests/e2e/context-delivery.spec.ts`，用 `COMPASS_CONTEXT_E2E=true` 启用。它使用已发布提示词、保留型 Redis、已授权零售测试连接与运行中的 Agent 消费者。测试模型宿主 `apps/agent/tests/context_e2e_app.py` 将模型请求转送至 `COMPASS_E2E_MODEL_PORT` 指定的本地端口，`apps/agent/tests/context_runtime_provider.py` 在该端口提供受控响应。两个套件共用上述 Web 登录夹具与 `WEB_TEST_EXTERNAL_SERVER=true` 配置。两个验收开关同时开启时，还会在意图识别进行中发布一份系统提示词，实测新 Run 生效用时、在途 Run 的旧版本以及历史会话和恢复后的回答。
+
+## 第 22 课指标口径
+
+进入工作区的「数据与语义 → 指标口径」登记来源、新建或派生指标，选择维护和使用范围。业务负责人审核定义，数据负责人用工作区的受限连接试算。发布人可选择灰度范围、查看受影响的查询与报告、回切或撤销发布。已发布的指标可由 Chat 解释和取数，遇到多个适用口径时会在原会话请求选择。
+
+管理页面和 Chat 浏览器用例分别位于 [治理验收](tests/e2e/semantics-governance.spec.ts) 和 [对话验收](tests/e2e/semantics-chat.spec.ts)。环境变量和可复跑的账号、数据准备步骤见[第 22 课测试计划](../../mai-specs/974-lesson-22-enterprise-semantic-governance/test/TEST_PLAN.md)。
+
+## 第 23 课资料与回答引用
+
+在 Agent 的 `COMPASS_SEARCH_WORKSPACES` 中显式登记启用的工作区 UUID。在 Web 服务进程设置 `COMPASS_DOCUMENTS_ROOT` 和 `COMPASS_DOCUMENTS_PIN_DIR` 的绝对路径。前者为只读发布目录，含 `collections/<sha256>.json` 原件包及 `bindings/<tenantId>/<workspaceId>.json` 当前指针与访问政策。后者为 Web 独占的持久可写目录。多 Web 实例须共享两目录并支持同目录文件硬链接。Compose 已配置只读发布目录和持久固定记录卷，宿主路径与备份方式见[部署说明](../../deploy/README.md#工作区资料检索)。
+
+启用该工作区前发布资料包并配置受众工作区。分析成员只可搜索发布时与当前政策均准许的段落。受限受众按活动工作区的显式成员关系管理，商业报价可独立撤权。切换包时保留旧摘要文件和 Run 固定记录，恢复和回看仍按当前发布政策重新验证。停用某类来源可从绑定的 `kinds` 移除，撤回单份材料可移除 `policies` 中对应文号或将其 `enabled` 改为 false。
+
+Chat 中的数字角标可用键盘或鼠标打开。详情展示结论、适用范围、来源与复算过程。回看、重连与附件下载均按当前身份复核材料权限。运行课堂用例见[跨源检索课堂入口](../../examples/showcases/lesson-23-agentic-search/README.md)。

@@ -11,7 +11,11 @@ from uuid import uuid5
 
 from sqlalchemy.exc import DBAPIError
 
-from compass_agent.harness.autonomy import AutonomyBudget, AutonomyLimits, AutonomyStopped
+from compass_agent.harness.autonomy import (
+    AutonomyBudget,
+    AutonomyLimits,
+    AutonomyStopped,
+)
 from compass_agent.harness.context import ContextLimit
 from compass_agent.harness.contracts import RunFailure
 from compass_agent.harness.verification import (
@@ -22,6 +26,7 @@ from compass_agent.harness.verification import (
 )
 from compass_agent.models.errors import ModelError
 from compass_agent.models.service import ModelInvocationCanceled, ModelService
+from compass_agent.prompt_assets import prompt_text
 from compass_agent.routing.service import RoutingService, SelectedRoute
 from compass_agent.runtime.context import AgentDefinition, RunRoute, initial_messages
 from compass_agent.runtime.control import RunControl
@@ -139,29 +144,27 @@ class RunService(RuntimeTurn):
         limits = self.autonomy_limits
         if command.constraints and command.constraints.max_steps is not None:
             limits = replace(limits, steps=min(limits.steps, command.constraints.max_steps))
+        from compass_agent.execution_context import current_execution
+
+        journal = current_execution.get()
+        search = (getattr(journal, "context_binding", None) or {}).get("search")
+        if search and search.get("maxToolCalls") is not None:
+            limits = replace(limits, tools=min(limits.tools, search["maxToolCalls"]))
         controlled = (
             RuntimeSession(self.autonomy_profiles, limits)
             if self.autonomy_profiles is not None
             else None
         )
-        from compass_agent.execution_context import current_execution
-
-        journal = current_execution.get()
         stop_reason: str | None = None
         candidate: RunResult = RunFailed(status="failed", errorCode="internal_error")
         stage = "tool_setup"
         try:
+            if search and not self.autonomy_profiles:
+                raise AutonomyStopped("model_budget_unavailable")
             # Retained user assets are readable, but retired execution contracts are unavailable.
             if command.workflow_asset_ref is not None:
                 raise RunFailure("workflow_unavailable")
-            discovery = (
-                {"defer_catalog_limit": True}
-                if self.schedules and journal and journal.schedule_tools
-                else {}
-            )
-            discovered = await control.perform(
-                lambda: self.tool_loader.discover(context, control, **discovery)
-            )
+            discovered = await self._discover_tools(context, control, journal)
             provider = self.tools_provider
             provided = (
                 await control.perform(lambda: provider(context, control, emit)) if provider else ()
@@ -195,26 +198,30 @@ class RunService(RuntimeTurn):
                 binding_version=selected.provider.binding_version,
                 model_label=selected.provider.alias,
                 scene_id=selected.intent.scene_id,
+                task_type=selected.features.task_type,
                 route_prompt=selected.prompt,
                 stream=capabilities.stream.state == "supported",
                 thinking=capabilities.thinking.state == "supported",
                 deepseek=selected.provider.vendor == "deepseek"
                 and (journal is None or getattr(journal, "deepseek_thinking", False)),
                 tools_enabled=supported and bool(declarations),
+                deliverable=getattr(selected, "deliverable", None),
+                limits=selected.provider.generation_profile.effective_limits
+                if getattr(selected.provider, "generation_profile", None)
+                else None,
+                requires_plan=bool(command.constraints and command.constraints.plan == "required")
+                or (bool(search) and selected.features.task_type == "复合任务"),
+                vendor=selected.provider.vendor,
+                model=selected.provider.api_model,
             )
             state = TaskState(
                 initial_messages(self.definition, command, route, workflow=workflow and supported)
             )
             if "schedule_read" in catalog.enabled:
-                guidance = (
-                    "定时任务使用 schedule_read 和已授权的 schedule_write。"
-                    "先查询目标与版本，不确定名称或时间时请用户明确。"
-                    "等待确认与变更成功分开说明，以工具实际回执为准。"
+                guidance = prompt_text(
+                    "shared/tools/schedule-guidance.md"
                     if supported
-                    else (
-                        "此模型缺少工具调用能力。"
-                        "遇到定时任务管理请求时，引导用户打开 Web 定时任务页面。"
-                    )
+                    else "shared/tools/schedule-unavailable.md"
                 )
                 first = state.messages[0]
                 state.messages[0] = first.model_copy(
@@ -344,16 +351,55 @@ class RunService(RuntimeTurn):
         result = control.commit(candidate)
         trace.settle(result.status)
         if controlled:
+            if search and state and state.tools and state.tools.search_dispatch:
+                # A canceled physical request can outlive its logical receipt. Its
+                # durable reservation still contributes to the terminal accounting.
+                controlled.budget.tools = await asyncio.to_thread(
+                    state.tools.search_dispatch.reserved_count
+                )
             emit(controlled.result_event(result, stop_reason))
         return result
+
+    async def _discover_tools(self, context, control, journal):
+        binding = getattr(journal, "context_binding", None)
+        if binding:
+            grants = await journal.capabilities() if journal.capabilities else {}
+            if not grants.get("analysis") or not grants.get("model"):
+                raise ModelError("forbidden", 403)
+            if grants.get("plugins") is not True or (
+                binding["scopeProfile"] == "finance" and not binding.get("registry")
+            ):
+                return None
+        options = (
+            {"defer_catalog_limit": True}
+            if self.schedules and journal and journal.schedule_tools
+            else {}
+        )
+        return await control.perform(lambda: self.tool_loader.discover(context, control, **options))
 
     async def tool_catalog(self, context, journal, entries, discovered, snapshot):
         capabilities = self.definition.builtin_tools
         schedules = self.schedules if journal and journal.schedule_tools else None
         if schedules:
             capabilities |= await self.schedule_capabilities(context, journal, snapshot)
+        semantic = None
+        if journal and (getattr(journal, "context_binding", None) or {}).get("registry"):
+            from compass_agent.semantic.service import RegistryTools
+
+            semantic = RegistryTools(journal, context)
+            grants = (await semantic.api("context"))["capabilities"]
+            capabilities = capabilities | {f"semantic_{k}" for k, v in grants.items() if v}
+        documents = None
+        if search := getattr(journal, "search_snapshot", None):
+            if set(search["kinds"]) & {"knowledge", "history", "external"}:
+                from compass_agent.documents.service import DocumentTools
+
+                documents = DocumentTools(journal, context)
+                capabilities = capabilities | {"documents"}
         catalog = CatalogContext(
             frozenset(capabilities),
+            documents=documents,
+            semantics=semantic,
             sandbox=self.tool_loader.sandbox is not None,
             schedules=schedules,
             schedule_effect=execute_effect if schedules else None,
@@ -415,10 +461,18 @@ class RunService(RuntimeTurn):
         discovered.entries = tuple(selected)
 
     async def _select_route(self, command, context, control, budget, question, **options):
-        from compass_agent.execution_context import recorded
+        from compass_agent.execution_context import current_execution, recorded
 
+        journal = current_execution.get()
+        if getattr(journal, "context_binding", None):
+            from compass_agent.context_runtime.source_access import require_run_sources
+
+            await asyncio.to_thread(require_run_sources, journal.store, journal.run_id, context)
         return await recorded(
-            "routing",
+            "routing_host"
+            if getattr(journal, "context_binding", None)
+            and isinstance(self.routing, RoutingService)
+            else "routing",
             "routing",
             {
                 "question": question,
@@ -443,10 +497,22 @@ class RunService(RuntimeTurn):
         *,
         intent_hint: Intent | None,
     ) -> SelectedRoute:
+        from compass_agent.execution_context import current_execution
+
+        messages = []
+        binding = getattr(current_execution.get(), "context_binding", None) or {}
+        if binding and not binding.get("search"):
+            for pair in command.history:
+                messages.extend(
+                    (
+                        ChatMessage(role="user", content=pair.question),
+                        ChatMessage(role="assistant", content=pair.answer),
+                    )
+                )
         routing_command = ChatCallInput(
             call_id=uuid5(control.id, "routing"),
             main_model=command.selection,
-            input=GenerateInput(messages=[ChatMessage(role="user", content=question)]),
+            input=GenerateInput(messages=[*messages, ChatMessage(role="user", content=question)]),
         )
         try:
             return await self.routing.select_route(

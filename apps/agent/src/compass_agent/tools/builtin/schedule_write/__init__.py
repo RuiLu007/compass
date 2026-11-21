@@ -12,6 +12,7 @@ from pydantic import Field, TypeAdapter, ValidationError
 from compass_agent.execution_context import current_execution, execution_path
 from compass_agent.llm.continuation import canonical
 from compass_agent.models.errors import ModelError
+from compass_agent.prompt_assets import tool_text
 from compass_agent.scheduler.cron import Cron
 from compass_agent.schemas import (
     RunContractModel,
@@ -65,12 +66,7 @@ def definition(_context):
     return ToolDefinition(
         function=ToolFunction(
             name=NAME,
-            description=(
-                "创建、修改、启停或软删除定时任务，执行前由任务所有者确认。单独调用。"
-                "修改与删除先查询并提供 ID 和当前版本；时间或目标含糊时先询问。"
-                "创建需要名称、分析问题、模型选择、五段 Cron 和 IANA 时区。"
-                "启停和删除不会取消已经受理的运行。"
-            ),
+            description=(tool_text("schedule_write")),
             parameters={"type": "object", **ARGUMENTS.json_schema(by_alias=True)},
         )
     )

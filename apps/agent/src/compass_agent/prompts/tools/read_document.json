@@ -1,0 +1,28 @@
+{
+  "type": "function",
+  "function": {
+    "name": "read_document",
+    "description": "用本 Run 此前检索或阅读取得的 ref 获取原文。offset 为 -1、0 或 1，可读取同一版本的相邻段。核实适用条款、表头与单位时按需打开邻段。资料权限和有效期在读取时复核。",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "format": "uuid",
+          "title": "Ref",
+          "type": "string"
+        },
+        "offset": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": -1,
+          "title": "Offset",
+          "type": "integer"
+        }
+      },
+      "required": ["ref"],
+      "title": "Input",
+      "type": "object"
+    }
+  },
+  "examples": []
+}

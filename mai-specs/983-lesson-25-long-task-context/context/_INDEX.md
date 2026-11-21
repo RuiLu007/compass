@@ -10,3 +10,8 @@
 - 第 20 课提供按权限投影的 Run Event Stream 和最终回答展示契约，第 25 课将其复用于 Child Run。
 
 ## 开放问题
+
+## 当前课程输入
+
+- [单课大纲与 Compass 实战范围](../../../../../../lessons/v5/formal/lesson_25_long_running_context_memory/brief/lesson_outline.md)
+- [逐页草案与分阶段实施建议](../../../../../../lessons/v5/formal/lesson_25_long_running_context_memory/brief/lesson_outline_by_page.md)

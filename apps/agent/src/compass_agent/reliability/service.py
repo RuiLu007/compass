@@ -21,6 +21,7 @@ from compass_agent.llm.policy import CallPolicy, LogicalPolicy
 from compass_agent.llm.runtime import Runtime
 from compass_agent.models.secrets import ModelContinuationCodec, SecretStore
 from compass_agent.models.service import to_response
+from compass_agent.prompt_assets import prompt_text
 from compass_agent.reliability.provider import ScriptedProvider
 from compass_agent.schemas import (
     ChatMessage,
@@ -155,7 +156,12 @@ async def run_showcase(command, context, emit):
             "https://simulation.invalid",
         )
         value = GenerateInput(
-            messages=[ChatMessage(role="user", content="模拟销售分析")], stream=True
+            messages=[
+                ChatMessage(
+                    role="user", content=prompt_text("support/diagnostics/reliability-request.md")
+                )
+            ],
+            stream=True,
         )
         if scenario == "schema_invalid":
             value.output_format = "schema"

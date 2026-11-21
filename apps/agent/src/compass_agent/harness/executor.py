@@ -4,7 +4,13 @@ from collections.abc import Awaitable, Callable
 from typing import Literal
 
 from compass_agent.harness.autonomy import AutonomyBudget, AutonomyStopped
-from compass_agent.harness.contracts import AgentState, ModelRoute, RepeatStep, RunFailure, Step
+from compass_agent.harness.contracts import (
+    AgentState,
+    ModelRoute,
+    RepeatStep,
+    RunFailure,
+    Step,
+)
 from compass_agent.llm.contracts import AgentCallResponse, RuntimeDelta
 from compass_agent.llm.policy import LogicalPolicy
 from compass_agent.models.service import ModelInvocationCanceled, ModelService
@@ -35,6 +41,7 @@ from compass_agent.tools.contracts import (
 )
 
 EmitProgress = Callable[[RunProgressEvent], None]
+IncompleteHandler = Callable[[Step, CallResponse], Awaitable[RunResult | RepeatStep | None]]
 
 
 class AgentLoop:
@@ -54,6 +61,8 @@ class AgentLoop:
         *,
         budget: AutonomyBudget | None = None,
         publish_text: bool = True,
+        model_timeout: float | None = 25,
+        handle_incomplete: IncompleteHandler | None = None,
     ) -> RunResult:
         for index in range(1, RUN_STREAM_LIMITS["steps"] + 1):
             control.require_running()
@@ -78,16 +87,27 @@ class AgentLoop:
                 lambda step=step, request=request: self._invoke_model(
                     step, request, route, context, control, budget, emit, publish_text=publish_text
                 ),
-                timeout_s=25 if budget is not None else None,
+                timeout_s=model_timeout if budget is not None else None,
             )
+            if step.prepared_request is not None:
+                prepared = (step.prepared_request, prepared[1])
+                state.messages = list(step.prepared_request.messages)
             if budget:
                 if result.error_code == "resource_cleanup_failed":
                     raise ResourceUnconfirmed("model cleanup unconfirmed")
                 budget.require_continue()
                 if result.error_code == "model_timeout":
                     raise AutonomyStopped("execution_timeout")
+            if result.status == "incomplete" and handle_incomplete:
+                recovery = await handle_incomplete(step, result)
+                if recovery is not None:
+                    self._finish_step(step, "failed", emit)
+                    if isinstance(recovery, RepeatStep):
+                        continue
+                    control.require_running()
+                    return recovery
             self._require_complete(result)
-            if state.trace:
+            if state.trace and not getattr(getattr(state, "tools", None), "search", None):
                 state.trace.model_content(str(step.id), result)
             candidate = await handle(step, result, prepared)
             self._finish_step(step, "completed", emit)
@@ -112,6 +132,8 @@ class AgentLoop:
         *,
         budget: AutonomyBudget | None = None,
         publish_text: bool = True,
+        model_timeout: float | None = 25,
+        handle_incomplete: IncompleteHandler | None = None,
     ) -> RunResult:
         """Advance any configured tool catalog using the same model loop.
 
@@ -151,6 +173,8 @@ class AgentLoop:
             handle,
             budget=budget,
             publish_text=publish_text,
+            model_timeout=model_timeout,
+            handle_incomplete=handle_incomplete,
         )
 
     async def _invoke_model(
@@ -231,7 +255,20 @@ class AgentExecutor(AgentLoop):
     async def _invoke_model(
         self, step, request, route, context, control, budget, emit=None, *, publish_text=True
     ):
-        from compass_agent.execution_context import recorded
+        from compass_agent.execution_context import current_execution, recorded
+
+        journal = current_execution.get()
+        if (
+            journal
+            and getattr(journal, "context_binding", None)
+            and getattr(route, "deliverable", None)
+            in ("business_qa", "data_analysis", "dashboard", "business_report")
+        ):
+            from compass_agent.context_runtime.model_step import call_model
+
+            return await call_model(
+                journal, self, step, request, route, context, control, budget, emit
+            )
 
         return await recorded(
             "model",
@@ -287,7 +324,10 @@ class AgentExecutor(AgentLoop):
             )
 
         async def project_delta(event: RuntimeDelta) -> None:
-            from compass_agent.execution_context import current_execution, execution_path
+            from compass_agent.execution_context import (
+                current_execution,
+                execution_path,
+            )
 
             journal = current_execution.get()
             if (

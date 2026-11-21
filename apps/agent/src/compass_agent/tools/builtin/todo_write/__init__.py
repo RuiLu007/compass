@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import TypeAdapter
 
+from compass_agent.prompt_assets import tool_text
 from compass_agent.schemas import ToolDefinition, ToolFunction
 from compass_agent.tools.builtin.todo_write.plan import (
     TODO_ACTION,
@@ -17,12 +18,12 @@ from compass_agent.tools.contracts import ExecutionReceipt
 
 def definition(
     adapter: TypeAdapter[Any] = TODO_ACTION,
-    description="登记、选择、完成或跳过任务事项，提交当前 baseVersion。",
+    description=None,
 ):
     return ToolDefinition(
         function=ToolFunction(
             name="todo_write",
-            description=description,
+            description=description if description is not None else tool_text("todo_write"),
             parameters={"type": "object", **adapter.json_schema(by_alias=True)},
         )
     )

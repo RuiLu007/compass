@@ -98,6 +98,11 @@ services:
       COMPASS_RUNTIME_EVENT_TOKEN: ${COMPASS_RUNTIME_EVENT_TOKEN:-}
       COMPASS_SCHEDULER_TOKEN: ${COMPASS_SCHEDULER_TOKEN:-compass_scheduler_local_only}
       COMPASS_RUNTIME_CONSUMER_SLOTS: ${COMPASS_RUNTIME_CONSUMER_SLOTS:-1}
+      COMPASS_CONTEXT_RUNTIME_ENABLED: ${COMPASS_CONTEXT_RUNTIME_ENABLED:-true}
+      COMPASS_CONTEXT_SCOPE_PROFILES: ${COMPASS_CONTEXT_SCOPE_PROFILES:-[]}
+      COMPASS_SEARCH_WORKSPACES: ${COMPASS_SEARCH_WORKSPACES:-}
+      COMPASS_SEMANTIC_WORKSPACES: ${COMPASS_SEMANTIC_WORKSPACES:-}
+      COMPASS_METRIC_DICTIONARY_PATH: ${COMPASS_CONTAINER_METRIC_DICTIONARY_PATH:-}
       COMPASS_RUNTIME_KEY_VERSION: ${COMPASS_RUNTIME_KEY_VERSION:-local-v1}
       COMPASS_RUNTIME_MAX_ACTIVE: ${COMPASS_RUNTIME_MAX_ACTIVE:-1000}
       COMPASS_RUNTIME_MAX_BACKLOG: ${COMPASS_RUNTIME_MAX_BACKLOG:-3000}
@@ -177,10 +182,15 @@ services:
       COMPASS_AGENT_SERVICE_TOKEN: ${COMPASS_AGENT_SERVICE_TOKEN:-}
       COMPASS_DEMO_ENABLED: "true"
       WEB_DATABASE_URL: postgresql://compass_web_runtime:compass_web_runtime_local_only@postgres:5432/compass_web
+      COMPASS_DOCUMENTS_ROOT: /srv/compass/documents
+      COMPASS_DOCUMENTS_PIN_DIR: /var/lib/compass/document-pins
       WEB_PUBLIC_ORIGIN: http://127.0.0.1:8100
       WEB_AUTH_ALLOW_LOCAL_HTTP: "true"
       HOSTNAME: 0.0.0.0
       PORT: "8100"
+    volumes:
+      - ${COMPASS_DOCUMENTS_ROOT:-../../work/document-releases}:/srv/compass/documents:ro
+      - ${COMPASS_DOCUMENTS_PIN_DIR:-documents-pins}:/var/lib/compass/document-pins
     ports:
       - "127.0.0.1:8100:8100"
     depends_on:
@@ -251,5 +261,6 @@ services:
       timeout: 4s
       retries: 20
 volumes:
+  documents-pins:
   redis-data:
   postgres-data:

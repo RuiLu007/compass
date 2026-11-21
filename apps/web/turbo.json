@@ -2,6 +2,9 @@
   "$schema": "https://turborepo.com/schema.json",
   "extends": ["//"],
   "tasks": {
+    "dev": {
+      "passThroughEnv": ["$TURBO_EXTENDS$", "COMPASS_DOCUMENTS_ROOT", "COMPASS_DOCUMENTS_PIN_DIR"]
+    },
     "test:e2e": {
       "passThroughEnv": [
         "$TURBO_EXTENDS$",

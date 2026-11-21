@@ -1,0 +1,83 @@
+.semantic-workspace,
+.semantic-form,
+.semantic-detail {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.semantic-workspace label {
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.semantic-workspace :is(input, select, textarea) {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  padding: 8px 12px;
+  min-height: 44px;
+  max-width: 100%;
+  min-width: 0;
+}
+.semantic-toolbar,
+.semantic-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+}
+.semantic-columns {
+  display: grid;
+  grid-template-columns: minmax(230px, 1fr) minmax(320px, 2fr);
+  gap: 16px;
+  align-items: start;
+}
+.semantic-row {
+  width: 100%;
+  text-align: start;
+  display: grid;
+  gap: 4px;
+  padding: 12px 8px;
+  color: var(--ink);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  cursor: pointer;
+}
+.semantic-row span,
+.semantic-detail dt {
+  color: var(--muted);
+  font-size: 14px;
+}
+.semantic-row[aria-pressed="true"] {
+  background: var(--canvas);
+  color: var(--primary);
+}
+.semantic-detail dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+.semantic-detail dd {
+  margin: 4px 0;
+  overflow-wrap: anywhere;
+}
+.semantic-form {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 235px), 1fr));
+}
+.semantic-form > h2,
+.semantic-form > h3,
+.semantic-form > div {
+  grid-column: 1/-1;
+}
+@media (max-width: 700px) {
+  .semantic-columns,
+  .semantic-form {
+    grid-template-columns: 1fr;
+  }
+  .semantic-toolbar label {
+    flex: 1 1 140px;
+  }
+}

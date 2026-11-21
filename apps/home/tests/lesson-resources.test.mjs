@@ -9,10 +9,10 @@ import { prepareLessonResources } from "../scripts/lesson-resources.mjs";
 const app = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const lessons = JSON.parse(await readFile(path.join(app, "src/lib/lesson-resources.json"), "utf8"));
 
-test("lesson 11–20 reading editions exist and are included in cache inputs", async () => {
+test("lesson 11–23 reading editions exist and are included in cache inputs", async () => {
   assert.deepEqual(
     lessons.map((lesson) => lesson.number),
-    [11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
+    [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23],
   );
   const turbo = JSON.parse(await readFile(path.join(app, "turbo.json"), "utf8"));
   for (const lesson of lessons) {

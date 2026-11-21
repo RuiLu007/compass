@@ -34,6 +34,7 @@ def configured(system):
         chat_visible=False,
     )[1].provider_id
     settings = Settings(
+        compass_context_runtime_enabled=False,
         compass_routing_jev_provider_id=jev,
         compass_routing_flash_provider_id=flash,
         compass_routing_pro_provider_id=pro,

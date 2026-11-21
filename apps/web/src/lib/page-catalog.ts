@@ -57,7 +57,7 @@ group("admin-overview", "控制总览", "tenant", "module.admin.overview", [
 group("data", "数据与语义", "workspace", "module.admin.data", [
   ["data-sources", "数据连接", "admin/data/sources", "implemented"],
   ["data-catalog", "数据目录", "admin/data/catalog"],
-  ["data-metrics", "指标口径", "admin/data/metrics"],
+  ["data-metrics", "指标口径", "admin/data/metrics", "implemented"],
   ["data-queries", "可信查询", "admin/data/queries"],
   ["data-quality", "数据质量", "admin/data/quality"],
   ["data-documents", "知识文档", "admin/data/documents"],
@@ -118,6 +118,7 @@ group("workspaces", "工作空间", "self", undefined, [
 ]);
 group("platform", "平台管理", "platform", undefined, [
   ["platform-tenants", "平台租户管理", "platform/tenants", "implemented"],
+  ["platform-promptops", "Prompts", "platform/promptops", "implemented"],
   ["platform-models", "平台模型管理", "platform/models", "implemented"],
 ]);
 for (const page of pages) {

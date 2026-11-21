@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 
 from compass_agent.harness.prompts import SYSTEM_PROMPT
+from compass_agent.prompt_assets import prompt_text
 from compass_agent.schemas import RUN_CONTEXT_MESSAGES, ChatMessage, GenerateInput
 from compass_agent.tools.contracts import RegisteredTool
 
@@ -28,7 +29,17 @@ def build_messages(definition, command, instructions: str = "") -> list[ChatMess
     )
     if len(visible.encode()) > 32 * 1024:
         raise ContextLimit()
-    messages = [ChatMessage(role="system", content=definition.system_prompt + instructions)]
+    messages = [
+        ChatMessage(
+            role="system",
+            content=(
+                prompt_text("shared/fragments/base.md")
+                if definition.system_prompt == SYSTEM_PROMPT
+                else definition.system_prompt
+            )
+            + instructions,
+        )
+    ]
     for turn in command.history:
         messages.extend(
             (
@@ -49,18 +60,19 @@ def model_input(
     thinking=False,
     controlled=False,
     deepseek=False,
+    defer_budget=False,
 ) -> GenerateInput:
-    if len(messages) > RUN_CONTEXT_MESSAGES:
+    if not defer_budget and len(messages) > RUN_CONTEXT_MESSAGES:
         raise ContextLimit()
     visible = json.dumps(
         [m.model_dump(mode="json", exclude_none=True) for m in messages],
         ensure_ascii=False,
         separators=(",", ":"),
     ).encode()
-    if len(visible) > 192 * 1024:
+    if not defer_budget and len(visible) > 192 * 1024:
         raise ContextLimit()
-    return GenerateInput(
-        messages=[message.model_copy(deep=True) for message in messages],
+    request = GenerateInput(
+        messages=messages[-1:] if defer_budget else messages,
         stream=stream,
         thinking=thinking and (not controlled or deepseek),
         reasoning_effort="low" if controlled and thinking and deepseek else None,
@@ -68,3 +80,4 @@ def model_input(
         max_tokens=2048 if controlled else 8192,
         continuation_token=continuation_token,
     )
+    return request.model_copy(update={"messages": list(messages)}) if defer_budget else request

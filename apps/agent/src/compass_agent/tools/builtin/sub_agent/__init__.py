@@ -2,6 +2,7 @@
 
 from pydantic import Field
 
+from compass_agent.prompt_assets import tool_text
 from compass_agent.schemas import RunContractModel, ToolDefinition, ToolFunction
 from compass_agent.tools.catalog_contracts import ToolSpec
 
@@ -16,10 +17,7 @@ def definition(_context):
     return ToolDefinition(
         function=ToolFunction(
             name=NAME,
-            description=(
-                "将一个明确的只读分析子任务交给独立 Agent。"
-                "在 prompt 提供必要背景、数据范围和预期输出。仅返回子任务结论。"
-            ),
+            description=(tool_text("sub_agent")),
             parameters=SubAgentInput.model_json_schema(),
         )
     )

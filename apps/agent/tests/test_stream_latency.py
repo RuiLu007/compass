@@ -44,6 +44,7 @@ def test_idle_sse_delivers_new_packet_without_half_second_wait():
         run_id, session_id, request_id, message_id = (uuid4() for _ in range(4))
         run = SimpleNamespace(
             session_id=session_id,
+            config_snapshot={},
             projected_seq="1-0",
             public_view={"run": {"status": "completed"}},
         )

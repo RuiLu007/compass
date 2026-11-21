@@ -241,6 +241,248 @@ def test_exit_filter_rejects_unsafe_attributes():
         owner.shutdown()
 
 
+def test_context_assembly_projects_complete_public_decisions_to_otlp():
+    from compass_agent.context_runtime.model_step import observe
+    from compass_agent.observability.privacy import META
+    from compass_agent.promptops.catalog import bundled
+    from opentelemetry.exporter.otlp.proto.common.trace_encoder import encode_spans
+
+    paths = list(bundled())[:20]
+    scope = {
+        "generation": 3,
+        "task": "business_qa",
+        "phase": "query",
+        "scene": "SC-01",
+        "policyVersion": 1,
+        "budget": {"before": 30, "after": 20, "limit": 50},
+        "files": [
+            {"path": p, "version": n, "body": "PRIVATE_BODY"} for n, p in enumerate(paths, 1)
+        ],
+        "skills": ["metric-check"],
+        "tools": ["database_query", "mcp_PRIVATE_NAME"],
+        "excluded": [("workflow_PRIVATE_NAME", "stage")],
+        "selections": [],
+        "compactions": [],
+    }
+    owner, export = observer(compass_observability_sample_ratio=1)
+    try:
+        with owner.root(uuid4(), CONTEXT, capture_content=False) as root:
+            observe(root, scope)
+        exported = spans(owner, export)
+        assembly = next(s for s in exported if s.name == "context.assemble")
+        attrs = assembly.attributes
+        assert attrs[META + "prompts_used"] == tuple(f"{p}@v{n}" for n, p in enumerate(paths, 1))
+        assert attrs[META + "skills_selected"] == ("metric-check",)
+        assert attrs[META + "tools_selected"] == ("database_query", "external")
+        assert attrs[META + "capabilities_excluded"] == ("external: stage",)
+        assert sum(e.name == "prompt.used" for s in exported for e in s.events) == len(paths)
+        assert b"PRIVATE" not in encode_spans(exported).SerializeToString()
+    finally:
+        owner.shutdown()
+
+
+@pytest.mark.parametrize(
+    ("name", "key", "value"),
+    [
+        ("context.assemble", "prompts_used", ["private/prompt.md@v1"]),
+        ("context.assemble", "prompts_used", ["shared/fragments/base.md@vPRIVATE"]),
+        ("context.assemble", "skills_selected", ["PRIVATE"]),
+        ("context.assemble", "tools_selected", ["mcp_PRIVATE"]),
+        ("context.assemble", "capabilities_excluded", ["database_query: PRIVATE"]),
+        ("compass.request", "tools_selected", ["database_query"]),
+    ],
+)
+def test_context_metadata_rejects_unsafe_native_sdk_attributes(name, key, value):
+    owner, export = observer(compass_observability_sample_ratio=1)
+    try:
+        with owner.root(uuid4(), CONTEXT) as root, root.child(name) as child:
+            child.native("metadata." + key, value)
+        assert len(spans(owner, export)) == 1
+        assert owner.status()["dropped"] == 1
+    finally:
+        owner.shutdown()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("export_failure", [False, True])
+async def test_tool_observation_tracks_physical_calls_and_isolates_export_failure(export_failure):
+    from dataclasses import replace
+
+    from compass_agent.observability.privacy import META
+    from compass_agent.tools.batch import ToolBatchPolicy, dispatch_batch
+    from compass_agent.tools.contracts import ExecutionReceipt
+    from opentelemetry.exporter.otlp.proto.common.trace_encoder import encode_spans
+
+    from .test_tool_dispatcher import call, context, dispatcher, registration
+
+    async def execute(args, ctx):
+        return ExecutionReceipt(ctx.call_id, "ok", "confirmed", {"value": "PRIVATE_OUTPUT"})
+
+    async def fail(args, ctx):
+        return ExecutionReceipt(ctx.call_id, "error", "confirmed", reason_code="PRIVATE_REASON")
+
+    class FailingExporter(InMemorySpanExporter):
+        def export(self, spans):
+            raise RuntimeError("PRIVATE_EXPORT")
+
+    export = FailingExporter() if export_failure else InMemorySpanExporter()
+    owner = Observer(
+        Settings(compass_observability_enabled=True, compass_observability_sample_ratio=1),
+        exporter=export,
+    )
+    try:
+        tools = dispatcher(
+            registration("database_query", execute), registration("mcp_PRIVATE", fail)
+        )
+        with owner.root(uuid4(), CONTEXT, capture_content=False) as root:
+            ctx = replace(context("database_query", "mcp_PRIVATE"), observation=root)
+            for name, status in (
+                ("database_query", "ok"),
+                ("mcp_PRIVATE", "error"),
+                ("absent", "rejected"),
+            ):
+                (result,) = await dispatch_batch(tools, (call(name),), ctx, ToolBatchPolicy())
+                assert result.status == status
+        exported = spans(owner, export)
+        if export_failure:
+            assert owner.status()["export_failures"] > 0
+        else:
+            used = [s for s in exported if s.name == "compass.tool.execute"]
+            assert [
+                (
+                    s.attributes[META + "tool"],
+                    s.attributes[META + "tool_status"],
+                    s.attributes[META + "status"],
+                )
+                for s in used
+            ] == [("database_query", "ok", "completed"), ("external", "error", "failed")]
+            assert all(s.attributes["langfuse.observation.type"] == "tool" for s in used)
+            assert root.span is not None
+            root_id = root.span.get_span_context().span_id
+            assert all(s.parent.span_id == root_id for s in used)
+            assert b"PRIVATE" not in encode_spans(exported).SerializeToString()
+    finally:
+        owner.shutdown()
+
+
+@pytest.mark.anyio
+async def test_durable_tool_receipts_emit_once_after_commit_across_worker_handoffs():
+    from dataclasses import replace
+    from unittest.mock import AsyncMock
+
+    from compass_agent.execution_context import current_execution, recorded
+    from compass_agent.observability.privacy import META
+    from compass_agent.runtime.durable_service import ProgressSink
+    from compass_agent.runtime.journal import BoundaryYield
+    from compass_agent.runtime.tool_bindings import RunToolBindings
+    from compass_agent.tools.contracts import (
+        ExecutionReceipt,
+        ToolBusinessStopped,
+        ToolExecutionEvent,
+    )
+
+    from .test_tool_dispatcher import call, context, dispatcher, registration
+
+    run_id, step_id = uuid4(), uuid4()
+    objects = {}
+    run = SimpleNamespace(public_view={"objects": objects})
+
+    def commit(_run, _epoch, events):
+        for event in events:
+            obj = event["payload"]
+            objects[obj["objectId"]] = obj
+
+    service = SimpleNamespace(
+        store=SimpleNamespace(read_run=lambda _id: run, progress=commit),
+        controls={},
+        publisher=SimpleNamespace(flush=AsyncMock()),
+        observations={},
+    )
+    results = {}
+    actual = []
+
+    async def record(_kind, key, _inputs, invoke, _type, **kwargs):
+        if key not in results:
+            results[key] = await invoke()
+            raise BoundaryYield()
+        return results[key]
+
+    async def handle(args, context):
+        if args["op"] == "list_connections":
+            return ExecutionReceipt(context.call_id, "ok", "confirmed", {})
+
+        async def query():
+            actual.append(context.call_id)
+            return ExecutionReceipt(context.call_id, args["status"], "confirmed", {})
+
+        return await recorded("tool", context.call_id, {}, query, ExecutionReceipt)
+
+    async def halted(args, context):
+        raise ToolBusinessStopped()
+
+    tools = dispatcher(
+        registration("database_query", handle), registration("schedule_read", halted)
+    )
+    owner, export = observer(compass_observability_sample_ratio=1)
+    try:
+        with owner.root(run_id, CONTEXT) as root:
+            service.observations[run_id] = root
+            ctx = replace(context("database_query", "schedule_read"), observation=root)
+            token = current_execution.set(SimpleNamespace(call=record))
+            try:
+                for _ in range(3):
+                    sink = ProgressSink(service, run_id, uuid4())
+                    bindings = SimpleNamespace(
+                        runtime=SimpleNamespace(registry=tools.registry), emit=sink
+                    )
+                    for key, op, status in (
+                        ("list", "list_connections", "ok"),
+                        ("sql-ok", "query", "ok"),
+                        ("sql-error", "query", "error"),
+                    ):
+                        item = tools.prepare(call("database_query", key), ctx)
+                        item = replace(item, args={"op": op, "status": status})
+                        try:
+                            receipt = await tools._invoke_live(item, replace(ctx, call_id=key))
+                        except BoundaryYield:
+                            continue
+                        RunToolBindings.publish_execution(
+                            cast(RunToolBindings, bindings),
+                            ToolExecutionEvent(
+                                run_id,
+                                step_id,
+                                key,
+                                "database_query",
+                                "in_process",
+                                "read_only",
+                                "none",
+                                receipt.status,
+                                receipt.cleanup,
+                                1,
+                                None,
+                                operation=op,
+                            ),
+                        )
+                    with pytest.raises(ToolBusinessStopped):
+                        await tools._invoke_live(tools.prepare(call("schedule_read"), ctx), ctx)
+                    await sink.flush()
+            finally:
+                current_execution.reset(token)
+        assert actual == ["sql-ok", "sql-error"]
+        used = [s.attributes for s in spans(owner, export) if s.name == "compass.tool.execute"]
+        assert [(a[META + "tool_operation"], a[META + "tool_status"]) for a in used] == [
+            ("list_connections", "ok"),
+            ("query", "ok"),
+            ("query", "error"),
+        ]
+        assert all(
+            a[META + "tool_evidence"] == "execution_receipt" and a[META + "step_id"] == str(step_id)
+            for a in used
+        )
+    finally:
+        owner.shutdown()
+
+
 def test_fixed_summary_counts_terminal_states_and_unknown_cost_separately():
     calls = []
 

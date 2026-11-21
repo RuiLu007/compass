@@ -1,5 +1,6 @@
 """Authorized input references and code bounds for the Python sandbox tool."""
 
+from compass_agent.prompt_assets import tool_text
 from compass_agent.schemas import ToolDefinition, ToolFunction
 from compass_agent.tools.catalog_contracts import ToolSpec
 from compass_agent.tools.contracts import (
@@ -28,10 +29,7 @@ def python_analysis_tool() -> RegisteredTool:
             type="function",
             function=ToolFunction(
                 name="python_analysis",
-                description=(
-                    "在独立 Python 环境中分析本轮已授权的查询结果。data 是输入数据；"
-                    "将 JSON 结果赋给 result，可写 /workspace/chart.png 生成 PNG。"
-                ),
+                description=(tool_text("python_analysis")),
                 parameters={
                     "type": "object",
                     "properties": {

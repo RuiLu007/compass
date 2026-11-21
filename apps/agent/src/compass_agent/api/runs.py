@@ -53,6 +53,7 @@ from compass_agent.schemas import (
     AnalysisRunInput,
     ControlCommand,
     ControlReceipt,
+    DashboardDocumentV1,
     ModelErrorResponse,
     RunEmpty,
     RunFailed,
@@ -430,7 +431,13 @@ async def cancel_run(
 @router.get(
     "/runs/{run_id}/artifacts/{artifact_id}",
     response_class=Response,
-    responses={200: {"content": {"image/png": {}}}},
+    responses={
+        200: {
+            "content": {
+                t: {} for t in ("image/png", "text/csv", "text/markdown", "application/json")
+            }
+        }
+    },
 )
 async def read_artifact(run_id: UUID, artifact_id: UUID, request: Request, context: RunContext):
     service = request.app.state.durable_runtime
@@ -461,6 +468,22 @@ async def read_artifact(run_id: UUID, artifact_id: UUID, request: Request, conte
             "Content-Disposition": 'inline; filename="chart.png"',
         },
     )
+
+
+@router.get("/runs/{run_id}/artifacts/{artifact_id}/dashboard")
+async def read_dashboard(
+    run_id: UUID, artifact_id: UUID, request: Request, response: Response, context: RunContext
+) -> DashboardDocumentV1:
+    service = request.app.state.durable_runtime
+    if service is None or not service.store.private.key:
+        raise ModelError("not_found", 404)
+    await service.access.check(context)
+    item = await asyncio.to_thread(service.store.artifact, run_id, artifact_id, context)
+    if item.media_type != "application/json" or len(item.content) > 512 * 1024:
+        raise ModelError("not_found", 404)
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return DashboardDocumentV1.model_validate_json(item.content)
 
 
 @router.post("/runs/{run_id}/sandboxes/{allocation_id}/inspect")

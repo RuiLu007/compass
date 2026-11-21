@@ -1,0 +1,27 @@
+{
+  "code": "fulfillment.allocation_insufficient_rate",
+  "name": "锁库缺货率",
+  "domain": "fulfillment",
+  "summary": "同渠道、负责仓及规格的库存不足尝试占全部锁库尝试的比例。",
+  "grain": "每租户每次锁库尝试",
+  "responsible": "履约运营",
+  "unit": "ratio",
+  "aliases": ["锁不住的比例", "锁库库存不足比例", "履约缺货率"],
+  "definition": {
+    "formula": "库存不足尝试数 / 全部有效锁库尝试数",
+    "event_time": "按 attempted_at 的业务日期归期，订单与尝试均须在观察截止可见。",
+    "timezone": "Asia/Shanghai",
+    "aggregation": "跨日合并分子与分母后计算比率，分母含已提交、库存不足及整单回滚。无尝试时返回无样本。",
+    "dimensions": ["day"],
+    "filters": ["region", "channel", "fulfillment_site", "sku"]
+  },
+  "binding": {
+    "access": "regional",
+    "watermarks": ["OMS", "WMS"],
+    "sources": ["stock_allocation_attempt", "order_header", "source_watermark"],
+    "start": "2023-01-01",
+    "end": "2026-01-01",
+    "fragments": ["allocation-rate"],
+    "statuses": ["COVERAGE_UNKNOWN", "SOURCE_DELAYED", "NO_FACTS"]
+  }
+}

@@ -14,8 +14,16 @@ from compass_agent.models.errors import ModelError
 from compass_agent.models.service import ModelInvocationCanceled
 from compass_agent.routing.config import POLICY
 from compass_agent.routing.dictionary import catalog, features_for
-from compass_agent.routing.intent import decision_input, flash_input, from_flash, from_jev
-from compass_agent.routing.prompts import MODE_PROMPTS, OFF_TOPIC_PROMPT
+from compass_agent.routing.intent import (
+    Delivery,
+    DeliveryPrediction,
+    choice,
+    decision_input,
+    flash_input,
+    from_flash,
+    from_jev,
+)
+from compass_agent.routing.prompts import route_prompt
 from compass_agent.schemas import (
     CallOutcome,
     ChatMessage,
@@ -40,6 +48,7 @@ class SelectedRoute:
     prompt: str
     off_topic: bool
     metrics: RoutingMetrics
+    deliverable: str | None = None
 
 
 class RoutingService:
@@ -69,6 +78,62 @@ class RoutingService:
     ):
         if check:
             check()
+        from compass_agent.execution_context import current_execution
+
+        journal = current_execution.get()
+        if kind == "classifier" and getattr(journal, "context_binding", None):
+            from compass_agent.context_runtime.classifier import call_classifier
+
+            result = await call_classifier(
+                journal,
+                self,
+                command,
+                context,
+                role,
+                provider_id,
+                value,
+                stage_deadline,
+                attempt_budget,
+            )
+        else:
+            result = await self._dispatch(
+                command,
+                context,
+                role,
+                provider_id,
+                value,
+                stage_deadline,
+                kind,
+                expected_binding_version,
+                emit,
+                attempt_budget,
+            )
+        if attempt_budget is not None:
+            if result.error_code == "resource_cleanup_failed":
+                raise ModelInvocationCanceled(cleanup_confirmed=False)
+            if result.error_code == "model_timeout":
+                attempt_budget.reason = "execution_timeout"
+        if kind == "classifier":
+            metrics.classification_calls.append(
+                CallOutcome.model_validate(result.model_dump(include=set(CallOutcome.model_fields)))
+            )
+        if result.error_code == "record_write_failed":
+            raise ModelError("record_write_failed", 503)
+        return result
+
+    async def _dispatch(
+        self,
+        command,
+        context,
+        role,
+        provider_id,
+        value,
+        stage_deadline,
+        kind,
+        binding,
+        emit,
+        attempt_budget,
+    ):
         physical_id = command.call_id if role == "inference" else uuid5(command.call_id, role)
         grant = (
             RoutingGrant(context.actor_user_id, context.scope, physical_id, provider_id, value.kind)
@@ -83,9 +148,9 @@ class RoutingService:
             context,
             deadline=stage_deadline,
             grant=grant,
-            expected_binding_version=expected_binding_version,
+            expected_binding_version=binding,
         )
-        result = await self.models.run(
+        return await self.models.run(
             prepared,
             value,
             emit=emit if role == "inference" else None,
@@ -94,18 +159,6 @@ class RoutingService:
                 max_attempts=2 if role == "inference" and value.kind == "generate" else 1
             ),
         )
-        if attempt_budget is not None:
-            if result.error_code == "resource_cleanup_failed":
-                raise ModelInvocationCanceled(cleanup_confirmed=False)
-            if result.error_code == "model_timeout":
-                attempt_budget.reason = "execution_timeout"
-        if kind == "classifier":
-            metrics.classification_calls.append(
-                CallOutcome.model_validate(result.model_dump(include=set(CallOutcome.model_fields)))
-            )
-        if result.error_code == "record_write_failed":
-            raise ModelError("record_write_failed", 503)
-        return result
 
     async def select_route(
         self,
@@ -125,6 +178,14 @@ class RoutingService:
         metrics = metrics or RoutingMetrics()
         classification_deadline = min(deadline - 1, started + POLICY.classification_seconds)
         intent = None
+        from compass_agent.execution_context import current_execution
+
+        binding = getattr(current_execution.get(), "context_binding", None) or {}
+        managed = bool(binding)
+        if managed and intent_hint is None:
+            paths = ["support/routing/scenes.json"]
+            await asyncio.to_thread(current_execution.get().prefetch_prompts, paths)
+        deliverable = None
         # M2 uses the Flash stage with a declared token and cost bound.
         routing_mode = (
             "flash_only" if attempt_budget is not None else self.settings.compass_routing_mode
@@ -146,13 +207,17 @@ class RoutingService:
                     context,
                     "intent_jev",
                     jev_id,
-                    decision_input(command.input),
+                    decision_input(command.input, managed=managed),
                     min(classification_deadline, loop.time() + POLICY.jev_seconds),
                     "classifier",
                     metrics,
                     check=check,
                 )
-                intent = from_jev(decision)
+                intent = from_jev(decision, managed=True) if managed else from_jev(decision)
+                if managed:
+                    deliverable = choice(decision, "deliverable")
+                    if deliverable not in Delivery.__args__:
+                        intent = None
                 if intent is None:
                     metrics.fallback_reason = "jev_unavailable_or_uncertain"
             except ModelError as exc:
@@ -161,6 +226,7 @@ class RoutingService:
                     "capability_not_supported",
                     "response_too_large",
                     "model_unavailable",
+                    "model_budget_unavailable",
                 }:
                     raise
         elif routing_mode != "flash_only":
@@ -176,19 +242,51 @@ class RoutingService:
                 context,
                 "intent_flash",
                 flash_id,
-                flash_input(command.input),
+                flash_input(command.input, managed=managed),
                 min(classification_deadline, loop.time() + POLICY.flash_seconds),
                 "classifier",
                 metrics,
                 check=check,
                 attempt_budget=attempt_budget,
             )
-            intent = from_flash(prediction)
+            if managed and prediction.status == "completed":
+                try:
+                    parsed = DeliveryPrediction.model_validate_json(prediction.text)
+                except ValueError:
+                    intent = from_flash(prediction)
+                    deliverable = "clarify"
+                else:
+                    from compass_agent.routing.dictionary import intent_for_scene
+
+                    intent = intent_for_scene(parsed.scene_id)
+                    deliverable = parsed.deliverable
+            else:
+                intent = from_flash(prediction)
             metrics.classifier_source = "flash"
         elif intent_hint is None:
             metrics.classifier_source = "jev"
             metrics.fallback_reason = None
         features = features_for(intent)
+        compound_search = bool(binding.get("search")) and features.task_type == "复合任务"
+        if (
+            binding.get("search")
+            and features.response_mode == "answer"
+            and deliverable == "clarify"
+        ):
+            # A reference to an earlier meeting or result can be resolved through authorized
+            # discovery. Missing information is reported after that read is attempted.
+            deliverable = "business_qa"
+        elif compound_search and deliverable in {"existing", "clarify", None}:
+            deliverable = "business_qa"
+        elif (
+            managed
+            and not compound_search
+            and (
+                features.response_mode in {"clarify", "handoff", "refuse"}
+                or intent.scene_id == "SC-39"
+            )
+        ):
+            deliverable = "existing"
         route_observation = (
             self.models.root_observation.child("compass.route")
             if getattr(self.models, "root_observation", None)
@@ -247,12 +345,41 @@ class RoutingService:
             features=features,
             routing=routing,
             provider=view,
-            prompt=OFF_TOPIC_PROMPT if off_topic else MODE_PROMPTS[features.response_mode],
+            prompt=route_prompt(
+                "clarify" if deliverable == "clarify" else features.response_mode,
+                off_topic=off_topic,
+            ),
             off_topic=off_topic,
             metrics=metrics,
+            deliverable=deliverable,
         )
 
+    def _pin_direct_prompts(self):
+        from compass_agent.promptops.catalog import bundled
+        from compass_agent.promptops.reader import current_bodies
+
+        paths = [
+            path
+            for path in bundled()
+            if path.startswith(("support/routing/", "shared/fragments/output-"))
+        ]
+        return current_bodies(self.models.repository.engine, paths)
+
     async def run(self, command, context, emit=None) -> Any:
+        from compass_agent.prompt_assets import use_prompts
+
+        if self.settings.compass_context_runtime_enabled:
+            try:
+                prompts = await asyncio.to_thread(self._pin_direct_prompts)
+            except ModelError as error:
+                return RoutedCallResponse(
+                    call_id=command.call_id, status="failed", error_code=error.code
+                )
+            with use_prompts(prompts):
+                return await self._run(command, context, emit)
+        return await self._run(command, context, emit)
+
+    async def _run(self, command, context, emit=None) -> Any:
         loop = asyncio.get_running_loop()
         started = loop.time()
         deadline = started + POLICY.parent_seconds

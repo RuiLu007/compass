@@ -2,6 +2,7 @@
 
 from uuid import UUID
 
+from compass_agent.prompt_assets import prompt_text
 from compass_agent.schemas import ToolDefinition, ToolFunction
 from compass_agent.tools.contracts import InProcessBinding, RegisteredTool, ToolPolicy
 from compass_agent.tools.registry import bounded_payload, parse_arguments
@@ -28,7 +29,8 @@ def registration(asset, handler, *, declaration=None):
         function=ToolFunction(
             name=name,
             description=(
-                f"个人工作流「{asset.name}」 v{asset.definition_version}。{asset.description}"
+                prompt_text("shared/tools/workflow-label.md")
+                + f"「{asset.name}」 v{asset.definition_version}。{asset.description}"
             ),
             parameters=asset.parameters,
         )

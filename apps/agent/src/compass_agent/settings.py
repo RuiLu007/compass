@@ -9,9 +9,12 @@ from pydantic import (
     Field,
     SecretStr,
     ValidationError,
+    field_validator,
     model_validator,
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from compass_agent.context_runtime.profiles import ScopeRule
 
 
 class RetailRunScopeConfig(BaseModel):
@@ -64,6 +67,10 @@ class Settings(BaseSettings):
     compass_model_max_concurrency: int = Field(default=8, ge=1, le=64)
     compass_model_max_inflight: int = Field(default=32, ge=1, le=256)
     compass_observability_enabled: bool = False
+    compass_context_runtime_enabled: bool = True
+    compass_context_scope_profiles: list[ScopeRule] = Field(default_factory=list, max_length=512)
+
+    compass_metric_dictionary_path: str = ""
     compass_observability_sample_ratio: float = Field(default=1, ge=0, le=1, allow_inf_nan=False)
     compass_observability_instance_id: str = Field(
         default="", max_length=128, pattern=r"^[a-zA-Z0-9_.:-]*$"
@@ -91,6 +98,8 @@ class Settings(BaseSettings):
     compass_runtime_tenant_backlog: int = Field(default=20, ge=1, le=20)
     compass_runtime_tenant_overrides: str = "{}"
     compass_runtime_lease_seconds: int = Field(default=15, ge=3, le=300)
+    compass_semantic_workspaces: str = ""
+    compass_search_workspaces: str = ""
     compass_web_authz_url: str = "http://127.0.0.1:8100/api/internal/analysis/authorize"
     compass_demo_enabled: bool = False
     compass_agent_service_token: str = ""
@@ -136,6 +145,20 @@ class Settings(BaseSettings):
         configured = self.compass_observability_capture_content
         return (
             self.compass_observability_environment == "local" if configured is None else configured
+        )
+
+    @field_validator("compass_context_scope_profiles")
+    @classmethod
+    def unique_context_scopes(cls, rules):
+        if len({(r.tenant_id, r.workspace_id) for r in rules}) != len(rules):
+            raise ValueError("duplicate context scope rule")
+        return rules
+
+    @field_validator("compass_semantic_workspaces")
+    @classmethod
+    def semantic_workspace_ids(cls, value: str) -> str:
+        return ",".join(
+            sorted({str(UUID(item.strip())) for item in value.split(",") if item.strip()})
         )
 
     @model_validator(mode="after")

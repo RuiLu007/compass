@@ -1,0 +1,229 @@
+[
+  {
+    "code": "term.sales_amount",
+    "name": "销售额",
+    "domain": "sales",
+    "owners": ["101", "102"],
+    "summary": "部门对销售额采用不同经营事件，显式口径优先，同级部门默认并列时需要选择。",
+    "aliases": ["成交额"],
+    "definition": {
+      "locale": "zh-CN",
+      "question": "上月销售额是多少？",
+      "counterexample": "已明确“扣退款”的问题按现金流净额解释。"
+    },
+    "targets": ["sales.paid_gmv", "sales.net_gmv", "finance.recognized_revenue"],
+    "targets_by_scope": {
+      "102": ["sales.paid_gmv", "sales.net_gmv"]
+    }
+  },
+  {
+    "code": "term.orders",
+    "name": "下单数",
+    "domain": "sales",
+    "owners": ["platform"],
+    "summary": "经营期内创建的订单数。",
+    "aliases": ["下单笔数"],
+    "definition": {
+      "locale": "zh-CN",
+      "question": "本周产生了多少张订单？",
+      "counterexample": "已支付订单数、订单行数、单件数各有自己的计数粒度。"
+    },
+    "targets": ["sales.order_count"]
+  },
+  {
+    "code": "term.paid",
+    "name": "支付 GMV",
+    "domain": "sales",
+    "owners": ["101.sales", "102.sales"],
+    "summary": "成功支付的总款项。",
+    "aliases": ["支付成交额"],
+    "definition": {
+      "locale": "zh-CN",
+      "question": "这周支付成交额多少？",
+      "counterexample": "问商品款的实付贡献时先确认是否采用商品日报。"
+    },
+    "targets": ["sales.paid_gmv"]
+  },
+  {
+    "code": "term.net_cash",
+    "name": "净 GMV",
+    "domain": "sales",
+    "owners": ["101", "102"],
+    "summary": "按各自事件日期计算支付与退款的收付差额。",
+    "aliases": ["退款后成交额"],
+    "definition": {
+      "locale": "zh-CN",
+      "question": "扣退款后的成交额是多少？",
+      "counterexample": "按下单批次观察最终退款需要另定观察窗。"
+    },
+    "targets": ["sales.net_gmv"]
+  },
+  {
+    "code": "term.revenue",
+    "name": "确认收入",
+    "domain": "finance",
+    "owners": ["101.finance"],
+    "summary": "按妥投和受理退货的财务入账事件归期。",
+    "aliases": ["妥投净收入", "营收"],
+    "definition": {
+      "locale": "zh-CN",
+      "question": "按品类看本月营收。",
+      "counterexample": "当月成功支付可能在次月入账。"
+    },
+    "targets": ["finance.recognized_revenue"]
+  },
+  {
+    "code": "term.ad_return",
+    "name": "广告回报",
+    "domain": "marketing",
+    "owners": ["101.marketing"],
+    "summary": "净 ROAS 衡量平台归因回款倍数，利润 ROI 需要成本口径。",
+    "aliases": ["广告 ROI", "广告投放回报"],
+    "definition": {
+      "locale": "zh-CN",
+      "question": "平台归因净回款是消耗的几倍？",
+      "counterexample": "问利润或增量获客回报时留作澄清。"
+    },
+    "targets": ["marketing.net_roas", "marketing.profit_roi"]
+  },
+  {
+    "code": "term.inventory",
+    "name": "期末可用库存",
+    "domain": "inventory",
+    "owners": ["101", "102"],
+    "summary": "截止指定期末时可售且未预留的基准件数。",
+    "aliases": ["可用库存", "可售未预留件数"],
+    "definition": {
+      "locale": "zh-CN",
+      "question": "月底我负责的地点还有多少可用件？",
+      "counterexample": "在途件及可售估值金额分别解释。"
+    },
+    "targets": ["inventory.closing_available_qty"]
+  },
+  {
+    "code": "term.reported_paid",
+    "name": "渠道商品实付",
+    "domain": "channel",
+    "owners": ["101", "102"],
+    "summary": "可按报表内的渠道与商品拆分实付金额。",
+    "aliases": ["商品日报实付"],
+    "definition": {
+      "locale": "zh-CN",
+      "question": "哪几个商品款贡献了渠道周度实付变化？",
+      "counterexample": "支付流水按支付归期，行级金额未经商品分摊。"
+    },
+    "targets": ["channel.reported_paid_amount"]
+  },
+  {
+    "code": "term.region",
+    "name": "销售地区",
+    "domain": "organization",
+    "owners": ["101", "102"],
+    "summary": "按原订单销售地区对比。",
+    "aliases": ["地区", "经营大区"],
+    "definition": {
+      "locale": "zh-CN",
+      "question": "按原订单销售地区对比。",
+      "counterexample": "配送地区与门店所在地区可能不同。"
+    },
+    "targets": ["entity.geo_area"]
+  },
+  {
+    "code": "term.site",
+    "name": "销售门店",
+    "domain": "organization",
+    "owners": ["101", "102"],
+    "summary": "各原销售门店收入多少？",
+    "aliases": ["门店", "网点"],
+    "definition": {
+      "locale": "zh-CN",
+      "question": "各原销售门店收入多少？",
+      "counterexample": "从该网点发货的金额属于履约维度。"
+    },
+    "targets": ["entity.site"]
+  },
+  {
+    "code": "term.channel",
+    "name": "销售渠道",
+    "domain": "organization",
+    "owners": ["101", "102"],
+    "summary": "各销售渠道占比多少？",
+    "aliases": ["渠道"],
+    "definition": {
+      "locale": "zh-CN",
+      "question": "各销售渠道占比多少？",
+      "counterexample": "退货申请渠道可与原销售渠道不同。"
+    },
+    "targets": ["entity.channel"]
+  },
+  {
+    "code": "term.sku",
+    "name": "商品规格",
+    "domain": "product",
+    "owners": ["101", "102"],
+    "summary": "哪个颜色尺码变化最大？",
+    "aliases": ["SKU"],
+    "definition": {
+      "locale": "zh-CN",
+      "question": "哪个颜色尺码变化最大？",
+      "counterexample": "把多个尺码合并后属于商品款。"
+    },
+    "targets": ["entity.sku"]
+  },
+  {
+    "code": "term.spu",
+    "name": "商品款",
+    "domain": "product",
+    "owners": ["101", "102"],
+    "summary": "比较全渠道各款实付差额。",
+    "aliases": ["SPU", "款式"],
+    "definition": {
+      "locale": "zh-CN",
+      "question": "比较全渠道各款实付差额。",
+      "counterexample": "商品款的销量口径需明确件或金额。"
+    },
+    "targets": ["entity.spu"]
+  },
+  {
+    "code": "term.stock_site",
+    "name": "持货地点",
+    "domain": "inventory",
+    "owners": ["101", "102"],
+    "summary": "指定仓库的期末可用库存是多少？",
+    "aliases": ["库存地点"],
+    "definition": {
+      "locale": "zh-CN",
+      "question": "指定仓库的期末可用库存是多少？",
+      "counterexample": "网点负责发货不代表该销售归该网点。"
+    },
+    "targets": ["entity.site"]
+  },
+  {
+    "code": "term.platform_buyer",
+    "name": "平台新客",
+    "domain": "marketing",
+    "owners": ["101", "102"],
+    "summary": "平台新客的识别范围是什么？",
+    "aliases": ["平台首购"],
+    "definition": {
+      "locale": "zh-CN",
+      "question": "平台新客的识别范围是什么？",
+      "counterexample": "会员首购或跨平台新客需要独立身份归并。"
+    },
+    "targets": ["entity.campaign_attribution_daily"]
+  },
+  {
+    "code": "term.first_report",
+    "name": "渠道首报",
+    "domain": "channel",
+    "owners": ["101", "102"],
+    "summary": "首次报送的金额与明细数，冻结第一版。",
+    "aliases": ["首报", "首次报送"],
+    "definition": {
+      "locale": "zh-CN",
+      "question": "POS 首报有多少行、合计多少元？",
+      "counterexample": "复盘最新重报金额需选择最新有效版。"
+    },
+    "targets": ["channel.first_report_paid_amount"]
+  }
+]

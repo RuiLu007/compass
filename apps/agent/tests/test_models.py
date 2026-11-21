@@ -522,3 +522,50 @@ def test_stream_error_after_partial_output_preserves_upstream_category(system):
     assert len(sent) == 1
     assert any(getattr(event, "text", None) == "partial" for event in events)
     assert "private stream diagnostic" not in result.model_dump_json()
+
+
+def test_platform_schema_calls_read_the_published_protocol(system, monkeypatch):
+    from compass_agent.api import promptops
+    from compass_agent.promptops.entities import PromptHead
+
+    from .test_promptops import first_release, publish, save
+
+    repo, upstream, service = system
+    with Session(repo.engine) as tx, tx.begin():
+        tx.add(PromptHead(id=1, generation=None, last_snapshot_no=0))
+    monkeypatch.setattr(promptops, "get_engine", lambda: repo.engine)
+    settings = Settings(compass_agent_service_token="unit-service-token")
+    manage = MANAGE.model_copy(update={"purpose": "promptops_manage"})
+    app.dependency_overrides[get_model_service] = lambda: service
+    try:
+        with (
+            patch("compass_agent.api.models.get_settings", return_value=settings),
+            TestClient(app, base_url="http://testserver/v1/promptops/") as admin,
+        ):
+            admin.headers.update(headers(manage))
+            first_release(admin)
+            path = "shared/policies.json"
+            marker = "Return JSON. Online protocol marker L21."
+            body = json.loads(admin.get("file", params={"path": path}).json()["body"])
+            body["rules"]["output-json"] = marker
+            save(admin, path, json.dumps(body, ensure_ascii=False))
+            publish(admin, "file", path=path)
+            _, provider = create(repo)
+            data = generate(
+                output_format="schema",
+                output_schema={
+                    "type": "object",
+                    "properties": {"answer": {"type": "string"}},
+                    "required": ["answer"],
+                },
+            )
+            result = admin.post(
+                f"http://testserver/v1/models/providers/{provider.provider_id}/tests",
+                headers=headers(TEST),
+                json={"call_id": str(uuid4()), "input": data.model_dump(mode="json")},
+            )
+            assert result.status_code == 200 and result.json()["status"] == "completed", result.text
+            sent = json.loads(upstream.requests[-1].content)
+            assert any(marker in message["content"] for message in sent["messages"])
+    finally:
+        app.dependency_overrides.pop(get_model_service, None)

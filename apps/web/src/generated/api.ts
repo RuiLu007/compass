@@ -106,6 +106,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/analysis/runs/{run_id}/artifacts/{artifact_id}/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Dashboard */
+        get: operations["read_dashboard_v1_analysis_runs__run_id__artifacts__artifact_id__dashboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/analysis/runs/{run_id}/cancel": {
         parameters: {
             query?: never;
@@ -117,6 +134,40 @@ export interface paths {
         put?: never;
         /** Cancel Run */
         post: operations["cancel_run_v1_analysis_runs__run_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/analysis/runs/{run_id}/citations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Citations */
+        get: operations["citations_v1_analysis_runs__run_id__citations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/analysis/runs/{run_id}/citations/{citation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Citation Detail */
+        get: operations["citation_detail_v1_analysis_runs__run_id__citations__citation_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -219,6 +270,24 @@ export interface paths {
         put?: never;
         /** Inspect Sandbox */
         post: operations["inspect_sandbox_v1_analysis_runs__run_id__sandboxes__allocation_id__inspect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/analysis/runs/{run_id}/semantic-results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Semantic Results */
+        get: operations["semantic_results_v1_analysis_runs__run_id__semantic_results_get"];
+        put?: never;
+        /** Semantic Result Decision */
+        post: operations["semantic_result_decision_v1_analysis_runs__run_id__semantic_results_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -901,6 +970,278 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/prompt-starters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Starters */
+        get: operations["read_starters_v1_prompt_starters_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/promptops/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Commands */
+        get: operations["commands_v1_promptops_commands_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/promptops/draft-from-version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Draft From Version */
+        post: operations["draft_from_version_v1_promptops_draft_from_version_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/promptops/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** File */
+        get: operations["file_v1_promptops_file_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/promptops/file-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Draft */
+        post: operations["draft_v1_promptops_file_draft_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/promptops/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** History */
+        get: operations["history_v1_promptops_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/promptops/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Package */
+        post: operations["import_package_v1_promptops_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/promptops/import-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Preview */
+        post: operations["import_preview_v1_promptops_import_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/promptops/release-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Release Preview */
+        post: operations["release_preview_v1_promptops_release_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/promptops/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Releases */
+        post: operations["releases_v1_promptops_releases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/promptops/render-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Render Preview */
+        post: operations["render_preview_v1_promptops_render_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/promptops/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Snapshot */
+        get: operations["snapshot_v1_promptops_snapshot_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/promptops/snapshots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Snapshots */
+        get: operations["snapshots_v1_promptops_snapshots_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/promptops/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tree */
+        get: operations["tree_v1_promptops_tree_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/semantic/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Suggestions */
+        post: operations["suggestions_v1_semantic_suggestions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/semantic/trial": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Binding Trial */
+        post: operations["binding_trial_v1_semantic_trial_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1170,6 +1511,21 @@ export interface components {
             /** Items */
             items: components["schemas"]["AvailableModel"][];
         };
+        /** BindingTrial */
+        BindingTrial: {
+            /** Binding */
+            binding: {
+                [key: string]: unknown;
+            };
+            /** Expected */
+            expected: {
+                [key: string]: string | null;
+            }[];
+            /** Parameters */
+            parameters: {
+                [key: string]: unknown;
+            };
+        };
         /** BudgetProposal */
         BudgetProposal: {
             /**
@@ -1380,6 +1736,28 @@ export interface components {
             usage?: components["schemas"]["ModelUsage"];
             validation?: components["schemas"]["OutputValidation"];
         };
+        /** Candidate */
+        Candidate: {
+            /** Confidence */
+            confidence: number;
+            /** Formula */
+            formula: string;
+            /** Missing */
+            missing: string[];
+            /** Name */
+            name: string;
+            /** Position */
+            position: string;
+            /**
+             * Source Ref
+             * Format: uuid
+             */
+            source_ref: string;
+            /** Suggestions */
+            suggestions: string[];
+            /** Summary */
+            summary: string;
+        };
         /** Capability */
         Capability: {
             /** Reason */
@@ -1494,6 +1872,58 @@ export interface components {
              */
             tool_calls: components["schemas"]["ToolCall"][] | null;
         };
+        /** CitationAnchor */
+        CitationAnchor: {
+            /** Citationid */
+            citationId: string;
+            /** End */
+            end: number;
+            /** Ordinal */
+            ordinal: number;
+            /** Start */
+            start: number;
+        };
+        /** CitationDetail */
+        CitationDetail: {
+            /**
+             * Calculation
+             * @default null
+             */
+            calculation: string | null;
+            /** Citationid */
+            citationId: string;
+            /** Claimid */
+            claimId: string;
+            /** Revision */
+            revision: number;
+            /** Sources */
+            sources: components["schemas"]["CitationSource"][];
+            /** Statement */
+            statement: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "supported" | "refuted" | "insufficient" | "contested";
+        };
+        /** CitationSource */
+        CitationSource: {
+            /** Excerpt */
+            excerpt: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "metric" | "definition" | "detail" | "knowledge" | "history" | "external";
+            /** Locator */
+            locator: string;
+            /** Scope */
+            scope: string;
+            /** Title */
+            title: string;
+            /** Version */
+            version: string;
+        };
         /** ClassificationEvent */
         ClassificationEvent: {
             /**
@@ -1538,6 +1968,38 @@ export interface components {
             status: string;
             /** Version */
             version: number;
+        };
+        /** DashboardDocumentV1 */
+        DashboardDocumentV1: {
+            /** Asof */
+            asOf: string;
+            /**
+             * Schemaversion
+             * @constant
+             */
+            schemaVersion: 1;
+            /** Scope */
+            scope: string;
+            /** Title */
+            title: string;
+            /** Widgets */
+            widgets: components["schemas"]["DashboardWidget"][];
+        };
+        /** DashboardWidget */
+        DashboardWidget: {
+            /** Columns */
+            columns: string[];
+            /** Factref */
+            factRef: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "metric" | "table" | "bar" | "line";
+            /** Rows */
+            rows: (string | number | boolean | null)[][];
+            /** Title */
+            title: string;
         };
         /** DataConnectionFields */
         DataConnectionFields: {
@@ -1695,6 +2157,11 @@ export interface components {
         /** DecisionCommand */
         DecisionCommand: {
             /**
+             * Choiceid
+             * @default null
+             */
+            choiceId: string | null;
+            /**
              * Decision
              * @enum {string}
              */
@@ -1704,6 +2171,13 @@ export interface components {
              * Format: uuid
              */
             decisionId: string;
+            /**
+             * Draftedits
+             * @default null
+             */
+            draftEdits: {
+                [key: string]: string;
+            } | null;
             /** Expectedversion */
             expectedVersion: number;
             /** Proposaldigest */
@@ -2184,6 +2658,20 @@ export interface components {
              * @default null
              */
             provider_id: string | null;
+        };
+        /** Material */
+        Material: {
+            /** Material */
+            material: string;
+            /** Position */
+            position: string;
+            /**
+             * Source Ref
+             * Format: uuid
+             */
+            source_ref: string;
+            /** Source Version */
+            source_version: string;
         };
         /** McpConnectionDelete */
         McpConnectionDelete: {
@@ -2686,6 +3174,476 @@ export interface components {
             dimension: "product";
             period: components["schemas"]["RunPeriod"];
         };
+        /** PromptChange */
+        PromptChange: {
+            /** New Version */
+            new_version: number | null;
+            /** Old Version */
+            old_version: number | null;
+            /** Path */
+            path: string;
+            /** Usages */
+            usages: string[];
+        };
+        /** PromptDraft */
+        PromptDraft: {
+            /** Base Epoch */
+            base_epoch: number;
+            /** Body */
+            body: string;
+            /** Expected Edit Rev */
+            expected_edit_rev: number;
+            /** Path */
+            path: string;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+        };
+        /** PromptDraftBase */
+        PromptDraftBase: {
+            /** Base Epoch */
+            base_epoch: number;
+            /** Expected Edit Rev */
+            expected_edit_rev: number;
+            /** Path */
+            path: string;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+        };
+        /** PromptDraftFromVersion */
+        PromptDraftFromVersion: {
+            /** Base Epoch */
+            base_epoch: number;
+            /** Expected Edit Rev */
+            expected_edit_rev: number;
+            /** Path */
+            path: string;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Version */
+            version: number;
+        };
+        /** PromptFileDetail */
+        PromptFileDetail: {
+            /** Active Epoch */
+            active_epoch: number;
+            /** Body */
+            body: string | null;
+            /**
+             * Contract Sha256
+             * @default null
+             */
+            contract_sha256: string | null;
+            /** Current Version */
+            current_version: number | null;
+            /** Draft Base Epoch */
+            draft_base_epoch: number | null;
+            /** Draft Base Version */
+            draft_base_version: number | null;
+            /** Draft Body */
+            draft_body: string | null;
+            /** Edit Rev */
+            edit_rev: number;
+            /** Has Draft */
+            has_draft: boolean;
+            /**
+             * Kind
+             * @default markdown
+             * @enum {string}
+             */
+            kind: "markdown" | "json" | "tool";
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "bundled" | "online";
+            /** Path */
+            path: string;
+            /**
+             * Retired
+             * @default false
+             */
+            retired: boolean;
+            /** Usages */
+            usages: string[];
+            /** Used */
+            used: boolean;
+            /** Variables */
+            variables: string[];
+            /** Version */
+            version: number | null;
+        };
+        /** PromptFileEntry */
+        PromptFileEntry: {
+            /** Active Epoch */
+            active_epoch: number;
+            /** Current Version */
+            current_version: number | null;
+            /** Edit Rev */
+            edit_rev: number;
+            /** Has Draft */
+            has_draft: boolean;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "bundled" | "online";
+            /** Path */
+            path: string;
+            /** Used */
+            used: boolean;
+        };
+        /** PromptHistoricalVersion */
+        PromptHistoricalVersion: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Note */
+            note: string;
+            /** Path */
+            path: string;
+            /** Sha256 */
+            sha256: string;
+            /** Version */
+            version: number;
+        };
+        /** PromptHistory */
+        PromptHistory: {
+            /** Items */
+            items: components["schemas"]["PromptHistoricalVersion"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** PromptImport */
+        PromptImport: {
+            /** Choices */
+            choices?: components["schemas"]["PromptImportChoice"][];
+            /** Confirmation Hash */
+            confirmation_hash: string;
+            /** Package Digest */
+            package_digest: string;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+        };
+        /** PromptImportChoice */
+        PromptImportChoice: {
+            /**
+             * Body
+             * @default null
+             */
+            body: string | null;
+            /**
+             * Choice
+             * @enum {string}
+             */
+            choice: "local" | "online" | "merge";
+            /** Path */
+            path: string;
+        };
+        /** PromptImportEntry */
+        PromptImportEntry: {
+            /**
+             * Base Body
+             * @default null
+             */
+            base_body: string | null;
+            /** Edit Rev */
+            edit_rev: number;
+            /**
+             * Local Body
+             * @default null
+             */
+            local_body: string | null;
+            /**
+             * Online Body
+             * @default null
+             */
+            online_body: string | null;
+            /** Path */
+            path: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "new" | "unchanged" | "local" | "online" | "conflict";
+        };
+        /** PromptImportPreview */
+        PromptImportPreview: {
+            /** Confirmation Hash */
+            confirmation_hash: string;
+            /** Items */
+            items: components["schemas"]["PromptImportEntry"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+            /** Package Digest */
+            package_digest: string;
+            /** Total */
+            total: number;
+        };
+        /** PromptImportPreviewInput */
+        PromptImportPreviewInput: {
+            /**
+             * Cursor
+             * @default null
+             */
+            cursor: string | null;
+            /**
+             * Limit
+             * @default 100
+             */
+            limit: number;
+            /**
+             * Path
+             * @default null
+             */
+            path: string | null;
+        };
+        /** PromptReceipt */
+        PromptReceipt: {
+            /** Action */
+            action: string;
+            /**
+             * Adopted
+             * @default 0
+             */
+            adopted: number;
+            /**
+             * Changed Count
+             * @default 0
+             */
+            changed_count: number;
+            /**
+             * Edit Rev
+             * @default null
+             */
+            edit_rev: number | null;
+            /**
+             * Generation
+             * @default null
+             */
+            generation: number | null;
+            /**
+             * Path
+             * @default null
+             */
+            path: string | null;
+            /**
+             * Retained
+             * @default 0
+             */
+            retained: number;
+            /**
+             * Skipped
+             * @default 0
+             */
+            skipped: number;
+            /**
+             * Snapshot No
+             * @default null
+             */
+            snapshot_no: number | null;
+            /**
+             * Version
+             * @default null
+             */
+            version: number | null;
+        };
+        /** PromptRelease */
+        PromptRelease: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "file" | "all" | "restore";
+            /** Confirmation Hash */
+            confirmation_hash: string;
+            /** Note */
+            note: string;
+            /**
+             * Path
+             * @default null
+             */
+            path: string | null;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /**
+             * Snapshot No
+             * @default null
+             */
+            snapshot_no: number | null;
+        };
+        /** PromptReleasePreview */
+        PromptReleasePreview: {
+            /** Changes */
+            changes: components["schemas"]["PromptChange"][];
+            /** Confirmation Hash */
+            confirmation_hash: string;
+            /** Errors */
+            errors: string[];
+            /** Generation */
+            generation: number | null;
+            /** Since Snapshot */
+            since_snapshot: components["schemas"]["PromptChange"][];
+            /** Snapshot No */
+            snapshot_no: number | null;
+        };
+        /** PromptReleaseTarget */
+        PromptReleaseTarget: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "file" | "all" | "restore";
+            /**
+             * Path
+             * @default null
+             */
+            path: string | null;
+            /**
+             * Snapshot No
+             * @default null
+             */
+            snapshot_no: number | null;
+        };
+        /** PromptRenderInput */
+        PromptRenderInput: {
+            /** Body */
+            body: string;
+            /** Path */
+            path: string;
+            /** Variables */
+            variables?: {
+                [key: string]: string;
+            };
+        };
+        /** PromptRendered */
+        PromptRendered: {
+            /** Rendered */
+            rendered: string;
+            /** Variables */
+            variables: string[];
+        };
+        /** PromptSnapshot */
+        PromptSnapshot: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Generation */
+            generation: number;
+            /** Items */
+            items: components["schemas"]["PromptSnapshotFile"][];
+            /** Manifest Digest */
+            manifest_digest: string;
+            /** Next Cursor */
+            next_cursor: string | null;
+            /** Note */
+            note: string;
+            /** Policy Digest */
+            policy_digest: string;
+            /** Policy Version */
+            policy_version: string;
+            /** Snapshot No */
+            snapshot_no: number;
+        };
+        /** PromptSnapshotEntry */
+        PromptSnapshotEntry: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Generation */
+            generation: number;
+            /** Manifest Digest */
+            manifest_digest: string;
+            /** Note */
+            note: string;
+            /** Policy Digest */
+            policy_digest: string;
+            /** Policy Version */
+            policy_version: string;
+            /** Snapshot No */
+            snapshot_no: number;
+        };
+        /** PromptSnapshotFile */
+        PromptSnapshotFile: {
+            /** Path */
+            path: string;
+            /** Version */
+            version: number;
+        };
+        /** PromptSnapshots */
+        PromptSnapshots: {
+            /** Items */
+            items: components["schemas"]["PromptSnapshotEntry"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** PromptStarterCards */
+        PromptStarterCards: {
+            /** Analysis */
+            analysis?: components["schemas"]["StarterGroup"][];
+            /**
+             * Default Choice
+             * @default null
+             */
+            default_choice: string | null;
+            /** Generation */
+            generation: number;
+            /** Models */
+            models?: components["schemas"]["StarterDecision"][];
+            /**
+             * Tool Description
+             * @default null
+             */
+            tool_description: string | null;
+            /** Workflow Parts */
+            workflow_parts?: string[];
+        };
+        /** PromptTree */
+        PromptTree: {
+            /** Generation */
+            generation: number | null;
+            /** Items */
+            items: components["schemas"]["PromptFileEntry"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+            /** Snapshot No */
+            snapshot_no: number;
+        };
         /** ProviderCreate */
         ProviderCreate: {
             /** Alias */
@@ -2890,7 +3848,7 @@ export interface components {
              * Mediatype
              * @enum {string}
              */
-            mediaType: "image/png" | "text/csv";
+            mediaType: "image/png" | "text/csv" | "application/json" | "text/markdown";
             /** Name */
             name: string;
             /** Sha256 */
@@ -3236,6 +4194,17 @@ export interface components {
              * @enum {string}
              */
             status: "canceled";
+        };
+        /** RunCitations */
+        RunCitations: {
+            /** Anchors */
+            anchors: components["schemas"]["CitationAnchor"][];
+            /** Messageid */
+            messageId: string;
+            /** Revision */
+            revision: number;
+            /** Textdigest */
+            textDigest: string;
         };
         /** RunCleanupUnconfirmed */
         RunCleanupUnconfirmed: {
@@ -3960,6 +4929,98 @@ export interface components {
             /** Summary */
             summary: string;
         };
+        /** SemanticAnalysis */
+        SemanticAnalysis: {
+            /**
+             * Draft
+             * @default
+             */
+            draft: string;
+            /** Sources */
+            sources: components["schemas"]["Material"][];
+            /**
+             * Task
+             * @default discover
+             * @enum {string}
+             */
+            task: "discover" | "review";
+        };
+        /** SemanticOpenResult */
+        SemanticOpenResult: {
+            /** Columns */
+            columns: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Draft Id
+             * @default null
+             */
+            draft_id: string | null;
+            /** Proposal */
+            proposal?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /**
+             * Result Ref
+             * Format: uuid
+             */
+            result_ref: string;
+            /** Reusable */
+            reusable: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "confirmed" | "dismissed" | "saved";
+        };
+        /** SemanticOption */
+        SemanticOption: {
+            /** Description */
+            description: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Unit */
+            unit: string;
+            /** Version */
+            version: number;
+            /** Versionid */
+            versionId: string;
+        };
+        /** SemanticResultDecision */
+        SemanticResultDecision: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "confirm" | "dismiss" | "save";
+            /**
+             * Fields
+             * @default null
+             */
+            fields: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /**
+             * Result Ref
+             * Format: uuid
+             */
+            result_ref: string;
+        };
+        /** SemanticResults */
+        SemanticResults: {
+            /** Items */
+            items: components["schemas"]["SemanticOpenResult"][];
+        };
+        /** SemanticSuggestions */
+        SemanticSuggestions: {
+            /** Candidates */
+            candidates: components["schemas"]["Candidate"][];
+        };
         /** SessionAccepted */
         SessionAccepted: {
             /** Runid */
@@ -4194,6 +5255,56 @@ export interface components {
              * @enum {string}
              */
             type: "start";
+        };
+        /** StarterDecision */
+        StarterDecision: {
+            /** Description */
+            description: string;
+            /** Id */
+            id: string;
+            /** Questions */
+            questions: components["schemas"]["StarterQuestion"][];
+            /** State */
+            state: string;
+            /**
+             * Stateformat
+             * @enum {string}
+             */
+            stateFormat: "text" | "json";
+            /** Title */
+            title: string;
+        };
+        /** StarterGroup */
+        StarterGroup: {
+            /** Suggestions */
+            suggestions: components["schemas"]["StarterSuggestion"][];
+            /** Title */
+            title: string;
+        };
+        /** StarterModel */
+        StarterModel: Record<string, never>;
+        /** StarterQuestion */
+        StarterQuestion: {
+            /** Criteria */
+            criteria: string;
+            /** Id */
+            id: string;
+            /** Instructions */
+            instructions: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "choice" | "noul" | "score";
+        };
+        /** StarterSuggestion */
+        StarterSuggestion: {
+            /** @default null */
+            constraints: components["schemas"]["RunConstraints"] | null;
+            /** Label */
+            label: string;
+            /** Question */
+            question: string;
         };
         /** StepFinished */
         StepFinished: {
@@ -4553,6 +5664,15 @@ export interface components {
             /** Toolindex */
             toolIndex: number;
         };
+        /** TrialResult */
+        TrialResult: {
+            /** Matched */
+            matched: boolean;
+            /** Rows */
+            rows: number;
+            /** Target Hash */
+            target_hash: string;
+        };
         /** TriggerAdmission */
         TriggerAdmission: {
             /**
@@ -4642,7 +5762,7 @@ export interface components {
              * Purpose
              * @enum {string}
              */
-            purpose: "manage" | "test" | "chat" | "module_read" | "data_manage" | "mcp_manage" | "runtime_diagnostics" | "runtime_usage" | "schedule_manage" | "schedule_owner" | "schedule_run";
+            purpose: "manage" | "test" | "chat" | "module_read" | "data_manage" | "mcp_manage" | "runtime_diagnostics" | "runtime_usage" | "schedule_manage" | "schedule_owner" | "schedule_run" | "promptops_manage";
             /** Scope */
             scope: components["schemas"]["PlatformScope"] | components["schemas"]["TenantScope"];
         };
@@ -4687,10 +5807,22 @@ export interface components {
             /** Expiresat */
             expiresAt: string | null;
             /**
+             * Fields
+             * @default null
+             */
+            fields: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /**
              * Kind
              * @enum {string}
              */
             kind: "approval" | "external_event" | "reconciliation";
+            /**
+             * Options
+             * @default null
+             */
+            options: components["schemas"]["SemanticOption"][] | null;
             /** Proposaldigest */
             proposalDigest: string;
             /** Proposalid */
@@ -4701,6 +5833,18 @@ export interface components {
             reasonCode: string | null;
             /** Runversion */
             runVersion: number;
+            /**
+             * Scopes
+             * @default null
+             */
+            scopes: {
+                [key: string]: components["schemas"]["JsonValue"];
+            }[] | null;
+            /**
+             * Semantickind
+             * @default null
+             */
+            semanticKind: ("choice" | "result" | "draft" | "submit") | null;
             /**
              * Status
              * @enum {string}
@@ -5070,7 +6214,90 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": unknown;
                     "image/png": unknown;
+                    "text/csv": unknown;
+                    "text/markdown": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    read_dashboard_v1_analysis_runs__run_id__artifacts__artifact_id__dashboard_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path: {
+                run_id: string;
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardDocumentV1"];
                 };
             };
             /** @description Unauthorized */
@@ -5208,6 +6435,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    citations_v1_analysis_runs__run_id__citations_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunCitations"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    citation_detail_v1_analysis_runs__run_id__citations__citation_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path: {
+                run_id: string;
+                citation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CitationDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -5474,6 +6770,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    semantic_results_v1_analysis_runs__run_id__semantic_results_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SemanticResults"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    semantic_result_decision_v1_analysis_runs__run_id__semantic_results_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SemanticResultDecision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SemanticOpenResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -8482,6 +9850,1331 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    read_starters_v1_prompt_starters_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptStarterCards"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    commands_v1_promptops_commands_get: {
+        parameters: {
+            query: {
+                request_id: string;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptReceipt"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    draft_from_version_v1_promptops_draft_from_version_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromptDraftFromVersion"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptReceipt"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    file_v1_promptops_file_get: {
+        parameters: {
+            query: {
+                path: string;
+                version?: number | null;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptFileDetail"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    draft_v1_promptops_file_draft_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromptDraft"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptReceipt"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    history_v1_promptops_history_get: {
+        parameters: {
+            query: {
+                path: string;
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptHistory"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    import_package_v1_promptops_import_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromptImport"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptReceipt"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    import_preview_v1_promptops_import_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromptImportPreviewInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptImportPreview"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    release_preview_v1_promptops_release_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromptReleaseTarget"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptReleasePreview"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    releases_v1_promptops_releases_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromptRelease"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptReceipt"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    render_preview_v1_promptops_render_preview_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromptRenderInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptRendered"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    snapshot_v1_promptops_snapshot_get: {
+        parameters: {
+            query: {
+                snapshot_no: number;
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptSnapshot"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    snapshots_v1_promptops_snapshots_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptSnapshots"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    tree_v1_promptops_tree_get: {
+        parameters: {
+            query?: {
+                prefix?: string;
+                q?: string;
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptTree"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    suggestions_v1_semantic_suggestions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SemanticAnalysis"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SemanticSuggestions"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    binding_trial_v1_semantic_trial_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BindingTrial"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrialResult"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

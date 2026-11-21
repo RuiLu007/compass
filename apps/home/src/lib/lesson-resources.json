@@ -144,5 +144,56 @@
         "href": "/resources/lessons/20/technical-design.html"
       }
     ]
+  },
+  {
+    "number": 21,
+    "title": "Context Runtime 与 PromptOps",
+    "description": "运行上下文契约与提示词管理。",
+    "artifacts": [
+      {
+        "id": "technical-design",
+        "title": "Context Runtime · 技术方案",
+        "source": "mai-specs/975-lesson-21-context-runtime-promptops/design/TECH_DESIGN.html",
+        "href": "/resources/lessons/21/technical-design.html"
+      },
+      {
+        "id": "promptops-design",
+        "title": "PromptOps · 技术方案",
+        "source": "mai-specs/975-lesson-21-context-runtime-promptops/design/PROMPTOPS_TECH_DESIGN.html",
+        "href": "/resources/lessons/21/promptops-design.html"
+      }
+    ]
+  },
+  {
+    "number": 22,
+    "title": "企业经营语义层",
+    "description": "指标口径治理与零售语义资产设计。",
+    "artifacts": [
+      {
+        "id": "technical-design",
+        "title": "企业经营语义层 · 技术方案",
+        "source": "mai-specs/974-lesson-22-enterprise-semantic-governance/design/TECH_DESIGN.html",
+        "href": "/resources/lessons/22/technical-design.html"
+      },
+      {
+        "id": "retail-semantic-assets",
+        "title": "零售语义资产 · 设计详解",
+        "source": "mai-specs/974-lesson-22-enterprise-semantic-governance/design/RETAIL_SEMANTIC_ASSETS.html",
+        "href": "/resources/lessons/22/retail-semantic-assets.html"
+      }
+    ]
+  },
+  {
+    "number": 23,
+    "title": "Agentic Search",
+    "description": "面向经营分析的自主检索流程。",
+    "artifacts": [
+      {
+        "id": "technical-design",
+        "title": "Agentic Search · 技术方案",
+        "source": "mai-specs/973-lesson-23-agentic-search/design/TECH_DESIGN.html",
+        "href": "/resources/lessons/23/technical-design.html"
+      }
+    ]
   }
 ]

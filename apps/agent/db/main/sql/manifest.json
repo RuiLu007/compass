@@ -1,9 +1,9 @@
 {
   "owner": "agent",
   "databaseKey": "main",
-  "feature": "984",
+  "feature": "975",
   "from": "empty",
-  "to": "0015",
+  "to": "0017",
   "engine": "PostgreSQL 17",
   "tool": "Alembic 1.20.0",
   "sourceRevision": "working-tree; fixed by source SHA-256",
@@ -67,10 +67,18 @@
     {
       "source": "../../migrations/versions/0015_scheduled_tasks.py",
       "sha256": "74ebf595a7953b7cb74b6d10017e0cbeea7b757761f79d73fdf1952e76fe0d0b"
+    },
+    {
+      "source": "../../migrations/versions/0016_prompt_context.py",
+      "sha256": "86df24acad54e6d13460aff8bcf98cb62be4b63d3e88e36051e385851378d63b"
+    },
+    {
+      "source": "../../migrations/versions/0017_semantic_runtime.py",
+      "sha256": "104e4ef6551e47f67eb1f87bd7fd8aa5fab5b9c2efa5a248360b550912083812"
     }
   ],
   "files": {
-    "bootstrap.sql": "d65b8483a488cb568247a74d2289a07ead487e3b8288e79ee121db51a91b30e1",
+    "bootstrap.sql": "301690c7b7113842051fd339606f034e9a0fb1f12b469706e71071188d79b986",
     "upgrades/0001__0002.sql": "471825e3af6e2d456e1973e62bd3545a5fc47fa4a84a6e599df86173753772ea",
     "upgrades/0001__0003.sql": "80d749841c34b3567a5d085892068d7de4e273c92c2248ebb7f99e173ae77565",
     "upgrades/0002__0003.sql": "fbc8e5d4c434c7d06c4326a697b62789ea959ee8d1df59bb26cbd2b1daaf96e1",
@@ -167,10 +175,26 @@
     "upgrades/0011__0015.sql": "51fda50b26bb6e65995e18f0f8d5abbd4ca3ab89f961401435891b5bce344e5b",
     "upgrades/0012__0015.sql": "2e909f342d6425f6be93e0d08771c386ea4e496fb6534192edc2d799e0a2ec3d",
     "upgrades/0013__0015.sql": "b762ef7e3cfc836d40a8803072703866dce7b69810b986fd8dcbc5582978b7cb",
-    "upgrades/0014__0015.sql": "3f5e30251a0d61ae989a5039db7dfa0b0b2c5ebebe9a77bedf88bbe83587b67d"
+    "upgrades/0014__0015.sql": "3f5e30251a0d61ae989a5039db7dfa0b0b2c5ebebe9a77bedf88bbe83587b67d",
+    "upgrades/0001__0017.sql": "9227ccdbbc582f2a832edb4ff0f3bbec53bb00247b244c61fb5221a5d0e574b0",
+    "upgrades/0002__0017.sql": "8c2060202c488047478daab8ef3690b58af24a66280a1a72715688c3bf1098a5",
+    "upgrades/0003__0017.sql": "577f8a0d062b0aefa592dd807b3e6b5ee4ab54c57a32822ba9feb6d5078de8c5",
+    "upgrades/0004__0017.sql": "8a6f5671e0136cf9a844b65fd4a8c8b949600f9867d5cd76fdd7e608b7d0499c",
+    "upgrades/0005__0017.sql": "847e7e1cb21fbe4382d575748c37f6cdfae4eaf781fb5c436371774d285d63d2",
+    "upgrades/0006__0017.sql": "8ba2dbcfa200f9baded0112df9d074f594c1932c63ab56b2804da984575f1f37",
+    "upgrades/0007__0017.sql": "30a6f3d8e92a52f34cc1161b0c6673529f3bc16cbdff18212c4cdae50f78450b",
+    "upgrades/0008__0017.sql": "1fa98ca282746ee81187e22b16b0749685dfcec5e9e3592f6e9faa13b54ab2c6",
+    "upgrades/0009__0017.sql": "0e31f2ba3945468b02bcaccc91da3ec3c8f1d3ece22cf3fb4405590f22903295",
+    "upgrades/0010__0017.sql": "4c9500f2e531ef259f6c36a95a84b3533e3342fe589d12358c3a173044b8f546",
+    "upgrades/0011__0017.sql": "b928f4062a418cbdb3dc89d10233385510a4e2477e3696b111d041704f8cda1b",
+    "upgrades/0012__0017.sql": "3a53fb1e069382e5ff09ff963e35e18eb7cbe07a8363211bc437052709880152",
+    "upgrades/0013__0017.sql": "3c7b1ad5e01b660ee6e32c287440f1ff53e2dd938208200291d1d51681402933",
+    "upgrades/0014__0017.sql": "f8042c3436e2d23383e940d1f07e74f6b85be2ea68ce1d39657bbc4ccbda8cec",
+    "upgrades/0015__0017.sql": "25a80d9008067cf0c5db3fb2ccb8d8daca912f41333ec0db5f1bcf816a7978e2",
+    "upgrades/0016__0017.sql": "339ad5727dc2689b499790483ab2127b66953dea9f3ba984d05c7add213ac117"
   },
   "generate": "pnpm db:sql -F agent",
-  "apply": "pnpm db:apply-sql -F agent -- --from empty --to 0015",
+  "apply": "pnpm db:apply-sql -F agent -- --from empty --to 0017",
   "transaction": "single transaction with advisory lock",
   "prerequisites": "Provisioned Agent-owned database; expected start and source checksums",
   "dataImpact": "Adds model configuration and metadata; renames decision adapter; adds execution summaries and multi-engine workspace connections; adds durable runs, checkpoints, HITL and immutable artifacts; adds asynchronous session titles, session deletion metadata and workflow tool contracts and soft deletion; adds plans, triggers and replica execution and publication leases; backfills historical model attempt metadata without raw content; preserves existing Retail configuration, credentials and revisions",

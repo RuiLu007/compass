@@ -8,6 +8,7 @@ export type ErrorCode =
   | "not_found"
   | "conflict"
   | "validation_failed"
+  | "payload_too_large"
   | "rate_limited"
   | "unavailable";
 
@@ -32,6 +33,7 @@ export function reject(code: ErrorCode, message?: string): never {
     not_found: "未找到可访问的记录。",
     conflict: "内容已变化，请重新读取并核对后提交。",
     validation_failed: "请检查输入内容。",
+    payload_too_large: "请求内容过大。",
     rate_limited: "尝试过于频繁，请稍后重试。",
     unavailable: "服务暂时不可用，请稍后重试。",
   };

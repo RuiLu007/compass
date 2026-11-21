@@ -15,6 +15,7 @@ from uuid import UUID, uuid4
 
 import psycopg
 import pytest
+from compass_agent.context_runtime.source_access import project_sources
 from compass_agent.data_connections.transport import AuthorizedDatabaseBinding
 from compass_agent.execution_context import current_execution
 from compass_agent.models.attempts import AttemptRecorder
@@ -67,6 +68,7 @@ from pydantic import SecretStr
 from sqlalchemy import MetaData, Table, create_engine, event, func, select, text
 from sqlalchemy.orm import Session
 
+from .context_fixture import capability_grants, install_prompts
 from .test_agent_run import CHAT, model_result
 from .test_database_tools_integration import db
 from .test_database_tools_integration import targets as targets
@@ -90,7 +92,7 @@ def owner(tenant=TENANT_A):
 def engine(targets):
     url, _ = targets("scheduler")
     db.migrate()
-    value = create_engine(url)
+    value = install_prompts(create_engine(url))
     try:
         yield value
     finally:
@@ -115,6 +117,7 @@ async def runtime_service(engine, **settings):
     async def allowed(context, **kwargs):
         return None
 
+    runtime.access.capabilities = capability_grants
     runtime.access.check = allowed
     await runtime.start()
     assert runtime.store.ready, "The isolated PostgreSQL/Redis runtime must be ready"
@@ -219,12 +222,18 @@ def test_acceptance_is_atomic_idempotent_and_rolls_back_every_record(engine, mon
                 "agent_run": 1,
                 "agent_run_job": 1,
                 "agent_tenant_schedule": 1,
-                "agent_message": 2,
+                "agent_message": 3,
                 "agent_outbox": 1,
                 "agent_command": 1,
                 "agent_attempt": 0,
                 "agent_action": 0,
             }
+            with Session(engine) as tx:
+                assert sorted(tx.scalars(select(AgentMessage.channel))) == [
+                    "context",
+                    "conversation",
+                    "conversation",
+                ]
             identifier = UUID(results[0]["runId"])
             run = runtime.store.read_run(identifier)
             assert run.status == "created" and run.execution_epoch is None
@@ -242,7 +251,9 @@ def test_acceptance_is_atomic_idempotent_and_rolls_back_every_record(engine, mon
                     runtime.store.submit(command(), owner(TENANT_B))
             assert counts(engine) == before
             await runtime.publisher.flush(identifier)
-            snapshot = runtime.reader.messages(run.session_id, owner())
+            snapshot = project_sources(
+                runtime.store, runtime.reader.messages(run.session_id, owner()), owner()
+            )
             assert any(
                 packet.event.type == "view.upsert" and packet.event.payload.kind == "timeline"
                 for packet in snapshot.packets
@@ -277,7 +288,7 @@ def test_concurrent_admission_enforces_tenant_and_global_backlog(engine, limit):
             assert all(e.code == "runtime_backpressure" and e.status == 429 for e in rejected)
             result = counts(engine)
             assert result["agent_run"] == result["agent_run_job"] == capacity
-            assert result["agent_message"] == capacity * 2
+            assert result["agent_message"] == capacity * 3
             assert result["agent_outbox"] == result["agent_command"] == capacity
             assert runtime.tasks == {}
             first = next(
@@ -824,6 +835,55 @@ def test_reclaim_waits_for_cleanup_without_canceling_it_again(engine):
     asyncio.run(scenario())
 
 
+def test_cancel_after_model_commit_keeps_its_checkpoint_and_frees_the_slot(engine):
+    async def scenario():
+        async with runtime_service(engine) as runtime:
+            run_id = await submit(runtime)
+            grant = await claim(runtime, ConsumerSlot("worker-returned", uuid4()), run_id)
+            entered = asyncio.Event()
+            model_returned = asyncio.Event()
+
+            class DelayedPublisher:
+                def require_owner(self):
+                    runtime.publisher.require_owner()
+
+                async def flush(self, key):
+                    if model_returned.is_set():
+                        entered.set()
+                        await asyncio.Event().wait()
+                    else:
+                        await runtime.publisher.flush(key)
+
+            journal = ExecutionJournal(runtime.store, DelayedPublisher(), run_id, grant.epoch)
+
+            async def completed():
+                model_returned.set()
+                return {"status": "completed", "text": "settled"}
+
+            task = asyncio.create_task(
+                journal.call(
+                    "model", "root/model:returned", {}, completed, dict, yield_boundary=False
+                )
+            )
+            await asyncio.wait_for(entered.wait(), 10)
+            assert journal.has_step("root/model:returned")
+            control(runtime.store, run_id, "cancel", control_command(runtime, run_id), owner())
+            task.cancel()
+            with pytest.raises(PhaseCanceled) as canceled:
+                await task
+            assert canceled.value.cleanup_confirmed
+            await runtime.recover_scheduled()
+            assert runtime.store.read_run(run_id).status == "canceled"
+            assert job(engine, run_id).status == "done"
+            with Session(engine) as tx:
+                attempt = tx.scalars(
+                    select(AgentAttempt).where(AgentAttempt.run_id == run_id)
+                ).one()
+                assert attempt.status == "completed"
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize("receipt_state", ["confirmed", "late", "prepared", "absent"])
 def test_cancel_reclaims_fenced_model_with_confirmed_cleanup(engine, receipt_state):
     async def scenario():
@@ -1231,7 +1291,9 @@ def test_workflow_tool_finishes_across_worker_boundaries(engine, monkeypatch):
             assert checkpoints
             assert len(models.children) == 6
             assert runner_lookups == 1
-            snapshot = runtime.reader.messages(run.session_id, owner())
+            snapshot = project_sources(
+                runtime.store, runtime.reader.messages(run.session_id, owner()), owner()
+            )
             assert any(
                 packet.event.type == "view.upsert" and packet.event.payload.kind == "workflow"
                 for packet in snapshot.packets
@@ -1265,7 +1327,10 @@ def test_workflow_rejection_and_child_query_replay_across_worker_boundaries(engi
             return model_result(text="17")
 
     async def scenario():
-        async with runtime_service(engine, compass_runtime_lease_seconds=60) as runtime:
+        # Replay a pre-registry workflow whose SQL binding is supplied by the legacy fixture.
+        async with runtime_service(
+            engine, compass_runtime_lease_seconds=60, compass_context_runtime_enabled=False
+        ) as runtime:
             run_id = await submit(runtime)
             worker = ConsumerSlot("worker-workflow-replay", uuid4())
             grant = await claim(runtime, worker, run_id)
@@ -1598,6 +1663,8 @@ def test_0009_upgrade_preserves_completed_runtime_records_and_runtime_permission
 
     async def legacy_run():
         async with legacy_service(source_engine) as runtime:
+            # 0009 predates managed context frames and encrypted source projections.
+            runtime.store.context_enabled = False
             assert runtime.store.scheduler is None
             executor = BoundaryRunner()
             executor.release.set()
@@ -1710,3 +1777,200 @@ def test_old_epoch_boundary_cannot_adopt_a_new_worker_grant(engine):
             assert runtime.store.read_run(run_id).status == "completed"
 
     asyncio.run(scenario())
+
+
+def test_due_triggers_keep_published_context_through_worker_takeover(engine, monkeypatch):
+    """Cross the publication boundary while a real scheduled Run has an accepted model step."""
+    from compass_agent.api import promptops
+    from compass_agent.context_runtime.model_step import call_model
+    from compass_agent.llm.contracts import AgentCallResponse
+    from compass_agent.main import app
+    from compass_agent.runtime.context import RunRoute
+    from compass_agent.scheduler.admission import TriggerAdmissionService
+    from compass_agent.scheduler.entities import AgentSchedule, AgentScheduleTrigger
+    from compass_agent.scheduler.lease import SchedulerLeaseStore
+    from compass_agent.scheduler.repository import ScheduleRepository
+    from compass_agent.scheduler.service import ScheduleService
+    from compass_agent.schemas import ChatMessage, GenerateInput, ModelTokenLimits, ScheduleCreate
+    from compass_agent.settings import get_settings
+    from fastapi.testclient import TestClient
+    from sqlalchemy.engine import make_url
+
+    from .test_promptops import headers, publish, save
+
+    admin_url = make_url(os.environ["AGENT_TEST_ADMIN_URL"]).set(
+        database=engine.url.database, drivername="postgresql+psycopg"
+    )
+    scan_engine = create_engine(
+        admin_url, connect_args={"options": "-c role=compass_agent_scheduler"}
+    )
+    monkeypatch.setattr(promptops, "get_engine", lambda: engine)
+    monkeypatch.setattr(get_settings(), "compass_agent_service_token", "promptops-test-credential")
+    editor = TestClient(app, base_url="http://testserver/v1/promptops/")
+    editor.headers.update(headers(uuid4()))
+    path = "tasks/business_qa/system.md"
+    marker = "本次定时发布验收的版本标记"
+
+    async def scenario():
+        async with runtime_service(
+            engine, compass_runtime_tenant_active=3, compass_runtime_max_active=3
+        ) as runtime:
+            context = owner()
+            plans = ScheduleService(runtime.store, runtime.access, None, runtime.settings)
+            scans = ScheduleRepository(
+                scan_engine, runtime.settings.compass_runtime_state_key.get_secret_value()
+            )
+            leases = SchedulerLeaseStore(scan_engine)
+            lease = leases.acquire(uuid4())
+            assert lease is not None
+            admission = TriggerAdmissionService(runtime)
+            audience = command()
+            route = RunRoute(
+                uuid4(),
+                1,
+                "fixture",
+                "SC-01",
+                "",
+                False,
+                False,
+                deliverable="business_qa",
+                limits=ModelTokenLimits(max_input_tokens=65536),
+            )
+            draft = GenerateInput(messages=[ChatMessage(role="user", content=audience.question)])
+            invocations = []
+
+            async def invoke(step, value, *args, **kwargs):
+                invocations.append(step.id)
+                return AgentCallResponse.model_validate(model_result(text="定时问答").model_dump())
+
+            target = SimpleNamespace(
+                models=SimpleNamespace(root_observation=None), _invoke_model_live=invoke
+            )
+
+            async def deliver(name):
+                with Session(engine) as tx, tx.begin():
+                    value = ScheduleCreate(
+                        requestId=uuid4(),
+                        name=name,
+                        question=audience.question,
+                        cron="0 0 * * *",
+                        timezone="UTC",
+                        selection=audience.selection,
+                    )
+                    receipt = plans.apply(tx, context, None, value)
+                    plan = tx.get(AgentSchedule, receipt.id)
+                    assert plan is not None
+                    plan.next_fire_at = scheduler(runtime).clock(tx) - timedelta(days=1)
+                leases.renew(lease)
+                assert scans.scan(lease) == 1 and scans.scan(lease) == 0
+                [delivery] = scans.claim(lease, reconciliation=False)
+                receipt = await admission.submit(delivery.trigger_id, delivery.token)
+                assert receipt.run_id is not None
+                assert await admission.submit(delivery.trigger_id, delivery.token) == receipt
+                assert await admission.reconcile(delivery.trigger_id, delivery.token) == receipt
+                await runtime.publisher.flush(receipt.run_id)
+                return receipt.run_id
+
+            async def model_step(grant, step_id, *, replay=False):
+                journal = ExecutionJournal(
+                    runtime.store, runtime.publisher, grant.run_id, grant.epoch
+                )
+                journal.context_phase = "generate"
+                journal.capabilities = lambda: capability_grants(context)
+                step = SimpleNamespace(id=step_id)
+                invocation = call_model(
+                    journal, target, step, draft, route, context, None, None, None
+                )
+                if replay:
+                    result = await invocation
+                    assert result.text == "定时问答"
+                else:
+                    with pytest.raises(BoundaryYield):
+                        await invocation
+                journal.validate_checkpoint()
+
+            def assert_checkpoint(run_id, generation, version, steps):
+                with Session(engine) as tx:
+                    run = tx.get(AgentRun, run_id)
+                    assert (
+                        run is not None
+                        and run.config_snapshot["contextRuntime"]["generation"] == generation
+                    )
+                    checkpoint_row = tx.get(AgentCheckpoint, (run_id, run.checkpoint_no))
+                    assert (
+                        checkpoint_row is not None and len(checkpoint_row.completed_refs) == steps
+                    )
+                    for ref in checkpoint_row.completed_refs:
+                        step = tx.get(AgentStep, UUID(ref["stepId"]))
+                        assert step is not None and step.accepted_attempt_id == UUID(
+                            ref["attemptId"]
+                        )
+                        assert step.prepared_context is not None
+                        frame = runtime.store.private.open(
+                            run_id, "model-frame", step.prepared_context
+                        )
+                        assert frame["receipt"]["generation"] == generation
+                        assert [
+                            (f["path"], f["version"])
+                            for f in frame["receipt"]["files"]
+                            if f["path"] == path
+                        ] == [(path, version)]
+                        system = frame["input"]["request"]["messages"][0]["content"]
+                        assert (marker in system) == (version == 2)
+
+            original = editor.get("tree").json()
+            old_id = await deliver("发布前")
+            worker = ConsumerSlot("before-release", uuid4())
+            old = await claim(runtime, worker, old_id)
+            first_step = uuid4()
+            await model_step(old, first_step)
+            assert_checkpoint(old_id, original["generation"], 1, 1)
+            save(editor, path, marker)
+            updated = publish(editor, "file", path=path)
+            during_id = await deliver("单文件发布后")
+            restored = publish(editor, "restore", snapshot_no=original["snapshot_no"])
+            after_id = await deliver("恢复后")
+            for rid, expected_generation, expected_version in (
+                (during_id, updated["generation"], 2),
+                (after_id, restored["generation"], 1),
+            ):
+                grant = await claim(runtime, ConsumerSlot("next-run", uuid4()), rid)
+                await model_step(grant, uuid4())
+                assert_checkpoint(rid, expected_generation, expected_version, 1)
+                runtime.store.finish(rid, grant.epoch, "completed", answer="定时问答")
+                await runtime.publisher.flush(rid)
+            expire_lease(engine, old_id)
+            await runtime.recover_scheduled()
+            await runtime.publisher.flush(old_id)
+            assert job(engine, old_id).status == "ready", runtime.store.read_run(old_id).reason_code
+            resumed = await claim(runtime, ConsumerSlot("replacement", uuid4()), old_id)
+            assert resumed.epoch != old.epoch and resumed.checkpoint_no == 1
+            await model_step(resumed, first_step, replay=True)
+            await model_step(resumed, uuid4())
+            assert_checkpoint(old_id, original["generation"], 1, 2)
+            runtime.store.finish(old_id, resumed.epoch, "completed", answer="定时问答")
+            await runtime.publisher.flush(old_id)
+            leases.renew(lease)
+            assert scans.sync(lease) == 3
+            with Session(engine) as tx:
+                rows = tx.scalars(select(AgentScheduleTrigger)).all()
+                expected_runs = {old_id, during_id, after_id}
+                assert {t.run_id for t in rows} == expected_runs
+                assert set(tx.scalars(select(AgentRun.id))) == expected_runs
+                assert set(tx.scalars(select(AgentRunJob.run_id))) == expected_runs
+                assert len(rows) == 3 and all(
+                    t.finished_at and t.delivery_attempts == 1 for t in rows
+                )
+                assert (
+                    tx.scalar(select(func.count()).select_from(AgentAttempt))
+                    == len(set(invocations))
+                    == len(invocations)
+                    == 4
+                )
+            leases.release(lease)
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        editor.close()
+        scan_engine.dispose()

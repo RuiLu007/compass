@@ -37,6 +37,7 @@ from compass_agent.tools.contracts import (
     SandboxBinding,
     ToolExecutionContext,
     ToolExecutionEvent,
+    ToolRejected,
     json_bytes,
 )
 from compass_agent.tools.loader import RunTools
@@ -81,6 +82,19 @@ class RunToolBindings:
         self.loader, self.discovered, self.supported = loader, discovered, supported
         self.runtime: RunTools | None = None
         self.budget = controlled.budget if controlled else AutonomyBudget((), AutonomyLimits())
+        from compass_agent.context_runtime.search_control import SearchDispatch, SearchProgress
+        from compass_agent.execution_context import current_execution
+
+        journal = current_execution.get()
+        pin = (getattr(journal, "context_binding", None) or {}).get("search")
+        self.search = SearchProgress(pin) if pin else None
+        self.search_dispatch = (
+            SearchDispatch(journal, pin, self.budget, self.restore_plan) if pin else None
+        )
+        if self.search and journal:
+            journal.search_progress = self.search
+            if controlled:
+                controlled.search_progress = self.search
         self.artifacts: list[RunArtifact] = []
         self.todo_plan = controlled.plan if controlled else ExecutionPlan[TodoDefinition]()
 
@@ -167,6 +181,15 @@ class RunToolBindings:
         assert self.runtime is not None
         return self.runtime.registry.definitions()
 
+    def restore_plan(self, prepared, context, receipt):
+        from compass_agent.models.errors import ModelError
+        from compass_agent.tools.builtin.todo_write.plan import TODO_ACTION
+
+        parent = next(step for step in self.state.steps if step.id == context.step_id)
+        self.todo_plan.apply(TODO_ACTION.validate_python(prepared.args), parent.index)
+        if {"status": "ok", **self.todo_plan.snapshot()} != receipt.payload:
+            raise ModelError("execution_replay_mismatch", 409)
+
     def _handler(self, name):
         if self.workflow_tools:
             if name == SUB_AGENT:
@@ -203,12 +226,61 @@ class RunToolBindings:
 
         return invoke
 
+    def publish_execution(self, value: ToolExecutionEvent):
+        assert self.runtime is not None
+        record = {
+            "runId": str(value.run_id),
+            "stepId": str(value.step_id),
+            "toolCallId": value.tool_call_id,
+            "toolName": value.tool_name,
+            "catalogId": self.runtime.registry.catalog_id,
+            "environment": value.environment,
+            "effect": value.effect,
+            "approval": value.approval,
+            "status": value.status,
+            "cleanup": value.cleanup,
+            "elapsedMs": value.elapsed_ms,
+            "reasonCode": value.reason_code,
+            "environmentId": value.environment_id,
+        }
+        if value.operation is not None:
+            record["operation"] = value.operation
+        logging.getLogger(__name__).info(
+            "tool.execution.finished", extra={"tool_execution": record}
+        )
+        self.emit(
+            StreamExtension(
+                type="stream.extension",
+                payload=RunExtensionPayload(
+                    name="compass.tool.execution", version=1, required=False, data=record
+                ),
+            )
+        )
+
     async def dispatch(self, step, definitions):
         self.freeze()
         assert self.runtime is not None
         runtime = self.runtime
         trace = self.state.trace
         visible = frozenset(tool.function.name for tool in definitions)
+        from compass_agent.execution_context import current_execution
+
+        journal = current_execution.get()
+        if getattr(journal, "context_binding", None):
+            from compass_agent.context_runtime.source_access import require_run_sources
+
+            grants = await journal.capabilities() if journal.capabilities else {}
+            if not grants.get("analysis") or not grants.get("model"):
+                raise ToolRejected("permission_denied")
+            if not grants.get("plugins"):
+                visible = frozenset(n for n in visible if not n.startswith(("mcp_", "workflow_")))
+            await asyncio.to_thread(
+                require_run_sources,
+                journal.store,
+                journal.run_id,
+                self.trusted,
+                epoch=journal.epoch,
+            )
         if self.controlled and step.index >= self.controlled.budget.limits.steps:
             raise AutonomyStopped("max_steps")
 
@@ -216,11 +288,11 @@ class RunToolBindings:
             if not trace or not (identifier := trace.calls.get((str(step.id), prepared.call_id))):
                 return
             binding = prepared.tool.binding
-            fields: dict[str, object] = {
-                "detail": trace.tool_detail(
+            fields: dict[str, object] = {}
+            if not self.search:
+                fields["detail"] = trace.tool_detail(
                     identifier, input_json=json_bytes(prepared.args).decode()
                 )
-            }
             if isinstance(binding, McpBinding):
                 fields["origin"] = ExecutionOrigin(
                     kind="mcp", toolName=binding.remote_name, serverId=str(binding.connection_id)
@@ -237,32 +309,16 @@ class RunToolBindings:
                 trace.begin_call(str(step.id), prepared.call_id, **fields)
 
         def event(value: ToolExecutionEvent):
-            record = {
-                "runId": str(value.run_id),
-                "stepId": str(value.step_id),
-                "toolCallId": value.tool_call_id,
-                "toolName": value.tool_name,
-                "catalogId": runtime.registry.catalog_id,
-                "environment": value.environment,
-                "effect": value.effect,
-                "approval": value.approval,
-                "status": value.status,
-                "cleanup": value.cleanup,
-                "elapsedMs": value.elapsed_ms,
-                "reasonCode": value.reason_code,
-                "environmentId": value.environment_id,
-            }
-            logging.getLogger(__name__).info(
-                "tool.execution.finished", extra={"tool_execution": record}
-            )
-            self.emit(
-                StreamExtension(
-                    type="stream.extension",
-                    payload=RunExtensionPayload(
-                        name="compass.tool.execution", version=1, required=False, data=record
-                    ),
-                )
-            )
+            if value.status in {"ok", "empty"} and (
+                value.environment == "mcp" or value.tool_name in self.assets_by_tool
+            ):
+                from compass_agent.context_runtime.source_access import record_source
+                from compass_agent.execution_context import current_execution
+
+                journal = current_execution.get()
+                if getattr(journal, "context_binding", None):
+                    record_source(journal, {"kind": "transient"})
+            self.publish_execution(value)
             if trace and (identifier := trace.calls.get((str(step.id), value.tool_call_id))):
                 entry = runtime.registry.entries.get(value.tool_name)
                 binding = entry.binding if entry else None
@@ -284,7 +340,8 @@ class RunToolBindings:
                     output = json_bytes(
                         {"status": value.status, "code": value.reason_code}
                     ).decode()
-                fields["detail"] = trace.tool_detail(identifier, output_json=output)
+                if not self.search:
+                    fields["detail"] = trace.tool_detail(identifier, output_json=output)
                 status = {
                     "ok": "completed",
                     "empty": "empty",
@@ -309,6 +366,8 @@ class RunToolBindings:
             sources=runtime.sources,
             emit=event,
             on_start=started,
+            search_dispatch=self.search_dispatch.invoke if self.search_dispatch else None,
+            observation=getattr(self.executor.models, "root_observation", None),
         )
         policy = runtime.policy
         # Tools that declare ordered state changes run serially.
@@ -321,6 +380,16 @@ class RunToolBindings:
         results = await self.control.perform(
             lambda: dispatch_batch(runtime.dispatcher, step.tool_calls, context, policy)
         )
+        if self.search and all(
+            r.cleanup != "unconfirmed" and r.status not in {"waiting", "canceled", "timeout"}
+            for r in results
+        ):
+            from compass_agent.context_runtime.search_verification import verify_batch
+
+            observations = await asyncio.to_thread(
+                verify_batch, journal, step, results, self.trusted
+            )
+            self.search.record(step, results, observations, self.budget)
         waiting = None
         for result in results:
             payload = (

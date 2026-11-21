@@ -1,4 +1,5 @@
 import "server-only";
+import { fetchAgent, boundedJson } from "./agent-transport";
 import { traceHeaders } from "../contracts/trace-context";
 
 const errorTraces = new WeakMap<Error, Record<string, string>>();
@@ -28,28 +29,6 @@ type Options = {
   timeoutMs?: number;
   onStreamFailure?: (error: unknown) => Promise<void>;
 };
-
-async function boundedJson(response: Response): Promise<unknown> {
-  if (!response.body) throw protocolError();
-  const reader = response.body.getReader();
-  let size = 0;
-  const chunks: Uint8Array[] = [];
-  try {
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > LIMIT) throw protocolError();
-      chunks.push(value);
-    }
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  } catch {
-    await reader.cancel().catch(() => {});
-    throw protocolError();
-  } finally {
-    reader.releaseLock();
-  }
-}
 
 function domainError(value: unknown): ApplicationError {
   if (!isModelContract("ModelErrorResponse", value)) return protocolError();
@@ -91,24 +70,9 @@ export async function requestModelAgent(options: Options): Promise<Response> {
   };
   let correlation: Record<string, string> = {};
   try {
-    const upstream = await fetch(
-      new URL(options.path, process.env.AGENT_API_URL ?? "http://127.0.0.1:8102"),
-      {
-        method: options.method ?? "GET",
-        cache: "no-store",
-        redirect: "error",
-        signal: abort.signal,
-        headers: {
-          Authorization: `Bearer ${serviceToken}`,
-          "X-Compass-Context": Buffer.from(JSON.stringify(options.context)).toString("base64url"),
-          Accept: options.stream ? "text/event-stream" : "application/json",
-          ...(options.input === undefined ? {} : { "Content-Type": "application/json" }),
-        },
-        ...(options.input === undefined ? {} : { body: JSON.stringify(options.input) }),
-      },
-    );
+    const upstream = await fetchAgent(options, serviceToken, abort.signal);
     correlation = traceHeaders(upstream.headers);
-    if (!upstream.ok) throw domainError(await boundedJson(upstream));
+    if (!upstream.ok) throw domainError(await boundedJson(upstream, protocolError));
     if (options.stream) {
       if (
         !upstream.headers.get("content-type")?.startsWith("text/event-stream") ||
@@ -124,7 +88,7 @@ export async function requestModelAgent(options: Options): Promise<Response> {
       await upstream.body?.cancel();
       throw protocolError();
     }
-    const value = await boundedJson(upstream);
+    const value = await boundedJson(upstream, protocolError);
     if (!isModelContract(options.schema, value)) throw protocolError();
     if (options.callId && (value as { call_id?: string }).call_id !== options.callId)
       throw protocolError();
