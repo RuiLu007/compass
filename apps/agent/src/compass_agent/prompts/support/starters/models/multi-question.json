@@ -1,10 +1,10 @@
 {
   "values": {
     "department-criteria": "{\n  \"billing\": \"支付、扣款、退款和账单问题\",\n  \"technical\": \"产品故障和接口集成问题\",\n  \"sales\": \"报价、购买咨询和套餐升级\"\n}\n",
-    "department-instructions": "应该由哪个团队负责解决此工单？\n",
-    "escalate-instructions": "是否需要人工升级？涉及已确认的资金异常或多次联系仍未解决时，应升级。\n",
+    "department-instructions": "**判定要求**\n\n- 应该由哪个团队负责解决此工单？\n",
+    "escalate-instructions": "**判定要求**\n\n- 是否需要人工升级？\n- 涉及已确认的资金异常或多次联系仍未解决时，应升级。\n",
     "severity-criteria": "低：普通咨询，无业务影响\n中：使用受影响，有替代办法\n高：核心业务受阻或资金异常\n紧急：大范围故障或严重安全风险\n",
-    "severity-instructions": "根据业务和资金影响评估工单严重度。\n",
+    "severity-instructions": "**判定要求**\n\n- 根据业务和资金影响评估工单严重度。\n",
     "state": "{\n  \"ticket_id\": \"DEMO-1001\",\n  \"customer_message\": \"订单被扣款两次，联系两天仍未退款，希望主管介入。\",\n  \"payment\": {\n    \"successful_charges\": 2,\n    \"order_count\": 1\n  },\n  \"contacts\": 3,\n  \"elapsed_hours\": 48\n}\n"
   }
 }

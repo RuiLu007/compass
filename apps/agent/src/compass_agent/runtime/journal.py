@@ -101,7 +101,19 @@ class ExecutionJournal:
         self.context_questions = {}
         self.prompt_cache = {}
         self.capabilities: Callable[[], Awaitable[dict]] | None = None
+        from compass_agent.context_runtime.run_facts import facts_for
+        from compass_agent.schemas import TrustedContext
+
+        self.prompt_facts = None
         self.context_date = run.created_at.date()
+        if (environment := run.config_snapshot.get("promptEnvironment")) is not None:
+            self.prompt_facts = facts_for(
+                TrustedContext.model_validate(run.config_snapshot["context"]),
+                run.created_at,
+                environment,
+                self.search_snapshot,
+            )
+            self.context_date = self.prompt_facts.local_date
         if self.search_snapshot:
             from datetime import datetime
             from zoneinfo import ZoneInfo

@@ -6,7 +6,6 @@ import type { ScopeView } from "../../../contracts/semantic";
 import {
   digest,
   latest,
-  policyPartitionKind,
   published,
   releases,
   targetPartition,
@@ -133,6 +132,7 @@ export async function inspect(c: Context, v: Version, binding?: string) {
   );
   const live = await published(c);
   const released = !binding && live.some((m) => m.version_id === v.version_id);
+
   if (released && sub.authority.manage) actions.push("revise");
   const dependent = live.filter((m) => m.dependencies.includes(v.asset_id)).map((m) => m.name);
   const { rows: bindings } = await c.db.query(bindingQuery, [
@@ -209,7 +209,7 @@ export async function review(c: Context, id: string, action: string, raw: unknow
     ]);
   return { asset_id: v.asset_id, version_id: id, state };
 }
-export async function lockHead(c: Context, partition: string, expected: number) {
+export async function lockHead(c: Context, partition: string, expected?: number) {
   await c.db.query(
     "INSERT INTO web.semantic_release_head(partition_id) VALUES ($1) ON CONFLICT DO NOTHING",
     [partition],
@@ -219,7 +219,8 @@ export async function lockHead(c: Context, partition: string, expected: number) 
   } = await c.db.query("SELECT * FROM web.semantic_release_head WHERE partition_id=$1 FOR UPDATE", [
     partition,
   ]);
-  if (h.generation !== expected) reject("conflict", "发布状态已更新，请刷新并核对目标范围。");
+  if (expected !== undefined && h.generation !== expected)
+    reject("conflict", "发布状态已更新，请刷新并核对目标范围。");
   return h;
 }
 export async function advance(
@@ -243,6 +244,55 @@ export async function advance(
   );
   return { release_id: r.release_id as string, generation: gen };
 }
+// Update the definition in every active channel without promoting a different gray change.
+export async function changeDefinition(c: Context, v: Version, remove = false) {
+  const partition = await targetPartition(c, v.owner_scope_id, false, true);
+  const head = await lockHead(c, partition.id);
+  const dependencies: Record<string, string> = {};
+  if (!remove) {
+    const errors = (await findings(c, v)).filter((f) => f.severity === "error");
+    if (errors.length) reject("validation_failed", errors.map((f) => f.message).join("；"));
+    const { rows } = await c.db.query<{ to_asset_id: string }>(
+      "SELECT to_asset_id FROM web.semantic_relations WHERE from_version_id=$1 AND kind='depends_on'",
+      [v.version_id],
+    );
+    const visible = rows.length ? await published(c) : [];
+    for (const row of rows) {
+      const asset = visible.find((a) => a.asset_id === row.to_asset_id);
+      if (!asset) reject("validation_failed", "请先发布依赖的指标。");
+      dependencies[asset.asset_id] = asset.version_id;
+    }
+  }
+  async function updateChannel(
+    previous: string | null,
+    generation: number,
+    audience: string | null,
+  ) {
+    const {
+      rows: [base],
+    } = await c.db.query("SELECT manifest FROM web.semantic_release WHERE release_id=$1", [
+      previous,
+    ]);
+    const manifest: Manifest = { assets: base?.manifest.assets ?? {} };
+    if (remove) delete manifest.assets[v.asset_id];
+    else manifest.assets[v.asset_id] = { version: v.version_id, dependencies };
+    return advance(c, partition.id, generation, manifest, audience);
+  }
+  const stable = await updateChannel(head.stable_id, head.generation + 1, null);
+  if (head.gray_id) await updateChannel(head.gray_id, head.generation + 2, head.audience_id);
+  const state = remove ? "archived" : "published";
+  await c.db.query(
+    "UPDATE web.semantic_assets SET lifecycle=$2,open_draft_id=NULL WHERE asset_id=$1",
+    [v.asset_id, state],
+  );
+  return {
+    ...stable,
+    asset_id: v.asset_id,
+    version_id: v.version_id,
+    previous_release_id: head.stable_id,
+    state,
+  };
+}
 export async function release(c: Context, raw: unknown) {
   const f = releaseBody.parse(raw);
   if (!f.note.trim() || (f.mode === "gray") !== !!f.audience_id)
@@ -263,7 +313,7 @@ export async function release(c: Context, raw: unknown) {
   const {
     rows: [base],
   } = await c.db.query("SELECT manifest FROM web.semantic_release WHERE release_id=$1", [baseId]);
-  const manifest: Manifest = base?.manifest ?? { assets: {}, policies: {} };
+  const manifest: Manifest = { assets: base?.manifest.assets ?? {} };
   const visible = await published(c);
   if (
     sub.isLocal &&
@@ -282,12 +332,6 @@ export async function release(c: Context, raw: unknown) {
     dependencies: deps,
     ...(sub.b ? { binding: sub.b.binding_id, hash: sub.b.target_hash } : {}),
   };
-  // Policies can only point to assets included in an approved release. Runtime filters unseen targets.
-  const { rows: policies } = await c.db.query(
-    "SELECT p.scope_id,p.revision FROM web.semantic_policy p JOIN web.semantic_source s ON s.source_id=p.source_id WHERE p.scope_id=ANY($1::uuid[]) AND p.revision=1 AND s.source_kind='package'",
-    [c.scopes.filter((s) => policyPartitionKind(s.kind) === sub.partition.kind).map((s) => s.id)],
-  );
-  for (const p of policies) manifest.policies[p.scope_id] ??= p.revision;
   const receipt = await advance(
     c,
     sub.partition.id,
@@ -342,7 +386,13 @@ export async function restore(
   }
   const allowed = new Set((await releases(c)).map((r) => r.partition));
   if (!allowed.has(r.partition_id) && !scope(c, r.partition_id).release) reject("forbidden");
-  const restored = await advance(c, r.partition_id, h.generation + 1, r.manifest, r.audience_id);
+  const restored = await advance(
+    c,
+    r.partition_id,
+    h.generation + 1,
+    { assets: r.manifest.assets },
+    r.audience_id,
+  );
   return {
     ...restored,
     restored_from: releaseId,

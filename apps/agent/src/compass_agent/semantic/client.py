@@ -35,6 +35,16 @@ def enabled(settings, workspace_id):
     }
 
 
+def pin_manifest(settings, trusted, run_id, key):
+    try:
+        registry = request(settings, trusted, run_id, "manifest")
+        if not isinstance(registry.get("releases"), list) or not registry.get("manifest_hash"):
+            raise SourceUnavailable()
+    except ModelError as exc:
+        return {"registryIssue": {"status": "unavailable", "code": exc.code}}
+    return {key: {"manifest": registry["manifest_hash"], "pins": registry["releases"]}}
+
+
 def _wire(settings, trusted, run_id, op, args, pins, namespace):
     if not settings.compass_agent_service_token or trusted.scope.kind != "tenant":
         raise ModelError("forbidden", 403)

@@ -2,7 +2,7 @@
   "type": "function",
   "function": {
     "name": "todo_write",
-    "description": "登记、选择、完成或跳过任务事项，提交当前 baseVersion。",
+    "description": "**用途与调用规则**\n\n- 登记、选择、完成或跳过任务事项，提交当前 baseVersion。",
     "parameters": {
       "type": "object",
       "$defs": {

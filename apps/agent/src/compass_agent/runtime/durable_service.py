@@ -44,10 +44,10 @@ class CurrentAccess:
     def __init__(self, settings):
         self.url, self.token = settings.compass_web_authz_url, settings.compass_agent_service_token
 
-    async def check(self, context, *, approval=False, purpose=None):
+    async def check(self, context, *, approval=False, purpose=None, run_environment=False):
         if purpose:
             context = context.model_copy(update={"purpose": purpose})
-        await self.authorize(context, approval=approval)
+        return await self.authorize(context, approval=approval, run_environment=run_environment)
 
     async def visibility(self, context):
         value = await self.authorize(context, visibility=True)
@@ -60,7 +60,15 @@ class CurrentAccess:
             raise ModelError("authorization_unavailable", 503)
         return grants
 
-    async def authorize(self, context, *, approval=False, visibility=False, capabilities=False):
+    async def authorize(
+        self,
+        context,
+        *,
+        approval=False,
+        visibility=False,
+        capabilities=False,
+        run_environment=False,
+    ):
         try:
             async with httpx.AsyncClient(timeout=3, trust_env=False) as client:
                 response = await client.post(
@@ -69,6 +77,7 @@ class CurrentAccess:
                     json={
                         "context": context.model_dump(mode="json"),
                         "approval": approval,
+                        **({"runEnvironment": True} if run_environment else {}),
                         **({"visibility": True} if visibility else {}),
                         **({"capabilityGrants": True} if capabilities else {}),
                     },
@@ -77,6 +86,14 @@ class CurrentAccess:
                     raise ModelError("forbidden", 403)
                 if response.status_code != 200 or response.json().get("allowed") is not True:
                     raise ModelError("authorization_unavailable", 503)
+                if run_environment:
+                    value = response.json().get("runEnvironment")
+                    if not isinstance(value, dict) or not all(
+                        isinstance(value.get(k), str) and 0 < len(value[k]) <= 160
+                        for k in ("tenantName", "workspaceName", "timezone")
+                    ):
+                        raise ModelError("authorization_unavailable", 503)
+                    return {k: value[k] for k in ("tenantName", "workspaceName", "timezone")}
                 if visibility:
                     value = response.json().get("visibility")
                     if (
@@ -274,6 +291,7 @@ class DurableRuntime:
             "semantic_choice",
             "semantic_result_choice",
             "semantic_draft",
+            "semantic_revision",
             "semantic_submit",
         }:
             await self.access.check(context)

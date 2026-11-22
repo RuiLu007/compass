@@ -79,7 +79,7 @@ Compass 的开发源码维护在 `https://github.com/shanggqm/compass`。课程�
 - 禁止跨 app 导入源码；已有 Web → Agent 链路通过 HTTP 契约通信。单 app 的 UI、客户端和配置留在 app 内；UI 与 BFF 计为同一个消费者。
 - 新共享包须记录公开入口、维护人、兼容策略和测试命令；Python workspace 与 `package.json` 的内部依赖必须同步声明。
 - Web / BFF 直接负责账户、租户、成员、角色、权限及通用配置等工程 CRUD，拥有自有数据库；Agent 负责 Runtime 推理、工具执行、分析状态及运行相关配置；Memory 拥有记忆数据。Web 持久化与迁移入口见 [Web 运行说明](../apps/web/README.md)，Agent/Memory 业务页继续为空页。
-- 经营语义资产、组织范围、执行绑定的双人审批及发布清单由 Web 管理。Agent 经内部 HTTP 读取本次 Run 的固定清单，使用当前用户获准的只读连接执行。恢复、交付和回看都要复核当前权限。变更入口见[指标管理与查询](../apps/web/README.md#第-22-课指标口径)。
+- Web 管理经营实体、术语和指标定义。维护者保存定义后在所选使用范围内立即生效。Web 同时管理组织授权、执行绑定的双人审批及发布清单。Agent 经内部 HTTP 读取本次 Run 的固定清单，使用当前用户获准的只读连接执行。恢复、交付和回看都要复核当前权限。变更入口见[指标管理与查询](../apps/web/README.md#第-22-课指标口径)。
 - 全项目数据库规则见 [数据所有权与 SQL 迁移规范](../docs/database-migrations.md)：按 `<app>/<database-key>` 独立管理迁移源、版本、凭据、完整 SQL 和增量 SQL；跨 app 禁止直连对方业务表、跨库外键和跨库事务假设。定时触发由 Scheduler 通过内部 HTTP 提交给 Agent。
 - 当前 Agent HTTP 契约唯一源为 `apps/agent/src/compass_agent/schemas.py` 与 FastAPI 路由；修改源后运行 `pnpm contracts`，禁止手改 `contracts/*.json` 和 `apps/web/src/generated/`。
 - 数据库变更必须在 SDD 设计登记 owner、起止版本、源路径、SQL 交付、发布与恢复顺序；实现同步模型与派生 SQL，评审核对不可变历史，验收验证空库、旧库、权限、生成一致性和恢复。此规则适用于 simple / standard；需求目录链接迁移真源，不另建可编辑副本。首次接入数据库时同时交付工具入口，禁止虚构命令或声称尚未实现的 CI 门禁已生效。
@@ -88,7 +88,8 @@ Compass 的开发源码维护在 `https://github.com/shanggqm/compass`。课程�
 
 ### 工程约定
 
-- 新增、修改或评审 Compass 的页面、组件、代码展示及交互状态前，必须阅读并遵循 [Compass UI 样式规范](ui-style-guide.md)。优先复用应用的设计变量与通用组件。新增通用样式或组件变体时同步更新规范与演示，交付前检查桌面、窄屏、键盘和相关状态。
+- 新增、修改或评审 Compass 的页面、组件、代码展示及交互状态前，必须阅读并遵循 [Compass UI 样式规范](ui-style-guide.md)。优先复用应用的设计变量与通用组件。新增通用样式或组件变体时同步更新规范与演示，有原型时逐项对照数据结构、主操作入口与交互状态。交付前用真实页面检查桌面与窄屏的列对齐、控件高度和溢出，并用键盘走通新增、编辑、取消和错误恢复。
+- 新增或修订本项目任何技术方案 HTML 时，统一采用第 22 课的离线阅读样式与交互，主方案和专题、代码附录均适用。先核对 Markdown、实现与已有验收结果，再生成同名 HTML；涉及普通 Chat 的案例填入实际运行结论。课程版确认后同步 Home 对应课次。生成入口、视觉基准、浏览器检查与 Home 单课发布步骤见 [技术方案 HTML 阅读规范](ui-style-guide.md#技术方案-html-阅读版)。
 - Agent 工具遵循 [工具目录与注册规范](../apps/agent/src/compass_agent/tools/README.md)：通用工具放入 `tools/builtin/<tool_name>/`，业务工具放入 `tools/business/<tool_name>/`，目录名与工具名完全一致；定义、参数、执行适配及专属校验集中在该目录。每个静态工具导出 `SPEC: ToolSpec` 并登记到 `tools/catalog.py`，模型声明、预检与执行注册共用启用条件；Runtime 通过清单装配工具。MCP 按用户配置动态注册到统一 Registry；当前历史工作流资产保留管理与导出。通用工具独立于业务数据源，业务工具通过显式 Agent 配置接入；共享连接、沙箱后端和工作流引擎按职责维护。新增或修改工具须更新相关说明，并运行 Agent 检查、目录与注册一致性测试及相关行为用例。
 - 后续所有 Showcase 的新增、修改与迁移，必须遵循 [临时演示规范](../examples/showcases/README.md)，涵盖课程案例、演示及临时验证案例中的工具、Skill 和工作流。案例默认由普通问题、数据样本、数据字典与验收点组成，使用授权数据库查询、代码执行等通用能力完成。确需增加案例专属能力时，全部放入 `examples/showcases/<case_id>/`，登记目标、负责人、依赖、必要性与退出条件，由独立入口显式装配，并遵循统一工具目录与注册规范。生产 Runtime、Harness、默认清单、公开 Run 请求和组合根禁止导入演示实现，演示代码不得进入生产 wheel 或镜像；禁止增加演示 case ID、固定日期或问题关键词的执行分支、预定工具序列和业务答案。演示结束或被通用能力覆盖时退出；转正需按正式 Feature 评审通用接口并通过跨场景验收。修改相关边界须运行默认清单、导入与 wheel 隔离测试；停用已有执行能力前检查活动 Run，保留用户连接、历史、产物与资产。
 - 新应用使用 `apps/<短名>` 与 `@compass/<短名>`，短名与目录名相同且 workspace 内唯一；提供独立 `dev`、`lint`、`typecheck`、`test` 入口，禁止靠手工别名表或专用根脚本完成注册。

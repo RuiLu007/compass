@@ -1,5 +1,18 @@
 "use client";
 import { useRef, useState } from "react";
+import {
+  Check,
+  Code2,
+  Download,
+  Eye,
+  GitCompareArrows,
+  History,
+  LoaderCircle,
+  Play,
+  Rocket,
+  Save,
+  SlidersHorizontal,
+} from "lucide-react";
 import { ApiError } from "@/client/request-scope";
 import { AnalysisMarkdown } from "@/components/analysis-markdown";
 import { UiCodeBlock } from "@/components/ui/code-block";
@@ -97,7 +110,7 @@ export function FileEditor({
     session.download(blob, file.path.split("/").at(-1) ?? "prompt.md");
   }
   return (
-    <section className="prompt-editor ui-panel" aria-label="文件编辑器">
+    <section className="prompt-editor" aria-label="文件编辑器">
       <div className="prompt-head">
         <div>
           <h2>{file.path.split("/").at(-1)}</h2>
@@ -112,29 +125,52 @@ export function FileEditor({
         使用位置　{file.usages.join("、") || "尚未接入"} ·{" "}
         {file.origin === "online" ? "线上新增" : "随包文件"}
       </p>
-      <div className="prompt-actions">
+      <div className="prompt-actions prompt-file-actions" aria-label="文件操作">
         <button className="secondary" onClick={onHistory}>
-          版本历史
+          <History size={16} aria-hidden="true" /> 版本历史
         </button>
         <button className="secondary" onClick={download}>
-          {structured ? "下载 JSON" : "下载 Markdown"}
+          <Download size={16} aria-hidden="true" /> {structured ? "下载 JSON" : "下载 Markdown"}
+        </button>
+        <button
+          onClick={() => void save()}
+          disabled={
+            saving ||
+            !!validation ||
+            requiresReview ||
+            (!dirty && !(base.has_draft && base.draft_base_epoch !== base.active_epoch))
+          }
+        >
+          {saving ? (
+            <LoaderCircle size={16} className="ui-spinner" aria-hidden="true" />
+          ) : (
+            <Save size={16} aria-hidden="true" />
+          )}
+          {saving ? "正在处理…" : "保存草稿"}
+        </button>
+        <button
+          className="secondary"
+          disabled={saving || dirty || !!validation || requiresReview || !file.has_draft}
+          onClick={onPublish}
+        >
+          <Rocket size={16} aria-hidden="true" /> 发布此文件
         </button>
       </div>
       <div className="prompt-tabs" aria-label="正文视图">
         {(
           [
-            ["source", "源码编辑"],
-            ["markdown", structured ? "JSON 预览" : "Markdown 预览"],
-            ...(!structured ? [["sample", "模板试填"] as const] : []),
+            ["source", "源码编辑", Code2],
+            ["markdown", structured ? "JSON 预览" : "Markdown 预览", Eye],
+            ...(!structured ? [["sample", "模板试填", SlidersHorizontal] as const] : []),
           ] as const
-        ).map(([id, label]) => (
+        ).map(([id, label, Icon]) => (
           <button
             key={id}
             className="secondary"
             aria-pressed={id === view}
             onClick={() => setView(id)}
           >
-            {label}
+            <Icon size={16} aria-hidden="true" /> {label}
           </button>
         ))}
       </div>
@@ -164,9 +200,13 @@ export function FileEditor({
           />
         </label>
       ) : view === "markdown" && structured ? (
-        <UiCodeBlock code={body} language="json" title="JSON 资产" />
+        <div className="prompt-json-preview">
+          <UiCodeBlock code={body} language="json" title="JSON 资产" />
+        </div>
       ) : view === "markdown" ? (
-        <AnalysisMarkdown source={body} embedded />
+        <div className="prompt-preview" tabIndex={0} role="region" aria-label="Markdown 预览内容">
+          <AnalysisMarkdown source={body} embedded />
+        </div>
       ) : (
         <div className="prompt-grid">
           {base.variables.map((v) => (
@@ -183,9 +223,13 @@ export function FileEditor({
           ))}
           {!base.variables.length && <p className="muted">本文件没有登记模板变量。</p>}
           <button className="secondary" disabled={saving} onClick={() => void render()}>
-            运行模板预览
+            <Play size={16} aria-hidden="true" /> 运行模板预览
           </button>
-          {rendered !== null && <AnalysisMarkdown source={rendered} embedded />}
+          {rendered !== null && (
+            <div className="prompt-preview" tabIndex={0} role="region" aria-label="模板预览内容">
+              <AnalysisMarkdown source={rendered} embedded />
+            </div>
+          )}
         </div>
       )}
       {(message || validation) && (
@@ -195,7 +239,7 @@ export function FileEditor({
       )}
       {requiresReview && !conflict && (
         <button className="secondary" onClick={() => void compare()}>
-          核对最新草稿和生效版本
+          <GitCompareArrows size={16} aria-hidden="true" /> 核对最新草稿和生效版本
         </button>
       )}
       {conflict && (
@@ -219,30 +263,10 @@ export function FileEditor({
               setMessage("已核对最新基线，可继续编辑并保存。");
             }}
           >
-            保留我的输入，使用此基线
+            <Check size={16} aria-hidden="true" /> 保留我的输入，使用此基线
           </button>
         </div>
       )}
-      <div className="prompt-actions">
-        <button
-          onClick={() => void save()}
-          disabled={
-            saving ||
-            !!validation ||
-            requiresReview ||
-            (!dirty && !(base.has_draft && base.draft_base_epoch !== base.active_epoch))
-          }
-        >
-          保存草稿
-        </button>
-        <button
-          className="secondary"
-          disabled={saving || dirty || !!validation || requiresReview || !file.has_draft}
-          onClick={onPublish}
-        >
-          发布此文件
-        </button>
-      </div>
     </section>
   );
 }

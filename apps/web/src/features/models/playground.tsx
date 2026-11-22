@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Play, Square } from "lucide-react";
 import { useDocumentSession } from "@/components/shell/session-boundary";
+import { UiPageHeading } from "@/components/ui/page-heading";
 import { useModelCall } from "./use-model-call";
 import { ModelOutputPanel } from "./output";
 import type { DecisionInput, GenerateInput, Provider } from "./types";
@@ -218,23 +219,12 @@ export function ModelPlayground({
   };
   return (
     <section className="model-playground">
-      <div className="model-page-head">
-        <div>
-          <button className="model-back secondary compact" onClick={close}>
-            <ArrowLeft size={15} />
-            返回模型列表
-          </button>
-          <h2>
-            {provider.alias}
-            <span className="status status-muted">
-              {provider.kind === "decision" ? "决策模型" : "LLM"}
-            </span>
-          </h2>
-          <p className="muted">
-            {provider.api_model} · 配置版本 {provider.version} · 每次运行均产生一次真实模型调用。
-          </p>
-        </div>
-      </div>
+      <UiPageHeading title={provider.alias}>
+        <button className="secondary" onClick={close}>
+          <ArrowLeft size={15} />
+          返回模型列表
+        </button>
+      </UiPageHeading>
       <div className="model-mobile-tabs">
         <button
           className={mobilePane === "input" ? "" : "secondary"}
@@ -259,6 +249,10 @@ export function ModelPlayground({
           }}
         >
           <h3>能力测试</h3>
+          <p className="model-help muted">
+            {provider.kind === "decision" ? "决策模型" : "LLM"} · {provider.api_model} · 配置版本{" "}
+            {provider.version} · 每次运行均产生一次真实模型调用。
+          </p>
           {starters.failed && (
             <p role="status">
               预填示例暂时无法读取，可手动输入。{" "}

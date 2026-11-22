@@ -26,7 +26,7 @@ function readable({ access, pin, current, collection }: Corpus, d: Document, dat
     [d.audienceWorkspaceId, policy.audienceWorkspaceId].every(
       (group) => group === null || access.workspacePermissions.has(group),
     ) &&
-    Date.parse(d.publishedAt) <= k &&
+    (d.workspaceReference || Date.parse(d.publishedAt) <= k) &&
     (!d.requiresApproval || (d.approvedAt !== null && Date.parse(d.approvedAt) <= k)) &&
     d.validFrom <= date &&
     (d.validTo === null || d.validTo > date)
@@ -81,11 +81,16 @@ function field(value: string) {
   for (const t of tokens) counts.set(t, (counts.get(t) ?? 0) + 1);
   return { length: tokens.length, counts };
 }
-export function searchDocuments(c: Corpus, args: SearchArgs) {
+export function visibleDocuments(c: Corpus, args: SearchArgs) {
   const date = args.businessDate ?? businessDay(c.pin);
-  const visible = c.collection.documents.filter(
+  return c.collection.documents.filter(
     (d) => readable(c, d, date) && (!args.kind || args.kind === d.kind),
   );
+}
+
+export function searchDocuments(c: Corpus, args: SearchArgs, semantic: string[] = []) {
+  const date = args.businessDate ?? businessDay(c.pin);
+  const visible = visibleDocuments(c, args);
   const query = [args.query, args.entity ?? ""].join(" ").normalize("NFKC").toLowerCase();
   const expanded = Object.entries(c.collection.aliases)
     .filter(([alias]) => query.includes(alias))
@@ -120,8 +125,8 @@ export function searchDocuments(c: Corpus, args: SearchArgs) {
       }),
     );
   }
-  const ranked = rows
-    .map((row, i) => ({ ...row, score: scores[i] }))
+  const candidates = rows.map((row, i) => ({ ...row, score: scores[i] }));
+  let ranked = candidates
     .filter((r) => r.score > 0)
     .sort(
       (a, b) =>
@@ -130,6 +135,24 @@ export function searchDocuments(c: Corpus, args: SearchArgs) {
         a.d.version.localeCompare(b.d.version) ||
         a.s.sectionId.localeCompare(b.s.sectionId),
     );
+  if (semantic.length) {
+    const key = (r: (typeof candidates)[number]) =>
+      JSON.stringify([r.d.docId, r.d.version, r.s.sectionId, r.s.sectionHash]);
+    const fused = new Map<string, number>();
+    for (const list of [ranked.slice(0, 10).map(key), semantic]) {
+      list.forEach((k, i) => fused.set(k, (fused.get(k) ?? 0) + 1 / (61 + i)));
+    }
+    ranked = candidates
+      .filter((r) => fused.has(key(r)))
+      .sort(
+        (a, b) =>
+          Number(query.includes(b.d.docId.toLowerCase())) -
+            Number(query.includes(a.d.docId.toLowerCase())) ||
+          fused.get(key(b))! - fused.get(key(a))! ||
+          b.score - a.score ||
+          key(a).localeCompare(key(b)),
+      );
+  }
   // When two effective editions disagree on the same clause, keep the counterpart
   // beside the hit so that lower-ranked sections cannot crowd it out of the preview.
   const selected = new Set<(typeof ranked)[number]>();

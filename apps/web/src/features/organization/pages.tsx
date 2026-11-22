@@ -21,6 +21,7 @@ import {
   Status,
 } from "@/components/ui/entity";
 import { Modal } from "@/components/ui/dialog";
+import { UiPageHeading } from "@/components/ui/page-heading";
 import { PermissionsEditor } from "./permissions-editor";
 
 export function OrganizationPages({ payload }: { payload: PagePayload }) {
@@ -198,13 +199,9 @@ function TenantPage({ payload }: { payload: PagePayload }) {
   const [id] = useState(() => crypto.randomUUID());
   return (
     <section className="panel">
-      <div className="section-heading">
-        <div>
-          <h2>租户管理</h2>
-          <p className="muted">管理租户生命周期与首位管理员。</p>
-        </div>
+      <UiPageHeading title="租户管理">
         <button onClick={() => setEdit("new")}>创建租户</button>
-      </div>
+      </UiPageHeading>
       <ListFilter {...payload.query} />
       <div className="table-wrap">
         <table>
@@ -287,17 +284,14 @@ function TenantSettings({ value, editable }: { value: TenantDto; editable: boole
     [open, setOpen] = useState(false);
   return (
     <section className="panel">
-      <div className="section-heading">
-        <div>
-          <h2>{value.name}</h2>
-          <p className="muted">租户时区 · {value.timezone}</p>
-        </div>
+      <UiPageHeading title={value.name}>
         {editable && (
           <button className="secondary" onClick={() => setOpen(true)}>
             编辑租户设置
           </button>
         )}
-      </div>
+      </UiPageHeading>
+      <p className="muted">租户时区 · {value.timezone}</p>
       {open && (
         <EditDialog
           title="租户设置"
@@ -327,10 +321,9 @@ function WorkspaceTable({ list, payload }: { list: ListPage<WorkspaceDto>; paylo
     [id] = useState(() => crypto.randomUUID());
   return (
     <section className="panel">
-      <div className="section-heading">
-        <h2>工作空间</h2>
+      <UiPageHeading title="工作空间">
         {canWrite && <button onClick={() => setEdit("new")}>创建空间</button>}
-      </div>
+      </UiPageHeading>
       <ListFilter {...payload.query} />
       <div className="table-wrap">
         <table>
@@ -429,13 +422,9 @@ function MemberTable({ payload }: { payload: PagePayload }) {
     [id] = useState(() => crypto.randomUUID());
   return (
     <section className="panel">
-      <div className="section-heading">
-        <div>
-          <h2>直接成员</h2>
-          <p className="muted">按精确登录名添加已有账号，配置租户资格与空间权限。</p>
-        </div>
+      <UiPageHeading title="直接成员">
         {canWrite && <button onClick={() => setEdit("new")}>添加成员</button>}
-      </div>
+      </UiPageHeading>
       <ListFilter {...payload.query} placeholder="搜索成员姓名或登录名" />
       <div className="table-wrap">
         <table>

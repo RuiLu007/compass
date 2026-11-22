@@ -110,9 +110,6 @@ def _shared_dimensions(facts):
         if fact.authorized_source_tenant is not None:
             values["tenant"] = fact.authorized_source_tenant
         for name, value in values.items():
-            # Both warehouse and selling locations refer to an approved location key.
-            if name.endswith("_site"):
-                name = "site"
             if name in dimensions and dimensions[name] != value:
                 raise ValueError("各项资格的查询对象不一致")
             dimensions[name] = value
@@ -222,7 +219,7 @@ def policy_eligibility(
                 ):
                     raise ValueError("该观察窗须与所引制度及起算原始事件的期间一致")
                 for name, value in related[0].receipt_scope[0]:
-                    field = ("site" if name.endswith("_site") else name) + "_id"
+                    field = name + "_id"
                     if field in anchor.event["filters"] and anchor.event["filters"][field] != str(
                         value
                     ):

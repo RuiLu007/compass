@@ -74,7 +74,6 @@ export function AppShell({
     setSavingPin(false);
     setPinError("");
   }
-  const [conversationOrder, setConversationOrder] = useState("time");
   const sidebarRef = useRef<HTMLElement>(null);
   const mobileTriggerRef = useRef<HTMLButtonElement>(null);
   const isPromptOps = page.id === "platform-promptops";
@@ -280,7 +279,7 @@ export function AppShell({
               <small>{session.user.loginName}</small>
             </div>
             {navigation
-              .filter((p) => p.section === "personal" || p.section === "platform")
+              .filter((p) => p.section === "personal" || p.scopeKind === "platform")
               .map((p) => (
                 <DropdownMenu.Item key={p.id} asChild>
                   <AppLink href={p.href}>{p.title}</AppLink>
@@ -380,32 +379,16 @@ export function AppShell({
                 onClick={() => {
                   const target = entries.find((entry) => entry.id === "analysis-new")?.href;
                   if (!target) return;
-                  if (page.id === "analysis-new") {
-                    api.navigate(target);
-                  } else api.navigate(target);
+                  api.navigate(target);
                 }}
               >
                 <NavigationIcon name="plus" />
                 新建分析
               </button>
-              <div className="conversation-order" role="group" aria-label="会话分组方式">
-                <button
-                  aria-pressed={conversationOrder === "time"}
-                  onClick={() => setConversationOrder("time")}
-                >
-                  按时间
-                </button>
-                <button
-                  aria-pressed={conversationOrder === "topic"}
-                  onClick={() => setConversationOrder("topic")}
-                >
-                  按主题
-                </button>
-              </div>
               <ConversationList
                 key={JSON.stringify(payload.session.scope)}
                 payload={payload}
-                order={conversationOrder === "topic" ? "topic" : "time"}
+                active={!busy}
               />
             </>
           )}
@@ -502,7 +485,10 @@ export function AppShell({
           <div className="topbar-right">
             {!isPromptOps && (
               <AppLink className="context-switch" href="/workspaces">
-                {session.workspace?.name ?? session.tenant?.name ?? "选择工作空间"}
+                <span className="context-switch-name">
+                  {session.workspace?.name ?? session.tenant?.name ?? "选择工作空间"}
+                </span>
+                {session.workspace?.status === "archived" && <span>已归档</span>}
                 <ChevronDown size={14} />
               </AppLink>
             )}
@@ -518,34 +504,12 @@ export function AppShell({
           </div>
         </header>
         <main
-          className={`main ${page.section === "analysis" ? "analysis-main" : ""}`}
+          className={`main ${page.section === "analysis" ? "analysis-main" : ""} ${isPromptOps ? "prompt-main" : ""}`}
           id="main-content"
           tabIndex={-1}
           aria-busy={busy}
         >
-          {!isPromptOps && (
-            <div
-              className={page.section === "analysis" ? "sr-only" : "page-heading"}
-              hidden={page.id === "guide"}
-            >
-              <div>
-                <p className="eyebrow">
-                  {isAdmin ? "工作台管理" : (session.workspace?.name ?? "COMPASS")}
-                </p>
-                <h1>{isAdmin ? page.sectionTitle : page.title}</h1>
-                <p className="muted">
-                  {isAdmin
-                    ? "管理当前访问范围内的工作空间、配置与协作。"
-                    : page.id === "plugins-workflows"
-                      ? "查看和管理从分析对话保存的工作流。"
-                      : "从经营数据出发，看清每一步。"}
-                </p>
-              </div>
-              {session.workspace?.status === "archived" && (
-                <span className="status status-muted">空间已归档</span>
-              )}
-            </div>
-          )}
+          {!isPromptOps && page.id !== "guide" && <h1 className="sr-only">{page.title}</h1>}
           {isAdmin && navigation.filter((entry) => entry.section === page.section).length > 1 && (
             <nav className="route-tabs" aria-label="管理页签">
               {navigation

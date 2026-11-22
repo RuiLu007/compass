@@ -217,7 +217,7 @@ async def generate_title(job: TitleJob, models: ModelService) -> str | None:
 
 async def process_titles(
     store: RuntimeStore,
-    check_access: Callable[[TrustedContext], Awaitable[None]],
+    check_access: Callable[[TrustedContext], Awaitable[object]],
     model_factory: Callable[[], ModelService],
     ready: Callable[[], bool],
 ) -> None:

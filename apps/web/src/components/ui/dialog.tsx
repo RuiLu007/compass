@@ -11,6 +11,9 @@ export function Modal({
   wide = false,
   initialFocus,
   returnFocus,
+  placement = "center",
+  footer,
+  busy = false,
 }: {
   title: string;
   description?: string;
@@ -20,6 +23,9 @@ export function Modal({
   wide?: boolean;
   initialFocus?: RefObject<HTMLElement | null>;
   returnFocus?: () => HTMLElement | null;
+  placement?: "center" | "right";
+  footer?: ReactNode;
+  busy?: boolean;
 }) {
   const [opener] = useState(() =>
     typeof document === "undefined" ? null : (document.activeElement as HTMLElement | null),
@@ -28,7 +34,7 @@ export function Modal({
     <Dialog.Root
       open={open}
       onOpenChange={(value) => {
-        if (!value) onClose();
+        if (!value && !busy) onClose();
       }}
     >
       <Dialog.Portal>
@@ -46,6 +52,7 @@ export function Modal({
             if (target?.isConnected && !target.closest("[inert]")) target.focus();
           }}
           className={`dialog ${wide ? "dialog-wide" : ""}`}
+          data-placement={placement}
           data-sensitive-portal
           aria-describedby={description ? undefined : undefined}
         >
@@ -54,11 +61,12 @@ export function Modal({
               <Dialog.Title>{title}</Dialog.Title>
               {description && <Dialog.Description>{description}</Dialog.Description>}
             </div>
-            <Dialog.Close className="icon-button" aria-label="关闭">
+            <Dialog.Close className="icon-button" aria-label="关闭" disabled={busy}>
               <X size={18} />
             </Dialog.Close>
           </div>
           <div className="dialog-body">{children}</div>
+          {footer && <div className="dialog-footer">{footer}</div>}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

@@ -90,6 +90,17 @@ function executionExample(status: ExecutionNode["status"]): ExecutionNode[] {
       executor: { kind: "sandbox", runtime: "Python", environmentId: "guide-example" },
       summary: "协议示例：Sandbox 执行环境由第 18 课接入。",
     }),
+    node(11, "tool", "查询数据库", 8, {
+      ...state,
+      origin: { kind: "builtin", toolName: "database_query" },
+      detail: {
+        input: JSON.stringify({ op: "query", sql: "SELECT COUNT(*) AS orders FROM sales" }),
+        output:
+          status === "completed"
+            ? JSON.stringify({ status: "ok", columns: ["orders"], rows: [[128]], truncated: false })
+            : undefined,
+      },
+    }),
   ];
 }
 

@@ -12,7 +12,9 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 
 from compass_agent.context_runtime.delivery import Delivery
+from compass_agent.context_runtime.profiles import search_pack
 from compass_agent.context_runtime.search_claims import (
+    CORE_OPERATIONS,
     Checked,
     DraftRevision,
     Proposal,
@@ -41,12 +43,18 @@ from compass_agent.schemas import RUN_STREAM_LIMITS, AnalysisFileNone, RunComple
 from compass_agent.semantic.entities import SemanticMetricOffer
 
 
-def search_draft_schema(revising=False):
+def search_draft_schema(revising=False, *, pack=None):
     if revising:
         from pydantic import TypeAdapter
 
-        return TypeAdapter(SearchDraft | DraftRevision).json_schema(by_alias=True)
-    return SearchDraft.model_json_schema(by_alias=True)
+        schema = TypeAdapter(SearchDraft | DraftRevision).json_schema(by_alias=True)
+    else:
+        schema = SearchDraft.model_json_schema(by_alias=True)
+    schema["$defs"]["Proposal"]["properties"]["op"]["enum"] = [
+        *CORE_OPERATIONS,
+        *(pack or {}).get("proofOperations", ()),
+    ]
+    return schema
 
 
 def _check_query_receipt(store, tx, run, actor, name, args, payload, pin, refs):
@@ -394,7 +402,60 @@ def verify_batch(journal, step, results, trusted):
         return choices
 
 
-def verify_draft(journal, step, text, trusted, deliverable, *, checkpoint=False):
+def comparison_delivery(journal, step, text, trusted, deliverable):
+    from compass_agent.context_runtime.comparison_brief import ComparisonBrief, render_brief
+
+    draft = ComparisonBrief.model_validate_json(text or "")
+    require_run_sources(journal.store, journal.run_id, trusted, epoch=journal.epoch)
+    keys = {
+        item.get("sourceKey", identifier): identifier
+        for identifier, item in journal.search_progress.evidence.items()
+    }
+    with journal.store.transaction() as tx:
+        _, run = journal.store.lock(tx, journal.run_id, trusted)
+        journal.store.require_epoch(run, journal.epoch)
+
+        def lookup(ref):
+            identifier = keys.get(ref, ref)
+            if identifier not in journal.search_progress.evidence:
+                raise ValueError(f"本轮没有签收来源 {ref}")
+            item = read_private(journal.store, tx, run.id, "search/evidence/" + identifier)
+            if not item or item["kind"] in {"candidate", "hint"}:
+                raise ValueError("请引用实际读过的段落或查询回执")
+            return item
+
+        body, manifest = render_brief(run.id, draft, lookup)
+        refs = list(assistant_message(tx, run.id).source_refs or [])
+        save_private(
+            journal.store,
+            tx,
+            run,
+            "search/draft/" + str(step.id),
+            {"comparisonBrief": draft.model_dump(), "manifest": manifest},
+            refs,
+        )
+    result = RunCompleted(
+        status="completed", finalAnswer=body, file=AnalysisFileNone(status="none")
+    )
+    result._citations = manifest
+    if deliverable == "business_report":
+        result._delivery = Delivery(
+            f"{execution_path.get()}/model:{step.id}",
+            "report",
+            "report.md",
+            "text/markdown",
+            body.encode(),
+        )
+    return result
+
+
+def verify_draft(journal, step, text, trusted, deliverable, *, checkpoint=False, scene=None):
+    pack = search_pack((journal.context_binding or {}).get("search"), scene)
+    if (
+        not checkpoint
+        and (journal.context_binding.get("search") or {}).get("reportFormat") == "comparison_brief"
+    ):
+        return comparison_delivery(journal, step, text, trusted, deliverable)
     raw = (text or "").strip()
     # Some providers emit their accepted plan object immediately before the draft.
     # Consume only a complete, typed plan. All published data still comes from the draft.
@@ -495,6 +556,7 @@ def verify_draft(journal, step, text, trusted, deliverable, *, checkpoint=False)
             run.id,
             draft,
             records,
+            pack=pack,
             progress=None if checkpoint else progress,
             requested=[]
             if checkpoint
@@ -524,7 +586,7 @@ def verify_draft(journal, step, text, trusted, deliverable, *, checkpoint=False)
         # A terminal partial may reuse factual work from this checkpoint only while
         # its observation set is still current. Action proposals require final review.
         progress.verified_partial = None
-        if not any(p.op in {"whole_tier", "next_workday"} for p in draft.claim_proposals):
+        if not any(p.op in pack.get("actionOperations", ()) for p in draft.claim_proposals):
             progress.verified_partial = (
                 len(progress.evidence),
                 [

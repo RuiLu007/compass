@@ -1,18 +1,14 @@
 # 第 23 课技术方案阅读版
 
-[离线 HTML](../TECH_DESIGN.html) 由[技术方案 Markdown](../TECH_DESIGN.md)生成。七章沿用原文题目和顺序。工具、正式指标、阶段、停止条件与工程交付清单均从本章表格抽取。两段 Prompt 和反馈 JSON 直接取原文代码块。报价图读第六章两版报价，按余额、比例和整档约束计算，并与原文决策核对。每章的“对照原文”可在离线文件内打开完整章节。
+主方案、向量检索、代码实现、引用校验、零售数据五份 Markdown 维护设计正文，同目录同名 HTML 为离线阅读版。Chat 交互原型单独用于产品交互说明。
 
-[阅读布局](guide.md)只维护讲解顺序、图注与 Verify 时序图。[生成入口](build.mjs)复用项目的离线渲染器，装配本课交互组件。[配置](edition.json)指定原文和代码块，样式与交互分别在 [reader.css](reader.css) 和 [reader.js](reader.js)。经营数值、工具接口或决策有变化时先更新主方案；构建会检查章节、相关表格和案例计算是否仍匹配。
+[生成入口](build.mjs)从 [主方案](../TECH_DESIGN.md)提取表格、Prompt、反馈字段和两组经营案例。[阅读布局](guide.md)组织主方案的七章；原文对照、报价切换与案例表保留在生成结果。[附录生成器](supplements.mjs)直接读取其余四份 Markdown。五页都使用[课程共用阅读器](../../../../scripts/course-design/reader.mjs)。视觉样板、浏览器检查与发布步骤见[技术方案 HTML 阅读规范](../../../../docs/ui-style-guide.md#技术方案-html-阅读版)。
 
-从 Compass 根目录生成并检查阅读版。
+从 Compass 根目录构建五份离线 HTML，检查桌面、390 px、目录、搜索、图表和报价切换。确认后执行第二条命令发布该课。
 
 ```sh
 node mai-specs/973-lesson-23-agentic-search/design/document/build.mjs
-node .agents/skills/my-design-to-html/scripts/check-html.mjs mai-specs/973-lesson-23-agentic-search/design/TECH_DESIGN.html --report-dir work/lesson-23-reading-qa
+node apps/home/scripts/lesson-resources.mjs --lesson 23
 ```
 
-课程原件的词法召回实验仍可单独运行。
-
-```sh
-python3 mai-specs/973-lesson-23-agentic-search/design/lexical_probe.py
-```
+Home 的课程资源索引同时登记 HTML 和 Markdown。讲师回放、业务评分与普通 Chat 实跑详情见[本课验收记录](../../test/ACCEPTANCE.md)。

@@ -136,6 +136,9 @@ class PromptReader:
                 from compass_agent.promptops.structured import parse
 
                 document = parse(factory_text(path))
+                if path == "support/routing/scenes.json":
+                    for scene in document["scenes"].values():
+                        scene.pop("sop", None)
                 for member in legacy_tools[path]:
                     body = values[member].body
                     replace_member(

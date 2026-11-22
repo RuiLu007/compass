@@ -1,0 +1,563 @@
+{
+  "asset_period_status": [
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "assortment": [
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "brand": [
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "campaign": [
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "campaign_daily": [
+    {
+      "target": "geo_area",
+      "local": ["tenant_id", "region_id"],
+      "remote": ["tenant_id", "geo_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按计划地区关联地理区域。"
+    },
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "category": [
+    {
+      "target": "category",
+      "local": ["tenant_id", "parent_category_id"],
+      "remote": ["tenant_id", "category_id"],
+      "cardinality": "N:1",
+      "nullable": true,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按上级品类关联商品品类。"
+    },
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "channel": [
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "channel_listing": [
+    {
+      "target": "channel",
+      "local": ["tenant_id", "channel_id"],
+      "remote": ["tenant_id", "channel_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按渠道关联销售渠道。"
+    },
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "channel_product_daily": [
+    {
+      "target": "geo_area",
+      "local": ["tenant_id", "region_id"],
+      "remote": ["tenant_id", "geo_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按报表地区关联地理区域。"
+    },
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "cost_entry": [
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "customer": [
+    {
+      "target": "geo_area",
+      "local": ["tenant_id", "home_geo_id"],
+      "remote": ["tenant_id", "geo_id"],
+      "cardinality": "N:1",
+      "nullable": true,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按登记城市 允许未知关联地理区域。"
+    },
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "experiment_assignment": [
+    {
+      "target": "customer",
+      "local": ["tenant_id", "unit_id"],
+      "remote": ["tenant_id", "customer_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按随机化单位关联识别会员。"
+    },
+    {
+      "target": "geo_area",
+      "local": ["tenant_id", "region_id"],
+      "remote": ["tenant_id", "geo_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按入组时固定经营区域关联地理区域。"
+    }
+  ],
+  "geo_area": [
+    {
+      "target": "geo_area",
+      "local": ["tenant_id", "parent_geo_id"],
+      "remote": ["tenant_id", "geo_id"],
+      "cardinality": "N:1",
+      "nullable": true,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按上级节点关联地理区域。"
+    },
+    {
+      "target": "geo_area",
+      "local": ["tenant_id", "region_id"],
+      "remote": ["tenant_id", "geo_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按经营大区关联地理区域。"
+    },
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "inventory_snapshot": [
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "inventory_valuation_snapshot": [
+    {
+      "target": "site",
+      "local": ["tenant_id", "site_id", "region_id"],
+      "remote": ["tenant_id", "site_id", "region_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按地点、经营归属大区；与所属订单或地点一致关联经营网点。"
+    },
+    {
+      "target": "sku",
+      "local": ["tenant_id", "sku_id"],
+      "remote": ["tenant_id", "sku_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按SKU关联商品规格（SKU）。"
+    },
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "order_fee": [
+    {
+      "target": "order_fee",
+      "local": ["tenant_id", "reversal_of_fee_id", "order_id", "region_id"],
+      "remote": ["tenant_id", "fee_id", "order_id", "region_id"],
+      "cardinality": "N:1",
+      "nullable": true,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按对应冲回、订单、经营归属大区；与所属订单或地点一致关联订单费用。"
+    },
+    {
+      "target": "order_unit",
+      "local": ["tenant_id", "order_unit_id", "order_id", "region_id"],
+      "remote": ["tenant_id", "order_unit_id", "order_id", "region_id"],
+      "cardinality": "N:1",
+      "nullable": true,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按可以分配到单件；订单级费用为 NULL、订单、经营归属大区；与所属订单或地点一致关联订单单件。"
+    },
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "order_header": [
+    {
+      "target": "geo_area",
+      "local": ["tenant_id", "demand_geo_id"],
+      "remote": ["tenant_id", "geo_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按需求城市关联地理区域。"
+    },
+    {
+      "target": "org_unit",
+      "local": ["tenant_id", "org_unit_id"],
+      "remote": ["tenant_id", "org_unit_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按销售归属组织关联经营组织。"
+    },
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "order_line": [
+    {
+      "target": "channel_listing",
+      "local": ["tenant_id", "listing_id", "sku_id", "channel_id"],
+      "remote": ["tenant_id", "listing_id", "sku_id", "channel_id"],
+      "cardinality": "N:1",
+      "nullable": true,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按渠道商品版本 自建线下可无、规格、继承订单销售渠道；锁定有效映射和价格关联渠道上架映射。"
+    },
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "order_unit": [
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "org_unit": [
+    {
+      "target": "org_unit",
+      "local": ["tenant_id", "parent_org_unit_id"],
+      "remote": ["tenant_id", "org_unit_id"],
+      "cardinality": "N:1",
+      "nullable": true,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按上级关联经营组织。"
+    },
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "payment": [
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "refund": [
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "refund_allocation": [
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "return_header": [
+    {
+      "target": "channel",
+      "local": ["tenant_id", "request_channel_id"],
+      "remote": ["tenant_id", "channel_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按申请渠道关联销售渠道。"
+    },
+    {
+      "target": "order_header",
+      "local": ["tenant_id", "order_id", "region_id"],
+      "remote": ["tenant_id", "order_id", "region_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按原订单、经营归属大区；与所属订单或地点一致关联下单订单。"
+    },
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "revenue_entry": [
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "shipment": [
+    {
+      "target": "order_header",
+      "local": ["tenant_id", "order_id", "region_id"],
+      "remote": ["tenant_id", "order_id", "region_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按原订单、经营归属大区；与所属订单或地点一致关联下单订单。"
+    },
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "site": [
+    {
+      "target": "geo_area",
+      "local": ["tenant_id", "region_id"],
+      "remote": ["tenant_id", "geo_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按所在地区关联地理区域。"
+    },
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "sku": [
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "source_watermark": [
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "sport": [
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "spu": [
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "spu_sport": [
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ],
+  "target_monthly": [
+    {
+      "target": "channel",
+      "local": ["tenant_id", "channel_id"],
+      "remote": ["tenant_id", "channel_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按渠道关联销售渠道。"
+    },
+    {
+      "target": "geo_area",
+      "local": ["tenant_id", "region_id"],
+      "remote": ["tenant_id", "geo_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "按经营归属大区；与所属订单或地点一致关联地理区域。"
+    },
+    {
+      "target": "tenant",
+      "local": ["tenant_id"],
+      "remote": ["tenant_id"],
+      "cardinality": "N:1",
+      "nullable": false,
+      "validity": "同一零售数据发布，以记录保存的外键匹配。",
+      "use": "确定记录所属的经营租户，跨表连接时同时匹配租户键。"
+    }
+  ]
+}

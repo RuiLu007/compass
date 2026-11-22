@@ -13,7 +13,12 @@ type StoredScope = {
   member: boolean;
   grants: string[];
 };
-export async function semanticAccess(db: SqlClient, actor: Actor, target: Target) {
+export async function semanticAccess(
+  db: SqlClient,
+  actor: Actor,
+  target: Target,
+  optionalContextRead = false,
+) {
   const iam = bindAccess(db);
   const [access, workspace] = await Promise.all([
     iam.current(actor, target.tenantId),
@@ -22,7 +27,10 @@ export async function semanticAccess(db: SqlClient, actor: Actor, target: Target
   if (workspace.status !== "active") reject("forbidden");
   const can = (cap: "read" | "draft" | "govern" | "query") =>
     allowed(access, `semantics.${cap}`, target);
-  if (!can("read") && !can("draft") && !can("govern")) reject("forbidden");
+  const tenantAdmin = access.role === "admin" && !!access.memberId;
+  const sharedTermsOnly =
+    optionalContextRead && !can("read") && allowed(access, "module.analysis", target);
+  if (!sharedTermsOnly && !can("read") && !can("draft") && !can("govern")) reject("forbidden");
   const { rows } = await db.query<StoredScope>(
     `SELECT s.scope_id AS id,s.kind,s.department_key,s.owner_user_id,
     EXISTS(SELECT FROM web.semantic_scope_memberships m WHERE m.scope_id=s.scope_id AND m.tenant_member_id=$3 AND m.valid_from<=now() AND m.revoked_at IS NULL) AS member,
@@ -31,7 +39,8 @@ export async function semanticAccess(db: SqlClient, actor: Actor, target: Target
     AND (s.workspace_id IS NULL OR s.workspace_id=$2) AND (s.kind<>'personal' OR s.owner_user_id=$4)`,
     [target.tenantId, target.workspaceId, access.memberId, actor.userId],
   );
-  const tenantAdmin = access.role === "admin" && !!access.memberId;
+  // Administrators may inspect published organizational definitions in this target.
+  // Membership determines department grants, rollout audiences and approval duties.
   const scopes: ScopeView[] = rows
     .map((s) => {
       const personal = s.kind === "personal" && s.owner_user_id === actor.userId;
@@ -63,20 +72,51 @@ export async function semanticAccess(db: SqlClient, actor: Actor, target: Target
         release: duty("release"),
       };
     })
-    .filter((s) => s.use || s.manage || s.share || s.business || s.data || s.release);
-  return { db, actor, target, scopes, can, tenantAdmin, memberId: access.memberId };
+    .filter(
+      (s) =>
+        s.use ||
+        s.manage ||
+        s.share ||
+        s.business ||
+        s.data ||
+        s.release ||
+        canReadOrgScope(s.kind, actor.isPlatformAdmin || tenantAdmin),
+    );
+  return {
+    db,
+    actor,
+    target,
+    scopes,
+    can,
+    tenantAdmin,
+    sharedTermsOnly,
+    memberId: access.memberId,
+  };
 }
 export type Context = Awaited<ReturnType<typeof semanticAccess>>;
+function canReadOrgScope(kind: string, administrator: boolean) {
+  return administrator && (kind === "department" || kind === "job");
+}
+export function publishedScopeIds(c: Context) {
+  return c.scopes
+    .filter((s) => s.use || canReadOrgScope(s.kind, c.actor.isPlatformAdmin || c.tenantAdmin))
+    .map((s) => s.id);
+}
 export function scope(c: Context, id: string) {
   const s = c.scopes.find((row) => row.id === id);
   if (!s) reject("not_found");
   return s;
 }
-export function ensureShare(c: Context, owner: string, usage: string) {
-  if (!scope(c, owner).manage) reject("forbidden");
-  if (owner === usage) return;
+export function ensureShare(c: Context, owner: string, usage: string, kind?: string) {
+  const origin = scope(c, owner);
+  if (!origin.manage) reject("forbidden");
   if (
-    scope(c, owner).kind === "platform" ||
+    owner === usage ||
+    (kind === "term" && origin.kind === "personal" && scope(c, usage).kind === "workspace")
+  )
+    return;
+  if (
+    origin.kind === "platform" ||
     ["platform", "personal"].includes(scope(c, usage).kind) ||
     !scope(c, usage).share
   )

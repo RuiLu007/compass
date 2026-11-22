@@ -9,3 +9,7 @@
 演示结束或被通用能力覆盖时删除；需要进入产品时按正常 Feature 评审通用接口及跨场景行为。目录与注册规则由 `apps/agent/tests/test_showcase_isolation.py` 和构建产物检查验证。
 
 [第 23 课跨源经营诊断](lesson-23-agentic-search/README.md)提供冻结数据、工作区资料、正式口径发布与 Chat 业务验收入口。
+
+[第 23 课华东 GMV 下降 12%](lesson-23-east-gmv-rag/README.md)提供 12 份长篇 Markdown 业务原文、可查询的经营账本与讲师验收，用于 RAG 切片、检索和多轮经营归因。
+
+[第 22 课经营语义与指标口径](lesson-22-semantic-governance/README.md)提供新建分析的四道题、纯 NL2SQL 对照方法及指标保存、修订和冲突选择的课堂操作。

@@ -103,6 +103,11 @@ def validate_tool(path: str, document: dict) -> None:
         candidate["function"]["parameters"] = schema_structure(candidate["function"]["parameters"])
         baseline = copy.deepcopy(expected)
         baseline["function"].pop("description", None)
+        # Pinned Runs can resume with declarations predating these optional fields.
+        if name == "discover_semantic_candidates":
+            for optional in ("revise_metric", "reuse_reason"):
+                if optional not in candidate["function"]["parameters"]["properties"]:
+                    baseline["function"]["parameters"]["properties"].pop(optional, None)
         baseline["function"]["parameters"] = schema_structure(baseline["function"]["parameters"])
         if json.dumps(candidate, sort_keys=True, allow_nan=False) != json.dumps(
             baseline, sort_keys=True, allow_nan=False
@@ -161,17 +166,21 @@ def validate_document(path: str, body: str) -> dict:
         for key, row in scenes.items():
             if not isinstance(row, dict):
                 raise PromptError("invalid_scenes", "场景须为对象。")
-            fixed = {k: v for k, v in row.items() if k not in {"description", "examples"}}
+            fixed = {k: v for k, v in row.items() if k not in {"description", "examples", "sop"}}
             examples = row.get("examples")
             if (
                 fixed != expected[key]
+                or (
+                    "sop" in row
+                    and (not isinstance(row["sop"], str) or not 0 < len(row["sop"].strip()) <= 4000)
+                )
                 or not isinstance(row.get("description"), str)
                 or not row["description"].strip()
                 or not isinstance(examples, list)
                 or len(examples) > 10
                 or not all(isinstance(v, str) and 0 < len(v) <= 2000 for v in examples)
             ):
-                raise PromptError("invalid_scenes", f"{key} 只允许编辑场景描述和示例。")
+                raise PromptError("invalid_scenes", f"{key} 可编辑识别描述、示例及场景 SOP。")
     else:
         from compass_agent.prompt_assets import factory_text
 

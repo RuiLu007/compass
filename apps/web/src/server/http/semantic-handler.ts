@@ -9,8 +9,9 @@ import { withTransaction } from "../platform/db";
 import { reject } from "../platform/errors";
 import { bindIdentity } from "../modules/identity/infrastructure/pg-identity";
 import { semanticAccess } from "../modules/semantic/access";
-import { read, write } from "../modules/semantic/service";
-import { registry, restrictRuntime } from "../modules/semantic/runtime";
+import { list, read, write } from "../modules/semantic/service";
+import { releases } from "../modules/semantic/catalog";
+import { registry } from "../modules/semantic/runtime";
 import { tokenFromCookie, requireCsrf, requireSameOrigin } from "./security";
 import { errorResponse, jsonResponse, readJson } from "./responses";
 
@@ -63,6 +64,7 @@ export async function internalSemantic(request: Request, op: string) {
         "manifest",
         "authorize",
         "context",
+        "glossary",
         "definition",
         "resolve",
         "choice",
@@ -74,16 +76,19 @@ export async function internalSemantic(request: Request, op: string) {
         "submit",
         "drafts",
         "result-draft",
+        "revision-lookup",
+        "revision-preview",
+        "revision-save",
         "equivalents",
         "scopes",
       ].includes(op)
     )
       reject("not_found");
-    const command = ["reference", "submit", "drafts", "result-draft"].includes(op);
+    const command = ["reference", "submit", "drafts", "result-draft", "revision-save"].includes(op);
     const result = await withTransaction(command ? "command" : "query", async (db) => {
       const user = await bindIdentity(db).user(input.actor_user_id);
       if (user.status !== "active") reject("forbidden");
-      const access = await semanticAccess(
+      const c = await semanticAccess(
         db,
         {
           userId: user.id,
@@ -92,15 +97,30 @@ export async function internalSemantic(request: Request, op: string) {
           expiresAt: "",
         },
         { tenantId: input.tenant_id, workspaceId: input.workspace_id },
+        ["manifest", "context", "glossary", "authorize"].includes(op),
       );
-      const c = await restrictRuntime(access, input.pins);
+      if (input.pins) await releases(c, input.pins);
       if (["discover", "validate", "drafts", "result-draft"].includes(op) && !c.can("draft"))
         reject("forbidden");
       if (op === "submit" && !c.can("govern")) reject("forbidden");
       if (op === "scopes") return read(c, ["scopes"], {});
       if (op === "equivalents") {
-        const { hashes } = z
-          .strictObject({ hashes: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(100) })
+        const hash = z.string().regex(/^[a-f0-9]{64}$/);
+        const { hashes, candidates } = z
+          .strictObject({
+            hashes: z.array(hash).max(100),
+            candidates: z
+              .array(
+                z.strictObject({
+                  hash,
+                  name: z.string().min(1).max(160),
+                  summary: z.string().min(1).max(2400),
+                  formula: z.string().min(1).max(2400),
+                }),
+              )
+              .max(3)
+              .optional(),
+          })
           .parse(input.args);
         const { published } = await import("../modules/semantic/catalog");
         const versions = (await published(c)).map((v) => v.version_id);
@@ -111,7 +131,35 @@ export async function internalSemantic(request: Request, op: string) {
           AND (v.version_id=ANY($2::uuid[]) OR (a.creator_user_id=$3 AND a.owner_scope_id=ANY($4::uuid[])))`,
           [hashes, versions, c.actor.userId, c.scopes.filter((s) => s.manage).map((s) => s.id)],
         );
-        return { hashes: rows.map((r) => r.hash) };
+        const known = new Set(rows.map((r) => r.hash));
+        if (candidates?.length) {
+          if (!c.can("draft") || !c.memberId) reject("forbidden");
+          const metrics = (await list(c)).filter((m) => m.kind === "metric");
+          const { normalize } = await import("../modules/semantic/drafts");
+          for (const candidate of candidates) {
+            if (
+              metrics.some(
+                (m) =>
+                  [m.name, m.code, ...m.aliases].some(
+                    (n) => normalize(n) === normalize(candidate.name),
+                  ) ||
+                  (normalize(m.summary) === normalize(candidate.summary) &&
+                    typeof m.definition.formula === "string" &&
+                    normalize(m.definition.formula) === normalize(candidate.formula)),
+              )
+            )
+              known.add(candidate.hash);
+          }
+        }
+        return { hashes: [...known] };
+      }
+      if (op === "revision-lookup" || op === "revision-preview" || op === "revision-save") {
+        const { lookupRevision, previewRevision, saveRevision } =
+          await import("../modules/semantic/chat-revisions");
+        if (op === "revision-lookup") return lookupRevision(c, input.args);
+        return op === "revision-preview"
+          ? previewRevision(c, input.args)
+          : saveRevision(c, input.args);
       }
       if (op === "discover") {
         const { discover } = await import("../modules/semantic/drafts");

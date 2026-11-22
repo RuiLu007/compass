@@ -7,7 +7,13 @@ export type ModelScope =
   | {
       kind: "tenant";
       purpose:
-        "chat" | "module_read" | "data_manage" | "mcp_manage" | "runtime_usage" | "schedule_manage";
+        | "chat"
+        | "module_read"
+        | "knowledge_manage"
+        | "data_manage"
+        | "mcp_manage"
+        | "runtime_usage"
+        | "schedule_manage";
       tenantId: string;
       workspaceId: string;
     };
@@ -43,6 +49,9 @@ export function createModelAuthorizer(ctx: ModelAccessContext) {
       requirePermission(access, "models.invoke", scope);
     } else if (request.purpose === "mcp_manage") {
       requirePermission(access, "module.analysis", scope);
+    } else if (request.purpose === "knowledge_manage") {
+      if (!access.memberId) reject("forbidden");
+      requirePermission(access, "module.admin.data", scope);
     } else if (request.purpose === "data_manage") {
       if (!actor.isPlatformAdmin) reject("forbidden");
       requirePermission(access, "module.admin.data", scope);

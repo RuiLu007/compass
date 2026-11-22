@@ -25,7 +25,21 @@ from compass_agent.tools.mcp.entities import McpConnection
 from compass_agent.tools.sandbox.entities import SandboxAllocation
 from compass_agent.workflows.assets import UNIQUE_SCRIPT, WorkflowAsset
 from psycopg import sql
-from sqlalchemy import CheckConstraint, MetaData, UniqueConstraint, create_engine, inspect, text
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    MetaData,
+    String,
+    Table,
+    UniqueConstraint,
+    Uuid,
+    create_engine,
+    inspect,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB
 
 APP = Path(__file__).resolve().parents[1]
 SQL_ROOT = APP / "db/main/sql"
@@ -47,10 +61,10 @@ REVISIONS = {
     "0015": "0015_scheduled_tasks.py",
     "0016": "0016_prompt_context.py",
     "0017": "0017_semantic_runtime.py",
+    "0018": "0018_semantic_cleanup.py",
 }
-TARGET = "0017"
+TARGET = "0018"
 SEMANTIC_TABLES = {
-    semantic_entities.SemanticRunBinding.__tablename__,
     semantic_entities.SemanticMetricOffer.__tablename__,
 }
 MARKER = "compass:agent/main"
@@ -162,6 +176,8 @@ def inspect_version(connection, *, legacy: bool = False) -> str:
         expected |= SCHEDULER_TABLES
     if revision >= "0015":
         expected |= PLAN_TABLES
+    if revision == "0017":
+        expected.add("semantic_run_binding")
     if revision >= "0017":
         expected |= SEMANTIC_TABLES
     if revision >= "0016":
@@ -298,6 +314,19 @@ def inspect_version(connection, *, legacy: bool = False) -> str:
                         copied._columns.remove(copied.c[name])
                 if table.name == "model_call" and revision < "0004":
                     copied._columns.remove(copied.c.execution)
+            if revision == "0017":
+                # Validate the retired table only when checking the upgrade's starting schema.
+                Table(
+                    "semantic_run_binding",
+                    metadata,
+                    Column("run_id", Uuid, ForeignKey("agent_run.id"), primary_key=True),
+                    Column("tenant_id", Uuid, nullable=False),
+                    Column("workspace_id", Uuid, nullable=False),
+                    Column("catalog_kind", String(20), nullable=False),
+                    Column("manifest_hash", String(64), nullable=False),
+                    Column("partition_releases", JSONB, nullable=False),
+                    Column("bound_at", DateTime(timezone=True), nullable=False),
+                )
             if revision == "0005":
                 RetailConnection.__table__.to_metadata(metadata)
         context = MigrationContext.configure(
@@ -395,9 +424,12 @@ GRANT UPDATE (origin,edit_rev,max_version,active_epoch,draft_body,draft_base_ver
 GRANT SELECT, UPDATE (generation,last_snapshot_no) ON prompt_head TO {RUNTIME};
 GRANT USAGE ON SEQUENCE prompt_generation_id_seq TO {RUNTIME};"""
     if target >= "0017":
-        grants += (
-            f"\nGRANT SELECT, INSERT ON semantic_run_binding, semantic_metric_offer TO {RUNTIME};"
+        tables = (
+            "semantic_run_binding, semantic_metric_offer"
+            if target == "0017"
+            else "semantic_metric_offer"
         )
+        grants += f"\nGRANT SELECT, INSERT ON {tables} TO {RUNTIME};"
         grants += f"\nGRANT UPDATE(status,private_payload) ON semantic_metric_offer TO {RUNTIME};"
     return grants
 
@@ -429,8 +461,11 @@ def sql_delivery(start: str, target: str = TARGET) -> str:
         "0015": "984",
         "0016": "975",
         "0017": "974",
+        "0018": "974",
     }[target]
     change = "transactional Retail copy" if target == "0006" else "additive schema"
+    if target == "0018":
+        change = "remove verified duplicate manifest rows"
     return (
         f"-- Generated from Agent Alembic migrations; do not edit.\n"
         f"-- owner=agent/main; feature={feature}; "
@@ -456,14 +491,14 @@ def write_sql(*, check: bool = False) -> None:
         files[f"upgrades/{start}__0005.sql"] = sql_delivery(start, "0005")
     for start in ("0001", "0002", "0003", "0004", "0005"):
         files[f"upgrades/{start}__0006.sql"] = sql_delivery(start, "0006")
-    for target in ("0007", "0008", "0010", "0011", "0012", "0013", "0014", "0015", TARGET):
+    for target in ("0007", "0008", "0010", "0011", "0012", "0013", "0014", "0015", "0017", TARGET):
         for start in REVISIONS:
             if start < target:
                 files[f"upgrades/{start}__{target}.sql"] = sql_delivery(start, target)
     manifest = {
         "owner": "agent",
         "databaseKey": "main",
-        "feature": "975",
+        "feature": "974",
         "from": "empty",
         "to": TARGET,
         "engine": "PostgreSQL 17",
@@ -479,7 +514,8 @@ def write_sql(*, check: bool = False) -> None:
         "transaction": "single transaction with advisory lock",
         "prerequisites": "Provisioned Agent-owned database; expected start and source checksums",
         "dataImpact": (
-            "Adds model configuration and metadata; renames decision adapter; "
+            "Removes duplicated registry bindings after checking the retained Run snapshots; "
+            "adds model configuration and metadata; renames decision adapter; "
             "adds execution summaries and multi-engine workspace connections; "
             "adds durable runs, checkpoints, HITL and immutable artifacts; "
             "adds asynchronous session titles, session deletion metadata "

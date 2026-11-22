@@ -2,7 +2,7 @@
   "type": "function",
   "function": {
     "name": "discover_semantic_candidates",
-    "description": "从授权素材或同会话临时查询回执发现候选。说明来源、位置、置信度、公式与缺项。保存前向用户展示可编辑预览并等待确认。\n\n使用当前会话 previous_results 列出的 result_ref。用户明确提出保存或选择此前结果时使用 requested。系统对已确认且可复用的结果主动邀请时才使用 suggest。用户指的是刚才的结果时可省略 result_ref，多份候选先由用户选择。\n\nprevious_results 为本人已经看到的查询结果。跨轮保存直接使用这些回执，原计算、来源、筛选及归属均可在预览核对。",
+    "description": "**用途与调用规则**\n\n- 主动建议留存仅用于本轮实际算出、目录尚未覆盖且有明确重复决策用途的新指标。\n- 先用 search_semantics 比较相关名称、别名和业务含义。\n- 符合时单独调用 trigger=suggest，传本轮 database_query 回执的 semantic_result_ref 作为 result_ref，fields 填业务名称、业务域、统计口径、计量单位和一行可读计算公式。\n- 公式用业务名称及四则运算表达，例如「符合条件的订单数 ÷ 参与统计的订单数 × 100%」。\n- 筛选、时间边界和去重规则写入统计口径；表名、SQL 和实现细节留在查询回执，reuse_reason 说明具体复用场景。\n- 成功后会在回答下方展示候选，由用户决定是否保存。\n- 逐条推荐，最多三项，可以零项。\n- 明细、探查、一次性筛选或已有指标在新时段的结果直接回答。\n- 用户主动要求将此前的计算存为草稿时，用 requested 和 previous_results 中的 result_ref，按需提供建议字段。\n- 用户说“刚才的结果”可省略引用。\n- 保存前由用户核对。\n- 修订已保存指标时传 revise_metric（名称或代码）及本次改动的 fields。\n- 从授权素材提取时传 source_refs 和归属范围。",
     "parameters": {
       "$defs": {
         "SuggestedDraftFields": {
@@ -146,6 +146,21 @@
       },
       "additionalProperties": false,
       "properties": {
+        "revise_metric": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "修订已保存的指标时填现有名称、唯一代码或资产 ID，fields 只填本次修改。",
+          "title": "Revise Metric"
+        },
         "source_refs": {
           "anyOf": [
             {
@@ -209,6 +224,21 @@
           "enum": ["requested", "suggest"],
           "title": "Trigger",
           "type": "string"
+        },
+        "reuse_reason": {
+          "anyOf": [
+            {
+              "maxLength": 400,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "主动推荐时说明哪些经营决策会跨期重复使用这项计算。",
+          "title": "Reuse Reason"
         },
         "fields": {
           "anyOf": [

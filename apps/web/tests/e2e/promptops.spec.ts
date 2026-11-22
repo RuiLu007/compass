@@ -110,10 +110,12 @@ test("new online file previews a template and preserves both authors' changes du
 }) => {
   await login(page.context(), "platform");
   await page.goto("/platform/promptops");
-  await page.getByRole("button", { name: "新建提示词" }).click();
-  const path = "online/qa/" + crypto.randomUUID() + ".md";
+  await page.getByRole("button", { name: "在根目录新建提示词" }).click();
+  const path = "qa-" + crypto.randomUUID() + ".md";
   const source = "# 周报\n\n分析周期 {{period}}";
-  await page.getByLabel("相对路径").fill(path);
+  await expect(page.getByLabel("相对路径")).toHaveValue("./");
+  await expect(page.getByLabel("相对路径")).toHaveAttribute("readonly", "");
+  await page.getByLabel("文件名", { exact: true }).fill(path);
   await page.getByLabel("Markdown 正文").fill(source);
   await page.getByRole("button", { name: "创建草稿" }).click();
   await expect(page.getByText("已创建线上草稿。")).toBeVisible();

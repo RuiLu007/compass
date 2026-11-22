@@ -1,0 +1,87 @@
+{
+  "scopeProfiles": {
+    "platform": {
+      "audience": "经营团队"
+    },
+    "operations": {
+      "audience": "运营负责人"
+    },
+    "finance": {
+      "audience": "财务负责人",
+      "toolCeiling": {
+        "base": ["todo_write", "database_query"],
+        "withSearch": ["search_documents", "read_document"],
+        "registryCapabilities": [
+          "semantic_read",
+          "semantic_query",
+          "semantic_draft",
+          "semantic_govern"
+        ],
+        "registryPluginPrefixes": ["mcp_", "workflow_"]
+      }
+    }
+  },
+  "sceneTemplates": [
+    {
+      "task": "business_qa",
+      "scene": "SC-01",
+      "path": "tasks/business_qa/scenes/metric_lookup/answer.md"
+    },
+    {
+      "task": "data_analysis",
+      "scene": "SC-02",
+      "path": "tasks/data_analysis/scenes/period_comparison/answer.md"
+    },
+    {
+      "task": "dashboard",
+      "scene": "SC-25",
+      "path": "tasks/dashboard/scenes/channel_overview/layout.md"
+    },
+    {
+      "task": "business_report",
+      "scene": "SC-29",
+      "path": "tasks/business_report/scenes/weekly/report.md",
+      "variables": ["period", "unit", "audience"]
+    },
+    {
+      "task": "business_report",
+      "scene": "SC-29",
+      "scope": "finance",
+      "path": "tasks/business_report/scenes/weekly/finance.md",
+      "variables": ["period", "unit"]
+    }
+  ],
+  "searchPacks": {
+    "retail": {
+      "path": "shared/fragments/retail.md",
+      "excludedScenes": ["SC-33", "SC-36", "SC-37", "SC-38", "SC-39"],
+      "verifier": "retail",
+      "proofOperations": ["event_window", "next_workday", "whole_tier"],
+      "actionOperations": ["next_workday", "whole_tier"],
+      "dimensionDisplay": {
+        "channel": {
+          "label": "渠道",
+          "entity": "dimension.channel"
+        },
+        "region": {
+          "label": "地区",
+          "entity": "dimension.region"
+        },
+        "site": {
+          "label": "销售地点",
+          "entity": "dimension.site"
+        },
+        "fulfillment_site": {
+          "label": "履约地点",
+          "entity": "dimension.site"
+        },
+        "sku": {
+          "label": "商品规格",
+          "entity": "dimension.sku"
+        }
+      }
+    }
+  },
+  "numericIntents": ["查数查询", "对比拆解"],
+  "definitionIntents": ["指标解释"]
+}

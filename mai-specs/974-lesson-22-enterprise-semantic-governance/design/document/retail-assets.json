@@ -1,6 +1,6 @@
 {
-  "title": "Compass Retail 语义层设计",
-  "subtitle": "默认资产、审批发布与查询执行",
+  "title": "零售语义资产详解",
+  "subtitle": "零售语义模型、数据库结构与 Agent 应用机制。",
   "brand": "Compass",
   "label": "第 22 课 · 经营语义治理",
   "source": "../RETAIL_SEMANTIC_ASSETS.md",
@@ -22,5 +22,6 @@
       "language": "sql",
       "contains": "SELECT s.kind, s.tenant_id"
     }
-  }
+  },
+  "lesson": 22
 }

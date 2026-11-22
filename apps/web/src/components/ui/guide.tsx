@@ -2,7 +2,10 @@
 
 import { CheckCircle2, CircleAlert, Workflow } from "lucide-react";
 import { useId, useRef, useState } from "react";
+import { MetricSuggestionsCard, type MetricSuggestion } from "@/features/semantic/result-actions";
 import { UiButton } from "./button";
+import { UiPageHeading } from "./page-heading";
+import { Modal } from "./dialog";
 import { UiCodeBlock } from "./code-block";
 import { UiDisclosure } from "./disclosure";
 import { UiExecutionExample } from "./execution-example";
@@ -29,12 +32,34 @@ const [products, review] = await parallel([
 return { status: "ok", evidenceRefs: [lead.evidenceRef, products.evidenceRef, review.evidenceRef] };`;
 
 export function UiGuide() {
+  const [sampleSaved, setSampleSaved] = useState<string[]>([]);
+  const [sampleHidden, setSampleHidden] = useState<string[]>([]);
+  const suggestions: MetricSuggestion[] = [
+    {
+      id: "retried",
+      name: "支付重试挽回率",
+      unit: "%",
+      summary: "首次支付失败的订单中，24 小时内重试并支付成功的订单占比，同一订单只计一次。",
+      formula: "24 小时内重试成功的订单数 ÷ 首次支付失败的订单数 × 100%",
+      reason: "按周比较重试流程改版前后的支付恢复情况。",
+    },
+    {
+      id: "elapsed",
+      name: "支付恢复时长中位数",
+      unit: "分钟",
+      summary: "对首次失败后 24 小时内支付成功的订单，衡量从首次失败到首次成功的典型等待时间。",
+      formula: "中位数（首次成功时间 − 首次失败时间）",
+      reason: "定期评估支付重试流程的等待时间。",
+    },
+  ];
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const id = useId();
   const [name, setName] = useState("");
   const [attempted, setAttempted] = useState(false);
   const [savedName, setSavedName] = useState("");
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const drawerInput = useRef<HTMLInputElement>(null);
   const invalid = attempted && !name.trim();
 
   return (
@@ -48,6 +73,7 @@ export function UiGuide() {
           <a href="#ui-code">代码展示</a>
           <a href="#ui-interaction">交互演示</a>
           <a href="#ui-execution">执行过程</a>
+          <a href="#ui-semantic">指标保存建议</a>
         </nav>
       </header>
 
@@ -130,6 +156,32 @@ export function UiGuide() {
         <UiExecutionExample />
       </section>
 
+      <section className="ui-guide-section" id="ui-semantic" aria-labelledby="ui-semantic-title">
+        <h2 id="ui-semantic-title">指标保存建议</h2>
+        <MetricSuggestionsCard
+          items={suggestions
+            .filter((m) => !sampleHidden.includes(m.id))
+            .map((m) => ({ ...m, draftId: sampleSaved.includes(m.id) ? m.id : null }))}
+          error=""
+          busy={false}
+          onDecide={(ids, action) =>
+            (action === "save" ? setSampleSaved : setSampleHidden)((prev) => [...prev, ...ids])
+          }
+          draftUrl={() => "#ui-semantic"}
+        />
+        {(sampleSaved.length > 0 || sampleHidden.length > 0) && (
+          <UiButton
+            variant="quiet"
+            onClick={() => {
+              setSampleSaved([]);
+              setSampleHidden([]);
+            }}
+          >
+            重置指标示例
+          </UiButton>
+        )}
+      </section>
+
       <section className="ui-guide-section" id="ui-code" aria-labelledby="ui-code-title">
         <h2 id="ui-code-title">代码展示</h2>
         <UiCodeBlock title="渠道分析编排" language="JavaScript" code={script} />
@@ -149,7 +201,11 @@ export function UiGuide() {
         id="ui-interaction"
         aria-labelledby="ui-interaction-title"
       >
-        <h2 id="ui-interaction-title">交互演示</h2>
+        <UiPageHeading title="交互演示" titleId="ui-interaction-title">
+          <UiButton variant="secondary" onClick={() => setDrawerOpen(true)}>
+            在抽屉中编辑
+          </UiButton>
+        </UiPageHeading>
         <div className="ui-panel ui-guide-example">
           <h3>填写名称并确认保存</h3>
           <form
@@ -198,6 +254,39 @@ export function UiGuide() {
         </div>
       </section>
 
+      {drawerOpen && (
+        <Modal
+          open
+          placement="right"
+          title="编辑工作流名称"
+          initialFocus={drawerInput}
+          onClose={() => setDrawerOpen(false)}
+          footer={
+            <>
+              <UiButton variant="secondary" onClick={() => setDrawerOpen(false)}>
+                取消
+              </UiButton>
+              <UiButton form={`${id}-drawer`} type="submit">
+                应用名称
+              </UiButton>
+            </>
+          }
+        >
+          <form
+            id={`${id}-drawer`}
+            onSubmit={(event) => {
+              event.preventDefault();
+              setName(drawerInput.current!.value.trim());
+              setDrawerOpen(false);
+            }}
+          >
+            <label className="ui-field">
+              工作流名称
+              <input className="ui-input" ref={drawerInput} defaultValue={name} required />
+            </label>
+          </form>
+        </Modal>
+      )}
       <dialog ref={dialog} className="ui-panel ui-dialog" aria-labelledby={`${id}-dialog-title`}>
         <h2 id={`${id}-dialog-title`}>保存工作流</h2>
         <p className="ui-panel-description">将「{name.trim()}」保存为可复用的工作流。</p>

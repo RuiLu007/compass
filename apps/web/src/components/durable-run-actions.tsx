@@ -1,5 +1,6 @@
 "use client";
 import Image from "next/image";
+import { SemanticChoiceCard } from "@/features/semantic/choice-card";
 import { SemanticResultActions } from "@/features/semantic/result-actions";
 import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { ApiError } from "@/client/request-scope";
@@ -24,6 +25,18 @@ const reasons: Record<string, string> = {
   approval_rejected: "已拒绝执行，已保留只读分析。",
   cleanup_unconfirmed: "执行资源正在核对，确认完成前无法继续。",
 };
+const revisionLabels: Record<string, string> = {
+  name: "指标名称",
+  summary: "业务含义",
+  formula: "公式",
+  unit: "单位",
+  grain: "统计粒度",
+  event_time: "业务时间",
+  timezone: "时区",
+  aggregation: "聚合规则",
+  responsible: "负责人",
+};
+
 export function DurableRunActions({
   run,
   sessionId,
@@ -56,8 +69,8 @@ export function DurableRunActions({
     /^((?:创建|修改)「[^\r\n]+?」[。][\s\S]*?)分析内容[：:]([\s\S]+)$/,
   );
   const [wait, setWait] = useState<components["schemas"]["WaitView"] | null>(null);
-  const [choice, setChoice] = useState<{ wait: string; id: string }>();
   const [edits, setEdits] = useState<{ wait: string; data: Record<string, string> }>();
+  const [waitRefresh, setWaitRefresh] = useState(0);
   const waitId = approval?.waitId;
   const scopeQuery = new URLSearchParams(scope).toString();
   useEffect(() => {
@@ -75,7 +88,7 @@ export function DurableRunActions({
         if (!controller.signal.aborted) setWait(null);
       });
     return () => controller.abort();
-  }, [api, run.runId, run.run?.version, scopeQuery, waitId]);
+  }, [api, run.runId, run.run?.version, scopeQuery, waitId, waitRefresh]);
   const [clock, setClock] = useState(0);
   const pendingExpiration = approval?.status === "pending" ? approval.expiresAt : undefined;
   useEffect(() => {
@@ -91,7 +104,11 @@ export function DurableRunActions({
     if (
       !pending.current ||
       pending.current.kind !== kind ||
-      (extra.decision && pending.current.body.decision !== extra.decision)
+      (extra.decision &&
+        (pending.current.body.decision !== extra.decision ||
+          pending.current.body.choiceId !== extra.choiceId ||
+          pending.current.body.customDefinition !== extra.customDefinition ||
+          pending.current.body.waitId !== extra.waitId))
     )
       pending.current = {
         kind,
@@ -112,6 +129,7 @@ export function DurableRunActions({
     } catch (failure) {
       if (failure instanceof ApiError && [409, 410].includes(failure.status)) {
         pending.current = null;
+        if (kind === "decisions") setWaitRefresh((n) => n + 1);
         reload();
       }
       setError(failure instanceof Error ? failure.message : "操作未确认，请重试。");
@@ -119,6 +137,13 @@ export function DurableRunActions({
       setBusy(false);
     }
   }
+  const revisionChanges = wait?.revisionPreview?.changes.map(({ field, before, after }) => ({
+    before,
+    after: ((edits?.wait === waitId ? edits?.data[field] : undefined) ?? after).trim(),
+  }));
+  const revisionReady =
+    revisionChanges?.every(({ after }) => after.length > 0) &&
+    revisionChanges.some(({ before, after }) => before !== after);
   const canPause = value?.status === "running";
   const canResume = value?.status === "paused" && value.reasonCode !== "queued";
   const action =
@@ -158,7 +183,41 @@ export function DurableRunActions({
         approval?.status === "pending" &&
         approval.waitId !== resolvedWait &&
         !expired &&
-        !["completed", "failed", "canceled"].includes(value.status) && (
+        !["completed", "failed", "canceled"].includes(value.status) &&
+        (wait?.waitId === approval.waitId &&
+        (wait.semanticKind === "choice" || wait.semanticKind === "result") ? (
+          <SemanticChoiceCard
+            key={wait.waitId}
+            kind={wait.semanticKind}
+            options={wait.options ?? []}
+            waitId={wait.waitId}
+            expiresAt={approval.expiresAt}
+            busy={busy}
+            canApprove={wait.allowedActions.includes("approve")}
+            canReject={wait.allowedActions.includes("reject")}
+            onApprove={(answer) =>
+              command("decisions", {
+                waitId: approval.waitId,
+                proposalId: approval.proposalId,
+                proposalRevision: approval.proposalRevision,
+                proposalDigest: approval.proposalDigest,
+                decisionId: crypto.randomUUID(),
+                decision: "approve",
+                ...answer,
+              })
+            }
+            onReject={() =>
+              command("decisions", {
+                waitId: approval.waitId,
+                proposalId: approval.proposalId,
+                proposalRevision: approval.proposalRevision,
+                proposalDigest: approval.proposalDigest,
+                decisionId: crypto.randomUUID(),
+                decision: "reject",
+              })
+            }
+          />
+        ) : (
           <section className="durable-approval" aria-label="执行确认">
             <strong>等待你的决定</strong>
             {scheduleDetail ? (
@@ -180,31 +239,40 @@ export function DurableRunActions({
             {busy && !action && <p role="status">正在提交…</p>}
             {wait && wait.waitId === waitId && (
               <div className="actions">
-                {(wait.semanticKind === "choice" || wait.semanticKind === "result") && (
-                  <fieldset>
-                    <legend>
-                      {wait.semanticKind === "result" ? "要保存的查询结果" : "本次查询口径"}
-                    </legend>
-                    {wait.options?.map((o) => (
-                      <label key={o.id}>
-                        <input
-                          type="radio"
-                          name={wait.waitId}
-                          value={o.id}
-                          checked={choice?.wait === wait.waitId && choice.id === o.id}
-                          onChange={() => setChoice({ wait: wait.waitId, id: o.id })}
-                        />{" "}
-                        {o.name}{" "}
-                        {wait.semanticKind === "choice" && (
-                          <>
-                            · v{o.version} · {o.unit}
-                          </>
-                        )}
-                        <span> {o.description}</span>
-                      </label>
-                    ))}
-                  </fieldset>
-                )}
+                {wait.semanticKind === "revision" &&
+                  (wait.revisionPreview ? (
+                    <fieldset className="semantic-revision-preview" disabled={busy}>
+                      <legend>修订「{wait.revisionPreview.name}」</legend>
+                      <p>{wait.revisionPreview.code}</p>
+                      {wait.revisionPreview.changes.map(({ field, before, after }) => (
+                        <label key={field}>
+                          <strong>{revisionLabels[field] ?? field}</strong>
+                          <span>当前值 · {before || "未填写"}</span>
+                          <span>修订为</span>
+                          <textarea
+                            aria-label={`修订后的${revisionLabels[field] ?? field}`}
+                            className="ui-input"
+                            rows={2}
+                            maxLength={["summary", "formula"].includes(field) ? 2400 : 160}
+                            value={
+                              (edits?.wait === waitId ? edits?.data[field] : undefined) ?? after
+                            }
+                            onChange={(e) =>
+                              setEdits({
+                                wait: wait.waitId,
+                                data: {
+                                  ...(edits?.wait === waitId ? edits?.data : {}),
+                                  [field]: e.target.value,
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                      ))}
+                    </fieldset>
+                  ) : (
+                    <p role="status">指标或维护权限已变化。请取消本次修订，重新发起修改。</p>
+                  ))}
                 {wait.semanticKind === "draft" && (
                   <fieldset>
                     <legend>指标草稿预览</legend>
@@ -274,13 +342,7 @@ export function DurableRunActions({
                 )}
                 {wait.allowedActions.includes("approve") && (
                   <button
-                    disabled={
-                      busy ||
-                      ((wait.semanticKind === "choice" || wait.semanticKind === "result") &&
-                        (!choice ||
-                          choice.wait !== wait.waitId ||
-                          !wait.options?.some((o) => o.id === choice.id)))
-                    }
+                    disabled={busy || (wait.semanticKind === "revision" && !revisionReady)}
                     onClick={() =>
                       command("decisions", {
                         waitId: approval.waitId,
@@ -289,19 +351,17 @@ export function DurableRunActions({
                         proposalDigest: approval.proposalDigest,
                         decisionId: crypto.randomUUID(),
                         decision: "approve",
-                        ...(wait.semanticKind === "choice" || wait.semanticKind === "result"
-                          ? { choiceId: choice?.id }
-                          : {}),
-                        ...(wait.semanticKind === "draft" && edits?.wait === wait.waitId
+                        ...((wait.semanticKind === "draft" || wait.semanticKind === "revision") &&
+                        edits?.wait === wait.waitId
                           ? { draftEdits: edits.data }
                           : {}),
                       })
                     }
                   >
-                    {wait.semanticKind === "choice" || wait.semanticKind === "result"
-                      ? "选择并继续"
-                      : wait.semanticKind === "draft"
-                        ? "确认保存草稿"
+                    {wait.semanticKind === "draft"
+                      ? "确认保存草稿"
+                      : wait.semanticKind === "revision"
+                        ? "确认保存修订"
                         : "批准执行"}
                   </button>
                 )}
@@ -320,10 +380,10 @@ export function DurableRunActions({
                       })
                     }
                   >
-                    {wait.semanticKind === "choice" || wait.semanticKind === "result"
-                      ? "取消本次查询"
-                      : wait.semanticKind === "draft"
-                        ? "暂不保存"
+                    {wait.semanticKind === "draft"
+                      ? "暂不保存"
+                      : wait.semanticKind === "revision"
+                        ? "取消修订"
                         : "拒绝执行"}
                   </button>
                 )}
@@ -343,7 +403,7 @@ export function DurableRunActions({
               </div>
             )}
           </section>
-        )}
+        ))}
       {Object.values(run.objects)
         .filter((o) => o.kind === "artifact")
         .map(({ value: artifact }) => {

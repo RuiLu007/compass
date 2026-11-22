@@ -60,9 +60,8 @@ test("销售财务兼任用户刷新后仍能在原轮次选择口径并取得�
   if (!session) {
     await page.goto(entry);
     await selectLiveProvider(page);
-    await page
-      .getByLabel("分析问题")
-      .fill("经营问答：从 2025-11-17（含）到 2025-11-24（不含），销售额合计多少？");
+    await page.getByRole("button", { name: "联席会的“销售额”用哪个口径？" }).click();
+    await expect(page.getByLabel("分析问题")).toHaveValue(/联席会/);
     const receipt = page.waitForResponse(
       (r) => r.url().endsWith("/analysis/sessions/submit") && r.request().method() === "POST",
     );
@@ -74,7 +73,7 @@ test("销售财务兼任用户刷新后仍能在原轮次选择口径并取得�
   await page.goto(entry + "?session=" + session);
   const chooseMetric = page.getByRole("group", { name: "本次查询口径" });
   await expect(chooseMetric).toBeVisible({ timeout: 150000 });
-  await expect(chooseMetric.getByRole("radio")).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "都不合适，我来补充算法" })).toBeVisible();
   await expect(chooseMetric).toContainText("确认收入");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
@@ -113,12 +112,12 @@ test("销售财务兼任用户刷新后仍能在原轮次选择口径并取得�
   await expect(page).toHaveURL(new RegExp("session=" + session));
 });
 
-test("用户确认临时计算后编辑建议，重试保存仍然只有一份个人草稿", async ({ page }) => {
+test("一次性查询返回统计答案，只有经过识别的指标会显示保存建议", async ({ page }) => {
   test.setTimeout(420000);
   const auth = await page.request.post("/api/web/v1/auth/login", {
     headers: { origin },
     data: {
-      loginName: process.env.SEMANTIC_DUAL_LOGIN,
+      loginName: process.env.SEMANTIC_SALES_LOGIN ?? process.env.SEMANTIC_DUAL_LOGIN,
       password: process.env.WEB_TEST_PASSWORD,
     },
   });
@@ -134,11 +133,7 @@ test("用户确认临时计算后编辑建议，重试保存仍然只有一份�
   } else {
     await page.goto(entry);
     await selectLiveProvider(page);
-    await page
-      .getByLabel("分析问题")
-      .fill(
-        "经营问答：给我一个数，2025-10-01（含）至 2025-10-08（不含）成功支付使用了几种不同的支付方式？这个临时口径按 method 去重，请通过工作区受管连接的 retail_course.payment 只读计算，status 为 SUCCEEDED，时间按 attempted_at。只需返回种数及其计算口径。",
-      );
+    await page.getByRole("button", { name: "这周有几种支付方式真的付成功了？" }).click();
     const submitted = page.waitForResponse(
       (candidate) =>
         candidate.url().endsWith("/analysis/sessions/submit") &&
@@ -178,40 +173,31 @@ test("用户确认临时计算后编辑建议，重试保存仍然只有一份�
   } finally {
     await source.end();
   }
-  const results = page.getByRole("region", { name: "临时查询结果" });
-  const row = results
-    .locator(":scope > div")
-    .filter({ hasText: /method|支付方式/i })
-    .last();
-  await expect(row.getByRole("button", { name: "确认查询结果" })).toBeVisible();
-  await expect(row.getByText(/这项汇总可在其他期间复用/)).toHaveCount(0);
-  const confirming = page.waitForResponse(
-    (r) =>
-      r.url().endsWith("/runs/" + runId + "/semantic-results") &&
-      r.request().method() === "POST" &&
-      r.request().postDataJSON()?.action === "confirm",
+  const results = page.getByRole("region", { name: "指标保存建议" });
+  const offers = await page.request.get(
+    "/api/web/v1/analysis/runs/" + runId + "/semantic-results?" + scope,
   );
-  await row.getByRole("button", { name: "确认查询结果" }).click();
-  const confirmed = await confirming;
-  expect(confirmed.status()).toBe(200);
-  if ((await confirmed.json()).reusable) {
-    await expect(row.getByText(/这项汇总可在其他期间复用/)).toBeVisible();
-  } else {
-    await expect(row.getByText(/这项汇总可在其他期间复用/)).toHaveCount(0);
+  expect(offers.ok()).toBe(true);
+  const { items } = await offers.json();
+  expect(items.length).toBeLessThanOrEqual(3);
+  if (!items.length) {
+    await expect(results).toHaveCount(0);
+    return;
   }
-  await row.getByRole("button", { name: "保存为指标草稿" }).click();
-  const form = row.locator("form");
-  await expect(form.getByLabel("指标名称", { exact: true })).not.toHaveValue("");
-  await expect(form.getByLabel("公式", { exact: true })).not.toHaveValue("");
-  const code = "qa.payment_method_" + crypto.randomUUID().slice(0, 8);
-  await form.getByLabel("指标名称", { exact: true }).fill("成功支付方式种数");
-  await form.getByLabel("指标代码", { exact: true }).fill(code);
-  await form.getByLabel("业务域", { exact: true }).fill("销售");
+  for (const item of items) {
+    const { fields, reuse_reason } = item.proposal;
+    expect(reuse_reason.trim()).toBeTruthy();
+    for (const value of [fields.name, fields.summary, fields.formula]) {
+      expect(value.trim()).toBeTruthy();
+      await expect(results).toContainText(value);
+    }
+  }
+  const check = results.getByRole("checkbox").first();
+  await check.press("Space");
   const saved = page.waitForResponse(
-    (r) =>
-      r.url().endsWith("/runs/" + runId + "/semantic-results") && r.request().method() === "POST",
+    (r) => r.url().endsWith("/semantic-results") && r.request().method() === "POST",
   );
-  await form.getByRole("button", { name: "保存草稿", exact: true }).click();
+  await results.getByRole("button", { name: /保存所选/ }).click();
   const final = await saved;
   expect(final.status(), await final.text()).toBe(200);
   const receipt = await final.json();
@@ -221,15 +207,86 @@ test("用户确认临时计算后编辑建议，重试保存仍然只有一份�
     headers: { origin, "X-CSRF-Token": (await request.allHeaders())["x-csrf-token"] },
     data: request.postDataJSON(),
   });
-  expect(again.status(), await again.text()).toBe(200);
   expect((await again.json()).draft_id).toBe(receipt.draft_id);
-  const seen = await page.request.get("/api/semantic/assets?q=" + code + "&" + scope);
-  expect((await seen.json()).items.map((v: { code: string }) => v.code)).toEqual([code]);
   const asset = await page.request.get("/api/semantic/assets/" + receipt.draft_id + "?" + scope);
   const detail = await asset.json();
   expect(detail.state).toBe("draft");
   expect(detail.owner_scope_id).toBe(detail.usage_scope_id);
   expect(detail.source_id).toBeTruthy();
-  await row.getByRole("link", { name: "查看指标草稿" }).click();
-  await expect(page.getByRole("heading", { name: "成功支付方式种数", exact: true })).toBeVisible();
+});
+
+test("对话修订预览支持核对和取消，确认后写回原指标", async ({ page }) => {
+  test.setTimeout(360000);
+  const auth = await page.request.post("/api/web/v1/auth/login", {
+    headers: { origin },
+    data: {
+      loginName: process.env.SEMANTIC_SALES_LOGIN ?? process.env.SEMANTIC_DUAL_LOGIN,
+      password: process.env.WEB_TEST_PASSWORD,
+    },
+  });
+  expect(auth.status()).toBe(200);
+  const session = await page.request.get("/api/web/v1/session?" + scope + "&pageId=data-metrics");
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const name = "成功支付方式种数" + suffix;
+  const before = "统计有成功支付记录的方式";
+  const create = await page.request.post("/api/semantic/drafts?" + scope, {
+    headers: { origin, "X-CSRF-Token": (await session.json()).csrfToken },
+    data: {
+      request_key: crypto.randomUUID(),
+      code: "qa.methods_" + suffix,
+      name,
+      domain: "销售",
+      summary: before,
+      unit: "种",
+      formula: "count(distinct method)",
+      grain: "统计期",
+      event_time: "attempted_at",
+      timezone: "Asia/Shanghai",
+      aggregation: "去重计数",
+    },
+  });
+  expect(create.ok(), await create.text()).toBe(true);
+  const original = await create.json();
+  const readMetric = async () => {
+    const response = await page.request.get(
+      "/api/semantic/assets/" + original.asset_id + "?" + scope,
+    );
+    expect(response.ok()).toBe(true);
+    return response.json();
+  };
+  for (const commit of [false, true]) {
+    await page.setViewportSize(commit ? { width: 390, height: 844 } : { width: 1440, height: 960 });
+    await page.goto(entry);
+    await selectLiveProvider(page);
+    await page.getByRole("button", { name: "把已有指标的去重规则写清楚" }).click();
+    const input = page.getByLabel("分析问题");
+    await input.fill((await input.inputValue()).replace("成功支付方式种数", name));
+    await page.getByRole("button", { name: "发送消息", exact: true }).click();
+    const card = page.getByRole("group", { name: "修订「" + name + "」" });
+    await expect(card).toBeVisible({ timeout: 120000 });
+    await expect(card).toContainText(before);
+    const edits = card.getByLabel("修订后的业务含义");
+    await expect(edits).toHaveValue(/跨[日天]|多[天日]|不同[天日]|几天|统计期/);
+    await expect(edits).toHaveValue(/(?:只|仅).{0,6}[一1][种次]|去重|不重复计/);
+    const save = page.getByRole("button", { name: "确认保存修订" });
+    await edits.fill(before);
+    await expect(save).toBeDisabled();
+    const revised = "统计期内至少成功支付一次的方式，同一方式跨日只计一次。";
+    await edits.fill(revised);
+    await expect(save).toBeEnabled();
+    expect((await readMetric()).version_id).toBe(original.version_id);
+    const button = commit ? save : page.getByRole("button", { name: "取消修订" });
+    await button.focus();
+    await page.keyboard.press("Enter");
+    await expect(card).toBeHidden();
+    if (commit) {
+      await expect.poll(async () => (await readMetric()).summary, { timeout: 45000 }).toBe(revised);
+      const saved = await readMetric();
+      expect(saved.asset_id).toBe(original.asset_id);
+      expect(saved.version_id).not.toBe(original.version_id);
+      expect(saved.definition.formula).toBe("count(distinct method)");
+    } else {
+      expect((await readMetric()).version_id).toBe(original.version_id);
+    }
+  }
 });

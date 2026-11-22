@@ -2356,6 +2356,20 @@
             "default": null,
             "title": "Choiceid"
           },
+          "customDefinition": {
+            "anyOf": [
+              {
+                "maxLength": 1600,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Customdefinition"
+          },
           "decision": {
             "enum": [
               "approve",
@@ -3576,6 +3590,47 @@
         "type": "object"
       },
       "JsonValue": {},
+      "KnowledgeEmbeddingBatch": {
+        "additionalProperties": false,
+        "properties": {
+          "texts": {
+            "items": {
+              "maxLength": 10000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Texts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "texts"
+        ],
+        "title": "KnowledgeEmbeddingBatch",
+        "type": "object"
+      },
+      "KnowledgeEmbeddings": {
+        "additionalProperties": false,
+        "properties": {
+          "vectors": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Vectors",
+            "type": "array"
+          }
+        },
+        "required": [
+          "vectors"
+        ],
+        "title": "KnowledgeEmbeddings",
+        "type": "object"
+      },
       "MainModelSelection": {
         "additionalProperties": false,
         "properties": {
@@ -9861,6 +9916,30 @@
         "title": "SemanticAnalysis",
         "type": "object"
       },
+      "SemanticFieldChange": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "title": "Before",
+            "type": "string"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "before",
+          "after"
+        ],
+        "title": "SemanticFieldChange",
+        "type": "object"
+      },
       "SemanticOpenResult": {
         "additionalProperties": false,
         "properties": {
@@ -10023,6 +10102,33 @@
           "items"
         ],
         "title": "SemanticResults",
+        "type": "object"
+      },
+      "SemanticRevisionPreview": {
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/SemanticFieldChange"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "code",
+          "changes"
+        ],
+        "title": "SemanticRevisionPreview",
         "type": "object"
       },
       "SemanticSuggestions": {
@@ -12054,6 +12160,7 @@
               "test",
               "chat",
               "module_read",
+              "knowledge_manage",
               "data_manage",
               "mcp_manage",
               "runtime_diagnostics",
@@ -12318,6 +12425,17 @@
             ],
             "title": "Reasoncode"
           },
+          "revisionPreview": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SemanticRevisionPreview"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "runVersion": {
             "minimum": 1,
             "title": "Runversion",
@@ -12348,7 +12466,8 @@
                   "choice",
                   "result",
                   "draft",
-                  "submit"
+                  "submit",
+                  "revision"
                 ],
                 "type": "string"
               },
@@ -18202,6 +18321,131 @@
           }
         },
         "summary": "Catalog",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/v1/models/knowledge-embeddings": {
+      "post": {
+        "operationId": "knowledge_embeddings_v1_models_knowledge_embeddings_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-compass-context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Compass-Context"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeEmbeddingBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeEmbeddings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Knowledge Embeddings",
         "tags": [
           "models"
         ]

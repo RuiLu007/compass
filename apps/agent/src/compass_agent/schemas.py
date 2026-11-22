@@ -60,6 +60,7 @@ class TrustedContext(StrictModel):
         "test",
         "chat",
         "module_read",
+        "knowledge_manage",
         "data_manage",
         "mcp_manage",
         "runtime_diagnostics",
@@ -1615,7 +1616,21 @@ class DecisionCommand(ControlCommand):
     decision_id: UUID = Field(alias="decisionId", strict=False)
     decision: Literal["approve", "reject"]
     choice_id: UUID | None = Field(default=None, alias="choiceId", strict=False)
+    custom_definition: str | None = Field(
+        default=None, alias="customDefinition", min_length=1, max_length=1600
+    )
     draft_edits: dict[str, str] | None = Field(default=None, alias="draftEdits", max_length=16)
+
+    @model_validator(mode="after")
+    def validate_custom_definition(self):
+        if self.custom_definition is not None and (
+            self.decision != "approve"
+            or self.choice_id
+            or self.draft_edits
+            or not self.custom_definition.strip()
+        ):
+            raise ValueError("submit one clarification for the selected metric")
+        return self
 
 
 class ReconcileCommand(ControlCommand):
@@ -1736,8 +1751,21 @@ class SemanticOption(RunContractModel):
     version: int
 
 
+class SemanticFieldChange(RunContractModel):
+    field: str
+    before: str
+    after: str
+
+
+class SemanticRevisionPreview(RunContractModel):
+    name: str
+    code: str
+    changes: list[SemanticFieldChange]
+
+
 class WaitView(PublicApproval):
-    semantic_kind: Literal["choice", "result", "draft", "submit"] | None = Field(
+    revision_preview: SemanticRevisionPreview | None = Field(default=None, alias="revisionPreview")
+    semantic_kind: Literal["choice", "result", "draft", "submit", "revision"] | None = Field(
         default=None, alias="semanticKind"
     )
     options: list[SemanticOption] | None = None
@@ -2368,3 +2396,13 @@ class PromptStarterCards(StarterModel):
     default_choice: str | None = None
     tool_description: str | None = None
     workflow_parts: list[str] = Field(default_factory=list)
+
+
+class KnowledgeEmbeddingBatch(StrictModel):
+    texts: list[Annotated[str, Field(min_length=1, max_length=10000)]] = Field(
+        min_length=1, max_length=32
+    )
+
+
+class KnowledgeEmbeddings(StrictModel):
+    vectors: list[list[float]]

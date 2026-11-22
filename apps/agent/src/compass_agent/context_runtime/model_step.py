@@ -172,18 +172,49 @@ async def call_model(journal, executor, step, draft, route, trusted, control, bu
         if await asyncio.to_thread(journal.has_step, node_key):
             return None
         permitted = await journal.capabilities() if journal.capabilities else {}
-        registry_context = None
-        if binding.get("registry") and not draft.continuation_token and phase != "identify":
+        issue = binding.get("registryIssue") or getattr(journal, "registry_issue", None)
+        registry_context = {"items": [], "resolution": issue} if issue else None
+        if not issue and (
+            (binding.get("registry") or binding.get("glossary"))
+            and not draft.continuation_token
+            and phase != "identify"
+        ):
+            from compass_agent.routing.dictionary import semantic_context_args
             from compass_agent.semantic.service import RegistryTools
 
             service = RegistryTools(journal, trusted)
             question = journal.context_questions.get(path, "")
             initial = getattr(journal, "registry_initial_context", None) if not child else None
-            registry_context = dict(
-                initial or await service.api("context", {"question": question[:2400]})
-            )
-            if not child and (selected := getattr(journal, "registry_selected", None)):
-                registry_context["resolution"] = {"status": "resolved", "metric": selected}
+            try:
+                if binding.get("glossary"):
+                    registry_context = await service.api("glossary")
+                else:
+                    registry_context = dict(
+                        initial
+                        or await service.api(
+                            "context", semantic_context_args(question, route.scene_id)
+                        )
+                    )
+            except ModelError as exc:
+                return permitted, {
+                    "items": [],
+                    "resolution": {"status": "unavailable", "code": exc.code},
+                }
+            if not child:
+                journal.registry_initial_context = registry_context
+                registry_context["owner_clarifications"] = [
+                    {
+                        "mention": choice["args"]["mention"],
+                        **(
+                            {"definition": choice["customDefinition"]}
+                            if choice.get("customDefinition")
+                            else {"metric_id": choice["choiceId"]}
+                        ),
+                    }
+                    for choice in getattr(journal, "approved_proposals", ())
+                    if choice.get("kind") == "semantic_choice"
+                    and (choice.get("choiceId") or choice.get("customDefinition"))
+                ]
 
             from compass_agent.semantic.service import session_results
 
@@ -191,7 +222,11 @@ async def call_model(journal, executor, step, draft, route, trusted, control, bu
                 registry_context["results"] = await asyncio.to_thread(
                     session_results, journal, trusted
                 )
-            await asyncio.to_thread(service.record_page, registry_context["items"])
+            seen = list(registry_context["items"])
+            metric = (registry_context.get("resolution") or {}).get("metric")
+            if metric and all(item["version_id"] != metric["version_id"] for item in seen):
+                seen.append(metric)
+            await asyncio.to_thread(service.record_page, seen)
         return permitted, registry_context
 
     inputs = await finish_context_read(read_inputs())
@@ -220,10 +255,19 @@ async def call_model(journal, executor, step, draft, route, trusted, control, bu
         budget_extra = len(canonical(continuation)) if continuation else 0
         schema = None
         if phase == "generate" and not child and binding.get("search"):
-            from compass_agent.context_runtime.search_verification import search_draft_schema
+            if binding["search"].get("reportFormat") == "comparison_brief":
+                from compass_agent.context_runtime.comparison_brief import ComparisonBrief
 
-            progress = getattr(journal, "search_progress", None)
-            schema = search_draft_schema(getattr(progress, "previous_draft", None) is not None)
+                schema = ComparisonBrief.model_json_schema()
+            else:
+                from compass_agent.context_runtime.profiles import search_pack
+                from compass_agent.context_runtime.search_verification import search_draft_schema
+
+                progress = getattr(journal, "search_progress", None)
+                schema = search_draft_schema(
+                    getattr(progress, "previous_draft", None) is not None,
+                    pack=search_pack(binding["search"], route.scene_id),
+                )
         elif phase == "generate" and not child and route.deliverable != "business_qa":
             from compass_agent.context_runtime.delivery import output_contract
 
@@ -254,6 +298,12 @@ async def call_model(journal, executor, step, draft, route, trusted, control, bu
         # Recording this choice in the frame also preserves earlier steps on replay.
         if path == "root" and binding.get("search"):
             model_draft = model_draft.model_copy(update={"stream": False})
+            # Search opens a fresh phase with verified tool observations. Native
+            # reasoning can resume only with the provider's original sealed prefix.
+            if not draft.continuation_token and any(m.role == "tool" for m in draft.messages):
+                model_draft = model_draft.model_copy(
+                    update={"thinking": False, "reasoning_effort": None}
+                )
         value = prepare_input(
             tx,
             ctx,
@@ -264,10 +314,13 @@ async def call_model(journal, executor, step, draft, route, trusted, control, bu
             permitted,
             journal.store.metric_catalog,
             registry_context=registry_context,
+            run_facts=getattr(journal, "prompt_facts", None),
             variables={
                 **report_variables(
                     journal.context_questions.get(path, ""),
-                    journal.context_date,
+                    journal.prompt_facts.local_date
+                    if getattr(journal, "prompt_facts", None)
+                    else journal.context_date,
                     binding["scopeProfile"],
                 ),
                 "tool_limit": str(RUN_STREAM_LIMITS["toolsPerStep"]),
@@ -297,8 +350,6 @@ async def call_model(journal, executor, step, draft, route, trusted, control, bu
         nonlocal fresh
         fresh = not existed
         frame.update(value)
-        if binding.get("registry") and not child:
-            journal.registry_resolution = value["receipt"].get("semantic", {}).get("status")
         request_input = value["input"]
         if (
             value["receipt"]["generation"] != binding["generation"]

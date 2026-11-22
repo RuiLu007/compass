@@ -45,6 +45,15 @@ def result_preview(original, suggested, ref):
     return fields
 
 
+def authored_preview(source, suggested, ref):
+    from compass_agent.semantic.extraction import receipt_proposal
+
+    authored = {**source.get("recommendation", {}).get("fields", {}), **(suggested or {})}
+    if not all(authored.get(key) for key in ("name", "summary", "formula")):
+        return None
+    return result_preview(receipt_proposal(source).get("fields", {}), authored, ref)
+
+
 def confirmed_fields(original, fields, ref):
     scopes = {"owner_scope_id", "usage_scope_id"}
     lists = {"dimensions", "filters"}

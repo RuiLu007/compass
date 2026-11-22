@@ -56,7 +56,7 @@ beforeAll(async () => {
   await owner.connect();
   await owner.query("SET ROLE compass_web_owner");
   await owner.query(
-    `TRUNCATE web.semantic_feedback, web.semantic_reference, web.semantic_revocation, web.semantic_event, web.semantic_release_head, web.semantic_release, web.semantic_reviews, web.semantic_scope_grants, web.semantic_scope_memberships, web.semantic_policy, web.execution_bindings, web.semantic_relations, web.semantic_aliases,
+    `TRUNCATE web.semantic_asset_grants, web.semantic_reference, web.semantic_revocation, web.semantic_event, web.semantic_release_head, web.semantic_release, web.semantic_reviews, web.semantic_scope_grants, web.semantic_scope_memberships, web.execution_bindings, web.semantic_relations, web.semantic_aliases,
      web.semantic_versions, web.semantic_assets, web.semantic_scopes, web.semantic_source,
      web.notification, web.audit_event, web.workspace_member, web.tenant_member, web.workspace,
      web.tenant, web.web_session, web.app_user`,

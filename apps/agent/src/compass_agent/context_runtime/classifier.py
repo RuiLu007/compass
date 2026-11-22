@@ -61,13 +61,14 @@ async def call_classifier(
         offset = 0
         transforms = []
         before = None
+        facts = getattr(journal, "prompt_facts", None)
         with use_prompts(bodies):
             while True:
                 material = command.input.model_copy(update={"messages": original[offset:]})
                 request = (
-                    flash_input(material, managed=True)
+                    flash_input(material, managed=True, facts=facts)
                     if generate
-                    else decision_input(material, managed=True)
+                    else decision_input(material, managed=True, facts=facts)
                 )
                 prefix = bodies["shared/fragments/base.md"] + "\n"
                 wire_extra = 0
@@ -157,7 +158,13 @@ async def call_classifier(
         grants = await journal.capabilities() if journal.capabilities else {}
         if not grants.get("analysis") or not grants.get("model"):
             raise ModelError("forbidden", 403)
-        await asyncio.to_thread(require_run_sources, journal.store, journal.run_id, context)
+        await asyncio.to_thread(
+            require_run_sources,
+            journal.store,
+            journal.run_id,
+            context,
+            epoch=journal.epoch if fresh else None,
+        )
         observe(root, frame["receipt"], restored=not fresh)
 
     async def dispatch():

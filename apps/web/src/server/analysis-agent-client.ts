@@ -1,4 +1,5 @@
 import "server-only";
+import { sourceAccessNotice } from "../contracts/source-access";
 import type { components } from "../generated/api";
 import { isModelContract } from "../contracts/model-contract";
 import {
@@ -74,7 +75,12 @@ function domainError(value: unknown, status: number): ApplicationError {
   if (!isModelContract("ModelErrorResponse", value)) return protocolError();
   const { error } = value as components["schemas"]["ModelErrorResponse"];
   if (status === 403 && ["source_access_denied", "context_access_changed"].includes(error.code))
-    return new ApplicationError("forbidden", "当前权限无法读取这份结果的来源。");
+    return new ApplicationError(
+      "forbidden",
+      sourceAccessNotice(error.reasonCode) ?? sourceAccessNotice(error.code)!,
+    );
+  if (error.code === "source_authorization_unavailable")
+    return new ApplicationError("unavailable", sourceAccessNotice(error.code)!);
   if (Object.hasOwn(MODEL_ERRORS, error.code)) {
     const code = error.code as keyof typeof MODEL_ERRORS;
     return new ApplicationError(

@@ -11,7 +11,7 @@ from compass_agent.prompt_assets import tool_text
 from compass_agent.runtime.private_state import digest
 from compass_agent.schemas import ToolApprovalProposal, ToolDefinition, ToolFunction
 from compass_agent.semantic.client import SourceUnavailable
-from compass_agent.semantic.draft_fields import result_preview
+from compass_agent.semantic.draft_fields import authored_preview
 from compass_agent.tools.catalog_contracts import ToolSpec
 from compass_agent.tools.contracts import (
     ExecutionReceipt,
@@ -79,38 +79,63 @@ def tool(name, op, capability, args_type):
                 raise ToolRejected("semantic_source_unavailable") from None
 
         async def prepare(raw, execution):
+            try:
+                return await proposal_for(raw, execution)
+            except ModelError as exc:
+                raise ToolRejected(exc.code) from None
+
+        async def proposal_for(raw, execution):
             args = arguments(raw)
             options = None
             fields = None
+            revision = None
             if op == "resolve":
                 probe = {
                     k: v for k, v in args.items() if k not in {"parameters", "historical_as_of"}
                 }
                 result = await service.api(op, probe)
-                if result["status"] != "no_match":
-                    await asyncio.to_thread(service.put, "formal", "protected", {})
                 if result["status"] != "needs_clarification":
                     return None
                 saved = await asyncio.to_thread(service.choice, args["mention"])
+                if saved and saved.get("customDefinition"):
+                    return None
                 if saved and any(
                     (v["asset_id"], v["version_id"]) == (saved["asset_id"], saved["version_id"])
-                    for v in result["options"]
-                ):
-                    return None
-                selected = getattr(service.journal, "registry_selected", None)
-                if selected and any(
-                    v["asset_id"] == selected["asset_id"]
-                    and v["version_id"] == selected["version_id"]
                     for v in result["options"]
                 ):
                     return None
                 from compass_agent.semantic.clarification import options as choice_options
 
                 options = choice_options(result["options"])
-                if len(options) > 32:
-                    raise ToolRejected("semantic_narrow_selection")
                 kind = "semantic_choice"
                 summary = "请选择本次查询使用的指标口径。"
+            elif op == "discover" and args["trigger"] == "suggest":
+                if args.get("source_refs") or args.get("revise_metric"):
+                    raise ToolRejected("invalid_parameters")
+                return None
+            elif op == "discover" and args.get("revise_metric"):
+                if (
+                    not args.get("fields")
+                    or set(raw["fields"]) != set(args["fields"])
+                    or set(args) - {"revise_metric", "fields", "trigger"}
+                    or args["trigger"] != "requested"
+                ):
+                    raise ToolRejected("invalid_parameters")
+                view = await service.api(
+                    "revision-lookup",
+                    {"metric": args["revise_metric"], "changes": args["fields"]},
+                )
+                if view.get("status"):
+                    return None
+                if not view["changes"]:
+                    raise ToolRejected("semantic_definition_unchanged")
+                revision = {
+                    "asset_id": view["asset_id"],
+                    "expected_digest": view["expected_digest"],
+                    "changes": {c["field"]: c["after"] for c in view["changes"]},
+                }
+                kind = "semantic_revision"
+                summary = "请核对原指标与拟修改的字段，确认后将修订保存到同一指标。"
             elif op == "discover" and (ref := await service.requested_result(args)):
                 ref, source = await asyncio.to_thread(service.open_result, ref)
                 args["result_ref"] = ref
@@ -132,10 +157,7 @@ def tool(name, op, capability, args_type):
                 selected = next(
                     (r for r in available if r["result_ref"] == args["result_ref"]), None
                 )
-                if not selected or (
-                    args.get("trigger") == "suggest"
-                    and (selected["status"] != "confirmed" or not selected["reusable"])
-                ):
+                if not selected:
                     raise ToolRejected("semantic_invitation_unavailable")
                 chosen = await asyncio.to_thread(service.chosen_result)
                 if len(available) > 1 and chosen != args["result_ref"]:
@@ -144,20 +166,18 @@ def tool(name, op, capability, args_type):
                         {
                             "id": r["result_ref"],
                             "versionId": r["result_ref"],
-                            "name": "、".join(r["columns"])[:160],
+                            "name": r["title"],
                             "description": r["created_at"],
                             "unit": "",
                             "version": 1,
                         }
-                        for r in available
+                        for r in sorted(available, key=lambda r: r["result_ref"] != ref)
                     ]
                     summary = "请选择要保存的临时查询结果。"
                 else:
-                    fields = result_preview(
-                        source.get("proposal", {}).get("fields", {}),
-                        args.get("fields"),
-                        args["result_ref"],
-                    )
+                    fields = authored_preview(source, args.get("fields"), ref)
+                    if not fields:
+                        return None
                     kind = "semantic_draft"
                     summary = "请核对来自本次临时查询的定义，确认后保存为指标草稿。"
             elif op == "submit":
@@ -183,6 +203,7 @@ def tool(name, op, capability, args_type):
                 proposal,
                 {
                     "kind": kind,
+                    **({"revision": revision} if revision else {}),
                     "options": options,
                     "fields": fields,
                     **({"result_ref": args["result_ref"]} if args.get("result_ref") else {}),

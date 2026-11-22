@@ -10,6 +10,12 @@ from compass_agent.semantic.tool import Arguments, tool
 
 
 class Input(Arguments):
+    revise_metric: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=160,
+        description="修订已保存的指标时填现有名称、唯一代码或资产 ID，fields 只填本次修改。",
+    )
     source_refs: list[UUID] | None = Field(default=None, max_length=8)
     owner_scope_id: UUID | None = None
     usage_scope_id: UUID | None = None
@@ -20,6 +26,12 @@ class Input(Arguments):
     trigger: Literal["requested", "suggest"] = Field(
         default="requested",
         description="用户要求保存或选择时为 requested。只有主动推荐时填 suggest。",
+    )
+    reuse_reason: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=400,
+        description="主动推荐时说明哪些经营决策会跨期重复使用这项计算。",
     )
     fields: SuggestedDraftFields | None = None
 

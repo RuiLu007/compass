@@ -77,6 +77,13 @@ it("filters editions, current policies and explicit audience memberships before 
   const query = { query: "入库", historical: false };
   const results = searchDocuments(c, query);
   expect(results.map((r) => r.version)).toEqual(["1"]);
+  const vectorOnly = { query: "dock", historical: false };
+  const neighbor = (version: string) =>
+    JSON.stringify([doc.docId, version, doc.sections[0].sectionId, doc.sections[0].sectionHash]);
+  expect(searchDocuments(c, vectorOnly)).toEqual([]);
+  expect(
+    searchDocuments(c, vectorOnly, [neighbor("2"), neighbor("1")]).map((r) => r.version),
+  ).toEqual(["1"]);
   const peer = {
     ...doc,
     version: "5",
@@ -95,6 +102,7 @@ it("filters editions, current policies and explicit audience memberships before 
   for (const group of [audience, workspace]) {
     c.access.workspacePermissions.delete(group);
     expect(readDocument(c, ref)).toEqual([]);
+    expect(searchDocuments(c, vectorOnly, [neighbor("1")])).toEqual([]);
     expect(searchDocuments(c, query)).toEqual([]);
     c.access.workspacePermissions.set(group, []);
   }

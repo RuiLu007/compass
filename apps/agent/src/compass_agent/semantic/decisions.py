@@ -6,6 +6,8 @@ from uuid import UUID
 from compass_agent.models.errors import ModelError
 from compass_agent.semantic.client import request
 from compass_agent.semantic.draft_fields import result_preview
+from compass_agent.semantic.extraction import receipt_proposal
+from compass_agent.semantic.results import MAX_CARD_ITEMS
 
 
 def card(store, run, context, private) -> dict:
@@ -15,6 +17,7 @@ def card(store, run, context, private) -> dict:
         "semantic_choice",
         "semantic_result_choice",
         "semantic_draft",
+        "semantic_revision",
         "semantic_submit",
     }:
         return {}
@@ -22,6 +25,26 @@ def card(store, run, context, private) -> dict:
     def api(op, args):
         return request(store.source_settings, context, run.id, op, args, pins)
 
+    if kind == "semantic_revision":
+        revision = private["revision"]
+        try:
+            view = api(
+                "revision-preview",
+                {
+                    "metric": revision["asset_id"],
+                    "expected_digest": revision["expected_digest"],
+                    "changes": revision["changes"],
+                },
+            )
+        except ModelError as exc:
+            if exc.status not in {403, 409}:
+                raise
+            # Keep the owner's reject action available when a preview becomes stale.
+            return {"semanticKind": "revision"}
+        return {
+            "semanticKind": "revision",
+            "revisionPreview": {key: view[key] for key in ("name", "code", "changes")},
+        }
     if kind == "semantic_result_choice":
         from sqlalchemy import select
         from sqlalchemy.orm import Session
@@ -52,7 +75,7 @@ def card(store, run, context, private) -> dict:
             }
         return {
             "semanticKind": "result",
-            "options": [o for o in private["options"] if o["id"] in allowed],
+            "options": [o for o in private["options"] if o["id"] in allowed][:MAX_CARD_ITEMS],
         }
     if kind == "semantic_choice":
         current = api(
@@ -64,12 +87,14 @@ def card(store, run, context, private) -> dict:
             },
         )
         candidates = current.get("options", [])
-        if current["status"] == "resolved":
+        if current.get("metric"):
             candidates = [current["metric"]]
         keys = {(v["asset_id"], v["version_id"]) for v in candidates}
         return {
             "semanticKind": "choice",
-            "options": [v for v in private["options"] if (v["id"], v["versionId"]) in keys],
+            "options": [v for v in private["options"] if (v["id"], v["versionId"]) in keys][
+                :MAX_CARD_ITEMS
+            ],
         }
     if kind == "semantic_draft":
         from sqlalchemy.orm import Session
@@ -98,7 +123,7 @@ def card(store, run, context, private) -> dict:
         if not scopes["can_create_personal"] and not any(s["manage"] for s in scopes["items"]):
             raise ModelError("forbidden", 403)
         fields = result_preview(
-            original.get("proposal", {}).get("fields", {}), private["fields"], offer.offer_id
+            receipt_proposal(original).get("fields", {}), private["fields"], offer.offer_id
         )
         return {"semanticKind": "draft", "fields": fields, "scopes": scopes["items"]}
     state = api("validate", {"version_id": private["args"]["version_id"]})
@@ -108,6 +133,11 @@ def card(store, run, context, private) -> dict:
 
 
 def apply(store, run, context, private, command):
+    if command.custom_definition is not None:
+        if private.get("kind") != "semantic_choice":
+            raise ModelError("invalid_parameters", 422)
+        private["customDefinition"] = command.custom_definition.strip()
+        return
     view = card(store, run, context, private)
     if private.get("kind") == "semantic_draft":
         private["fields"] = view["fields"]
@@ -117,7 +147,24 @@ def apply(store, run, context, private, command):
         private["choiceId"] = str(command.choice_id)
     elif command.choice_id:
         raise ModelError("proposal_conflict", 409)
-    if private.get("kind") == "semantic_draft" and command.draft_edits:
+    if private.get("kind") == "semantic_revision":
+        preview = view.get("revisionPreview")
+        if not preview:
+            raise ModelError("proposal_conflict", 409)
+        changes = private["revision"]["changes"]
+        edits = command.draft_edits or {}
+        if set(edits) - changes.keys() or any(
+            not isinstance(v, str)
+            or not v.strip()
+            or len(v) > (2400 if k in {"summary", "formula"} else 160)
+            for k, v in edits.items()
+        ):
+            raise ModelError("invalid_parameters", 422)
+        changes = {**changes, **{k: v.strip() for k, v in edits.items()}}
+        if all(changes[item["field"]] == item["before"] for item in preview["changes"]):
+            raise ModelError("invalid_parameters", 422)
+        private["revision"]["changes"] = changes
+    elif private.get("kind") == "semantic_draft" and command.draft_edits:
         # User-editable attributes exclude source receipts, baseline digest and identity.
         allowed = {
             "code",

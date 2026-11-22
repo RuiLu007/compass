@@ -37,8 +37,18 @@ class AccessState:
         self.error: str | None = None
         self.checked: list[float] = []
 
-    async def authorize(self, context, *, approval=False, visibility=False, capabilities=False):
+    async def authorize(
+        self,
+        context,
+        *,
+        approval=False,
+        visibility=False,
+        capabilities=False,
+        run_environment=False,
+    ):
         assert context == CHAT
+        if run_environment and not self.error:
+            return {"timezone": "UTC", "tenantName": "Tenant", "workspaceName": "Workspace"}
         if visibility:
             self.checked.append(asyncio.get_running_loop().time())
         if self.error:
@@ -238,9 +248,13 @@ def test_exporter_failure_during_execution_keeps_authorized_message_and_timeline
         )
         denied = False
 
-        async def authorize(context, *, approval=False, visibility=False, capabilities=False):
+        async def authorize(
+            context, *, approval=False, visibility=False, capabilities=False, run_environment=False
+        ):
             if denied or context not in (CHAT, diagnostic_context):
                 raise ModelError("forbidden", 403)
+            if run_environment:
+                return {"timezone": "UTC", "tenantName": "Tenant", "workspaceName": "Workspace"}
             if capabilities:
                 return {"analysis": True, "model": True, "plugins": True}
             return {"details": True, "revision": "observability-view"} if visibility else None

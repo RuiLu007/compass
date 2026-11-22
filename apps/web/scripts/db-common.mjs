@@ -10,6 +10,10 @@ export const revisions = [
   "0004_semantic_content",
   "0005_semantic_governance",
   "0006_semantic_search",
+  "0007_semantic_cleanup",
+  "0008_semantic_asset_grants",
+  "0009_document_vectors",
+  "0010_knowledge_library",
 ];
 export const revision = revisions.at(-1);
 export const databaseRoot = new URL("../db/main/", import.meta.url);
@@ -81,11 +85,17 @@ export async function withMigrationLock(work, url) {
   }
 }
 
+// Only functions owned by the provisioned pgvector extension may exist in public.
+export const vectorFunction = `n.nspname='public' AND EXISTS (
+  SELECT FROM pg_depend d JOIN pg_extension e ON e.oid=d.refobjid
+  WHERE d.classid='pg_proc'::regclass AND d.objid=p.oid AND d.deptype='e'
+    AND d.refclassid='pg_extension'::regclass AND e.extname='vector' AND e.extnamespace=n.oid)`;
+
 export async function inspectVersion(client) {
   const unexpected =
     await client.query(`SELECT nspname FROM pg_namespace WHERE nspname NOT IN ('public','web','web_meta','information_schema') AND nspname NOT LIKE 'pg_%'
     UNION ALL SELECT n.nspname||'.'||c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','web','web_meta') AND c.relkind IN ('v','m','f')
-    UNION ALL SELECT n.nspname||'.'||p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname IN ('public','web','web_meta')`);
+    UNION ALL SELECT n.nspname||'.'||p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname IN ('public','web','web_meta') AND NOT (${vectorFunction})`);
   if (unexpected.rows.length) throw new Error("Unknown database objects; refusing migration");
   const { rows: tables } = await client.query(
     "SELECT schemaname,tablename FROM pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema') ORDER BY schemaname,tablename",
@@ -158,7 +168,16 @@ export async function inspectVersion(client) {
       "semantic_reference",
       "semantic_feedback",
     );
+  if (ledger.some(({ name }) => name === "0008_semantic_asset_grants"))
+    expected.push("semantic_asset_grants");
+  if (ledger.some(({ name }) => name === "0009_document_vectors"))
+    expected.push("document_vectors");
+  if (ledger.some(({ name }) => name === "0010_knowledge_library"))
+    expected.push("knowledge_base", "knowledge_file", "knowledge_chunk");
+  const retired =
+    ledger.at(-1).name >= "0007_semantic_cleanup" ? ["semantic_policy", "semantic_feedback"] : [];
   const qualified = expected
+    .filter((name) => !retired.includes(name))
     .map((name) => `web.${name}`)
     .concat(["web_meta.migration_source", "web_meta.pgmigrations"])
     .sort();

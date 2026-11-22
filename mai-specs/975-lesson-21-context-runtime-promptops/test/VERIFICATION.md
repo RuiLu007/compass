@@ -79,3 +79,17 @@ Auto 选择 DeepSeek Flash 时还发现了两个结构化交付问题。第一�
 - 在专用本地 PostgreSQL 集群创建空库 `compass_retail_test_975`，以 `psql -v reader_password=...` 执行[零售验收夹具](../../../apps/agent/tests/context_retail_fixture.sql)。将教学工作空间连接绑定为 `compass_l21_reader`、零售租户 101。完成浏览器用例后，在同一测试会话环境下执行 `CONTEXT_RETAIL_TEST_PORT=<端口> uv run python apps/agent/tests/context_access_e2e.py`，校验区域及列撤权、追问和恢复。
 - 回归源包括[组合与交付矩阵](../../../apps/agent/tests/test_context_runtime_integration.py)、[定时任务与接管](../../../apps/agent/tests/test_run_scheduler_integration.py)、[数据库迁移与发布并发](../../../apps/agent/tests/test_database_tools_integration.py)、[交付校验与一次性来源](../../../apps/agent/tests/test_context_deliveries.py)。涉及数据库或 Redis 的测试使用仓库已有的隔离测试环境变量。
 - 仓库检查已执行 `pnpm check`、`pnpm build`、`pnpm contracts:check`、`pnpm db:sql:check -F agent` 和 `pnpm smoke --memory`。Smoke 经过真实 Web、BFF、Agent、PostgreSQL 与 Memory 进程。工具测试中依赖本地可选格式化 hook 的 13 项由仓库跳过。
+
+## 2026-11-21 销售额案例与空目录降级
+
+平台教学账号原轮次 `90abe669-b341-4d6f-add8-b619e1dd6fba` 成功读取了经营数据水位。路由再次核验来源时把本次执行的临时查询结果当成历史来源处理，最终显示 `source_access_denied`。已修复路由的执行批次传递，并为受行权限保护的数据水位查询保存可复核的表、列和行范围。
+
+同一管理员在本机分析页重发原题，轮次 `4e5adfe6-74c9-4b0f-9d3b-7b421f204def` 完成，页面说明缺少本部门已发布的默认口径，请用户确认业务事件。该次实跑验证了缺配置时的对话结果。管理员的实时目录接口返回可读取、可查询，发布清单和可见条目均为空。销售部正式取数仍待验收。检查时本机教学库有 121 个候选资产和 14 个候选绑定，生效发布与有效部门成员关系均为零。
+
+隔离 PostgreSQL 回归覆盖了启用目录后的首个空清单、旧轮次固定空清单、管理员查阅其他部门的已发布定义、部门成员按授权读取、个人草稿隔离，以及只获分析权限的用户取得空上下文。原水位 SQL 和两种投影已用本机教学只读连接实际查询并重新核验权限。
+
+### 演示管理员与权限提示
+
+本机为 `teaching.platform` 补齐两个教学租户的管理员成员身份。重复执行教学 seed，新增成员数依次为 2 和 0。通过三个教学工作区的实际 Web 接口核对了指标读取、查询、草稿、治理，以及组织配置与个人草稿入口。重新打开原失败会话后，分析页提示联系工作区管理员核对来源数据的读取权限。数据库、指标和文档类拒绝分别给出申请建议，权限服务暂不可用时提示重试。教学账号权限与正式口径发布分别验收。
+
+在经营总部以同一管理员实际提交数据水位查询，Run `42b1ea0b-f50b-47aa-8c04-5d0af5136f23` 完成。通过会话消息接口重新读取了 OMS 的一条水位记录，预期与到达批次均为 1，状态为 `COMPLETE`。

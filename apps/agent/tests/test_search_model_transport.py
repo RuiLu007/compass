@@ -14,7 +14,7 @@ from compass_agent.execution_context import execution_scope
 from compass_agent.harness.executor import AgentExecutor
 from compass_agent.models.service import create_runtime
 from compass_agent.runtime.context import RunRoute
-from compass_agent.schemas import ModelTokenLimits
+from compass_agent.schemas import ChatMessage, ModelTokenLimits
 
 from .test_models import CHAT, create, generate
 from .test_models import system as system
@@ -114,6 +114,34 @@ def test_transport_is_a_property_of_the_new_private_root_frame(
         frame.saved["input"]["request"]["stream"] = True
         asyncio.run(call())
         assert seen[-1] == (True, False) and draft.stream is requested
+
+
+def test_reopened_search_observations_use_a_fresh_non_reasoning_call(monkeypatch):
+    assemble(monkeypatch)
+    frame = Frame()
+    draft = generate(thinking=True).model_copy(
+        update={"messages": [ChatMessage(role="tool", tool_call_id="read", content="observed")]}
+    )
+
+    async def live(step, prepared, *args, publish_text):
+        assert prepared.thinking is False
+        assert prepared.reasoning_effort is None
+
+    with execution_scope("root", absolute=True):
+        asyncio.run(
+            model_step.call_model(
+                frame,
+                SimpleNamespace(_invoke_model_live=live),
+                SimpleNamespace(id=uuid4()),
+                draft,
+                route(uuid4()),
+                CHAT,
+                None,
+                None,
+                None,
+            )
+        )
+    assert draft.thinking is True
 
 
 @pytest.mark.parametrize(

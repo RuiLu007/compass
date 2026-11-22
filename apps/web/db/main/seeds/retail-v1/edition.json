@@ -23,35 +23,5 @@
     "scope": "101.personal",
     "tenant": "101",
     "user": "99500000-0000-4000-8000-000000000003"
-  },
-  "policies": [
-    { "scope": "platform", "pins": ["platform/sales.order_count"] },
-    {
-      "scope": "101",
-      "pins": ["101/term.sales_amount", "101/sales.net_gmv", "101/inventory.closing_available_qty"]
-    },
-    { "scope": "102", "pins": ["102/term.sales_amount", "102/sales.net_gmv"] },
-    {
-      "scope": "101.sales",
-      "term": "101/term.sales_amount",
-      "default": "101.sales/sales.paid_gmv",
-      "pins": ["101.sales/sales.paid_gmv", "101/channel.reported_paid_amount"]
-    },
-    {
-      "scope": "101.finance",
-      "term": "101/term.sales_amount",
-      "default": "101.finance/finance.recognized_revenue",
-      "pins": ["101.finance/finance.recognized_revenue"]
-    },
-    {
-      "scope": "102.sales",
-      "term": "102/term.sales_amount",
-      "default": "102/sales.net_gmv",
-      "pins": ["102/sales.net_gmv"]
-    },
-    {
-      "scope": "101.marketing",
-      "pins": ["101.marketing/marketing.net_roas", "101.marketing/term.ad_return"]
-    }
-  ]
+  }
 }

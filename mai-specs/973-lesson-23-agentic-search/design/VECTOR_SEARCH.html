@@ -1,0 +1,1464 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="从 12 份经营资料检索线索，再回到账本解释两周差额" />
+    <title>OpenAI 向量检索与华东 GMV 诊断 · Compass</title>
+    <!-- prettier-ignore -->
+    <style>/* Adapted from the approved lesson 13 reading edition; no product-app dependency. */
+:root {
+  color-scheme: light;
+  --paper: #f9faf7;
+  --surface: #fff;
+  --ink: #172c25;
+  --muted: #5d6b64;
+  --green: #245847;
+  --soft: #edf2eb;
+  --line: #dce4db;
+  --lime: #d7edb4;
+  --mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+* {
+  box-sizing: border-box;
+}
+html {
+  scroll-padding-top: 96px;
+}
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--paper);
+  font: 14px/1.9 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+button,
+input {
+  font: inherit;
+}
+button,
+summary {
+  cursor: pointer;
+}
+button {
+  touch-action: manipulation;
+}
+a {
+  color: var(--green);
+  text-underline-offset: 4px;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid #598547;
+  outline-offset: 4px;
+}
+svg {
+  display: block;
+}
+.icon {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+}
+.skip {
+  position: fixed;
+  z-index: 100;
+  top: -80px;
+  left: 20px;
+  padding: 12px 20px;
+  background: var(--green);
+  color: white;
+}
+.skip:focus {
+  top: 10px;
+}
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: 72px;
+  background: rgba(249, 250, 247, 0.97);
+  border-bottom: 1px solid var(--line);
+}
+.topbar-inner {
+  max-width: 1440px;
+  height: 100%;
+  margin: auto;
+  padding: 0 40px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: var(--ink);
+  font-size: 21px;
+  font-weight: 650;
+  text-decoration: none;
+}
+.brand span {
+  border-left: 1px solid var(--line);
+  padding-left: 16px;
+  color: var(--muted);
+  font: 10px/1.3 var(--mono);
+}
+.top-links {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  font-size: 13px;
+}
+.top-links a {
+  text-decoration: none;
+  color: var(--muted);
+}
+.search-trigger,
+.plain-button,
+.close-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: white;
+  color: var(--ink);
+  font-size: 12px;
+}
+.close-button {
+  min-width: 44px;
+  font-size: 24px;
+}
+kbd {
+  padding: 4px;
+  border-radius: 3px;
+  background: var(--soft);
+  color: var(--muted);
+  font: 11px var(--mono);
+}
+.reading-progress {
+  position: absolute;
+  bottom: -1px;
+  height: 2px;
+  width: 100%;
+  background: var(--green);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+.hero {
+  max-width: 1200px;
+  margin: auto;
+  padding: 70px 40px 0;
+}
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 30px;
+  color: var(--green);
+  font: 11px/1.5 var(--mono);
+  letter-spacing: 0.06em;
+}
+.dash {
+  width: 25px;
+  height: 2px;
+  background: var(--green);
+}
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 52px;
+  align-items: center;
+}
+.hero-grid--solo {
+  grid-template-columns: 1fr;
+}
+h1 {
+  margin: 0 0 26px;
+  font-size: clamp(32px, 3.4vw, 50px);
+  line-height: 1.25;
+  letter-spacing: -0.04em;
+  overflow-wrap: anywhere;
+}
+h1 > span {
+  display: block;
+  margin-top: 18px;
+  font-size: clamp(22px, 2.4vw, 32px);
+  font-weight: 450;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+  color: var(--green);
+}
+h1 > span:empty {
+  display: none;
+}
+.hero-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+.hero-topics:empty {
+  display: none;
+}
+.hero-topics span {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: white;
+  padding: 5px 11px;
+  color: var(--green);
+  font: 12px/1.6 var(--mono);
+}
+.primary-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 18px;
+  border-radius: 5px;
+  background: var(--green);
+  color: white;
+  text-decoration: none;
+  font-size: 13px;
+}
+.hero-note {
+  margin-top: 22px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #67885b;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  margin-top: 48px;
+  padding: 28px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.metric {
+  padding: 0 24px;
+  border-left: 1px solid var(--line);
+}
+.metric:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+.metric strong {
+  font-size: 31px;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  margin-right: 8px;
+}
+.metric small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.metric p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.doc-layout {
+  max-width: 1200px;
+  margin: auto;
+  padding: 0 40px;
+}
+.document {
+  min-width: 0;
+  padding-top: 20px;
+}
+.document h2 {
+  margin: 64px 0 24px;
+  padding-top: 32px;
+  border-top: 1px solid var(--line);
+  font-size: 30px;
+  line-height: 1.4;
+  letter-spacing: -0.025em;
+}
+.document h3 {
+  margin: 40px 0 20px;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.document h4 {
+  margin: 32px 0 18px;
+  font-size: 19px;
+  font-weight: 600;
+}
+.document p {
+  margin: 16px 0;
+}
+.document strong {
+  font-weight: 650;
+}
+.document :not(pre) > code {
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: var(--green);
+  background: var(--soft);
+  font: 13px/1.7 var(--mono);
+  overflow-wrap: anywhere;
+}
+.table-wrap {
+  overflow-x: auto;
+  margin: 24px 0 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  text-align: left;
+}
+th,
+td {
+  min-width: 130px;
+  padding: 14px 16px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+th {
+  background: var(--soft);
+  color: #355442;
+  font-weight: 600;
+}
+td:first-child {
+  color: #305344;
+  font-weight: 500;
+}
+tr:last-child td {
+  border-bottom: 0;
+}
+.diagram {
+  overflow: hidden;
+  margin: 28px 0 40px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: white;
+}
+.hero .diagram {
+  margin: 0;
+}
+.figure-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: #f3f6ef;
+}
+.figure-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.figure-label small {
+  margin-right: 13px;
+  color: var(--muted);
+  font: 10px var(--mono);
+}
+.figure-bar button {
+  flex: none;
+}
+.diagram-stage {
+  padding: 22px;
+  overflow: auto;
+  background-image: radial-gradient(#dce6d8 0.7px, transparent 0.7px);
+  background-size: 16px 16px;
+}
+.diagram-stage > svg {
+  display: block;
+  margin-inline: auto;
+  max-height: none;
+}
+.source-details {
+  border-top: 1px solid var(--line);
+}
+.source-details summary {
+  padding: 10px 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.source-details .code-block {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+.code-block {
+  overflow: hidden;
+  margin: 24px 0 36px;
+  border: 1px solid #2d493d;
+  border-radius: 9px;
+  background: #182d25;
+  color: #e1eada;
+}
+.code-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: 49px;
+  padding: 8px 16px;
+  background: #213a2e;
+  border-bottom: 1px solid #365141;
+}
+.code-bar > span {
+  font: 11px/1.6 var(--mono);
+  color: #bad1af;
+  overflow-wrap: anywhere;
+}
+.code-tools {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+.code-tools button {
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid #54725a;
+  border-radius: 5px;
+  color: #d4e1ca;
+  background: transparent;
+  font-size: 12px;
+}
+.code-block pre {
+  overflow: auto;
+  max-height: 480px;
+  margin: 0;
+  padding: 20px 0;
+  font: 14px/1.85 var(--mono);
+  tab-size: 4;
+}
+.code-block.expanded pre {
+  max-height: none;
+}
+.code-block pre > code {
+  display: block;
+  min-width: max-content;
+}
+.code-line {
+  display: block;
+  padding-right: 24px;
+}
+.line-num {
+  display: inline-block;
+  width: 4ch;
+  margin: 0 20px 0 12px;
+  color: #819582;
+  text-align: right;
+  user-select: none;
+}
+.line-content {
+  white-space: pre;
+}
+.hljs-keyword,
+.hljs-meta {
+  color: #d8bded;
+}
+.hljs-string,
+.hljs-regexp {
+  color: #c9dfaa;
+}
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.function_ {
+  color: #bce3dd;
+}
+.hljs-number,
+.hljs-literal {
+  color: #efcb91;
+}
+.hljs-comment {
+  color: #9daf9b;
+  font-style: italic;
+}
+.hljs-built_in,
+.hljs-type {
+  color: #b3d9e7;
+}
+.hljs-attr,
+.hljs-params,
+.hljs-property {
+  color: #e1eada;
+}
+.footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  max-width: 1120px;
+  margin: 72px auto 0;
+  padding: 24px 0 36px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+.footer a {
+  margin-left: 18px;
+}
+dialog {
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 20px 80px #102c2533;
+}
+dialog::backdrop {
+  background: #12261f77;
+  backdrop-filter: blur(3px);
+}
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.dialog-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+#search-dialog {
+  width: min(720px, calc(100vw - 32px));
+  max-height: 85dvh;
+}
+.search-field {
+  padding: 18px 20px;
+}
+.search-field input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px 14px;
+  color: var(--ink);
+  background: white;
+}
+#search-results {
+  max-height: 50dvh;
+  overflow: auto;
+  padding: 0 20px;
+}
+.search-result {
+  display: block;
+  padding: 12px;
+  margin: 0 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  text-decoration: none;
+}
+.search-result:hover,
+.search-result:focus {
+  background: var(--soft);
+}
+.search-result strong {
+  font-size: 14px;
+}
+.search-result p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.search-meta {
+  padding: 0 20px 16px;
+  font-size: 12px;
+  color: var(--muted);
+}
+#diagram-dialog {
+  width: calc(100vw - 40px);
+  height: calc(100dvh - 40px);
+  max-width: 1600px;
+  max-height: none;
+}
+.zoom-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+#zoom-level {
+  min-width: 48px;
+  text-align: center;
+  font: 12px var(--mono);
+}
+.zoom-hint {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+#zoom-viewport {
+  overflow: auto;
+  height: calc(100% - 160px);
+  padding: 24px;
+  background: white;
+}
+#zoom-content {
+  margin: auto;
+}
+#zoom-content svg {
+  max-width: none !important;
+}
+.toast {
+  position: fixed;
+  z-index: 100;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  border-radius: 7px;
+  background: var(--green);
+  color: white;
+  font-size: 13px;
+}
+.toast:empty {
+  display: none;
+}
+.document [id]:target {
+  scroll-margin-top: 96px;
+}
+@media (max-width: 1000px) {
+  .top-links .desktop-link {
+    display: none;
+  }
+  .hero-grid {
+    gap: 28px;
+  }
+  .footer {
+    margin-inline: 40px;
+  }
+}
+@media (max-width: 760px) {
+  .topbar {
+    height: 64px;
+  }
+  .topbar-inner {
+    padding-inline: 20px;
+    gap: 10px;
+  }
+  .brand {
+    font-size: 18px;
+    gap: 9px;
+  }
+  .brand span {
+    padding-left: 9px;
+    font-size: 8px;
+  }
+  .search-trigger span,
+  .search-trigger kbd {
+    display: none;
+  }
+  .hero {
+    padding: 40px 20px 0;
+  }
+  .hero-grid {
+    grid-template-columns: 1fr;
+  }
+  .metrics {
+    grid-template-columns: 1fr 1fr;
+    padding-block: 0;
+  }
+  .metric,
+  .metric:first-child {
+    padding: 18px 12px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .metric:nth-child(2n) {
+    border-left: 1px solid var(--line);
+  }
+  .doc-layout {
+    padding-inline: 20px;
+  }
+  .document h2 {
+    font-size: 28px;
+  }
+  .document h3 {
+    font-size: 23px;
+  }
+  .diagram-stage {
+    padding: 16px;
+  }
+  .diagram-stage > svg {
+    max-width: none !important;
+  }
+  .figure-bar,
+  .code-bar {
+    flex-wrap: wrap;
+    padding-inline: 12px;
+  }
+  .figure-label small {
+    display: none;
+  }
+  .footer {
+    margin: 48px 20px 0;
+    flex-direction: column;
+    gap: 8px;
+  }
+  #diagram-dialog {
+    width: calc(100vw - 12px);
+    height: calc(100dvh - 12px);
+  }
+  .dialog-header {
+    padding: 10px 12px;
+  }
+  .zoom-toolbar {
+    padding: 8px;
+  }
+  .zoom-hint {
+    display: none;
+  }
+  #zoom-viewport {
+    height: calc(100% - 180px);
+    padding: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation: none !important;
+    transition: none !important;
+  }
+}
+@media print {
+  body {
+    background: white;
+  }
+  .topbar,
+  .skip,
+  .hero-actions,
+  .source-details,
+  .code-tools,
+  .figure-bar button,
+  dialog,
+  .toast {
+    display: none !important;
+  }
+  .hero {
+    padding-top: 0;
+  }
+  .hero,
+  .doc-layout {
+    max-width: none;
+    padding-inline: 0;
+  }
+  .hero-grid {
+    grid-template-columns: 1fr;
+  }
+  .table-wrap {
+    overflow: visible;
+  }
+  th,
+  td {
+    min-width: 0;
+  }
+  .code-block pre {
+    max-height: none;
+    overflow: visible;
+  }
+  .code-block {
+    background: #f4f5f2;
+    color: #1d3125;
+    border-color: #ccc;
+  }
+  .code-bar {
+    background: #edf2eb;
+    border-color: #ccc;
+  }
+  .code-bar > span,
+  .line-content span {
+    color: inherit;
+  }
+  .code-block pre > code {
+    min-width: 0;
+  }
+  .code-line,
+  .line-content {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .diagram-stage {
+    overflow: visible;
+  }
+  .diagram-stage > svg {
+    max-width: 100% !important;
+  }
+  h2,
+  h3,
+  h4 {
+    break-after: avoid;
+  }
+  .footer {
+    margin-top: 24px;
+  }
+}
+</style>
+  <!-- prettier-ignore --><style id="course-reader">.lesson-heading {
+  width: min(100%, 1200px);
+  margin: auto;
+  padding: 30px 40px 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 255px);
+  grid-template-areas: "title cover" "controls cover";
+  align-items: center;
+  gap: 12px 40px;
+}
+.lesson-number {
+  margin: 0 0 6px;
+  color: var(--green);
+  font-weight: 650;
+}
+.lesson-heading h1 {
+  margin: 0;
+  font-size: clamp(31px, 3.5vw, 48px);
+}
+.lesson-question {
+  margin: 8px 0 0;
+  font-size: clamp(16px, 1.6vw, 20px);
+  color: var(--muted);
+}
+.lesson-cover {
+  grid-area: cover;
+  justify-self: end;
+  width: 100%;
+}
+.lesson-cover summary {
+  position: relative;
+  display: block;
+  width: 100%;
+  color: var(--green);
+}
+.lesson-cover summary::-webkit-details-marker {
+  display: none;
+}
+.lesson-cover img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.lesson-cover summary span {
+  display: block;
+  margin-top: 2px;
+  text-align: right;
+  font-size: 12px;
+}
+.lesson-cover .cover-close,
+.lesson-cover[open] .cover-open {
+  display: none;
+}
+.lesson-cover[open] .cover-close {
+  display: block;
+}
+.lesson-heading:has(.lesson-cover[open]) {
+  grid-template-columns: 1fr;
+  grid-template-areas: "title" "controls" "cover";
+}
+.lesson-cover[open] {
+  max-width: 960px;
+  justify-self: start;
+}
+.lesson-controls {
+  grid-area: controls;
+  display: flex;
+  align-items: start;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.lesson-toc {
+  position: relative;
+}
+.lesson-toc summary {
+  padding: 8px 14px;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  line-height: 26px;
+}
+.lesson-toc nav {
+  position: absolute;
+  z-index: 4;
+  width: min(350px, 85vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px #172c2521;
+}
+.lesson-toc nav a {
+  display: block;
+  padding: 5px 10px;
+  text-decoration: none;
+}
+.lesson-toc nav a:hover,
+.lesson-toc nav a:focus-visible {
+  background: var(--soft);
+}
+.document {
+  padding-top: 0;
+  font-size: 15px;
+}
+.document > h2:first-child {
+  margin: 0 0 10px;
+  padding-top: 20px;
+}
+.document > h2:first-child + ul {
+  margin: 0;
+  padding-left: 1.5em;
+}
+.document > h2:first-child + ul li {
+  padding: 2px 0;
+}
+.document > h2:first-child + ul li::marker {
+  color: var(--green);
+}
+.document > h2:first-child + ul + h2 {
+  margin-top: 26px;
+  padding-top: 22px;
+}
+.document h2 + .diagram {
+  margin-top: 12px;
+}
+.diagram-stage:focus-visible {
+  outline-offset: -4px;
+}
+@media screen and (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --paper: #15201b;
+    --surface: #1b2b23;
+    --ink: #e6eee7;
+    --muted: #b0c1b5;
+    --green: #aed3b8;
+    --soft: #263a2f;
+    --line: #3b5042;
+  }
+  .topbar,
+  .search-trigger,
+  .plain-button,
+  .close-button,
+  .search-result,
+  .search-field input,
+  .source-details {
+    background: var(--surface);
+  }
+  .figure-bar {
+    background: var(--soft);
+  }
+  th,
+  td:first-child {
+    color: var(--ink);
+  }
+  .diagram-stage,
+  #zoom-viewport {
+    color-scheme: light;
+    background-color: #f8faf7;
+  }
+  .toast {
+    color: var(--paper);
+  }
+}
+@media (max-width: 760px) {
+  .lesson-heading {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "title title" "controls cover";
+    gap: 10px;
+    padding: 20px 20px 16px;
+  }
+  .lesson-heading > div:first-child {
+    grid-area: title;
+  }
+  .lesson-cover:not([open]) img {
+    display: none;
+  }
+  .lesson-cover summary span {
+    margin: 0;
+    padding: 10px 0;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .lesson-controls {
+    gap: 6px;
+  }
+}
+@media print {
+  .lesson-heading {
+    display: block;
+    padding: 0 0 16px;
+  }
+  .lesson-cover,
+  .lesson-controls {
+    display: none;
+  }
+}
+.document h2 {
+  margin-top: 38px;
+}
+.document h3 {
+  margin: 24px 0 10px;
+  font-size: clamp(18px, 2.1vw, 22px);
+}
+.document .diagram,
+.document .table-wrap,
+.document > .code-block {
+  margin-block: 12px 20px;
+}
+.document .table-wrap td {
+  vertical-align: top;
+}
+.document .table-wrap td:first-child {
+  min-width: 9em;
+}
+
+.lesson-heading:not(:has(.lesson-cover)) {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "title" "controls";
+}
+.lesson-toc nav {
+  max-width: calc(100vw - 42px);
+}
+.lesson-controls .plain-button {
+  min-height: 44px;
+}
+.document h2,
+.document h3,
+.lesson-heading {
+  overflow-wrap: anywhere;
+}
+@media print {
+  .document .table-wrap {
+    overflow: visible;
+  }
+}
+</style></head>
+  <body>
+    <a class="skip" href="#document">跳至设计正文</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="#top"
+          >Compass<span>ENGINEERING<br />DESIGN NOTES</span></a
+        >
+        <nav class="top-links" aria-label="快捷导航">
+          <a class="desktop-link" href="#section-0">课堂演示</a><a class="desktop-link" href="#section-1">资料发布</a><a class="desktop-link" href="#section-2">请求与归属</a><a class="desktop-link" href="#section-3">数据、发布与恢复</a>
+          <button class="search-trigger" type="button" data-search aria-label="检索文档">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="6.5" />
+              <path d="m16 16 5 5" />
+            </svg>
+            <span>检索文档</span><kbd>⌘ K</kbd>
+          </button>
+        </nav>
+      </div>
+      <div class="reading-progress" aria-hidden="true"></div>
+    </header>
+    <main id="top">
+      <header class="lesson-heading" aria-labelledby="page-title">
+    <div><p class="lesson-number">第 23 课 · 技术方案</p><h1 id="page-title">OpenAI 向量检索与华东 GMV 诊断</h1><p class="lesson-question">从 12 份经营资料检索线索，再回到账本解释两周差额</p></div>
+    <div class="lesson-controls"><details class="lesson-toc"><summary>章节目录</summary><nav aria-label="章节目录"><a href="#section-0">课堂演示</a><a href="#section-1">资料发布</a><a href="#section-2">请求与归属</a><a href="#section-3">数据、发布与恢复</a><a href="#section-4">混合排名与验收</a><a href="#section-5">两周降幅与行动优先级</a><a href="#section-6">工作区知识文档管理</a><a href="#section-7">知识库检索测试</a></nav></details><button class="plain-button" type="button" data-search>检索文档</button></div></header>
+      <div class="doc-layout"><article class="document" id="document"><p><a href="TECH_DESIGN.html">本课主方案</a> · <a href="RETAIL_CASE.html">两组课堂案例的数据与口径</a></p>
+<p>经营会需要先确认华东少了多少钱，再判断是哪个经营单元少了、该由谁跟进。文档检索找到当时生效的支付口径、投放排期和门店券规则，账本查询给出两周的支付金额。两种来源在同一轮普通 Chat 中汇合。</p>
+<h2 id="section-0">课堂演示</h2>
+<p>在 Compass 首页选择「远山零售 → 华东区域 → 新建分析」，点击「华东区 GMV 为什么下降了 12%？」并发送。先看助手如何确定支付口径和封版时间，再看它如何从分单元查账转向晚场采购、旗舰店主销码和杭州试点券。讲到仓配时可以追问「周三已经签收，顾客从哪天开始买得到？」观察它是否继续检索货池的前台可售记录。</p>
+<h2 id="section-1">资料发布</h2>
+<p>将 12 份 Markdown 转为既有 collection。按二级标题取章节，过长章节沿空行拆分，以 600 字符为目标，完整自然段和表格保留在同一片，切片携带文号、版本、有效日期、标题和正文摘要。Embedding 文本是文档标题、章节标题与正文。使用现有 OpenAI Provider 的服务端密钥，模型固定为 text-embedding-3-small，输出 1024 维。每批最多 32 段；校验响应的行数、维度和有限数值后，在同一数据库事务内分批写入 Web 索引。内容包与索引均按摘要寻址，最后原子切换工作区绑定。发生失败时既有绑定可用，重跑同内容可复用已完成索引。</p>
+<h2 id="section-2">请求与归属</h2>
+<p>Agent 持有 Provider 密钥，发布阶段和查询阶段采用同一 Provider 配置与模型。普通 Chat 继续调用 search_documents，在启用向量的资料快照中额外发送问题向量。Web 按当时 Run 固定的文档版本、当前权限、业务日期先选可读章节。词法和余弦距离分别取前十，再按倒数名次融合，返回至多三个章节引用。精确文号优先，保留同条款不同版本的现有展示规则。read_document 原有回读、内容校验和撤权检查持续生效。Embedding 服务不可用时返回词法结果，并记录实际检索模式。</p>
+<figure class="diagram" id="figure-0" data-title="文档发现如何连接到经营查账"><div class="figure-bar"><span class="figure-label"><small>FIG. 01</small>文档发现如何连接到经营查账</span><button class="plain-button" type="button" data-diagram>放大图表 ↗</button></div><div class="diagram-stage"><svg xmlns="http://www.w3.org/2000/svg" id="drawing-0-render-0" width="100%" class="flowchart" style="max-width: 100%; width: 568.719px; height: auto;" viewBox="0 0 568.71875 832" role="img" aria-roledescription="flowchart-v2" aria-label="文档发现如何连接到经营查账"><style>#drawing-0-render-0{font-family:-apple-system,BlinkMacSystemFont,PingFang SC,Microsoft YaHei,sans-serif;font-size:15px;fill:#20372a;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#drawing-0-render-0 .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#drawing-0-render-0 .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#drawing-0-render-0 .error-icon{fill:#e9eff0;}#drawing-0-render-0 .error-text{fill:#16100f;stroke:#16100f;}#drawing-0-render-0 .edge-thickness-normal{stroke-width:1px;}#drawing-0-render-0 .edge-thickness-thick{stroke-width:3.5px;}#drawing-0-render-0 .edge-pattern-solid{stroke-dasharray:0;}#drawing-0-render-0 .edge-thickness-invisible{stroke-width:0;fill:none;}#drawing-0-render-0 .edge-pattern-dashed{stroke-dasharray:3;}#drawing-0-render-0 .edge-pattern-dotted{stroke-dasharray:2;}#drawing-0-render-0 .marker{fill:#6c8265;stroke:#6c8265;}#drawing-0-render-0 .marker.cross{stroke:#6c8265;}#drawing-0-render-0 svg{font-family:-apple-system,BlinkMacSystemFont,PingFang SC,Microsoft YaHei,sans-serif;font-size:15px;}#drawing-0-render-0 p{margin:0;}#drawing-0-render-0 .label{font-family:-apple-system,BlinkMacSystemFont,PingFang SC,Microsoft YaHei,sans-serif;color:#20372a;}#drawing-0-render-0 .cluster-label text{fill:#16100f;}#drawing-0-render-0 .cluster-label span{color:#16100f;}#drawing-0-render-0 .cluster-label span p{background-color:transparent;}#drawing-0-render-0 .label text,#drawing-0-render-0 span{fill:#20372a;color:#20372a;}#drawing-0-render-0 .node rect,#drawing-0-render-0 .node circle,#drawing-0-render-0 .node ellipse,#drawing-0-render-0 .node polygon,#drawing-0-render-0 .node path{fill:#eef4e7;stroke:#8ba67c;stroke-width:1px;}#drawing-0-render-0 .rough-node .label text,#drawing-0-render-0 .node .label text,#drawing-0-render-0 .image-shape .label,#drawing-0-render-0 .icon-shape .label{text-anchor:middle;}#drawing-0-render-0 .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#drawing-0-render-0 .rough-node .label,#drawing-0-render-0 .node .label,#drawing-0-render-0 .image-shape .label,#drawing-0-render-0 .icon-shape .label{text-align:center;}#drawing-0-render-0 .node.clickable{cursor:pointer;}#drawing-0-render-0 .root .anchor path{fill:#6c8265!important;stroke-width:0;stroke:#6c8265;}#drawing-0-render-0 .arrowheadPath{fill:#0b0b0b;}#drawing-0-render-0 .edgePath .path{stroke:#6c8265;stroke-width:2.0px;}#drawing-0-render-0 .flowchart-link{stroke:#6c8265;fill:none;}#drawing-0-render-0 .edgeLabel{background-color:#fff;text-align:center;}#drawing-0-render-0 .edgeLabel p{background-color:#fff;}#drawing-0-render-0 .edgeLabel rect{opacity:0.5;background-color:#fff;fill:#fff;}#drawing-0-render-0 .labelBkg{background-color:rgba(255, 255, 255, 0.5);}#drawing-0-render-0 .cluster rect{fill:#f6f8f1;stroke:#b4c6aa;stroke-width:1px;}#drawing-0-render-0 .cluster text{fill:#16100f;}#drawing-0-render-0 .cluster span{color:#16100f;}#drawing-0-render-0 div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:-apple-system,BlinkMacSystemFont,PingFang SC,Microsoft YaHei,sans-serif;font-size:12px;background:#e9eff0;border:1px solid hsl(188.5714285714, 0%, 82.7450980392%);border-radius:2px;pointer-events:none;z-index:100;}#drawing-0-render-0 .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#20372a;}#drawing-0-render-0 rect.text{fill:none;stroke-width:0;}#drawing-0-render-0 .icon-shape,#drawing-0-render-0 .image-shape{background-color:#fff;text-align:center;}#drawing-0-render-0 .icon-shape p,#drawing-0-render-0 .image-shape p{background-color:#fff;padding:2px;}#drawing-0-render-0 .icon-shape rect,#drawing-0-render-0 .image-shape rect{opacity:0.5;background-color:#fff;fill:#fff;}#drawing-0-render-0 .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#drawing-0-render-0 .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#drawing-0-render-0 :root{--mermaid-font-family:-apple-system,BlinkMacSystemFont,PingFang SC,Microsoft YaHei,sans-serif;}</style><g><marker id="drawing-0-render-0_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="drawing-0-render-0_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="drawing-0-render-0_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="drawing-0-render-0_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="drawing-0-render-0_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="drawing-0-render-0_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M438.719,58L438.719,83L438.719,104" id="drawing-0-L_A_B_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_A_B_0" data-points="W3sieCI6NDM4LjcxODc1LCJ5Ijo1OH0seyJ4Ijo0MzguNzE4NzUsInkiOjgzfSx7IngiOjQzOC43MTg3NSwieSI6MTA4fV0=" marker-end="url(#drawing-0-render-0_flowchart-v2-pointEnd)"/><path d="M438.719,158L438.719,183L438.719,204" id="drawing-0-L_B_C_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_B_C_0" data-points="W3sieCI6NDM4LjcxODc1LCJ5IjoxNTh9LHsieCI6NDM4LjcxODc1LCJ5IjoxODN9LHsieCI6NDM4LjcxODc1LCJ5IjoyMDh9XQ==" marker-end="url(#drawing-0-render-0_flowchart-v2-pointEnd)"/><path d="M137.359,266.25L137.359,299.5L198.298,323.058" id="drawing-0-L_Q_V_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_Q_V_0" data-points="W3sieCI6MTM3LjM1OTM3NSwieSI6MjY2LjI1fSx7IngiOjEzNy4zNTkzNzUsInkiOjI5OS41fSx7IngiOjIwMi4wMjg3Njg3NzY4MjQwNSwieSI6MzI0LjV9XQ==" marker-end="url(#drawing-0-render-0_flowchart-v2-pointEnd)"/><path d="M438.719,274.5L438.719,299.5L377.78,323.058" id="drawing-0-L_C_V_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_C_V_0" data-points="W3sieCI6NDM4LjcxODc1LCJ5IjoyNzQuNX0seyJ4Ijo0MzguNzE4NzUsInkiOjI5OS41fSx7IngiOjM3NC4wNDkzNTYyMjMxNzU5NSwieSI6MzI0LjV9XQ==" marker-end="url(#drawing-0-render-0_flowchart-v2-pointEnd)"/><path d="M221.916,391L172.199,416L172.199,445.25" id="drawing-0-L_V_L_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_V_L_0" data-points="W3sieCI6MjIxLjkxNTg4OTg4NzMzOTA2LCJ5IjozOTF9LHsieCI6MTcyLjE5OTIxODc1LCJ5Ijo0MTZ9LHsieCI6MTcyLjE5OTIxODc1LCJ5Ijo0NDkuMjV9XQ==" marker-end="url(#drawing-0-render-0_flowchart-v2-pointEnd)"/><path d="M354.162,391L403.879,416L403.879,437" id="drawing-0-L_V_S_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_V_S_0" data-points="W3sieCI6MzU0LjE2MjIzNTExMjY2MDk0LCJ5IjozOTF9LHsieCI6NDAzLjg3ODkwNjI1LCJ5Ijo0MTZ9LHsieCI6NDAzLjg3ODkwNjI1LCJ5Ijo0NDF9XQ==" marker-end="url(#drawing-0-render-0_flowchart-v2-pointEnd)"/><path d="M172.199,499.25L172.199,532.5L226.447,555.915" id="drawing-0-L_L_F_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_L_F_0" data-points="W3sieCI6MTcyLjE5OTIxODc1LCJ5Ijo0OTkuMjV9LHsieCI6MTcyLjE5OTIxODc1LCJ5Ijo1MzIuNX0seyJ4IjoyMzAuMTE5MTQwNjI1LCJ5Ijo1NTcuNX1d" marker-end="url(#drawing-0-render-0_flowchart-v2-pointEnd)"/><path d="M403.879,507.5L403.879,532.5L349.631,555.915" id="drawing-0-L_S_F_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_S_F_0" data-points="W3sieCI6NDAzLjg3ODkwNjI1LCJ5Ijo1MDcuNX0seyJ4Ijo0MDMuODc4OTA2MjUsInkiOjUzMi41fSx7IngiOjM0NS45NTg5ODQzNzUsInkiOjU1Ny41fV0=" marker-end="url(#drawing-0-render-0_flowchart-v2-pointEnd)"/><path d="M288.039,607.5L288.039,632.5L288.039,653.5" id="drawing-0-L_F_D_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_F_D_0" data-points="W3sieCI6Mjg4LjAzOTA2MjUsInkiOjYwNy41fSx7IngiOjI4OC4wMzkwNjI1LCJ5Ijo2MzIuNX0seyJ4IjoyODguMDM5MDYyNSwieSI6NjU3LjV9XQ==" marker-end="url(#drawing-0-render-0_flowchart-v2-pointEnd)"/><path d="M288.039,707.5L288.039,732.5L288.039,753.5" id="drawing-0-L_D_T_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_D_T_0" data-points="W3sieCI6Mjg4LjAzOTA2MjUsInkiOjcwNy41fSx7IngiOjI4OC4wMzkwNjI1LCJ5Ijo3MzIuNX0seyJ4IjoyODguMDM5MDYyNSwieSI6NzU3LjV9XQ==" marker-end="url(#drawing-0-render-0_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g><rect class="background" style="stroke: none;"/></g><g><rect class="background" style="stroke: none;"/></g><g><rect class="background" style="stroke: none;"/></g><g><rect class="background" style="stroke: none;"/></g><g><rect class="background" style="stroke: none;"/></g><g><rect class="background" style="stroke: none;"/></g><g><rect class="background" style="stroke: none;"/></g><g><rect class="background" style="stroke: none;"/></g><g><rect class="background" style="stroke: none;"/></g><g><rect class="background" style="stroke: none;"/></g><g class="edgeLabel"><g class="label" data-id="L_A_B_0" transform="translate(0, 0)"><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"/></text></g></g><g class="edgeLabel"><g class="label" data-id="L_B_C_0" transform="translate(0, 0)"><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"/></text></g></g><g class="edgeLabel"><g class="label" data-id="L_Q_V_0" transform="translate(0, 0)"><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"/></text></g></g><g class="edgeLabel"><g class="label" data-id="L_C_V_0" transform="translate(0, 0)"><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"/></text></g></g><g class="edgeLabel"><g class="label" data-id="L_V_L_0" transform="translate(0, 0)"><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"/></text></g></g><g class="edgeLabel"><g class="label" data-id="L_V_S_0" transform="translate(0, 0)"><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"/></text></g></g><g class="edgeLabel"><g class="label" data-id="L_L_F_0" transform="translate(0, 0)"><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"/></text></g></g><g class="edgeLabel"><g class="label" data-id="L_S_F_0" transform="translate(0, 0)"><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"/></text></g></g><g class="edgeLabel"><g class="label" data-id="L_F_D_0" transform="translate(0, 0)"><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"/></text></g></g><g class="edgeLabel"><g class="label" data-id="L_D_T_0" transform="translate(0, 0)"><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"/></text></g></g></g><g class="nodes"><g class="node default" id="drawing-0-flowchart-A-0" transform="translate(438.71875, 33)"><rect class="basic label-container" x="-84.5703125" y="-25" width="169.140625" height="50"/><g class="label" transform="translate(0, -9)"><rect/><g><rect class="background" style="stroke: none;"/><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">业务</tspan><tspan font-style="normal" class="text-inner-tspan" font-weight="normal"> Markdown</tspan></tspan></text></g></g></g><g class="node default" id="drawing-0-flowchart-B-1" transform="translate(438.71875, 133)"><rect class="basic label-container" x="-92" y="-25" width="184" height="50"/><g class="label" transform="translate(0, -9)"><rect/><g><rect class="background" style="stroke: none;"/><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">按章和自然段切片</tspan></tspan></text></g></g></g><g class="node default" id="drawing-0-flowchart-C-3" transform="translate(438.71875, 241.25)"><rect class="basic label-container" x="-122" y="-33.25" width="244" height="66.5"/><g class="label" transform="translate(0, -17.25)"><rect/><g><rect class="background" style="stroke: none;"/><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">OpenAI</tspan></tspan><tspan class="text-outer-tspan" x="0" y="1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">向量入库，切换工作区绑定</tspan></tspan></text></g></g></g><g class="node default" id="drawing-0-flowchart-Q-4" transform="translate(137.359375, 241.25)"><rect class="basic label-container" x="-129.359375" y="-25" width="258.71875" height="50"/><g class="label" transform="translate(0, -9)"><rect/><g><rect class="background" style="stroke: none;"/><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">模型选择</tspan><tspan font-style="normal" class="text-inner-tspan" font-weight="normal"> search_documents</tspan></tspan></text></g></g></g><g class="node default" id="drawing-0-flowchart-V-5" transform="translate(288.0390625, 357.75)"><rect class="basic label-container" x="-129.5" y="-33.25" width="259" height="66.5"/><g class="label" transform="translate(0, -17.25)"><rect/><g><rect class="background" style="stroke: none;"/><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">检查快照、业务日和当前访问</tspan></tspan><tspan class="text-outer-tspan" x="0" y="1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">权</tspan></tspan></text></g></g></g><g class="node default" id="drawing-0-flowchart-L-9" transform="translate(172.19921875, 474.25)"><rect class="basic label-container" x="-52.1796875" y="-25" width="104.359375" height="50"/><g class="label" transform="translate(0, -9)"><rect/><g><rect class="background" style="stroke: none;"/><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">BM25</tspan></tspan></text></g></g></g><g class="node default" id="drawing-0-flowchart-S-11" transform="translate(403.87890625, 474.25)"><rect class="basic label-container" x="-129.5" y="-33.25" width="259" height="66.5"/><g class="label" transform="translate(0, -17.25)"><rect/><g><rect class="background" style="stroke: none;"/><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">查询向量与可读段落的余弦距</tspan></tspan><tspan class="text-outer-tspan" x="0" y="1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">离</tspan></tspan></text></g></g></g><g class="node default" id="drawing-0-flowchart-F-13" transform="translate(288.0390625, 582.5)"><rect class="basic label-container" x="-114.5" y="-25" width="229" height="50"/><g class="label" transform="translate(0, -9)"><rect/><g><rect class="background" style="stroke: none;"/><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">合并名次，签发段落引用</tspan></tspan></text></g></g></g><g class="node default" id="drawing-0-flowchart-D-17" transform="translate(288.0390625, 682.5)"><rect class="basic label-container" x="-117.9296875" y="-25" width="235.859375" height="50"/><g class="label" transform="translate(0, -9)"><rect/><g><rect class="background" style="stroke: none;"/><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">read_document</tspan><tspan font-style="normal" class="text-inner-tspan" font-weight="normal"> 核对原文</tspan></tspan></text></g></g></g><g class="node default" id="drawing-0-flowchart-T-19" transform="translate(288.0390625, 790.75)"><rect class="basic label-container" x="-129.5" y="-33.25" width="259" height="66.5"/><g class="label" transform="translate(0, -17.25)"><rect/><g><rect class="background" style="stroke: none;"/><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">用货池、日期等线索查询经营</tspan></tspan><tspan class="text-outer-tspan" x="0" y="1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">账本</tspan></tspan></text></g></g></g></g></g></g></svg></div><details class="source-details"><summary>查看 Mermaid 源码</summary><div class="code-block" id="code-0"><div class="code-bar"><span>文档发现如何连接到经营查账 · 图表源 · text / 11 LINES</span><div class="code-tools"><button type="button" data-copy="0">复制代码</button></div></div><pre id="code-0-pre" tabindex="0"><code><span class="code-line"><span class="line-num" aria-hidden="true">1</span><span class="line-content">flowchart TD</span></span><span class="code-line"><span class="line-num" aria-hidden="true">2</span><span class="line-content">  A[&quot;业务 Markdown&quot;] --&gt; B[&quot;按章和自然段切片&quot;]</span></span><span class="code-line"><span class="line-num" aria-hidden="true">3</span><span class="line-content">  B --&gt; C[&quot;OpenAI 向量入库，切换工作区绑定&quot;]</span></span><span class="code-line"><span class="line-num" aria-hidden="true">4</span><span class="line-content">  Q[&quot;模型选择 search_documents&quot;] --&gt; V[&quot;检查快照、业务日和当前访问权&quot;]</span></span><span class="code-line"><span class="line-num" aria-hidden="true">5</span><span class="line-content">  C --&gt; V</span></span><span class="code-line"><span class="line-num" aria-hidden="true">6</span><span class="line-content">  V --&gt; L[&quot;BM25&quot;]</span></span><span class="code-line"><span class="line-num" aria-hidden="true">7</span><span class="line-content">  V --&gt; S[&quot;查询向量与可读段落的余弦距离&quot;]</span></span><span class="code-line"><span class="line-num" aria-hidden="true">8</span><span class="line-content">  L --&gt; F[&quot;合并名次，签发段落引用&quot;]</span></span><span class="code-line"><span class="line-num" aria-hidden="true">9</span><span class="line-content">  S --&gt; F</span></span><span class="code-line"><span class="line-num" aria-hidden="true">10</span><span class="line-content">  F --&gt; D[&quot;read_document 核对原文&quot;]</span></span><span class="code-line"><span class="line-num" aria-hidden="true">11</span><span class="line-content">  D --&gt; T[&quot;用货池、日期等线索查询经营账本&quot;]</span></span></code></pre></div></details></figure><h2 id="section-3">数据、发布与恢复</h2>
+<p>向量索引归 web/main。版本从 0008_semantic_asset_grants 升到 0009_document_vectors。真源为 Web 迁移，完整与增量 SQL 随工具生成。表按 tenant_id、collection_digest、index_profile、doc_id、version、section_id 唯一，记录 section_hash 和 embedding。索引版本固定模型及维度，查询仅在同一版本内比对。现阶段逐向量精确计算余弦距离，12 份原文的 131 个片段使用 PostgreSQL 精确扫描即可完成召回。</p>
+<p>先备份 Web 库，由已有本地供应入口在受管 Web 目标安装 vector 扩展，之后应用迁移、装载索引、发布工作区。Web 运行账号对离线发布表具有查询权限，对管理库的三张表具有查询、插入和更新权限。恢复可切回先前绑定；数据库按项目规范在新受管目标恢复备份。保留旧内容及在途 Run 的引用。教学经营账本单独装入业务库，给华东工作区绑定只读角色，与 Web 索引库分开。</p>
+<h2 id="section-4">混合排名与验收</h2>
+<div class="code-block" id="code-1"><div class="code-bar"><span>混合排名与验收 · text / 4 LINES</span><div class="code-tools"><button type="button" data-copy="1">复制代码</button></div></div><pre id="code-1-pre" tabindex="0"><code><span class="code-line"><span class="line-num" aria-hidden="true">1</span><span class="line-content">visible = readable(collection, currentAccess, runSnapshot, businessDate)</span></span><span class="code-line"><span class="line-num" aria-hidden="true">2</span><span class="line-content">lexical = bm25(visible, query).top(10)</span></span><span class="code-line"><span class="line-num" aria-hidden="true">3</span><span class="line-content">semantic = cosine(visible, queryEmbedding).top(10)</span></span><span class="code-line"><span class="line-num" aria-hidden="true">4</span><span class="line-content">score(section) = sum(1 / (60 + rank))  # rank 从 1 开始</span></span></code></pre></div><p>本案例为工作区选择 comparison_brief 交付格式，调查最多调用 52 次工具。模型为比较表选择基期、本期回执中的列与行，Agent 复核数值和单位并逐行计算差额与环比。引用原段或查询行的经营判断、优先行动与待验证事项单独展示。</p>
+<p>附加向量只从内部受信调用进入。运行时按文号、版本、章节与摘要连接查询结果，再签发现有来源引用。新索引生成不向生产工具添加日期、课号或参考答案。</p>
+<p>课堂在首页提交同一条普通问题，核对 Run 是否实际进行了混合检索、读取原文与查询经营数据，并查阅答案中的两期 GMV、贡献和行动。助手选择检索次序。讲师在独立目录保留已有的词法评测和标准答案，业务知识库只含 12 份原文。独立课堂环境的一次普通 Chat 实跑完成 10 次混合检索、15 次原文读取和 9 次 SQL 查询，返回两期金额、六个互斥经营单元的贡献及三项优先行动。</p>
+<h2 id="section-5">两周降幅与行动优先级</h2>
+<p>华东支付 GMV 在 2025 年 10 月 13–19 日为 100 万元，20–26 日为 88 万元。小程序付费跑鞋贡献 −6 万元、旗舰店跑鞋 −5 万元、杭州城西 −1.5 万元，自然服配抵消 0.5 万元。另外两个单元持平。差额加回 −12 万元，区域环比 −12%。 华东主工作区从首页以普通 Chat 再次提交后，返回了相同的总额和六项单元差额。</p>
+<p>经营判断依次回到三份业务记录核对：晚场投放比白班少了多少有效落地，41、42 码何时在目标货池前台可售，杭州试点的新券门槛在哪家门店生效。普通 Chat 给出的行动是小额恢复晚场投放试验、前移主销码补货预警、复审门店用券门槛。</p>
+<h2 id="section-6">工作区知识文档管理</h2>
+<p>在「管理与治理 → 数据与语义 → 知识文档」创建知识库。卡片显示知识库名称、最多三行的说明、文件数量和原文件总大小。卡片和分段的标题靠上对齐，深绿悬停配白字。三点菜单提供编辑和删除，支持键盘选择、Esc 与点击外部关闭。打开知识库后可以按文件名搜索、批量选择或拖入文件，查看每个文件的解析和索引结果。打开文件后按原顺序展示切片，支持分页、正文搜索、查看原文件、编辑正文和逐片启停。三个层级共用 Compass 深绿主色、对话框与键盘焦点规则。</p>
+<p>平台管理员打开知识文档即进入全平台目录。卡片悬停提示显示所属租户和工作区，在经营总部也能打开华东资料库、查看文件、原文和分段。普通成员按当前工作区的数据与语义权限访问。新建知识库归入页面当前工作区，修改已有资料时按资料所属工作区重新鉴权。Agent 发起检索时只使用本轮工作区获准的资料。</p>
+<p>Web 拥有知识库、原始文件、发布时间与业务属性、切片文本、开关和索引。web/main 从 0009 升到 0010_knowledge_library，完整 SQL 与逐版增量由 Web 迁移工具生成。库属于租户和工作区。原文件与切片分别保存，编辑切片后仍可打开最初上传的文件。存量教学资料按发布摘要与分段哈希导入，沿用原向量、文号、时效与受众。备份覆盖 Web 数据库、已发布资料目录和 Run 固定记录，恢复时按相同组合恢复。</p>
+<p>上传支持 UTF-8 Markdown、TXT 与带文本层的 PDF。PDF 用 unpdf 逐页提取文字，扫描件给出可操作的失败原因。Web 按章节、自然段及长度上限分片，通过受信 HTTP 请求由 Agent 调用已有 OpenAI Provider。文件的所有向量和正文在一个短事务内发布。失败保留原文件并支持重试。单片编辑在新向量就绪后同时更新正文和向量，版本冲突要求重新打开。停用切片立即退出召回和引用回读，重新启用复用已保存的向量。</p>
+<p>新 Run 固定本轮可用资料，接下来的每次检索、回读与交付核对当前有效片段。原有教学发布的资料日期、审批和授权继续生效。管理入口上传的是工作区通用参考资料，文件详情记录真实上传时间；业务制度的正式历史版本继续通过带生效日期的发布流程提供。</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="设计表格"><table><thead>
+<tr>
+<th>数据</th>
+<th>存储位置</th>
+<th>读取方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>工作区知识库</td>
+<td>web.knowledge_base</td>
+<td>平台管理员可跨工作区浏览，成员按当前工作区列出</td>
+</tr>
+<tr>
+<td>文件信息、原始字节与处理状态</td>
+<td>web.knowledge_file</td>
+<td>管理页按文件名搜索，查看原文返回上传时的字节</td>
+</tr>
+<tr>
+<td>分段内容、启停、哈希和向量</td>
+<td>web.knowledge_chunk</td>
+<td>按文件及序号展示，按可见哈希执行余弦召回</td>
+</tr>
+<tr>
+<td>原有课堂发布及历史运行</td>
+<td>原 collection、web.document_vectors、Run 固定记录目录</td>
+<td>管理库复用旧向量，固定快照继续支持旧引用复查</td>
+</tr>
+</tbody>
+</table></div><p>本机使用 Docker 的 PostgreSQL 17 实例与 pgvector，宿主映射端口 55432。进入「远山零售 → 华东区域」后，在管理页可以看到 12 份教材文件。导入脚本按稳定文件 ID 跳过已接管的文档。启用 Agentic Search 的工作区由 COMPASS_SEARCH_WORKSPACES 配置；有检索资料且无经营账本绑定的工作区可以固定仅含知识来源的快照。</p>
+<p>管理功能接入后，在独立课堂从普通 Chat 重新发送华东问题。本轮完成 9 次混合检索，支付账本汇总为基期 100 万元、本期 88 万元。对管理页另外上传的练习文件，旧 Run 的原文引用在正文修改后失效，新 Run 能召回新正文。停用分段后，从已有 Run 和新 Run 检索均不会返回该段。</p>
+<h2 id="section-7">知识库检索测试</h2>
+<p>知识库最外层的「检索测试」位于「新建知识库」旁。右侧抽屉提供知识库选择、查询输入和预置关键词。默认覆盖当前账号在管理页可见的知识库，平台管理员可跨租户检索，普通成员使用当前工作区。可选择一个知识库缩小范围。课堂预置华东 GMV 下降、优惠券叠加、库存缺货、退款口径，点击后填入输入框，按 Enter 或检索按钮执行。</p>
+<p>Web 接口为 POST knowledge/catalog/search 和 POST knowledge/bases/search，分别用于平台目录和工作区目录。请求接受 query 与可选 baseId。服务端先校验登录、CSRF、管理范围和知识库归属，提交查询文本至现有 Agent knowledge-embeddings 接口。OpenAI text-embedding-3-small 生成 1024 维查询向量。网络调用结束后再次检查当前权限，使用既有 pgvector 余弦距离从 knowledge_chunk 读取前 10 个有效片段。每次检索只使用已入库文件中已启用的片段，并排除已删除的库和文件。</p>
+<p>结果展示知识库、租户与工作区、文件名、分段序号、章节标题、正文、片段 ID 和查询耗时。相关度为 1 减余弦距离，乘 100 后按百分比显示，供比较语义相似程度。支持三行预览、展开全文及进入文件分段。请求进行时禁用重复提交，失败保留输入并可重试，关闭抽屉取消客户端等待。Agentic Search 的混合排序和 Run 固定资料范围继续在运行链路中执行。</p>
+</article></div>
+    </main>
+    <footer class="footer">
+      <span>Compass · 第 23 课 · 技术方案</span><span>单文件 · 离线阅读 <a href="#top">返回顶部 ↑</a></span>
+    </footer>
+    <dialog id="search-dialog" aria-labelledby="search-title">
+      <div class="dialog-header">
+        <h2 id="search-title">检索设计与代码</h2>
+        <button class="close-button" type="button" data-close aria-label="关闭检索">×</button>
+      </div>
+      <div class="search-field">
+        <input
+          id="search-input"
+          aria-label="搜索章节、类型或设计内容"
+          placeholder="输入章节、类型或关键词…"
+          autocomplete="off"
+        />
+      </div>
+      <div id="search-results"></div>
+      <p class="search-meta" id="search-meta" role="status"></p>
+    </dialog>
+    <dialog id="diagram-dialog" aria-labelledby="zoom-title">
+      <div class="dialog-header">
+        <h2 id="zoom-title">设计图</h2>
+        <button class="close-button" type="button" data-close aria-label="关闭图表">×</button>
+      </div>
+      <div class="zoom-toolbar">
+        <button class="plain-button" type="button" data-zoom="out" aria-label="缩小图表">−</button>
+        <output id="zoom-level" aria-label="缩放比例">100%</output>
+        <button class="plain-button" type="button" data-zoom="in" aria-label="放大图表">+</button>
+        <button class="plain-button" type="button" data-zoom="fit">适应窗口</button>
+        <button class="plain-button" type="button" data-zoom="actual">原始尺寸</button>
+        <button class="plain-button" type="button" id="download-svg">下载 SVG</button>
+        <span class="zoom-hint">可横向、纵向滚动 · Esc 关闭</span>
+      </div>
+      <div id="zoom-viewport" tabindex="0" aria-label="图表滚动区域">
+        <div id="zoom-content"></div>
+      </div>
+    </dialog>
+    <div class="toast" role="status" aria-live="polite"></div>
+    <!-- prettier-ignore -->
+    <script type="application/json" id="document-data">{"search":[{"id":"section-0","title":"课堂演示","text":"在 Compass 首页选择「远山零售 → 华东区域 → 新建分析」，点击「华东区 GMV 为什么下降了 12%？」并发送。先看助手如何确定支付口径和封版时间，再看它如何从分单元查账转向晚场采购、旗舰店主销码和杭州试点券。讲到仓配时可以追问「周三已经签收，顾客从哪天开始买得到？」观察它是否继续检索货池的前台可售记录。"},{"id":"section-1","title":"资料发布","text":"将 12 份 Markdown 转为既有 collection。按二级标题取章节，过长章节沿空行拆分，以 600 字符为目标，完整自然段和表格保留在同一片，切片携带文号、版本、有效日期、标题和正文摘要。Embedding 文本是文档标题、章节标题与正文。使用现有 OpenAI Provider 的服务端密钥，模型固定为 text-embedding-3-small，输出 1024 维。每批最多 32 段；校验响应的行数、维度和有限数值后，在同一数据库事务内分批写入 Web 索引。内容包与索引均按摘要寻址，最后原子切换工作区绑定。发生失败时既有绑定可用，重跑同内容可复用已完成索引。"},{"id":"section-2","title":"请求与归属","text":"Agent 持有 Provider 密钥，发布阶段和查询阶段采用同一 Provider 配置与模型。普通 Chat 继续调用 search_documents，在启用向量的资料快照中额外发送问题向量。Web 按当时 Run 固定的文档版本、当前权限、业务日期先选可读章节。词法和余弦距离分别取前十，再按倒数名次融合，返回至多三个章节引用。精确文号优先，保留同条款不同版本的现有展示规则。read_document 原有回读、内容校验和撤权检查持续生效。Embedding 服务不可用时返回词法结果，并记录实际检索模式。 flowchart TD\n  A[\"业务 Markdown\"] --> B[\"按章和自然段切片\"]\n  B --> C[\"OpenAI 向量入库，切换工作区绑定\"]\n  Q[\"模型选择 search_documents\"] --> V[\"检查快照、业务日和当前访问权\"]\n  C --> V\n  V --> L[\"BM25\"]\n  V --> S[\"查询向量与可读段落的余弦距离\"]\n  L --> F[\"合并名次，签发段落引用\"]\n  S --> F\n  F --> D[\"read_document 核对原文\"]\n  D --> T[\"用货池、日期等线索查询经营账本\"]\n"},{"id":"section-3","title":"数据、发布与恢复","text":"向量索引归 web/main。版本从 0008_semantic_asset_grants 升到 0009_document_vectors。真源为 Web 迁移，完整与增量 SQL 随工具生成。表按 tenant_id、collection_digest、index_profile、doc_id、version、section_id 唯一，记录 section_hash 和 embedding。索引版本固定模型及维度，查询仅在同一版本内比对。现阶段逐向量精确计算余弦距离，12 份原文的 131 个片段使用 PostgreSQL 精确扫描即可完成召回。 先备份 Web 库，由已有本地供应入口在受管 Web 目标安装 vector 扩展，之后应用迁移、装载索引、发布工作区。Web 运行账号对离线发布表具有查询权限，对管理库的三张表具有查询、插入和更新权限。恢复可切回先前绑定；数据库按项目规范在新受管目标恢复备份。保留旧内容及在途 Run 的引用。教学经营账本单独装入业务库，给华东工作区绑定只读角色，与 Web 索引库分开。"},{"id":"section-4","title":"混合排名与验收","text":"visible = readable(collection, currentAccess, runSnapshot, businessDate)\nlexical = bm25(visible, query).top(10)\nsemantic = cosine(visible, queryEmbedding).top(10)\nscore(section) = sum(1 / (60 + rank))  # rank 从 1 开始\n 本案例为工作区选择 comparison_brief 交付格式，调查最多调用 52 次工具。模型为比较表选择基期、本期回执中的列与行，Agent 复核数值和单位并逐行计算差额与环比。引用原段或查询行的经营判断、优先行动与待验证事项单独展示。 附加向量只从内部受信调用进入。运行时按文号、版本、章节与摘要连接查询结果，再签发现有来源引用。新索引生成不向生产工具添加日期、课号或参考答案。 课堂在首页提交同一条普通问题，核对 Run 是否实际进行了混合检索、读取原文与查询经营数据，并查阅答案中的两期 GMV、贡献和行动。助手选择检索次序。讲师在独立目录保留已有的词法评测和标准答案，业务知识库只含 12 份原文。独立课堂环境的一次普通 Chat 实跑完成 10 次混合检索、15 次原文读取和 9 次 SQL 查询，返回两期金额、六个互斥经营单元的贡献及三项优先行动。"},{"id":"section-5","title":"两周降幅与行动优先级","text":"华东支付 GMV 在 2025 年 10 月 13–19 日为 100 万元，20–26 日为 88 万元。小程序付费跑鞋贡献 −6 万元、旗舰店跑鞋 −5 万元、杭州城西 −1.5 万元，自然服配抵消 0.5 万元。另外两个单元持平。差额加回 −12 万元，区域环比 −12%。 华东主工作区从首页以普通 Chat 再次提交后，返回了相同的总额和六项单元差额。 经营判断依次回到三份业务记录核对：晚场投放比白班少了多少有效落地，41、42 码何时在目标货池前台可售，杭州试点的新券门槛在哪家门店生效。普通 Chat 给出的行动是小额恢复晚场投放试验、前移主销码补货预警、复审门店用券门槛。"},{"id":"section-6","title":"工作区知识文档管理","text":"在「管理与治理 → 数据与语义 → 知识文档」创建知识库。卡片显示知识库名称、最多三行的说明、文件数量和原文件总大小。卡片和分段的标题靠上对齐，深绿悬停配白字。三点菜单提供编辑和删除，支持键盘选择、Esc 与点击外部关闭。打开知识库后可以按文件名搜索、批量选择或拖入文件，查看每个文件的解析和索引结果。打开文件后按原顺序展示切片，支持分页、正文搜索、查看原文件、编辑正文和逐片启停。三个层级共用 Compass 深绿主色、对话框与键盘焦点规则。 平台管理员打开知识文档即进入全平台目录。卡片悬停提示显示所属租户和工作区，在经营总部也能打开华东资料库、查看文件、原文和分段。普通成员按当前工作区的数据与语义权限访问。新建知识库归入页面当前工作区，修改已有资料时按资料所属工作区重新鉴权。Agent 发起检索时只使用本轮工作区获准的资料。 Web 拥有知识库、原始文件、发布时间与业务属性、切片文本、开关和索引。web/main 从 0009 升到 0010_knowledge_library，完整 SQL 与逐版增量由 Web 迁移工具生成。库属于租户和工作区。原文件与切片分别保存，编辑切片后仍可打开最初上传的文件。存量教学资料按发布摘要与分段哈希导入，沿用原向量、文号、时效与受众。备份覆盖 Web 数据库、已发布资料目录和 Run 固定记录，恢复时按相同组合恢复。 上传支持 UTF-8 Markdown、TXT 与带文本层的 PDF。PDF 用 unpdf 逐页提取文字，扫描件给出可操作的失败原因。Web 按章节、自然段及长度上限分片，通过受信 HTTP 请求由 Agent 调用已有 OpenAI Provider。文件的所有向量和正文在一个短事务内发布。失败保留原文件并支持重试。单片编辑在新向量就绪后同时更新正文和向量，版本冲突要求重新打开。停用切片立即退出召回和引用回读，重新启用复用已保存的向量。 新 Run 固定本轮可用资料，接下来的每次检索、回读与交付核对当前有效片段。原有教学发布的资料日期、审批和授权继续生效。管理入口上传的是工作区通用参考资料，文件详情记录真实上传时间；业务制度的正式历史版本继续通过带生效日期的发布流程提供。 数据 存储位置 读取方式 工作区知识库 web.knowledge_base 平台管理员可跨工作区浏览，成员按当前工作区列出 文件信息、原始字节与处理状态 web.knowledge_file 管理页按文件名搜索，查看原文返回上传时的字节 分段内容、启停、哈希和向量 web.knowledge_chunk 按文件及序号展示，按可见哈希执行余弦召回 原有课堂发布及历史运行 原 collection、web.document_vectors、Run 固定记录目录 管理库复用旧向量，固定快照继续支持旧引用复查 本机使用 Docker 的 PostgreSQL 17 实例与 pgvector，宿主映射端口 55432。进入「远山零售 → 华东区域」后，在管理页可以看到 12 份教材文件。导入脚本按稳定文件 ID 跳过已接管的文档。启用 Agentic Search 的工作区由 COMPASS_SEARCH_WORKSPACES 配置；有检索资料且无经营账本绑定的工作区可以固定仅含知识来源的快照。 管理功能接入后，在独立课堂从普通 Chat 重新发送华东问题。本轮完成 9 次混合检索，支付账本汇总为基期 100 万元、本期 88 万元。对管理页另外上传的练习文件，旧 Run 的原文引用在正文修改后失效，新 Run 能召回新正文。停用分段后，从已有 Run 和新 Run 检索均不会返回该段。"},{"id":"section-7","title":"知识库检索测试","text":"知识库最外层的「检索测试」位于「新建知识库」旁。右侧抽屉提供知识库选择、查询输入和预置关键词。默认覆盖当前账号在管理页可见的知识库，平台管理员可跨租户检索，普通成员使用当前工作区。可选择一个知识库缩小范围。课堂预置华东 GMV 下降、优惠券叠加、库存缺货、退款口径，点击后填入输入框，按 Enter 或检索按钮执行。 Web 接口为 POST knowledge/catalog/search 和 POST knowledge/bases/search，分别用于平台目录和工作区目录。请求接受 query 与可选 baseId。服务端先校验登录、CSRF、管理范围和知识库归属，提交查询文本至现有 Agent knowledge-embeddings 接口。OpenAI text-embedding-3-small 生成 1024 维查询向量。网络调用结束后再次检查当前权限，使用既有 pgvector 余弦距离从 knowledge_chunk 读取前 10 个有效片段。每次检索只使用已入库文件中已启用的片段，并排除已删除的库和文件。 结果展示知识库、租户与工作区、文件名、分段序号、章节标题、正文、片段 ID 和查询耗时。相关度为 1 减余弦距离，乘 100 后按百分比显示，供比较语义相似程度。支持三行预览、展开全文及进入文件分段。请求进行时禁用重复提交，失败保留输入并可重试，关闭抽屉取消客户端等待。Agentic Search 的混合排序和 Run 固定资料范围继续在运行链路中执行。"},{"id":"code-0","title":"文档发现如何连接到经营查账 · 图表源","text":"flowchart TD\n  A[\"业务 Markdown\"] --> B[\"按章和自然段切片\"]\n  B --> C[\"OpenAI 向量入库，切换工作区绑定\"]\n  Q[\"模型选择 search_documents\"] --> V[\"检查快照、业务日和当前访问权\"]\n  C --> V\n  V --> L[\"BM25\"]\n  V --> S[\"查询向量与可读段落的余弦距离\"]\n  L --> F[\"合并名次，签发段落引用\"]\n  S --> F\n  F --> D[\"read_document 核对原文\"]\n  D --> T[\"用货池、日期等线索查询经营账本\"]\n"},{"id":"code-1","title":"混合排名与验收","text":"visible = readable(collection, currentAccess, runSnapshot, businessDate)\nlexical = bm25(visible, query).top(10)\nsemantic = cosine(visible, queryEmbedding).top(10)\nscore(section) = sum(1 / (60 + rank))  # rank 从 1 开始\n"}],"codes":["flowchart TD\n  A[\"业务 Markdown\"] --> B[\"按章和自然段切片\"]\n  B --> C[\"OpenAI 向量入库，切换工作区绑定\"]\n  Q[\"模型选择 search_documents\"] --> V[\"检查快照、业务日和当前访问权\"]\n  C --> V\n  V --> L[\"BM25\"]\n  V --> S[\"查询向量与可读段落的余弦距离\"]\n  L --> F[\"合并名次，签发段落引用\"]\n  S --> F\n  F --> D[\"read_document 核对原文\"]\n  D --> T[\"用货池、日期等线索查询经营账本\"]\n","visible = readable(collection, currentAccess, runSnapshot, businessDate)\nlexical = bm25(visible, query).top(10)\nsemantic = cosine(visible, queryEmbedding).top(10)\nscore(section) = sum(1 / (60 + rank))  # rank 从 1 开始\n"]}</script>
+    <!-- prettier-ignore -->
+    <script>(() => {
+  "use strict";
+  const $ = (selector, root = document) => root.querySelector(selector);
+  const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+  const { search: searchIndex, codes } = JSON.parse($("#document-data").textContent);
+  const toast = $(".toast");
+  let toastTimer;
+  function announce(message) {
+    toast.textContent = message;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toast.textContent = "";
+    }, 2400);
+  }
+  async function copy(text) {
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const field = document.createElement("textarea");
+      field.value = text;
+      field.style.cssText = "position:fixed;left:-10000px;top:0";
+      document.body.append(field);
+      field.select();
+      const succeeded = document.execCommand("copy");
+      field.remove();
+      if (!succeeded) {
+        announce("请选中代码后复制");
+        return;
+      }
+    }
+    announce("代码已复制");
+  }
+  $$("[data-copy]").forEach((button) =>
+    button.addEventListener("click", () => {
+      void copy(codes[Number(button.dataset.copy)]);
+    }),
+  );
+  $$("[data-expand]").forEach((button) =>
+    button.addEventListener("click", () => {
+      const expanded = button.closest(".code-block").classList.toggle("expanded");
+      button.textContent = expanded ? "收起代码" : "展开代码";
+      button.setAttribute("aria-expanded", String(expanded));
+    }),
+  );
+  function reveal(id) {
+    const node = document.getElementById(id);
+    if (!node) return;
+    let parent = node.parentElement;
+    while (parent) {
+      if (parent.tagName === "DETAILS") parent.open = true;
+      parent = parent.parentElement;
+    }
+    const code = node.closest(".code-block");
+    if (code) {
+      code.classList.add("expanded");
+      const expand = $("[data-expand]", code);
+      if (expand) {
+        expand.textContent = "收起代码";
+        expand.setAttribute("aria-expanded", "true");
+      }
+    }
+    node.scrollIntoView({ block: "start" });
+    if (!node.hasAttribute("tabindex")) node.setAttribute("tabindex", "-1");
+    node.focus({ preventScroll: true });
+  }
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest('a[href^="#"]');
+    if (!link) return;
+    const id = decodeURIComponent(link.hash.slice(1));
+    if (!document.getElementById(id)) return;
+    event.preventDefault();
+    $$(".mobile-nav[open]").forEach((details) => {
+      details.open = false;
+    });
+    history.pushState(null, "", "#" + id);
+    reveal(id);
+  });
+  window.addEventListener("hashchange", () => reveal(decodeURIComponent(location.hash.slice(1))));
+  if (location.hash)
+    requestAnimationFrame(() => reveal(decodeURIComponent(location.hash.slice(1))));
+
+  const searchDialog = $("#search-dialog");
+  const searchInput = $("#search-input");
+  const results = $("#search-results");
+  function search() {
+    const query = searchInput.value.trim().toLowerCase();
+    const words = query.split(/\s+/).filter(Boolean);
+    const matches = searchIndex
+      .filter((item) =>
+        words.every((word) => (item.title + " " + item.text).toLowerCase().includes(word)),
+      )
+      .sort(
+        (a, b) =>
+          Number(b.title.toLowerCase().includes(query)) -
+          Number(a.title.toLowerCase().includes(query)),
+      );
+    results.replaceChildren();
+    for (const item of matches.slice(0, 25)) {
+      const a = document.createElement("a");
+      a.className = "search-result";
+      a.href = "#" + item.id;
+      const title = document.createElement("strong");
+      title.textContent = item.title;
+      const description = document.createElement("p");
+      const index = query ? item.text.toLowerCase().indexOf(query) : 0;
+      const start = Math.max(0, index - 24);
+      description.textContent = item.text.slice(start, start + 110);
+      a.append(title, description);
+      a.addEventListener("click", () => searchDialog.close());
+      results.append(a);
+    }
+    $("#search-meta").textContent = query
+      ? "找到 " + matches.length + " 项" + (matches.length > 25 ? "，显示前 25 项" : "")
+      : "输入章节、字段或关键词 · Tab 选择结果 · Enter 跳转";
+  }
+  $$("[data-search]").forEach((button) =>
+    button.addEventListener("click", () => {
+      searchDialog.showModal();
+      search();
+      searchInput.focus();
+    }),
+  );
+  searchInput.addEventListener("input", search);
+  searchInput.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      $(".search-result", results)?.focus();
+    }
+    if (event.key === "Enter") $(".search-result", results)?.click();
+  });
+  document.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      if (!searchDialog.open) searchDialog.showModal();
+      search();
+      searchInput.focus();
+    }
+  });
+  $$("[data-close]").forEach((button) =>
+    button.addEventListener("click", () => button.closest("dialog").close()),
+  );
+  $$("dialog").forEach((dialog) =>
+    dialog.addEventListener("click", (event) => {
+      if (event.target !== dialog) return;
+      const bounds = dialog.getBoundingClientRect();
+      if (
+        event.clientX < bounds.left ||
+        event.clientX > bounds.right ||
+        event.clientY < bounds.top ||
+        event.clientY > bounds.bottom
+      )
+        dialog.close();
+    }),
+  );
+
+  const diagramDialog = $("#diagram-dialog");
+  const zoomContent = $("#zoom-content");
+  const zoomViewport = $("#zoom-viewport");
+  let diagramSource,
+    diagramName,
+    svgWidth = 1,
+    svgHeight = 1,
+    scale = 1;
+  function setScale(next) {
+    scale = Math.max(0.07, Math.min(3, next));
+    const svg = $("svg", zoomContent);
+    if (!svg) return;
+    svg.style.width = svgWidth * scale + "px";
+    svg.style.height = svgHeight * scale + "px";
+    zoomContent.style.width = svgWidth * scale + "px";
+    $("#zoom-level").textContent = Math.round(scale * 100) + "%";
+  }
+  function fit() {
+    setScale(
+      Math.min(
+        (zoomViewport.clientWidth - 64) / svgWidth,
+        (zoomViewport.clientHeight - 64) / svgHeight,
+      ),
+    );
+  }
+  $$("[data-diagram]").forEach((button) =>
+    button.addEventListener("click", () => {
+      const figure = button.closest(".diagram");
+      const original = $(".diagram-stage > svg", figure);
+      diagramSource = original.outerHTML;
+      diagramName = figure.dataset.title;
+      $("#zoom-title").textContent = diagramName;
+      const svg = original.cloneNode(true);
+      // Namespace the copy so SVG marker references do not collide with the source.
+      const nodes = [svg, ...$$("*", svg)];
+      const ids = new Map(
+        nodes.filter((node) => node.id).map((node) => [node.id, "zoom-" + node.id]),
+      );
+      for (const node of nodes) {
+        for (const attribute of [...node.attributes]) {
+          let value = attribute.value.replace(/url\(['"]?#([^)'"]+)['"]?\)/g, (match, id) =>
+            ids.has(id) ? `url(#${ids.get(id)})` : match,
+          );
+          if (attribute.name === "id") value = ids.get(value);
+          else if (/^(?:xlink:)?href$/.test(attribute.name) && ids.has(value.slice(1)))
+            value = "#" + ids.get(value.slice(1));
+          else if (/^aria-(?:labelledby|describedby)$/.test(attribute.name))
+            value = value
+              .split(/\s+/)
+              .map((id) => ids.get(id) ?? id)
+              .join(" ");
+          node.setAttribute(attribute.name, value);
+        }
+        if (node.localName === "style")
+          node.textContent = node.textContent.replace(/#([A-Za-z_][\w:-]*)/g, (match, id) =>
+            ids.has(id) ? "#" + ids.get(id) : match,
+          );
+      }
+      zoomContent.replaceChildren(svg);
+      const viewBox = original.viewBox.baseVal;
+      svgWidth = viewBox.width;
+      svgHeight = viewBox.height;
+      diagramDialog.showModal();
+      fit();
+      zoomViewport.scrollTop = 0;
+      zoomViewport.scrollLeft = 0;
+    }),
+  );
+  $$("[data-zoom]").forEach((button) =>
+    button.addEventListener("click", () => {
+      const mode = button.dataset.zoom;
+      if (mode === "fit") fit();
+      else setScale(mode === "actual" ? 1 : scale * (mode === "in" ? 1.3 : 1 / 1.3));
+    }),
+  );
+  $("#download-svg").addEventListener("click", () => {
+    if (!diagramSource) return;
+    const url = URL.createObjectURL(
+      new Blob([diagramSource], { type: "image/svg+xml;charset=utf-8" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "design-" + diagramName.replace(/[^\w\u4e00-\u9fff-]+/g, "-") + ".svg";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+
+  let scheduled = false;
+  function updateReading() {
+    scheduled = false;
+    const total = document.documentElement.scrollHeight - innerHeight;
+    $(".reading-progress").style.transform =
+      "scaleX(" + (total > 0 ? Math.min(1, scrollY / total) : 0) + ")";
+  }
+  addEventListener(
+    "scroll",
+    () => {
+      if (!scheduled) {
+        scheduled = true;
+        requestAnimationFrame(updateReading);
+      }
+    },
+    { passive: true },
+  );
+  addEventListener("resize", updateReading);
+  updateReading();
+})();
+</script>
+  <script>(() => {
+    const menu = document.querySelector(".lesson-toc");
+    menu.addEventListener("click", (event) => { if (event.target.closest("a")) menu.open = false; });
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape" && menu.open) { menu.open = false; menu.querySelector("summary").focus(); } });
+    document.addEventListener("pointerdown", (event) => { if (menu.open && !menu.contains(event.target)) menu.open = false; });
+  })()</script></body>
+</html>

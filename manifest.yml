@@ -20,6 +20,7 @@ canonical:
   local_deployment: deploy/README.md
   model_observability: deploy/observability/README.md
   agentic_search: mai-specs/973-lesson-23-agentic-search/design/TECH_DESIGN.md
+  knowledge_library: mai-specs/973-lesson-23-agentic-search/design/VECTOR_SEARCH.md
   agentic_search_classroom: examples/showcases/lesson-23-agentic-search/README.md
   tool_catalog: apps/agent/src/compass_agent/tools/README.md
   showcase_policy: examples/showcases/README.md

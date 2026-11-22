@@ -115,6 +115,12 @@ async def runtime_service(engine, **settings):
     )
 
     async def allowed(context, **kwargs):
+        if kwargs.get("run_environment"):
+            return {
+                "tenantName": "定时租户",
+                "workspaceName": "调度组",
+                "timezone": "Asia/Shanghai",
+            }
         return None
 
     runtime.access.capabilities = capability_grants
@@ -1916,6 +1922,9 @@ def test_due_triggers_keep_published_context_through_worker_takeover(engine, mon
                             if f["path"] == path
                         ] == [(path, version)]
                         system = frame["input"]["request"]["messages"][0]["content"]
+                        assert "Asia/Shanghai" in system
+                        organization = frame["input"]["request"]["messages"][1]
+                        assert json.loads(organization["content"])["workspaceName"] == "调度组"
                         assert (marker in system) == (version == 2)
 
             original = editor.get("tree").json()

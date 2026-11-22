@@ -657,6 +657,13 @@ def search_messages(progress, state, question, phase, budget, correction):
             if v["kind"] not in {"candidate", "hint"}
         ],
     }
+    if progress.pin.get("reportFormat") == "comparison_brief":
+        material["delivery"] = (
+            "经营简报按 comparisons 和 notes 交付。比较项要取得查询返回的基期和本期原值，"
+            "从 permittedReferences 选择 evidenceId、从零起的行号和可用列名。"
+            "贡献表和环比由程序计算。重要判断和行动须能指回已读原段或实际查询行。"
+            "取得材料后直接交付，不必提交 claimProposals。"
+        )
     if correction:
         material["correction"] = correction
     if progress.previous_draft is not None:

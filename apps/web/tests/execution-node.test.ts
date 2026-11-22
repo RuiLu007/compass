@@ -8,6 +8,7 @@ import {
   RunSequence,
 } from "../src/contracts/analysis-run";
 import { applyAnalysisRunEvent, type AnalysisTurnView } from "../src/client/analysis-run";
+import { executionEntries } from "../src/components/ui/execution-timeline";
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const node = (n: number, fields: Partial<ExecutionNode> = {}): ExecutionNode => ({
@@ -97,5 +98,104 @@ describe("unified execution protocol", () => {
     ]) {
       expect(() => new ExecutionSequence().accept(invalid, RUN_STREAM_LIMITS)).toThrow();
     }
+  });
+});
+
+describe("database query timeline", () => {
+  const databaseNode = (fields: Partial<ExecutionNode>) =>
+    node(1, {
+      kind: "tool",
+      origin: { kind: "builtin", toolName: "database_query" },
+      title: "查询数据库",
+      ...fields,
+    });
+
+  it("keeps running and completed summaries on the same call and leaves full details readable", () => {
+    const input = JSON.stringify({
+      op: "query",
+      sql: `SELECT\n  COUNT(*) AS orders FROM ${"sales_".repeat(12)} WHERE paid = true`,
+    });
+    const output = JSON.stringify({ columns: ["orders"], rows: [[0]], truncated: false });
+    const running = databaseNode({ detail: { input } });
+    const [started] = executionEntries([running], true);
+    const [finished] = executionEntries(
+      [{ ...running, revision: 2, status: "completed", detail: { input, output } }],
+      false,
+    );
+    expect(started.title).toMatch(
+      /^执行 SELECT COUNT\(\*\) AS orders FROM .*….*WHERE paid = true$/,
+    );
+    expect(started.queryResult).toBeUndefined();
+    expect(finished).toMatchObject({
+      id: started.id,
+      title: started.title,
+      queryResult: "返回 1 行 · orders=0",
+      input,
+      output,
+    });
+  });
+
+  it.each([
+    [
+      { op: "list_connections" },
+      { connections: [{ name: "零售库" }] },
+      "列出可用连接",
+      "1 个连接 · 零售库",
+    ],
+    [
+      { op: "list_tables", offset: 50, connectionId: "warehouse" },
+      { columns: ["schema", "table"], rows: [["retail", "sales"]], truncated: true },
+      "列出数据表 · 偏移 50 · 连接 warehouse",
+      "返回 1 行（已截断） · schema=retail · table=sales",
+    ],
+    [
+      { op: "describe_table", schema: "retail", table: "sales" },
+      { columns: ["column_name", "data_type"], rows: [["paid", "boolean"]] },
+      "查看表结构 retail.sales",
+      "返回 1 行 · column_name=paid · data_type=boolean",
+    ],
+  ] as const)(
+    "summarizes authorized metadata previews for %o",
+    (input, output, title, queryResult) => {
+      const [entry] = executionEntries(
+        [
+          databaseNode({
+            status: "completed",
+            display: {
+              policy: "preview",
+              inputPreview: JSON.stringify(input),
+              outputPreview: JSON.stringify(output),
+            },
+          }),
+        ],
+        false,
+      );
+      expect(entry).toMatchObject({ title, queryResult });
+    },
+  );
+
+  it("handles empty, failed, malformed and detail-free calls without inventing results", () => {
+    const detail = { input: '{"op":"query","sql":"SELECT 1"}', output: '{"columns":[],"rows":[]}' };
+    const entries = executionEntries(
+      [
+        databaseNode({ status: "empty", detail }),
+        databaseNode({ status: "failed", detail }),
+        databaseNode({ status: "completed", detail: { input: '{"op":', output: '{"rows":' } }),
+        databaseNode({ status: "completed", title: "查询经营数据" }),
+        databaseNode({
+          status: "completed",
+          detail,
+          origin: { kind: "mcp", serverId: "remote", toolName: "database_query" },
+        }),
+      ],
+      false,
+    );
+    expect(entries.map(({ title, queryResult }) => [title, queryResult])).toEqual([
+      ["执行 SELECT 1", "返回 0 行"],
+      ["执行 SELECT 1", undefined],
+      ["查询数据库", undefined],
+      ["查询经营数据", undefined],
+      ["database_query", undefined],
+    ]);
   });
 });

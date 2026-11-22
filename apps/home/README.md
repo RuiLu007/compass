@@ -119,9 +119,9 @@ Agent 决策权标签页使用 `public/resources/agent-authority-architecture.pn
 
 “课程资料”栏目位于 `/resources`，左侧按第 11–23 课呈现可折叠的课程树，点击子项后右侧 iframe 加载对应 HTML。阅读地址使用课号和文档 ID，例如 `/resources?lesson=15&doc=technical-design`，支持直接打开、刷新和浏览器前进后退。无课号时默认第 11 课，已知课号下省略或填错文档 ID 时打开该课首份文档。索引真源为 [lesson-resources.json](src/lib/lesson-resources.json)，每课的 `artifacts` 数组可登记多个 HTML 产物；每项记录稳定 ID、展示标题、Compass 根目录下的源路径和访问地址。
 
-当前第 11、12 课使用 `TECH_DESIGN.compact.html`；第 13–20 课使用各自 `design/TECH_DESIGN.html` 的学员阅读版。第 21–23 课分别收录 Context Runtime 与 PromptOps、企业经营语义层与零售语义资产、Agentic Search。设计与 HTML 继续在对应 Feature 维护。`dev` / `build` 通过 [lesson-resources.mjs](scripts/lesson-resources.mjs) 将登记文件同步到 `public/resources/lessons/<课号>/<产物>.html`，生成文件不提交 Git。新增产物时同步登记 `turbo.json` 的 build / test 源文件输入，确保更新后刷新构建缓存。
+当前第 11、12 课使用 `TECH_DESIGN.compact.html`；第 13–20 课使用各自 `design/TECH_DESIGN.html` 的学员阅读版。第 21–23 课分别收录 Context Runtime 与 PromptOps、企业经营语义层与零售语义资产、Agentic Search 与华东 GMV 向量检索案例。设计与 HTML 继续在对应 Feature 维护。`dev` / `build` 通过 [lesson-resources.mjs](scripts/lesson-resources.mjs) 将登记文件同步到 `public/resources/lessons/<课号>/<产物>.html`，生成文件不提交 Git。新增产物时同步登记 `turbo.json` 的 build / test 源文件输入，确保更新后刷新构建缓存。
 
-第 16 课的技术方案登记了可选的 `markdown` 下载项。构建将源 Markdown 原样复制到 `/resources/lessons/16/technical-design.md`。
+第 16 课的技术方案与第 22 课的「零售语义资产 · 设计详解」均提供 HTML 在线阅读和 Markdown 下载。构建按索引中的 `markdown` 配置原样复制源文件。第 23 课的主方案、向量检索、代码实现、结论校验和零售数据五份阅读版同样提供两种格式。单独刷新该课可运行 `node apps/home/scripts/lesson-resources.mjs --lesson 23`。样式与分发要求见[技术方案 HTML 阅读规范](../../docs/ui-style-guide.md#技术方案-html-阅读版)。第 22 课入口为 `/resources?lesson=22&doc=retail-semantic-assets`。
 
 隔离的 Sites 发布副本在 `reference/lessons/<课号>/` 提供已登记的 HTML 和 Markdown；缺少登记文件时构建会报错。本机 Docker 部署沿用部署入口预先准备 public 素材的流程。页面采用占满导航下方视口的文档阅读布局，隐藏站点页脚，不参与滚轮翻屏；目录与正文独立滚动，窄屏可收起目录，工具栏提供新窗口打开与下载。分发时隐藏 HTML 自带的整条顶部栏（Logo、页内导航及工具），并收紧锚点滚动留白；保留正文、图表、代码交互与离线能力。Feature 原始文件保持原样。
 

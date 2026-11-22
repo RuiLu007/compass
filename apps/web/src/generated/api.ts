@@ -798,6 +798,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/models/knowledge-embeddings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Knowledge Embeddings */
+        post: operations["knowledge_embeddings_v1_models_knowledge_embeddings_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/models/observability": {
         parameters: {
             query?: never;
@@ -2162,6 +2179,11 @@ export interface components {
              */
             choiceId: string | null;
             /**
+             * Customdefinition
+             * @default null
+             */
+            customDefinition: string | null;
+            /**
              * Decision
              * @enum {string}
              */
@@ -2646,6 +2668,16 @@ export interface components {
             scene_id: string;
         };
         JsonValue: unknown;
+        /** KnowledgeEmbeddingBatch */
+        KnowledgeEmbeddingBatch: {
+            /** Texts */
+            texts: string[];
+        };
+        /** KnowledgeEmbeddings */
+        KnowledgeEmbeddings: {
+            /** Vectors */
+            vectors: number[][];
+        };
         /** MainModelSelection */
         MainModelSelection: {
             /**
@@ -4945,6 +4977,15 @@ export interface components {
              */
             task: "discover" | "review";
         };
+        /** SemanticFieldChange */
+        SemanticFieldChange: {
+            /** After */
+            after: string;
+            /** Before */
+            before: string;
+            /** Field */
+            field: string;
+        };
         /** SemanticOpenResult */
         SemanticOpenResult: {
             /** Columns */
@@ -5015,6 +5056,15 @@ export interface components {
         SemanticResults: {
             /** Items */
             items: components["schemas"]["SemanticOpenResult"][];
+        };
+        /** SemanticRevisionPreview */
+        SemanticRevisionPreview: {
+            /** Changes */
+            changes: components["schemas"]["SemanticFieldChange"][];
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
         };
         /** SemanticSuggestions */
         SemanticSuggestions: {
@@ -5762,7 +5812,7 @@ export interface components {
              * Purpose
              * @enum {string}
              */
-            purpose: "manage" | "test" | "chat" | "module_read" | "data_manage" | "mcp_manage" | "runtime_diagnostics" | "runtime_usage" | "schedule_manage" | "schedule_owner" | "schedule_run" | "promptops_manage";
+            purpose: "manage" | "test" | "chat" | "module_read" | "knowledge_manage" | "data_manage" | "mcp_manage" | "runtime_diagnostics" | "runtime_usage" | "schedule_manage" | "schedule_owner" | "schedule_run" | "promptops_manage";
             /** Scope */
             scope: components["schemas"]["PlatformScope"] | components["schemas"]["TenantScope"];
         };
@@ -5831,6 +5881,8 @@ export interface components {
             proposalRevision: number;
             /** Reasoncode */
             reasonCode: string | null;
+            /** @default null */
+            revisionPreview: components["schemas"]["SemanticRevisionPreview"] | null;
             /** Runversion */
             runVersion: number;
             /**
@@ -5844,7 +5896,7 @@ export interface components {
              * Semantickind
              * @default null
              */
-            semanticKind: ("choice" | "result" | "draft" | "submit") | null;
+            semanticKind: ("choice" | "result" | "draft" | "submit" | "revision") | null;
             /**
              * Status
              * @enum {string}
@@ -8864,6 +8916,87 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CatalogPage"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelErrorResponse"];
+                };
+            };
+        };
+    };
+    knowledge_embeddings_v1_models_knowledge_embeddings_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-compass-context"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KnowledgeEmbeddingBatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeEmbeddings"];
                 };
             };
             /** @description Unauthorized */

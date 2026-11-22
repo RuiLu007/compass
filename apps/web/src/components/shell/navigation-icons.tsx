@@ -42,7 +42,9 @@ export const primaryIcons: Record<string, NavigationIconName> = {
 export const governanceIcons: Record<string, NavigationIconName> = {
   "admin-overview": "chart",
   data: "database",
-  capabilities: "code",
+  models: "spark",
+  promptops: "folder",
+  sandbox: "code",
   runs: "play",
   quality: "check",
   security: "shield",
@@ -76,7 +78,6 @@ export const secondaryIcons: Record<string, NavigationIconName> = {
   guide: "grid",
   workspaces: "grid",
   access: "shield",
-  "platform-promptops": "folder",
   "platform-tenants": "users",
 };
 

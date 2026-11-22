@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
-import type { MouseEvent as ReactMouseEvent, SyntheticEvent } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { ChevronRight, FileText, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { assetUrl } from "@/lib/asset-url";
@@ -59,32 +59,50 @@ export function ResourceReader() {
   const [navigationPreference, setNavigationPreference] = useState<boolean>();
   const navigationOpen = navigationPreference ?? !(narrow && selectedLesson);
 
-  function navigate(href: string) {
+  const navigate = useCallback((href: string) => {
     if (window.location.search !== href || window.location.hash) {
       window.history.pushState(null, "", href);
     }
     if (window.matchMedia(narrowViewport).matches) setNavigationPreference(false);
-  }
+  }, []);
 
-  function followDocumentLinks(event: SyntheticEvent<HTMLIFrameElement>) {
-    const frame = event.currentTarget;
-    frame.contentDocument?.addEventListener("click", (click) => {
-      if (!isUnmodifiedClick(click)) return;
-      const link = (click.target as Element | null)?.closest?.<HTMLAnchorElement>("a[href]");
-      if (!link || link.hasAttribute("download") || (link.target && link.target !== "_self"))
-        return;
-      if (link.origin !== window.location.origin || link.pathname === documentUrl) return;
-      const nextLesson = lessons.find((item) =>
-        item.artifacts.some(({ href }) => assetUrl(href) === link.pathname),
-      );
-      const nextArtifact = nextLesson?.artifacts.find(
-        ({ href }) => assetUrl(href) === link.pathname,
-      );
-      if (!nextLesson || !nextArtifact) return;
-      click.preventDefault();
-      navigate(resourceHref(nextLesson.number, nextArtifact.id, link.hash.slice(1)));
-    });
-  }
+  const followDocumentLinks = useCallback(
+    (frame: HTMLIFrameElement | null) => {
+      if (!frame) return;
+      let current: Document | null = null;
+      function follow(click: MouseEvent) {
+        if (!isUnmodifiedClick(click)) return;
+        const link = (click.target as Element | null)?.closest?.<HTMLAnchorElement>("a[href]");
+        if (!link || link.hasAttribute("download") || (link.target && link.target !== "_self"))
+          return;
+        if (link.origin !== window.location.origin || link.pathname === current?.location.pathname)
+          return;
+        const nextLesson = lessons.find((item) =>
+          item.artifacts.some(({ href }) => assetUrl(href) === link.pathname),
+        );
+        const nextArtifact = nextLesson?.artifacts.find(
+          ({ href }) => assetUrl(href) === link.pathname,
+        );
+        if (!nextLesson || !nextArtifact) return;
+        click.preventDefault();
+        navigate(resourceHref(nextLesson.number, nextArtifact.id, link.hash.slice(1)));
+      }
+      function bind() {
+        if (!frame || current === frame.contentDocument) return;
+        current?.removeEventListener("click", follow);
+        current = frame.contentDocument;
+        current?.addEventListener("click", follow);
+      }
+      // An iframe restored from cache can finish loading before React mounts this reader.
+      frame.addEventListener("load", bind);
+      bind();
+      return () => {
+        frame.removeEventListener("load", bind);
+        current?.removeEventListener("click", follow);
+      };
+    },
+    [navigate],
+  );
 
   return (
     <main id="main-content" className={styles.reader} data-navigation-open={navigationOpen}>
@@ -153,7 +171,7 @@ export function ResourceReader() {
           src={frameSrc}
           title={`${title} · ${activeDocument.title}`}
           className={styles.frame}
-          onLoad={followDocumentLinks}
+          ref={followDocumentLinks}
         />
       </section>
     </main>

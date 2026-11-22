@@ -40,22 +40,18 @@ def business_period(question: str, as_of: date):
 
 def report_variables(question, as_of, scope_profile):
     period = business_period(question, as_of)
-    unit = next(
-        (
-            u
-            for u in ("万元", "亿元", "元", "美元")
-            if "单位为" + u in question or "以" + u + "为单位" in question
-        ),
-        None,
+    from compass_agent.context_runtime.profiles import ASSEMBLY
+
+    match = re.search(
+        r"(?:单位(?:为|是|[：:])\s*([\w%％/·]{1,16})(?=[，。；、\s]|$)|以\s*([\w%％/·]{1,16}?)\s*为单位)",
+        question,
     )
     return {
         "period": (period[0].isoformat() + " 至 " + period[1].isoformat())
         if period
         else "本次任务的统计期间（范围待核对）",
-        "unit": unit or "数据来源标注的货币单位",
-        "audience": {"finance": "财务负责人", "operations": "运营负责人"}.get(
-            scope_profile, "经营团队"
-        ),
+        "unit": (match[1] or match[2]) if match else "已核实口径的计量单位",
+        "audience": ASSEMBLY["scopeProfiles"][scope_profile]["audience"],
     }
 
 

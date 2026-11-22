@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 from typing import Literal
 
 from compass_agent.harness.autonomy import AutonomyBudget, AutonomyStopped
+from compass_agent.harness.context import validate_messages
 from compass_agent.harness.contracts import (
     AgentState,
     ModelRoute,
@@ -98,7 +99,10 @@ class AgentLoop:
                 budget.require_continue()
                 if result.error_code == "model_timeout":
                     raise AutonomyStopped("execution_timeout")
-            if result.status == "incomplete" and handle_incomplete:
+            if handle_incomplete and (
+                result.status == "incomplete"
+                or (result.status == "failed" and result.error_code == "empty_output")
+            ):
                 recovery = await handle_incomplete(step, result)
                 if recovery is not None:
                     self._finish_step(step, "failed", emit)
@@ -270,6 +274,12 @@ class AgentExecutor(AgentLoop):
                 journal, self, step, request, route, context, control, budget, emit
             )
 
+        from compass_agent.context_runtime.run_facts import current_facts
+
+        if facts := current_facts():
+            messages = facts.messages(request.messages)
+            validate_messages(messages)
+            request = request.model_copy(update={"messages": messages})
         return await recorded(
             "model",
             f"model:{step.id}",

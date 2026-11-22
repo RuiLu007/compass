@@ -78,6 +78,16 @@ def entry(row, manifest, refs):
     )
 
 
+def asset_title(body):
+    for line in (body or "").splitlines():
+        line = line.strip()
+        if line.startswith("# "):
+            return line[2:].strip()
+        if line.startswith("**") and line.endswith("**") and len(line) > 4:
+            return line[2:-2].strip()
+    return ""
+
+
 def tree(tx, prefix, q, cursor, limit):
     pointer = head(tx)
     gen = active(tx, pointer)
@@ -96,10 +106,7 @@ def tree(tx, prefix, q, cursor, limit):
             body = row.draft_body
             if body is None and row.path in manifest:
                 body = version_row(tx, row.path, manifest[row.path]).body
-            title = next(
-                (line.strip("# ") for line in (body or "").splitlines() if line.startswith("# ")),
-                "",
-            )
+            title = asset_title(body)
             if q.casefold() not in title.casefold():
                 continue
         matches.append(entry(row, manifest, refs))
@@ -536,7 +543,12 @@ def release_plan(tx, pointer, data):
             updates[p] = row.draft_body
     required = set(refs)
     if previous:
-        required.difference_update(optional_showcase_paths())
+        from compass_agent.promptops.layout import asset_path
+        from compass_agent.promptops.starter_catalog import starter_usages
+
+        optional = optional_showcase_paths()
+        required_starters = {asset_path(p) for p in starter_usages() if p not in optional}
+        required.difference_update({asset_path(p) for p in optional} - required_starters)
     else:
         required.update(catalog.bundled())
     for path in sorted(required - manifest.keys()):

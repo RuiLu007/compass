@@ -2,7 +2,7 @@
   "type": "function",
   "function": {
     "name": "schedule_read",
-    "description": "列出、搜索当前用户的定时任务，或按 ID 查看详情及执行记录。按名称修改或删除前先查询，遇到同名任务请用户选择。",
+    "description": "**用途与调用规则**\n\n- 列出、搜索当前用户的定时任务，或按 ID 查看详情及执行记录。\n- 按名称修改或删除前先查询，遇到同名任务请用户选择。",
     "parameters": {
       "type": "object",
       "$defs": {

@@ -92,7 +92,7 @@ def terminal_result(service, run):
 
 
 async def start_legacy(service, body, context, executor, carrier=None):
-    await service.access.check(context)
+    environment = await service.access.check(context, run_environment=True)
     command = SessionSubmit.model_validate(
         body.model_dump(mode="json", by_alias=True, exclude={"history"})
     )
@@ -100,6 +100,7 @@ async def start_legacy(service, body, context, executor, carrier=None):
         service.store.submit,
         command,
         context,
+        run_environment=environment,
         imported_history=[h.model_dump(mode="json") for h in body.history],
     )
     run_id = UUID(receipt["runId"])

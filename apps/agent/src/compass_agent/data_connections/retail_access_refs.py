@@ -50,12 +50,15 @@ async def retail_projection(cursor, binding, query):
         return None
     sources = [n for n in nodes if isinstance(n, ast.RangeVar)]
     if not 1 <= len(sources) <= 4 or any(
-        s.schemaname != "core" or s.catalogname or (s.alias and s.alias.colnames) for s in sources
+        (s.schemaname != "core" and (s.schemaname, s.relname) != ("ops", "source_watermark"))
+        or s.catalogname
+        or (s.alias and s.alias.colnames)
+        for s in sources
     ):
         return None
     catalog = {}
     for s in sources:
-        if not s.relname or s.schemaname != "core":
+        if not s.schemaname or not s.relname:
             return None
         alias = s.alias.aliasname if s.alias else s.relname
         name = s.schemaname + "." + s.relname
@@ -78,7 +81,28 @@ async def retail_projection(cursor, binding, query):
             {"tenant_id", "region_id"} if region else {"tenant_id"},
             region,
         )
+    # Only a plain SELECT-list star expands to these base columns. Other uses
+    # (whole-row expressions, functions, joins with merged columns) stay transient.
+    projections = [target.val for target in stmt.targetList or ()]
     for ref in (n for n in nodes if isinstance(n, ast.ColumnRef)):
+        if (
+            ref.fields
+            and isinstance(ref.fields[-1], ast.A_Star)
+            and any(ref is projected for projected in projections)
+        ):
+            if len(ref.fields) == 1:
+                expanded = list(catalog.values())
+            elif (
+                len(ref.fields) == 2
+                and isinstance(ref.fields[0], ast.String)
+                and ref.fields[0].sval in catalog
+            ):
+                expanded = [catalog[ref.fields[0].sval]]
+            else:
+                return None
+            for _, columns, used, _ in expanded:
+                used.update(columns)
+            continue
         if not ref.fields or any(not isinstance(c, ast.String) for c in ref.fields):
             return None
         parts = [c.sval for c in ref.fields]

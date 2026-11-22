@@ -2,7 +2,7 @@
   "type": "function",
   "function": {
     "name": "review_semantic_change",
-    "description": "检查草稿来源、声明、依赖、冲突与已登记影响，说明阻断项及修正建议。",
+    "description": "**用途与调用规则**\n\n- 检查草稿来源、声明、依赖、冲突与已登记影响，说明阻断项及修正建议。",
     "parameters": {
       "additionalProperties": false,
       "properties": {

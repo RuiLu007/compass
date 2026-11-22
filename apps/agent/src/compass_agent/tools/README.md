@@ -22,15 +22,17 @@
 
 ## 经营语义工具
 
-启用 Registry 的工作区按使用者权限装配 `search_semantics`、`get_metric_definition`、`resolve_semantics` 和 `query_metric`。查询使用 Run 固定的发布版本和私有参数引用。用户选择歧义口径后继续原轮，结果交付时再次检查连接和来源权限。
+启用 Registry 的工作区按使用者权限装配 `search_semantics`、`get_metric_definition`、`resolve_semantics` 和 `query_metric`。查询使用 Run 固定的发布版本和私有参数引用。模型可按问题先查获准的明细。用户已指明指标或算法时直接使用；口径有歧义时可选择候选，或选择“都不合适”填写本次算法，继续原轮分析。缺少发布绑定只影响对应指标的正式查询。工具把可见定义、缺少的参数和失败原因返回模型，明细查询和交付各自校验权限。
 
-语义检索的下一页游标绑定原 Run、发布清单和搜索条件。下钻使用已解析的子分组与父级筛选，从整体下钻可显式指定 `parent_group="total"`。对比使用同一指标、单位、分组、筛选及数据可见截止。对照期默认取本期之前等长的左闭右开区间，也可显式指定业务日期。
+语义检索的下一页游标绑定原 Run、发布清单和搜索条件。下钻使用已解析的子分组与父级筛选，从整体下钻可显式指定 `parent_group="total"`。对比使用同一指标、单位、分组、筛选及数据可见截止。对照期按用户要求显式传入。解析结果提供前一等长窗口供参考。
 
-`discover_semantic_candidates`、`review_semantic_change` 和 `submit_semantic_change` 使用同一 Web 授权边界。来自临时查询的建议保留同一会话的来源回执，用户在预览中确认保存，随后由维护者单独提交审批。
+`discover_semantic_candidates`、`review_semantic_change` 和 `submit_semantic_change` 使用同一 Web 授权边界。主动建议使用 `trigger=suggest` 提交本轮查询回执、业务名称、口径、公式、单位、业务域和复用理由。模型先比较相关目录定义，服务按当前权限复核等价定义，每轮最多留存三个建议。用户勾选后才写入个人草稿。明确请求保存上一轮计算时使用 `requested`。修改已有指标时，向 `discover_semantic_candidates` 提供 `revise_metric` 和要修改的 `fields`。维护者在原会话核对逐字段差异，确认后写入同一资产的新草稿版本。预览和保存均复核维护权限及版本摘要。
 
 ## 资料检索
 
-启用检索的工作区通过 `search_documents` 检索制度、历史产物和外部材料，通过 `read_document` 打开本轮已取得的段落及同版本相邻段。搜索摘要与原文均登记来源。Web 在候选排名、取原文、继续执行和历史读取时按当前成员、工作区和发布方政策重新授权。来源包、时点与连接配置见 [Web 资料来源](../../../../../apps/web/README.md#工作区资料来源)。
+启用检索的工作区通过 `search_documents` 检索制度、历史产物和外部材料，通过 `read_document` 打开本轮已取得的段落及同版本相邻段。启用向量的资料包用现有 OpenAI Provider 的 text-embedding-3-small 生成查询向量，再与词法排名融合。可用 COMPASS_EMBEDDING_PROVIDER_ID 指定连接。搜索结果中的 retrievalMode 表示实际用到的 hybrid 或 lexical。搜索摘要与原文均登记来源。Web 在候选排名、取原文、继续执行和历史读取时按当前成员、工作区和发布方政策重新授权。来源包、时点与连接配置见 [Web 资料来源](../../../../../apps/web/README.md#第-23-课资料与回答引用)。
+
+资料包可声明自己的核验操作。通用检索支持当前来源的行列、引文、计算与比较。已启用的零售包另外提供观察窗口、采购档位及工作日历核验；输出 Schema 与回执校验共用本轮相同的包配置。
 
 ## 默认装配
 

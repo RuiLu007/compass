@@ -1,14 +1,18 @@
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-export async function prepareLessonResources(app) {
+export async function prepareLessonResources(app, lessonNumber) {
   const lessons = JSON.parse(
     await readFile(path.join(app, "src/lib/lesson-resources.json"), "utf8"),
   );
   const reference = path.join(app, "reference");
   const useReference = existsSync(reference);
-  const files = lessons.flatMap((lesson) => {
+  const selected =
+    lessonNumber === undefined ? lessons : lessons.filter((item) => item.number === lessonNumber);
+  if (!selected.length) throw new Error("Unknown lesson " + lessonNumber);
+  const files = selected.flatMap((lesson) => {
     const links = new Map(
       lesson.artifacts.map((item) => [
         path.posix.basename(item.source ?? item.href),
@@ -30,7 +34,9 @@ export async function prepareLessonResources(app) {
   for (const { source } of files) {
     if (!existsSync(source)) throw new Error(`Missing lesson resource: ${source}`);
   }
-  await rm(path.join(app, "public/resources/lessons"), { recursive: true, force: true });
+  if (lessonNumber === undefined) {
+    await rm(path.join(app, "public/resources/lessons"), { recursive: true, force: true });
+  }
   for (const { source, destination, links } of files) {
     await mkdir(path.dirname(destination), { recursive: true });
     if (!links) {
@@ -54,4 +60,12 @@ export async function prepareLessonResources(app) {
       ),
     );
   }
+}
+
+if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
+  const [flag, value, ...extra] = process.argv.slice(2);
+  if (flag !== "--lesson" || !/^[1-9]\d*$/.test(value ?? "") || extra.length) {
+    throw new Error("Usage: node apps/home/scripts/lesson-resources.mjs --lesson <number>");
+  }
+  await prepareLessonResources(fileURLToPath(new URL("../", import.meta.url)), Number(value));
 }

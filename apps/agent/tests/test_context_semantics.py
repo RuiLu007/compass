@@ -78,3 +78,18 @@ def test_budget_compacts_complete_optional_turns_and_preserves_active_prefix():
         fit(request.model_copy(update={"continuation_token": "active"}), 600)
     with pytest.raises(ContextLimit):
         fit(request, 30)
+
+
+def test_report_uses_user_units_and_routed_intent_without_date_syntax():
+    from compass_agent.context_runtime.profiles import numeric_intent
+    from compass_agent.context_runtime.semantics import report_variables
+
+    for query, expected in [
+        ("请以工时为单位", "工时"),
+        ("单位为 kg/件", "kg/件"),
+        ("以前怎么计算", "已核实口径的计量单位"),
+    ]:
+        assert report_variables(query, date(2026, 2, 2), "platform")["unit"] == expected
+    assert numeric_intent("查数查询", "business_qa")
+    assert not numeric_intent("指标解释", "business_qa")
+    assert not numeric_intent("其他", None)

@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { CircleAlert, CircleCheck, Database, Plus, RefreshCw } from "lucide-react";
 import { useDocumentSession } from "@/components/shell/session-boundary";
 import { Modal } from "@/components/ui/dialog";
+import { UiPageHeading } from "@/components/ui/page-heading";
 import type { SessionView } from "@/contracts/page";
 import type { components } from "@/generated/api";
 import { ApiError } from "@/client/request-scope";
@@ -36,7 +37,7 @@ export function RetailConnectionPage({ session }: { session: SessionView }) {
         />
       ) : (
         <>
-          <h2>数据连接</h2>
+          <UiPageHeading title="数据连接" />
           <div className="panel">请联系平台管理员配置此工作区的数据连接。</div>
         </>
       )}
@@ -113,23 +114,16 @@ function Connections({ query }: { query: string }) {
 
   return (
     <>
-      <div className="model-page-head">
-        <div>
-          <p className="eyebrow">DATA CONNECTIONS</p>
-          <h2>数据连接</h2>
-          <p className="muted">管理当前工作区的 PostgreSQL 和 MySQL 连接。</p>
-        </div>
-        <div className={`actions ${styles.pageActions}`}>
-          {connections && !loadingError && (
-            <button className="secondary" onClick={reload} disabled={!!testing}>
-              <RefreshCw size={16} aria-hidden="true" /> 重新加载
-            </button>
-          )}
-          <button onClick={() => setEditing("new")} disabled={!connections || !!loadingError}>
-            <Plus size={17} aria-hidden="true" /> 新增连接
+      <UiPageHeading title="数据连接">
+        {connections && !loadingError && (
+          <button className="secondary" onClick={reload} disabled={!!testing}>
+            <RefreshCw size={16} aria-hidden="true" /> 重新加载
           </button>
-        </div>
-      </div>
+        )}
+        <button onClick={() => setEditing("new")} disabled={!connections || !!loadingError}>
+          <Plus size={17} aria-hidden="true" /> 新增连接
+        </button>
+      </UiPageHeading>
       {notice && <p role="status">{notice}</p>}
       {loadingError ? (
         <div className="panel">

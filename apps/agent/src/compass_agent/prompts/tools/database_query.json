@@ -2,7 +2,7 @@
   "type": "function",
   "function": {
     "name": "database_query",
-    "description": "列出可查询的表、查看字段，或执行一条只读 PostgreSQL SELECT。先用 list_connections 发现连接，多个连接时指定 connectionId。SQL 使用 schema.table。最多返回 50 行、4 KiB。",
+    "description": "**用途与调用规则**\n\n- 列出可查询的表、查看字段，或执行一条只读 PostgreSQL SELECT。\n- 先用 list_connections 发现连接，多个连接时指定 connectionId。\n- SQL 使用 schema.table。\n- 最多返回 50 行、4 KiB。",
     "parameters": {
       "type": "object",
       "$defs": {

@@ -31,8 +31,16 @@
 
 本课的具体交付按[模型工具与语义层清单](design/TECH_DESIGN.md#1-本课实施清单)、[上下文装配](design/TECH_DESIGN.md#2-上下文装配)、[Prompt 设定](design/TECH_DESIGN.md#3-prompt-设定)和[Verify 接入](design/TECH_DESIGN.md#4-verify-接入)查阅。
 
-主 Agent 通过 Plan → Execute → Verify 驱动检索。Context Runtime 全量装配选中场景的基础方法，按需装入经营事实，再根据已核断言、缺口与实际预算收口。技术方案待评审，文件级工作列在[开发顺序](design/TECH_DESIGN.md#7-开发顺序兼容与恢复)。
+主 Agent 通过 Plan → Execute → Verify 驱动检索。Context Runtime 全量装配选中场景的基础方法，按需装入经营事实，再根据已核断言、缺口与实际预算收口。本版按现有实现回写，发布与恢复列在[开发顺序](design/TECH_DESIGN.md#7-开发顺序兼容与恢复)。
+
+增量方案见 [OpenAI 向量检索与华东 GMV 诊断](design/VECTOR_SEARCH.md)。
 
 ## 实施与验收
 
 [实施记录与端到端验收](test/ACCEPTANCE.md)
+
+## 工作区知识库管理
+
+第 23 课同时交付「数据与语义 → 知识文档」。工作区维护者可以创建知识库、批量导入文件、检查解析结果、编辑和启停单个分段，管理操作直接影响 Agentic Search 的召回与原文回读。详细交互和数据库设计沿用[向量检索方案](design/VECTOR_SEARCH.md)。
+
+平台管理员从经营总部打开知识文档即可浏览各租户与工作区的知识库、原文及分段。资料的维护权限和 Agent 检索范围按对应工作区授权。

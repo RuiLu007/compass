@@ -81,9 +81,15 @@ def test_classify_dictionary_route_inference(system, text, scene, role):
     assert result.metrics.classifier_source == "jev"
     assert result.metrics.usage_complete
     assert repo.call(result.call_id, CHAT).status == "completed"
+    body = json.loads(upstream.requests[-1].content)
+    system_prompt = body["messages"][0]["content"]
+    environment = system_prompt.split("本轮运行环境\n")[1]
+    classifier = json.loads(upstream.requests[0].content)
+    assert environment in classifier["questions"]["scene"]["instructions"]
+    assert CHAT.scope.kind == "tenant"
+    assert str(CHAT.scope.tenant_id) in environment
     if scene == "SC-39":
-        body = json.loads(upstream.requests[-1].content)
-        assert body["messages"][0]["content"] == OFF_TOPIC_PROMPT
+        assert system_prompt.startswith(OFF_TOPIC_PROMPT + "\n\n")
         assert "业务数据" in result.result.text
 
 

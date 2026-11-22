@@ -2,7 +2,7 @@
   "type": "function",
   "function": {
     "name": "submit_semantic_change",
-    "description": "把已保存和校验的版本提交双人评审，需要维护者确认。",
+    "description": "**用途与调用规则**\n\n- 把已保存和校验的版本提交双人评审，需要维护者确认。",
     "parameters": {
       "additionalProperties": false,
       "properties": {

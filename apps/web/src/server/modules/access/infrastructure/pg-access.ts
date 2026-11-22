@@ -86,9 +86,13 @@ export function bindAccess(client: SqlClient): AccessStore {
     if (actor.isPlatformAdmin) {
       const value = await tenant(tenantId);
       if (value.status !== "active") reject("not_found");
+      const { rows } = await client.query<{ id: string }>(
+        "SELECT id FROM web.tenant_member WHERE tenant_id=$1 AND user_id=$2 AND status='active' AND role_key='admin'",
+        [tenantId, actor.userId],
+      );
       return {
         tenantId,
-        memberId: null,
+        memberId: rows[0]?.id ?? null,
         role: "admin",
         authzVersion: value.authzVersion,
         tenantPermissions: [],

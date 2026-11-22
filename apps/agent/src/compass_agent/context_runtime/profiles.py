@@ -7,7 +7,7 @@ from importlib.resources import files
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Task = Literal["business_qa", "data_analysis", "dashboard", "business_report"]
 Phase = Literal["identify", "plan", "query", "analyze", "generate"]
@@ -21,6 +21,7 @@ def _policy_digest():
     digest = sha256()
     for path in (
         "context_runtime/profiles.py",
+        "context_runtime/assembly.json",
         "promptops/catalog.py",
         "promptops/template.py",
         "promptops/layout.py",
@@ -34,7 +35,9 @@ def _policy_digest():
     scene_document = json.loads(root.joinpath("prompts/support/routing/scenes.json").read_text())
     fixed = {
         key: {
-            field: value for field, value in row.items() if field not in {"description", "examples"}
+            field: value
+            for field, value in row.items()
+            if field not in {"description", "examples", "sop"}
         }
         for key, row in scene_document["scenes"].items()
     }
@@ -45,21 +48,46 @@ def _policy_digest():
 POLICY_DIGEST = _policy_digest()
 BASE = "shared/fragments/base.md"
 
-# Task form selects the method. The business scene independently selects an output slot.
+ASSEMBLY = json.loads(files("compass_agent").joinpath("context_runtime/assembly.json").read_text())
 SCENE_FILES = {
-    ("business_qa", "SC-01"): "tasks/business_qa/scenes/metric_lookup/answer.md",
-    ("data_analysis", "SC-02"): "tasks/data_analysis/scenes/period_comparison/answer.md",
-    ("dashboard", "SC-25"): "tasks/dashboard/scenes/channel_overview/layout.md",
-    ("business_report", "SC-29"): "tasks/business_report/scenes/weekly/report.md",
+    (r["task"], r["scene"]): r["path"] for r in ASSEMBLY["sceneTemplates"] if "scope" not in r
 }
-FINANCE_REPORT = "tasks/business_report/scenes/weekly/finance.md"
+SCOPED_SCENE_FILES = {
+    (r["task"], r["scene"], r["scope"]): r["path"]
+    for r in ASSEMBLY["sceneTemplates"]
+    if "scope" in r
+}
+
+
+def search_pack(search, scene):
+    pack = ASSEMBLY["searchPacks"].get((search or {}).get("scenePack"))
+    return pack if pack and scene not in pack["excludedScenes"] else {}
+
+
+def discover_plugins(scope: str, registry: bool) -> bool:
+    ceiling = ASSEMBLY["scopeProfiles"][scope].get("toolCeiling")
+    return ceiling is None or bool(registry and ceiling.get("registryPluginPrefixes"))
+
+
+def numeric_intent(task_type: str, deliverable: str | None) -> bool:
+    return task_type not in ASSEMBLY["definitionIntents"] and (
+        task_type in ASSEMBLY["numericIntents"]
+        or deliverable in {"business_report", "dashboard", "data_analysis"}
+    )
 
 
 class ScopeRule(BaseModel):
     model_config = ConfigDict(extra="forbid")
     tenant_id: UUID = Field(alias="tenantId")
     workspace_id: UUID | None = Field(None, alias="workspaceId")
-    profile: Literal["finance", "operations"]
+    profile: str
+
+    @field_validator("profile")
+    @classmethod
+    def registered_profile(cls, value):
+        if value not in ASSEMBLY["scopeProfiles"]:
+            raise ValueError("Unknown context scope profile")
+        return value
 
 
 def scope_profile(scope, rules: list[ScopeRule]) -> str:
@@ -127,18 +155,20 @@ def enumerate_usages(policy_version=POLICY_VERSION) -> tuple[PathUsage, ...]:
     return (
         PathUsage(BASE),
         PathUsage("shared/fragments/search-protocol.md"),
-        PathUsage("shared/fragments/retail.md"),
+        *(PathUsage(p["path"]) for p in ASSEMBLY["searchPacks"].values()),
         PathUsage("shared/fragments/semantics.md"),
         PathUsage("shared/fragments/semantic-governance.md"),
         *(PathUsage(f"tasks/{t}/system.md", t) for t in TASKS),
         *(PathUsage(f"shared/stages/{s}.md", phase=s) for s in PHASES),
         *(
             PathUsage(
-                p, t, variables=("period", "unit", "audience") if t == "business_report" else ()
+                r["path"],
+                r["task"],
+                scope=r.get("scope", "platform"),
+                variables=tuple(r.get("variables", ())),
             )
-            for (t, _), p in SCENE_FILES.items()
+            for r in ASSEMBLY["sceneTemplates"]
         ),
-        PathUsage(FINANCE_REPORT, "business_report", scope="finance", variables=("period", "unit")),
         *(PathUsage(s.path, t, phase) for s in SKILLS for t in s.tasks for phase in s.phases),
     )
 
@@ -164,7 +194,15 @@ def resolve_profile(
     }[phase]
     from compass_agent.tools.catalog import TOOLS
 
-    semantic_tools = {t.name for t in TOOLS if t.capability.startswith("semantic_")}
+    ceiling = ASSEMBLY["scopeProfiles"][scope].get("toolCeiling")
+    scope_tools = set(ceiling["base"]) if ceiling else set()
+    plugin_prefixes = ()
+    if ceiling and registry:
+        scope_tools.update(t.name for t in TOOLS if t.capability in ceiling["registryCapabilities"])
+        if plugins:
+            plugin_prefixes = tuple(ceiling["registryPluginPrefixes"])
+    if ceiling and search:
+        scope_tools.update(ceiling["withSearch"])
     allowed, excluded = [], []
     for name in available:
         if search:
@@ -175,15 +213,7 @@ def resolve_profile(
                 continue
         if not enabled or (name.startswith("mcp_") and not plugins):
             excluded.append((name, "permission"))
-        elif (
-            scope == "finance"
-            and not (search and name in {"search_documents", "read_document"})
-            and not (
-                registry
-                and (name in semantic_tools or (plugins and name.startswith(("mcp_", "workflow_"))))
-            )
-            and name not in {"todo_write", "database_query"}
-        ):
+        elif ceiling and name not in scope_tools and not name.startswith(plugin_prefixes):
             excluded.append((name, "scope"))
         elif stage_tools is not None and name not in stage_tools:
             excluded.append((name, "stage"))
@@ -192,21 +222,14 @@ def resolve_profile(
     paths = [BASE]
     if search and phase != "identify":
         paths.append("shared/fragments/search-protocol.md")
-        if search.get("scenePack") == "retail" and scene not in {
-            "SC-33",
-            "SC-36",
-            "SC-37",
-            "SC-38",
-            "SC-39",
-        }:
-            paths.append("shared/fragments/retail.md")
+        pack = search_pack(search, scene)
+        if pack:
+            paths.append(pack["path"])
     if registry and phase != "identify":
         paths.append("shared/fragments/semantics.md")
     if phase != "identify":
         paths.append(f"tasks/{task}/system.md")
-        scene_path = SCENE_FILES.get((task, scene))
-        if task == "business_report" and scene == "SC-29" and scope == "finance":
-            scene_path = FINANCE_REPORT
+        scene_path = SCOPED_SCENE_FILES.get((task, scene, scope), SCENE_FILES.get((task, scene)))
         if scene_path:
             paths.append(scene_path)
     paths.append(f"shared/stages/{phase}.md")

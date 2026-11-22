@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.concurrency import run_in_threadpool
 
 from compass_agent.database import get_engine
+from compass_agent.documents.embeddings import EmbeddingUnavailable, embed
 from compass_agent.llm.catalog import catalog_page
 from compass_agent.llm.policy import LogicalPolicy
 from compass_agent.models.errors import ModelError, message
@@ -29,6 +30,8 @@ from compass_agent.schemas import (
     CallResponse,
     CatalogPage,
     FinalEvent,
+    KnowledgeEmbeddingBatch,
+    KnowledgeEmbeddings,
     ModelChangePage,
     ModelComparison,
     ModelErrorDetail,
@@ -510,3 +513,16 @@ class ModelBoundaryMiddleware:
             await self.app(scope, bounded_receive, no_store)
         except SQLAlchemyError:
             await error_response(ModelError("unavailable", 503))(scope, bounded_receive, no_store)
+
+
+@router.post("/knowledge-embeddings", response_model=KnowledgeEmbeddings)
+async def knowledge_embeddings(command: KnowledgeEmbeddingBatch, context: Context):
+    if context.scope.kind == "platform":
+        require(context, {"manage"}, "platform")
+    else:
+        require(context, {"knowledge_manage"}, "tenant")
+    try:
+        vectors = await embed(get_engine(), get_settings(), command.texts)
+    except EmbeddingUnavailable as exc:
+        raise ModelError("unavailable", 503) from exc
+    return KnowledgeEmbeddings(vectors=vectors)

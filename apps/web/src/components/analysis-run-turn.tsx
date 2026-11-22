@@ -1,5 +1,6 @@
 "use client";
 
+import { sourceAccessNotice } from "@/contracts/source-access";
 import Image from "next/image";
 import { memo, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Download, FileSpreadsheet, Sparkles } from "lucide-react";
@@ -14,6 +15,7 @@ import type { RunView } from "@/contracts/agent-response";
 import { CitedAnswer } from "./cited-answer";
 import { DurableRunActions } from "./durable-run-actions";
 import { WorkflowSaveCard } from "./workflow-save-card";
+import { withDatabaseQuerySummary } from "./ui/database-query-summary";
 import {
   executionEntries,
   UiExecutionTimeline,
@@ -88,12 +90,7 @@ function dateRange(period: { start: string; end: string }) {
 }
 
 function toolTitle(tool: AnalysisToolView) {
-  if (tool.toolKind === "database_query") {
-    const input = parsePreview(tool.inputPreview);
-    if (input?.op === "list_tables") return "查看可查询的数据表";
-    if (input?.op === "describe_table") return `查看 ${input.schema}.${input.table} 的字段`;
-    return "执行 SQL 查询";
-  }
+  if (tool.toolKind === "database_query") return "执行查询";
   if (!tool.params) return "检查查询请求";
   return tool.params.dimension === "channel"
     ? "比较渠道实付金额"
@@ -107,21 +104,12 @@ function resultText(tool: AnalysisToolView) {
   if (tool.status === "error") {
     if (tool.toolKind === "database_query" && tool.errorCode === "invalid_parameters")
       return "请使用当前连接可访问的表，并提交一条受支持的只读 SELECT。";
-    return toolErrors[tool.errorCode ?? ""] ?? "工具调用失败。";
+    return (
+      sourceAccessNotice(tool.errorCode) ?? toolErrors[tool.errorCode ?? ""] ?? "工具调用失败。"
+    );
   }
   if (tool.status === "canceled") return "本次调用已停止。";
   return "尚未确认本次调用结果。";
-}
-
-function parsePreview(source: string | null | undefined): Record<string, unknown> | undefined {
-  if (!source) return undefined;
-  try {
-    const value: unknown = JSON.parse(source);
-    if (value && typeof value === "object" && !Array.isArray(value))
-      return value as Record<string, unknown>;
-  } catch {
-    return undefined;
-  }
 }
 
 function markdownPrefix(source: string, end: number) {
@@ -226,6 +214,7 @@ function TurnNotice({ turn, retry }: { turn: AnalysisTurnView; retry?: () => voi
   if (turn.terminal?.status === "failed") {
     title = turn.autonomy?.outcome === "human_required" ? "需要人工核对" : "本轮分析未完成";
     detail =
+      sourceAccessNotice(turn.runtimeFailure?.reasonCode ?? turn.terminal.errorCode) ??
       (turn.autonomy && autonomyReasons.get(turn.autonomy.reason)) ??
       runErrors[turn.terminal.errorCode] ??
       "本轮分析执行失败。";
@@ -357,27 +346,32 @@ function legacyExecutionEntries(turn: AnalysisTurnView, active: boolean): Execut
             title: "",
           },
         ]),
-    ...step.tools.map((tool): ExecutionEntry => ({
-      id: `${step.stepId}:${tool.toolIndex}`,
-      kind: "tool",
-      title: toolTitle(tool),
-      status:
-        tool.status === "ok"
-          ? "completed"
-          : tool.status === "error"
-            ? "failed"
-            : !active && tool.status === "running"
-              ? "incomplete"
-              : tool.status,
-      summary: resultText(tool),
-      context: [
-        ...(tool.params ? [`时段 · ${dateRange(tool.params.period)}`] : []),
-        ...(tool.params?.compareTo ? [`对比时段 · ${dateRange(tool.params.compareTo)}`] : []),
-      ],
-      input: tool.inputPreview,
-      output: tool.resultPreview,
-      language: "json",
-    })),
+    ...step.tools.map((tool): ExecutionEntry => {
+      const entry: ExecutionEntry = {
+        id: `${step.stepId}:${tool.toolIndex}`,
+        kind: "tool",
+        title: toolTitle(tool),
+        status:
+          tool.status === "ok"
+            ? "completed"
+            : tool.status === "error"
+              ? "failed"
+              : !active && tool.status === "running"
+                ? "incomplete"
+                : tool.status,
+        summary: resultText(tool),
+        context: [
+          ...(tool.params ? [`时段 · ${dateRange(tool.params.period)}`] : []),
+          ...(tool.params?.compareTo ? [`对比时段 · ${dateRange(tool.params.compareTo)}`] : []),
+        ],
+        input: tool.inputPreview,
+        output: tool.resultPreview,
+        language: "json",
+      };
+      return tool.toolKind === "database_query"
+        ? withDatabaseQuerySummary(entry, tool.rowCount)
+        : entry;
+    }),
     ...(step.status === "running" ? (step.preparingTools ?? []) : [])
       .filter((index) => !step.tools.some((tool) => tool.toolIndex === index))
       .map((index): ExecutionEntry => ({

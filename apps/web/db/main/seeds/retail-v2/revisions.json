@@ -1,0 +1,52 @@
+{
+  "terms": {
+    "term.region": "销售地区取自原订单的经营归属大区。退款和收入回溯原单后，沿用该销售地区汇总。",
+    "term.site": "销售网点指原订单记录的销售门店，用于归集该门店获得的订单和收入。订单未指定门店时，保留为未归属。",
+    "term.channel": "销售渠道指原订单成交的渠道。按渠道汇总销售或计算占比时，分子和总额使用同一指标、期间和可见范围。",
+    "term.sku": "SKU 是可独立销售和管理库存的商品规格。颜色、尺码等属性区分同一商品款下的具体规格。",
+    "term.spu": "SPU 表示商品款，用于合并同款下不同颜色、尺码的 SKU。按款比较实付金额时，使用能归属到商品款的报表或分摊口径。",
+    "term.stock_site": "持货地点指库存快照记载的仓库或门店。期末库存按地点和 SKU 归集，门店销售归属由原订单单独确定。",
+    "term.platform_buyer": "平台新客指平台归因日报按其新客识别规则统计的首次支付买家。人数随归因批次和报表版本读取，需同时说明平台、归因窗与识别规则。"
+  },
+  "metrics": {
+    "sales.order_count": {
+      "formula": "COUNT(DISTINCT order_header.order_id)，在单一租户内按 ordered_at 归期，保留 available_at ≤ as_of 的订单。商品筛选以匹配订单行为准，每张订单计一次。"
+    },
+    "marketing.profit_roi": {
+      "summary": "衡量指定活动及归因窗内，每单位投放成本产生的净贡献回报。",
+      "formula": "(Σ归因贡献毛利 − Σ投放成本) / Σ投放成本",
+      "numerator": "同一活动、归因窗内的归因贡献毛利合计减投放成本合计。",
+      "denominator": "相同范围的投放成本合计。",
+      "event_time": "活动归因批次日期，成本对齐同一归因窗",
+      "aggregation": "先分别合计贡献毛利和投放成本，再计算比率。",
+      "exceptions": "分母为零、成本不可见或分摊规则未确定时不返回数值。"
+    },
+    "finance.gross_profit": {
+      "summary": "同一经营范围、同一确认期间内，商品确认收入扣除对应销售成本后的金额。",
+      "formula": "Σ带符号收入分录金额分 − Σ同口径净销售成本分",
+      "event_time": "收入和成本分别按各自确认事件归期",
+      "aggregation": "在单件和确认事件粒度核对收入及成本，分别汇总后相减。",
+      "exceptions": "成本冲回符号或成本可见范围未核实时不返回数值。"
+    },
+    "inventory.closing_value": {
+      "summary": "期末时点，授权持货地点内可售库存按估值口径折算的总金额。",
+      "formula": "Σ(各地点、SKU 在同一截止日的可售库存估值金额分)",
+      "event_time": "经营期最后一个自然日的期末快照",
+      "aggregation": "同一截止时点跨地点、SKU 加总。跨天比较分别取各期期末。",
+      "exceptions": "缺少估值快照、成本访问权或估值规则时不返回数值。"
+    },
+    "personal.channel_net_cash": {
+      "summary": "本人获准查看且选定的渠道内，统计期间成功支付金额扣除同期成功退款金额。",
+      "formula": "Σ选定渠道成功支付金额分 − Σ原单属于该渠道的成功退款金额分",
+      "event_time": "支付按成功行的支付时点，退款按成功退款时点",
+      "aggregation": "先按原订单归属筛选授权渠道，再分别累加支付和退款。",
+      "exceptions": "未指定渠道、超出当前权限或未配置对应执行绑定时不返回数值。"
+    }
+  },
+  "lineage": {
+    "marketing.profit_roi": ["campaign_attribution_daily", "campaign_daily", "cost_entry"],
+    "finance.gross_profit": ["revenue_entry", "cost_entry", "order_unit"],
+    "inventory.closing_value": ["inventory_valuation_snapshot", "sku", "site"],
+    "personal.channel_net_cash": ["payment", "refund", "order_header", "channel"]
+  }
+}

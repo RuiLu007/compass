@@ -15,7 +15,7 @@ const entries = [
   ["module.boards", "看板入口", "both"],
   ["module.admin.overview", "控制总览入口", "both"],
   ["module.admin.data", "数据与语义入口", "both"],
-  ["module.admin.capabilities", "Agent 与能力入口", "both"],
+  ["module.admin.capabilities", "模型路由与代码环境入口", "both"],
   ["module.admin.runs", "运行与调度入口", "both"],
   ["module.admin.quality", "质量与发布入口", "both"],
   ["module.admin.security", "安全与审计入口", "both"],

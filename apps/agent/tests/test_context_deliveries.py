@@ -192,3 +192,66 @@ def test_report_after_failed_repair_only_lists_complete_authorized_formal_result
     observations.pop()
     with pytest.raises(ValueError):
         deliver_formal(draft, retry=True)
+
+
+def test_watermark_star_captures_all_columns_under_the_exact_retail_policy():
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    from compass_agent.data_connections.legacy import LegacyScopeCheck
+    from compass_agent.data_connections.retail_access_refs import retail_projection
+    from psycopg import adapters
+
+    columns = ["tenant_id", "status", "latest_event_at"]
+    cursor = SimpleNamespace(
+        connection=None,
+        adapters=adapters,
+        execute=AsyncMock(),
+        fetchall=AsyncMock(return_value=[(c,) for c in columns]),
+        fetchone=AsyncMock(return_value=(True,)),
+    )
+    binding = SimpleNamespace(scope_check=LegacyScopeCheck(101, "reader"))
+
+    def project(statement):
+        return asyncio.run(retail_projection(cursor, binding, statement))
+
+    for select in ["*", "w.*"]:
+        result = project(f"SELECT {select} FROM ops.source_watermark AS w ORDER BY 1")
+        assert result and result[1] == {"ops.source_watermark": sorted(columns)}
+    assert project("SELECT row_to_json(w.*) FROM ops.source_watermark w") is None
+    assert project("SELECT * FROM ops.other") is None
+    cursor.fetchone.return_value = (False,)
+    assert project("SELECT * FROM ops.source_watermark") is None
+
+
+def test_managed_clarification_does_not_query_before_the_user_answers():
+    from compass_agent.runtime.service import route_supports_tools
+
+    route = SimpleNamespace(
+        features=SimpleNamespace(response_mode="clarify"),
+        deliverable="existing",
+        provider=SimpleNamespace(
+            capabilities=SimpleNamespace(tools=SimpleNamespace(state="supported"))
+        ),
+    )
+    journal = SimpleNamespace(context_binding={"generation": 1})
+    assert not route_supports_tools(route, journal)
+    route.features.response_mode = "answer"
+    assert route_supports_tools(route, journal)
+
+
+@pytest.mark.parametrize(
+    ("kinds", "expected"),
+    [
+        (["retail", "metadata"], "database_access_denied"),
+        (["semantic_result"], "metric_access_denied"),
+        (["document"], "document_access_denied"),
+        (["transient"], "source_result_expired"),
+        (["metadata", "transient"], None),
+    ],
+)
+def test_source_denial_exposes_only_known_resource_category(kinds, expected):
+    from compass_agent.context_runtime.source_access import source_denial
+
+    error = source_denial([{"kind": kind, "name": "private_table"} for kind in kinds])
+    assert (error.status, error.code, error.reason_code) == (403, "source_access_denied", expected)

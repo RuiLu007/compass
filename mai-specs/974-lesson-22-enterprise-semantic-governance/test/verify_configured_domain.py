@@ -1,4 +1,4 @@
-"""Exercise configured scopes, source, names, units and defaults in a new tenant."""
+"""Exercise authorized scopes, term links, units and contextual choices in a new tenant."""
 
 import argparse
 import asyncio
@@ -167,7 +167,7 @@ def main(runs):
         "filters": {},
     }
 
-    def publish(code, name, usage, measure=None, expected=None):
+    def publish(code, name, usage, measure=None, expected=None, targets=()):
         v = write(
             writer,
             "drafts",
@@ -190,7 +190,15 @@ def main(runs):
                 "aggregation": "sum",
                 "dimensions": ["line"],
                 "filters": ["plant"],
-                "aliases": ["周转当量"] if measure else [],
+                **(
+                    {
+                        "links": [{"target_id": t["asset_id"]} for t in targets],
+                        "question": "本期有多少周转当量？",
+                        "counterexample": "已明确抽检时应采用抽检当量。",
+                    }
+                    if targets
+                    else {}
+                ),
             },
         )
         fields = {"expected_digest": v["digest"], "note": "核对物理列与范围"}
@@ -240,9 +248,9 @@ def main(runs):
         )
         return v
 
-    term = publish("kiln.turnover", "周转当量", tenant)
     received = publish("kiln.received", "收坯当量", groups[0], "received", 16)
     inspected = publish("kiln.inspected", "抽检当量", groups[1], "inspected", 9)
+    publish("kiln.turnover", "周转当量", tenant, targets=(received, inspected))
 
     def start(key):
         return runs.enter_context(running_registry(people[key], "核对窑区周转当量"))
@@ -261,26 +269,6 @@ def main(runs):
             },
         )
 
-    def policy(defaults):
-        generation = read(writer, "policies/" + tenant)["generation"]
-        return write(
-            writer,
-            "policies",
-            {
-                "scope_id": tenant,
-                "source_id": src,
-                "expected_generation": generation,
-                "note": "按窑区词表设置",
-                "policy": {
-                    "pinned_asset_ids": [inspected["asset_id"]],
-                    "defaults": defaults,
-                    "page_size": 1,
-                    "context_max_items": 1,
-                    "max_search_rounds": 3,
-                },
-            },
-        )
-
     only = start("101.sales")
     assert resolve(only, "周转当量")["metric"]["asset_id"] == received["asset_id"]
     both = start("101.sales_finance")
@@ -292,14 +280,19 @@ def main(runs):
 
     expected = {received["asset_id"], inspected["asset_id"]}
     assert options(both) == expected
-    policy([{"term_ref": term["asset_id"], "target_metric_ref": inspected["asset_id"]}])
-    fresh = start("101.sales_finance")
-    assert resolve(fresh, "周转当量")["metric"]["asset_id"] == inspected["asset_id"]
-    assert options(both) == expected
-    policy([])
-    after = start("101.sales_finance")
-    assert options(after) == expected
-    assert resolve(fresh, "周转当量")["metric"]["asset_id"] == inspected["asset_id"]
+    for metric in (received, inspected):
+        selected = tool(
+            both,
+            "resolve",
+            {
+                "mention": "周转当量",
+                "metric_id": metric["asset_id"],
+                "parameters": period,
+                "historical_as_of": period["as_of"],
+            },
+        )
+        assert selected["metric"]["asset_id"] == metric["asset_id"]
+    assert options(start("101.sales_finance")) == expected
     definition = tool(only, "definition", {"asset_id": received["asset_id"]})
     assert definition["unit"] == "托当量" and definition["definition"]["dimensions"] == ["line"]
     p = {**period, "group_by": "line", "filters": {"plant": "north"}}
@@ -393,7 +386,9 @@ def main(runs):
         db.execute("ALTER POLICY owner_read ON kiln_ops.shard_moves USING (false)")
     assert not allowed()
     print("通过 PromptOps 发布新场景 SOP，新旧 Run 读取各自正文，同一授权指标逐组数值保持一致。")
-    print("新租户两个交叉范围与两种同名指标通过。调整和清除默认策略后，新旧 Run 分别命中预期。")
+    print(
+        "新租户两个交叉范围与两种同名指标通过。明确候选后两种口径均可查询，新的含糊提问仍需选定。"
+    )
     print(
         "陌生表和物理列完成真实试算、双审、释义、下钻与等长对比。"
         "两条线的差额为 +2、−4 托当量，收紧行策略后旧结果停止展示。"

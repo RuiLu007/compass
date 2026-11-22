@@ -1,5 +1,6 @@
 """Compare 100 frozen retail queries with independent PostgreSQL aggregates or PRD values."""
 
+import argparse
 import hashlib
 import json
 import os
@@ -138,6 +139,9 @@ def expected(conn, metric, p):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--edition", choices=("1", "2"), default="1")
+    edition = parser.parse_args().edition
     samples = list(cases())
     fingerprint = hashlib.sha256(
         json.dumps(samples, sort_keys=True, separators=(",", ":")).encode()
@@ -153,7 +157,8 @@ def main():
                    FROM web.execution_bindings b JOIN web.semantic_versions v USING(version_id)
                    JOIN web.semantic_assets a USING(asset_id)
                    JOIN web.semantic_source s USING(source_id)
-                   WHERE s.locator='compass-retail/semantic-content' AND s.source_version='1'"""
+                   WHERE s.locator='compass-retail/semantic-content' AND s.source_version=%s""",
+                (edition,),
             )
         }
         sources = {}
@@ -203,6 +208,7 @@ def main():
         json.dumps(
             {
                 "mode": "installed-sql",
+                "edition": edition,
                 "cohort": fingerprint,
                 "samples": len(samples),
                 "passed": len(samples) - len(failures),

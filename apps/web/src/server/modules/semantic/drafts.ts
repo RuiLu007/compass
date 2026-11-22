@@ -42,7 +42,7 @@ export async function dependencies(c: Context, ids: string[], owner: string, ass
   );
   if (rowCount) reject("validation_failed", "依赖关系存在环。");
 }
-export async function saveDraft(c: Context, raw: unknown, pathDraft?: string) {
+export async function saveDraft(c: Context, raw: unknown, pathDraft?: string, managed = false) {
   const f = draftBody.parse(raw);
   if (!c.can("draft")) reject("forbidden");
   const newest = f.asset_id ? await latest(c, f.asset_id, true) : null;
@@ -54,8 +54,13 @@ export async function saveDraft(c: Context, raw: unknown, pathDraft?: string) {
   }
   const owner = previous?.owner_scope_id ?? f.owner_scope_id ?? (await personal(c));
   if (previous && f.owner_scope_id && f.owner_scope_id !== owner) reject("forbidden");
-  const usage = f.usage_scope_id ?? previous?.usage_scope_id ?? owner;
-  ensureShare(c, owner, usage);
+  const usage =
+    f.usage_scope_id ??
+    previous?.usage_scope_id ??
+    (f.kind === "term" && scope(c, owner).kind === "personal"
+      ? (await targetPartition(c, owner, true, true)).id
+      : owner);
+  ensureShare(c, owner, usage, f.kind);
   if (pathDraft && previous?.draft_id !== pathDraft) reject("conflict");
   if (
     previous &&
@@ -77,7 +82,25 @@ export async function saveDraft(c: Context, raw: unknown, pathDraft?: string) {
   if (f.derived_from && !(await published(c)).some((v) => v.version_id === f.derived_from))
     reject("not_found");
   const asset = previous?.asset_id ?? randomUUID();
-  await dependencies(c, f.dependencies, owner, asset);
+  const lineage = previous
+    ? (
+        await c.db.query<{ to_asset_id: string }>(
+          "SELECT to_asset_id FROM web.semantic_relations WHERE from_version_id=$1 AND kind='derived_from'",
+          [previous.version_id],
+        )
+      ).rows.map((row) => row.to_asset_id)
+    : [];
+  const inputs = f.dependencies.filter((id) => !lineage.includes(id));
+  const targetIds = [...new Set([...inputs, ...(f.links ?? []).map((link) => link.target_id)])];
+  if (targetIds.length) {
+    const checked = await c.db.query(
+      "SELECT asset_id FROM web.semantic_assets WHERE asset_id=ANY($1::uuid[]) AND lifecycle<>'archived' ORDER BY asset_id FOR SHARE",
+      [targetIds],
+    );
+    if (checked.rowCount !== targetIds.length)
+      reject("validation_failed", "关联资产已移除或不存在。");
+  }
+  await dependencies(c, inputs, owner, asset);
   let draft = randomUUID() as string;
   if (previous) {
     const {
@@ -86,7 +109,7 @@ export async function saveDraft(c: Context, raw: unknown, pathDraft?: string) {
       "SELECT open_draft_id,lifecycle FROM web.semantic_assets WHERE asset_id=$1",
       [asset],
     );
-    if (["business", "data", "approved"].includes(head.lifecycle))
+    if (!managed && ["business", "data", "approved"].includes(head.lifecycle))
       reject("conflict", "请先退回待审版本再编辑。");
     draft = head.open_draft_id ?? (head.lifecycle === "draft" ? previous.draft_id : draft);
   } else {
@@ -95,9 +118,75 @@ export async function saveDraft(c: Context, raw: unknown, pathDraft?: string) {
       [asset, owner, f.kind, f.code, f.domain, f.responsible, c.actor.userId],
     );
   }
+  const linkKind = { entity: "entity_join", term: "denotes", metric: "derived_from" }[f.kind];
+  const readable = f.links ? await published(c) : [];
+  const links = (f.links ?? []).map(({ target_id, ...rule }) => {
+    const target = readable.find((item) => item.asset_id === target_id);
+    if (
+      !target ||
+      (scope(c, owner).kind === "platform" && scope(c, target.usage_scope_id).kind !== "platform")
+    )
+      reject("validation_failed", "请选择当前可用的关联对象。");
+    if (f.kind === "metric" && target.kind !== "entity")
+      reject("validation_failed", "请选择计算所用的来源实体。");
+    if (f.kind === "term" && target.kind === "term")
+      reject("validation_failed", "术语须指向实体或指标。");
+    if (
+      f.kind === "entity" &&
+      (target.kind !== "entity" ||
+        !rule.local?.length ||
+        rule.remote?.length !== rule.local.length ||
+        !rule.cardinality ||
+        !rule.use)
+    )
+      reject("validation_failed", "请补齐关系的连接键、基数与用途。");
+    return {
+      id: target_id,
+      role:
+        f.kind === "entity"
+          ? [target.code, rule.local?.join(","), rule.remote?.join(",")].join("/")
+          : target.code,
+      rule: f.kind === "entity" ? { ...rule, target: target.code.replace(/^entity\./, "") } : {},
+    };
+  });
+  if (new Set(links.map((l) => l.id + "/" + l.role)).size !== links.length)
+    reject("validation_failed", "关联对象重复。");
+  if (
+    managed &&
+    f.kind === "term" &&
+    (!(f.question ?? previous?.definition.question) ||
+      !(f.counterexample ?? previous?.definition.counterexample))
+  )
+    reject("validation_failed", "术语须填写示例问题与易混场景。");
+  if (managed && f.kind === "entity") {
+    const keys = f.primary_key ?? previous?.definition.primary_key;
+    const fields = f.fields ?? previous?.definition.fields;
+    if (
+      !f.grain ||
+      !(f.table ?? previous?.definition.table) ||
+      !Array.isArray(keys) ||
+      !keys.length ||
+      !fields ||
+      typeof fields !== "object" ||
+      keys.some((k) => !Object.hasOwn(fields, k))
+    )
+      reject("validation_failed", "实体须填写数据表、粒度和字段字典，主键必须出现在字典中。");
+    for (const link of f.links ?? []) {
+      const remote = readable.find((v) => v.asset_id === link.target_id)?.definition.fields;
+      if (
+        link.local?.some((k) => !Object.hasOwn(fields, k)) ||
+        !remote ||
+        typeof remote !== "object" ||
+        link.remote?.some((k) => !Object.hasOwn(remote, k))
+      )
+        reject("validation_failed", "连接键必须出现在两端实体的字段字典中。");
+    }
+  }
   const vid = randomUUID();
   const def = {
     ...previous?.definition,
+    ...(f.initial_context && { initial_context: f.initial_context }),
+    ...(f.kind === "metric" && f.metric_details),
     formula: f.formula,
     event_time: f.event_time,
     timezone: f.timezone,
@@ -105,6 +194,17 @@ export async function saveDraft(c: Context, raw: unknown, pathDraft?: string) {
     dimensions: f.dimensions,
     filters: f.filters,
     responsible: f.responsible,
+    ...(f.kind === "term" && {
+      question: f.question ?? previous?.definition.question,
+      counterexample: f.counterexample ?? previous?.definition.counterexample,
+    }),
+    ...(f.kind === "entity" && {
+      table: f.table ?? previous?.definition.table,
+      primary_key: f.primary_key ?? previous?.definition.primary_key,
+      fields: f.fields ?? previous?.definition.fields,
+      visible_time: f.visible_time ?? previous?.definition.visible_time,
+      ...(f.links && { joins: links.map((l) => l.rule) }),
+    }),
     ...(f.derived_from ? { derived_from: f.derived_from } : {}),
   };
   const hash = digest({
@@ -148,7 +248,31 @@ export async function saveDraft(c: Context, raw: unknown, pathDraft?: string) {
       [vid, asset, usage, normalize(alias), alias],
     );
   }
-  for (const dep of new Set(f.dependencies))
+  if (previous) {
+    await c.db.query(
+      `INSERT INTO web.semantic_relations(from_version_id,kind,to_asset_id,scope_id,role,rule)
+       SELECT $1,kind,to_asset_id,scope_id,role,rule FROM web.semantic_relations
+       WHERE from_version_id=$2 AND kind IN ('entity_join','denotes','derived_from')
+       AND ($3::text IS NULL OR kind<>$3 OR scope_id<>$4 OR NOT (to_asset_id=ANY($5::uuid[])))`,
+      [
+        vid,
+        previous.version_id,
+        f.links ? linkKind : null,
+        previous.usage_scope_id,
+        readable.map((v) => v.asset_id),
+      ],
+    );
+  }
+  for (const l of links)
+    await c.db.query("INSERT INTO web.semantic_relations VALUES ($1,$2,$3,$4,$5,$6)", [
+      vid,
+      linkKind,
+      l.id,
+      usage,
+      l.role,
+      l.rule,
+    ]);
+  for (const dep of new Set(inputs))
     await c.db.query(
       "INSERT INTO web.semantic_relations VALUES ($1,'depends_on',$2,$3,'input','{}')",
       [vid, dep, usage],
@@ -305,7 +429,7 @@ export async function idempotent<T>(
     if (vid) {
       const v = await version(c, vid);
       if (action.startsWith("drafts") || action === "result-draft")
-        ensureShare(c, v.owner_scope_id, v.usage_scope_id);
+        ensureShare(c, v.owner_scope_id, v.usage_scope_id, v.kind);
       else if (action.startsWith("revisions/") || action === "releases" || action === "trial") {
         const { subject, duty } = await import("./governance");
         const sub = await subject(
@@ -331,9 +455,11 @@ export async function idempotent<T>(
         if (!authority.manage || !c.can("query") || !c.can("govern")) reject("forbidden");
       } else if (!c.scopes.find((s) => s.id === v.owner_scope_id)?.manage) reject("forbidden");
     }
-    if (["scopes", "grants"].includes(action) && !(c.tenantAdmin && c.can("govern")))
+    if (
+      ["scopes", "grants", "asset-grants"].includes(action) &&
+      !(c.tenantAdmin && c.can("govern"))
+    )
       reject("forbidden");
-    if (action === "policies" && !scope(c, String(fields.scope_id)).release) reject("forbidden");
     if (
       action === "sources" &&
       !(await sources(c)).some(
@@ -342,11 +468,6 @@ export async function idempotent<T>(
           s.owner_scope_id &&
           scope(c, s.owner_scope_id).manage,
       )
-    )
-      reject("forbidden");
-    if (
-      action === "feedback" &&
-      !(await published(c)).some((v) => v.version_id === fields.version_id)
     )
       reject("forbidden");
     if (action.startsWith("releases/")) {

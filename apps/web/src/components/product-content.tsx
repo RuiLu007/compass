@@ -8,6 +8,7 @@ import { UiGuide } from "./ui/guide";
 import { Blocks, CircleAlert } from "lucide-react";
 import { RetailConnectionPage } from "@/features/data/retail-connection-page";
 import { AutomationsPage } from "@/features/automations/page";
+import { KnowledgePage } from "@/features/knowledge/page";
 import { SemanticPage } from "@/features/semantic/page";
 import { PromptOpsPage } from "@/features/promptops/page";
 import { ModelsPages } from "@/features/models/pages";
@@ -62,6 +63,8 @@ export function ProductContent({ payload }: { payload: PagePayload }) {
       <ModelsPages payload={payload} />
     ) : page.id === "platform-promptops" ? (
       <PromptOpsPage />
+    ) : page.id === "data-documents" ? (
+      <KnowledgePage session={session} />
     ) : page.id === "data-metrics" ? (
       <SemanticPage key={tenantId + "/" + workspaceId} session={session} />
     ) : page.id === "data-sources" ? (

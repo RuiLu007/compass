@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { PAGE_CATALOG, pageUrl } from "../../src/lib/page-catalog";
 import { DEFAULT_TEMPLATES } from "../../src/contracts/authorization";
 import { setVisibility, observePageFlashes, pageFlashes } from "./visibility";
+import { ProductionRuntimeFixture } from "./production-runtime.fixture";
 const fid = (n: number) => `99500000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const tenantId = fid(10),
   workspaceId = fid(20),
@@ -109,11 +110,8 @@ test("local login, complete registered pages, and SPA navigation with a persiste
           : spec.sectionTitle;
     await expect(page.locator(".secondary-sidebar .secondary-brand")).toHaveText(sidebarTitle);
     await expect(page.locator(".secondary-section-title")).toHaveCount(0);
-    await expect(page.locator("#main-content")).toContainText(
-      spec.scopeKind === "tenant" && spec.section.startsWith("admin")
-        ? spec.sectionTitle
-        : spec.title,
-    );
+    await expect(page.locator(".breadcrumb strong")).toHaveText(spec.title);
+    await expect(page.locator("#main-content .page-heading")).toHaveCount(0);
   }
   expect(futureRequests).toBe(0);
   await active(page, `/t/${tenantId}/w/${workspaceId}/analysis`);
@@ -157,6 +155,42 @@ test("local login, complete registered pages, and SPA navigation with a persiste
   ).toBe(true);
   expect((await context.request.get("/api/web/v1/files")).status()).toBe(404);
   expect((await context.request.get("/demo")).status()).toBe(404);
+});
+
+test("governance tabs keep their title and page action on the same row", async ({
+  page,
+  context,
+}) => {
+  await login(context, "platform");
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const [path, title, action] of [
+      ["capabilities/models", "工作区可用模型", "平台模型管理"],
+      ["data/sources", "数据连接", "新增连接"],
+    ]) {
+      await active(page, `/t/yuanshan/w/zongbu/admin/${path}`);
+      const header = page.locator(".ui-page-heading");
+      const name = header.getByRole("heading", { name: title, exact: true });
+      const control = header.getByText(action, { exact: true });
+      await expect(control).toBeVisible();
+      await expect(header.locator("p")).toHaveCount(0);
+      const headingBox = (await name.boundingBox())!;
+      const actionBox = (await control.boundingBox())!;
+      const centerY = headingBox.y + headingBox.height / 2;
+      expect(actionBox.x).toBeGreaterThanOrEqual(headingBox.x + headingBox.width);
+      expect(centerY).toBeGreaterThanOrEqual(actionBox.y);
+      expect(centerY).toBeLessThanOrEqual(actionBox.y + actionBox.height);
+    }
+    await active(page, "/t/yuanshan/w/zongbu/admin/data/documents");
+    const library = page.getByRole("region", { name: "知识库管理" });
+    await expect(library.getByRole("heading", { name: "知识库管理" })).toHaveCount(0);
+    const create = library.getByRole("toolbar").getByRole("button", { name: "新建知识库" });
+    await create.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog", { name: "新建知识库" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(create).toBeFocused();
+  }
 });
 
 test("edits profile, searches, and opens the shared personal permission editor", async ({
@@ -308,7 +342,8 @@ test("prototype frame and mobile navigation remain usable at five viewport width
       for (const title of [
         "控制总览",
         "数据与语义",
-        "Agent 与能力",
+        "模型路由",
+        "代码环境",
         "运行与调度",
         "质量与发布",
         "安全与审计",
@@ -466,7 +501,16 @@ test("platform administrators see every module on platform pages and can switch 
       page.locator(".primary-rail").getByRole("link", { name, exact: true }),
     ).toBeVisible();
   await page.getByRole("link", { name: "管理与治理", exact: true }).click();
-  await expect(page.locator(".secondary-links .nav-item")).toHaveCount(8);
+  await expect(page.locator(".secondary-links .nav-item")).toHaveCount(11);
+  await page
+    .getByRole("navigation", { name: "二级导航" })
+    .getByRole("link", { name: "PromptOps", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/platform\/promptops$/);
+  await expect(page.locator(".secondary-brand")).toHaveText("管理与治理");
+  await expect(
+    page.getByRole("navigation", { name: "二级导航" }).getByRole("link", { name: "PromptOps" }),
+  ).toHaveAttribute("aria-current", "page");
   await active(page, "/t/yuanshan/w/zongbu/reports");
   await expect(page.locator("#main-content h1")).toHaveText("全部产物");
   await active(page, "/t/xinghe/w/dianshang/analysis");
@@ -666,18 +710,17 @@ test("analysis sidebar and composer follow the prototype interaction", async ({
   page,
   context,
 }) => {
-  await login(context, "analyst");
+  await login(context);
+  const query = new URLSearchParams({ ...scope, pageId: "analysis-new" });
+  const session = await context.request.get(`/api/web/v1/session?${query}`);
+  expect(session.status()).toBe(200);
+  await new ProductionRuntimeFixture(page, session.headers()["x-compass-view-revision"]).install();
   await active(page, `/t/${tenantId}/w/${workspaceId}/analysis/conversations`);
   await expect(page).toHaveURL(/\/t\/yuanshan\/w\/zongbu\/analysis$/);
   await expect(page.locator(".secondary-brand span")).toHaveText("分析空间");
   for (const name of ["全部分析会话", "分析案例", "待我决定"])
     await expect(page.getByRole("link", { name, exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "按主题", exact: true }).click();
-  await expect(page.getByRole("button", { name: "按主题", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
-  await expect(page.locator(".conversation-list")).toHaveAttribute("data-group-by", "topic");
+  await expect(page.getByRole("button", { name: /^(按主题|按时间)$/ })).toHaveCount(0);
   await page.getByRole("button", { name: "如何拆解销售增长的影响因素？", exact: true }).click();
   await expect(page.getByLabel("分析问题")).toHaveValue("如何拆解销售增长的影响因素？");
   page.once("dialog", (dialog) => dialog.accept());
@@ -735,7 +778,7 @@ test("navigation icons match the canonical prototype and controls retain its den
     [
       "管理与治理",
       "shield",
-      ["chart", "database", "code", "play", "check", "shield", "book", "users"],
+      ["chart", "database", "spark", "code", "play", "check", "shield", "book", "users"],
     ],
     ["定时任务", "clock", ["clock", "clock"]],
   ] as const;
@@ -767,12 +810,10 @@ test("navigation icons match the canonical prototype and controls retain its den
   await expect(page.locator(".new-analysis-button")).toHaveCSS("height", "42px");
   await expect(page.locator(".new-analysis-button")).toHaveCSS("font-size", "13px");
   await expect(page.locator(".new-analysis-button")).toHaveCSS("justify-content", "flex-start");
-  await expect(page.locator(".conversation-order button").first()).toHaveCSS("height", "29px");
   await page.setViewportSize({ width: 375, height: 812 });
   await page.getByRole("button", { name: "展开导航" }).click();
   const drawer = page.getByRole("dialog", { name: "导航" });
   await expect(drawer.locator(".new-analysis-button")).toHaveCSS("height", "44px");
-  await expect(drawer.locator(".conversation-order button").first()).toHaveCSS("height", "36px");
   await drawer.getByRole("button", { name: "关闭导航" }).click();
   await expect(page.getByRole("button", { name: "展开导航" })).toBeFocused();
 });
@@ -809,7 +850,7 @@ test("floating navigation previews without routing and supports pointer, keyboar
   await expect(plugins).toBeFocused();
   await plugins.hover();
   await expect(sidebar).toBeVisible();
-  await page.locator("#main-content .page-heading").click();
+  await page.locator(".topbar").click();
   await expect(sidebar).toBeHidden();
   await plugins.focus();
   await expect(sidebar).toBeVisible();

@@ -102,9 +102,7 @@ def test_search_cursor_is_bound_to_its_release_and_original_conditions(monkeypat
     visible_id = "one"
 
     async def api(op, args=None):
-        if op == "context":
-            return {"max_search_rounds": 2}
-        assert args is not None
+        assert op == "search" and args is not None
         offsets.append(args["cursor"])
         return {"items": [{"asset_id": visible_id}], "cursor": 5 if args["cursor"] == 0 else None}
 
@@ -256,8 +254,8 @@ def test_invalid_filter_returns_its_registered_type_before_issuing_a_plan():
     }
 
 
-def test_requested_metric_differences_share_verified_source_time_and_filters():
-    from compass_agent.semantic.receipts import reconciliation_lines
+def test_receipt_scope_does_not_add_unrequested_comparisons():
+    from compass_agent.semantic.receipts import with_scope
 
     w = {"start": "2026-01-01", "end": "2026-02-01", "group_by": "total"}
     metrics = [{"asset_id": "a", "name": "发出"}, {"asset_id": "b", "name": "收到"}]
@@ -276,16 +274,8 @@ def test_requested_metric_differences_share_verified_source_time_and_filters():
         }
 
     a, b = observation(metrics[0], 3), observation(metrics[1], 7)
-    assert "发出 减 收到 = -4 箱" in reconciliation_lines({"a": a, "b": b}, metrics)[0]
-    for patch in (
-        {"source_scope_hash": "other"},
-        {"unit": "件"},
-        {"as_of": "2026-04-01"},
-        {"aggregation": "non_additive"},
-        {"time_range": [{**w, "filters": {"route": 1}}]},
-    ):
-        assert not reconciliation_lines({"a": a, "b": {**b, **patch}}, metrics)
-    assert not reconciliation_lines({"a": a, "b": b}, metrics[:1])
+    answer = with_scope("发出 3 箱，收到 7 箱。", {"a": a, "b": b}, 8000)
+    assert "发出 3 箱，收到 7 箱。" in answer and "取数口径" in answer and " 减 " not in answer
 
 
 def test_reconcile_grouped_results_against_the_same_independent_total():
@@ -391,6 +381,24 @@ def test_draft_preview_and_legacy_confirmation_use_the_recorded_source_fields():
     assert "data_source" not in repaired
 
 
+def test_explicit_save_needs_a_readable_definition_before_showing_a_form():
+    from compass_agent.semantic.draft_fields import authored_preview
+
+    ref = uuid4()
+    receipt = {"proposal": {"fields": {"name": "cnt", "formula": "count(*)", "summary": "cnt汇总"}}}
+    assert authored_preview(receipt, None, ref) is None
+    fields = {
+        "name": "签收件数",
+        "summary": "按签收日统计期内签收的件数",
+        "formula": "符合条件的包裹数量",
+    }
+    proposed = authored_preview(receipt, fields, ref)
+    assert proposed and proposed["name"] == "签收件数"
+    receipt["recommendation"] = {"fields": fields}
+    existing = authored_preview(receipt, None, ref)
+    assert existing and existing["formula"] == fields["formula"]
+
+
 def test_cross_turn_save_prefers_the_previous_answer_over_an_unpublished_repeat(monkeypatch):
     import asyncio
 
@@ -460,65 +468,121 @@ def test_source_definition_extracts_typed_time_bounds_and_parameterizes_private_
     )
 
 
-def test_only_one_equivalent_confirmed_result_can_invite(monkeypatch):
+def test_set_query_receipt_preserves_projected_aggregates_without_literal_values():
+    from compass_agent.semantic.extraction import definition_from_query, receipt_proposal
+
+    sql = (
+        "SELECT count(DISTINCT x) FROM a WHERE k='private' "
+        "UNION ALL SELECT count(DISTINCT y) FROM b"
+    )
+    result = definition_from_query(sql, ["count"], "")
+    assert result["fields"]["formula"] == "(count(DISTINCT x)) UNION ALL (count(DISTINCT y))"
+    old = {"proposal": {"fields": {"formula": ""}}, "query": {"sql": sql}, "columns": ["count"]}
+    assert receipt_proposal(old)["fields"]["formula"] == result["fields"]["formula"]
+
+
+def test_only_nominated_novel_results_can_offer_saving(monkeypatch):
     from compass_agent.semantic import results
 
-    monkeypatch.setattr(results.client, "request", lambda *a: {"hashes": ["published"]})
+    store = SimpleNamespace(source_settings=None)
+    raw = {"reusable": True, "definition_hash": "raw"}
+    assert not results.invitation_eligibility([("raw", "confirmed", raw)], store, None, None)
+    checked = []
 
-    def row(ref, status, key):
-        return ref, status, {"definition_hash": key, "reusable": True}
+    def equivalents(_settings, _trusted, _run, op, args):
+        assert op == "equivalents"
+        checked.extend(args["hashes"])
+        return {"hashes": ["known"]}
+
+    monkeypatch.setattr(results.client, "request", equivalents)
+
+    def row(key, status):
+        fields = {
+            "name": "复购率",
+            "summary": "在统计期内重复下单的客户占比",
+            "formula": "重复下单人数 / 下单人数",
+        }
+        return key, status, {"definition_hash": key, "recommendation": {"fields": fields}}
 
     sample = [
-        row("1", "active", "same"),
-        row("2", "confirmed", "same"),
-        row("3", "confirmed", "published"),
+        row("hidden", "dismissed"),
+        row("known", "active"),
+        row("new", "active"),
+        row("other", "confirmed"),
+        row("extra", "active"),
     ]
-    store = SimpleNamespace(source_settings=None)
-    assert results.invitation_eligibility(sample, store, None, None) == {"2"}
-    assert not results.invitation_eligibility(
-        [*sample, row("4", "dismissed", "same")], store, None, None
-    )
+    assert results.invitation_eligibility(sample, store, None, None) == {"new", "other"}
+    assert checked == ["known", "new", "other"]
 
 
-def test_single_term_requires_owner_choice_only_while_two_versions_are_usable():
+def test_nomination_requires_an_authored_definition_and_a_reuse_case():
+    from compass_agent.semantic.results import nominate
+
+    assert nominate(None, {"result_ref": str(uuid4()), "fields": {"name": "status"}}) == {
+        "status": "incomplete_definition"
+    }
+
+
+@pytest.mark.parametrize("status", ["unavailable_binding", "query_forbidden", "no_match"])
+def test_resolution_returns_observations_without_ending_the_run(status):
+    import asyncio
+    from unittest.mock import Mock
+
+    metric = {"asset_id": "visible", "version_id": "fixed", "executable": False}
+    observation = {
+        "status": status,
+        **({"metric": metric} if status != "no_match" else {}),
+    }
+    svc = object.__new__(RegistryTools)
+    svc.journal = SimpleNamespace(accepted_at=datetime.now(UTC), approved_proposals=[])
+    svc.api = AsyncMock(return_value=observation)
+    svc.choice = Mock(return_value=None)
+    svc.record = Mock()
+    svc.put = Mock()
+    assert asyncio.run(svc.run("resolve", {"mention": "履约量"}, object())) == observation
+    svc.put.assert_not_called()
+    assert svc.record.call_count == int(status != "no_match")
+
+
+def test_resolve_tool_requests_a_choice_only_if_context_has_not_selected_a_candidate():
     import asyncio
 
-    from compass_agent.schemas import RunCompleted, RunWaiting
-    from compass_agent.semantic.clarification import check
+    from compass_agent.tools.business.resolve_semantics import SPEC
 
     choices = [
         {
             "asset_id": str(uuid4()),
             "version_id": str(uuid4()),
-            "name": name,
-            "summary": "已发布口径",
-            "unit": "件",
-            "version": 1,
+            "name": n,
+            "summary": n,
+            "unit": "元",
+            "version": 2,
         }
-        for name in ("发出件数", "签收件数")
+        for n in ("成功支付金额", "已确认收入")
     ]
-    journal = SimpleNamespace(run_id=uuid4())
-    status: dict[str, str | None] = {"status": "needs_clarification", "mention": "履约量"}
 
-    async def registry(op, _args):
-        return {"resolution": status} if op == "context" else {**status, "options": choices}
+    async def registry(op, args):
+        assert op == "resolve" and args["mention"] == "销售额"
+        if args.get("metric_id") == choices[0]["asset_id"]:
+            return {"status": "resolved", "metric": choices[0]}
+        return {"status": "needs_clarification", "options": choices}
 
-    current = None
-    svc = SimpleNamespace(journal=journal, api=registry, choice=lambda _: current)
-    waiting = asyncio.run(check(svc, "查询该期间的履约量"))
-    assert isinstance(waiting, RunWaiting)
-    assert journal.pending_proposal["origin"] == "registry"
-    assert [o["id"] for o in journal.pending_proposal["options"]] == [
-        m["asset_id"] for m in choices
-    ]
-    current = choices[1]
-    assert asyncio.run(check(svc, "查询该期间的履约量")) is None
-    assert journal.registry_selected == choices[1]
-    status["status"] = "unavailable_binding"
-    denied = asyncio.run(check(svc, "查询该期间的履约量"))
-    assert isinstance(denied, RunCompleted) and "权限" in denied.final_answer
-    status["mention"] = None
-    assert asyncio.run(check(svc, "查询多个不同指标")) is None
+    service = SimpleNamespace(
+        api=registry, put=lambda *_: None, choice=lambda _: None, journal=SimpleNamespace()
+    )
+    context: Any = SimpleNamespace(semantics=service)
+    assert SPEC.context_factory is not None
+    prepare = SPEC.context_factory(context).prepare_approval
+    assert prepare is not None
+    execution: Any = SimpleNamespace(run_id=uuid4(), step_id=uuid4(), call_id="resolve")
+
+    async def request(args):
+        return await prepare(args, execution)
+
+    assert asyncio.run(request({"mention": "销售额", "metric_id": choices[0]["asset_id"]})) is None
+    pending = asyncio.run(request({"mention": "销售额"}))
+    assert pending is not None and pending.private["kind"] == "semantic_choice"
+    assert [row["id"] for row in pending.private["options"]] == [m["asset_id"] for m in choices]
 
 
 def test_comparison_reports_each_approved_definition_and_clock_once():
@@ -579,36 +643,30 @@ def test_source_recheck_retries_temporary_failure_and_immediately_honors_revocat
     assert check.call_count == 5
 
 
-def test_evidence_for_one_named_metric_does_not_complete_a_multi_metric_request():
-    import json
+def test_custom_definition_is_returned_as_owner_input_without_a_formal_plan():
+    import asyncio
+    from unittest.mock import Mock
 
-    from compass_agent.semantic.clarification import pending_queries
+    from compass_agent.semantic import decisions
 
-    metrics = [{"name": name, "asset_id": name, "code": name} for name in ("sent", "delivered")]
-    journal = SimpleNamespace(registry_initial_context={"requested_metrics": metrics})
-
-    def observation(tool, item, **fields):
-        return SimpleNamespace(
-            tool_calls=[SimpleNamespace(function=SimpleNamespace(name=tool))],
-            tool_results=[
-                SimpleNamespace(
-                    status="ok", observation_json=json.dumps({"metric": item, **fields})
-                )
-            ],
-        )
-
-    steps = [
-        observation("query_metric", metrics[0], resultId="receipt-1"),
-        observation("resolve_semantics", metrics[1], query_ref="issued-plan"),
-    ]
-    correction = pending_queries(journal, steps)
-    assert correction and correction["missing"] == [
-        {"name": "delivered", "code": "delivered", "query_ref": "issued-plan"}
-    ]
-    assert (
-        pending_queries(journal, [*steps, observation("query_metric", metrics[1], resultId="r2")])
-        is None
+    private = {"kind": "semantic_choice", "callId": "call", "stepId": "step"}
+    command = SimpleNamespace(custom_definition=" 按签收日去重计件 ")
+    decisions.apply(None, None, None, private, command)
+    svc = object.__new__(RegistryTools)
+    svc.journal = SimpleNamespace(accepted_at=datetime.now(UTC), approved_proposals=[private])
+    svc.api = AsyncMock()
+    svc.put = Mock()
+    result = asyncio.run(
+        svc.run("resolve", {"mention": "履约量"}, SimpleNamespace(call_id="call", step_id="step"))
     )
+    assert result == {
+        "status": "user_definition",
+        "confirmed_by": "current_user",
+        "mention": "履约量",
+        "definition": "按签收日去重计件",
+    }
+    svc.api.assert_not_awaited()
+    svc.put.assert_not_called()
 
 
 @pytest.mark.parametrize("selected", [False, True], ids=["single-result", "selected-from-several"])
@@ -677,9 +735,7 @@ def test_dated_definition_and_cross_turn_save_follow_their_respective_routes(mon
     done = RunCompleted(
         status="completed", finalAnswer="已处理", file=AnalysisFileNone(status="none")
     )
-    native_check = AsyncMock()
     continuation = AsyncMock(return_value=done)
-    monkeypatch.setattr(clarification, "check", native_check)
     monkeypatch.setattr(clarification, "continue_selected_result", continuation)
     runner: Any = object.__new__(RuntimeTurn)
     runner.execute_tools = AsyncMock(return_value=done)
@@ -693,17 +749,14 @@ def test_dated_definition_and_cross_turn_save_follow_their_respective_routes(mon
     try:
         route = SimpleNamespace(deliverable="business_qa", task_type="指标解释")
         assert asyncio.run(runner.execute_turn(state, route, None, None, None, None)) == done
-        native_check.assert_not_awaited()
         state = TaskState([ChatMessage(role="user", content="本月履约量是多少？")])
         route.task_type = "查数查询"
-        native_check.return_value = done
         assert asyncio.run(runner.execute_turn(state, route, None, None, None, None)) == done
-        native_check.assert_awaited_once()
         route.deliverable = "existing"
         journal.approved_proposals = [{"kind": "semantic_result_choice"}]
         assert asyncio.run(runner.execute_turn(state, route, None, None, None, None)) == done
         continuation.assert_awaited_once()
-        runner.execute_tools.assert_awaited_once()
+        assert runner.execute_tools.await_count == 2
     finally:
         current_execution.reset(token)
 
@@ -753,3 +806,189 @@ def test_known_at_limits_published_metrics_and_historical_queries():
             effective_cutoff(accepted, snapshot, candidate)
     with pytest.raises(ToolRejected, match="semantic_source_unavailable"):
         effective_cutoff(accepted, {"knownAt": "2025-10-09"})
+
+
+def test_metric_revision_rechecks_the_version_and_limits_owner_edits(monkeypatch):
+    from unittest.mock import Mock
+
+    from compass_agent.models.errors import ModelError
+    from compass_agent.semantic import decisions
+
+    store = SimpleNamespace(source_settings=object())
+    run = SimpleNamespace(
+        id=uuid4(), config_snapshot={"contextRuntime": {"registry": {"pins": []}}}
+    )
+    private = {
+        "kind": "semantic_revision",
+        "revision": {"asset_id": str(uuid4()), "expected_digest": "v1", "changes": {"unit": "件"}},
+    }
+    view = {
+        "name": "收货量",
+        "code": "receipts",
+        "changes": [{"field": "unit", "before": "个", "after": "件"}],
+    }
+    api = Mock(return_value=view)
+    monkeypatch.setattr(decisions, "request", api)
+
+    def apply(edits):
+        decisions.apply(
+            store,
+            run,
+            object(),
+            private,
+            SimpleNamespace(choice_id=None, draft_edits=edits, custom_definition=None),
+        )
+
+    for invalid in [{"formula": "sum(0)"}, {"unit": "个"}, {"unit": " "}]:
+        with pytest.raises(ModelError) as rejected:
+            apply(invalid)
+        assert rejected.value.status == 422
+    apply({"unit": " 箱 "})
+    assert private["revision"]["changes"] == {"unit": "箱"}
+    api.side_effect = ModelError("proposal_conflict", 409)
+    assert decisions.card(store, run, object(), private) == {"semanticKind": "revision"}
+    with pytest.raises(ModelError) as stale:
+        apply({})
+    assert stale.value.status == 409
+
+
+def test_registered_metric_does_not_block_a_new_detail_read():
+    import asyncio
+
+    from compass_agent.execution_context import current_execution
+    from compass_agent.tools.builtin.database_query.handler import registration
+
+    tool: Any = registration(())
+    token = current_execution.set(SimpleNamespace(context_binding={"registry": {"pins": []}}))
+    try:
+        receipt = asyncio.run(
+            tool.binding.handler({"op": "list_connections"}, SimpleNamespace(call_id="detail"))
+        )
+        assert receipt.payload == {"connections": []}
+    finally:
+        current_execution.reset(token)
+
+
+def test_default_terms_keep_their_versions_beyond_the_tool_reference_budget(monkeypatch):
+
+    from compass_agent.context_runtime import source_access
+    from compass_agent.semantic import service
+
+    run = SimpleNamespace(id=uuid4(), config_snapshot={"contextRuntime": {"registry": True}})
+    message = SimpleNamespace(source_refs=[])
+    monkeypatch.setattr(source_access, "assistant_message", lambda *_: message)
+    store = SimpleNamespace(require_epoch=lambda *_: None)
+    journal = SimpleNamespace(
+        run_id=run.id, store=store, context_binding={"glossary": {"pins": ["p"]}}
+    )
+    registry = service.RegistryTools(journal, None)
+    monkeypatch.setattr(
+        service,
+        "record_sources",
+        lambda _, refs: source_access.record_sources_locked(store, None, run, refs, None),
+    )
+    terms = [
+        {
+            "kind": "term",
+            "asset_id": str(uuid4()),
+            "version_id": str(uuid4()),
+            "context_reason": "默认术语",
+        }
+        for _ in range(70)
+    ]
+    registry.record_page(terms)
+    registry.record_page(terms)
+    assert len(message.source_refs) == 70
+    assert all(
+        r["kind"] == "semantic" and r["default_term"] and r["pins"] == ["p"]
+        for r in message.source_refs
+    )
+    assert {r["version_id"] for r in message.source_refs} == {term["version_id"] for term in terms}
+
+
+def test_registry_pin_distinguishes_an_empty_release_from_unavailable_permissions(monkeypatch):
+    from compass_agent.models.errors import ModelError
+    from compass_agent.semantic import client
+
+    def denied(*args):
+        raise ModelError("forbidden", 403)
+
+    monkeypatch.setattr(client, "request", denied)
+    assert client.pin_manifest(None, None, None, "registry") == {
+        "registryIssue": {"status": "unavailable", "code": "forbidden"}
+    }
+    monkeypatch.setattr(client, "request", lambda *args: {"releases": [], "manifest_hash": "fixed"})
+    assert client.pin_manifest(None, None, None, "glossary") == {
+        "glossary": {"manifest": "fixed", "pins": []}
+    }
+
+
+def test_recommendations_are_idempotent_bounded_and_preserve_source_receipts(monkeypatch):
+    from contextlib import nullcontext
+    from unittest.mock import Mock
+
+    from compass_agent.semantic import results
+    from compass_agent.semantic.extraction import receipt_proposal
+
+    refs = [str(uuid4()) for _ in range(5)]
+    rows = [
+        SimpleNamespace(
+            offer_id=ref,
+            status="active",
+            private_payload={
+                "proposal": {"fields": {"name": "cnt", "formula": "count(*)"}},
+                "complete": True,
+                "refs": ["witness"],
+                "definition_hash": ref,
+            },
+        )
+        for ref in refs
+    ]
+    tx, store = Mock(), Mock()
+    tx.scalars.return_value.all.return_value = rows
+    store.transaction.side_effect = lambda: nullcontext(tx)
+    store.lock.return_value = (None, Mock())
+    store.private.open.side_effect = store.private.seal.side_effect = lambda _run, _kind, data: data
+    service = SimpleNamespace(
+        store=store,
+        journal=SimpleNamespace(run_id=uuid4(), epoch=uuid4()),
+        trusted=SimpleNamespace(actor_user_id=uuid4()),
+        open_result=lambda ref: (ref, rows[refs.index(ref)].private_payload),
+    )
+    monkeypatch.setattr(results, "allows", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(results.client, "request", lambda *_args: {"hashes": []})
+
+    def offer(index, name):
+        return results.nominate(
+            service,
+            {
+                "result_ref": refs[index],
+                "fields": {
+                    "name": name,
+                    "summary": "运输时长按签收日期归期",
+                    "formula": [
+                        "平均（签收时间 − 发运时间）",
+                        "中位数（签收时间 − 发运时间）",
+                        "上四分位数（签收时间 − 发运时间）",
+                        "城区平均配送时长",
+                        "平均配送时长",
+                    ][index],
+                    "domain": "履约",
+                    "unit": "天",
+                },
+                "reuse_reason": "按月评估承运商时效",
+            },
+        )["status"]
+
+    assert offer(0, "配送时长") == offer(0, "配送时长") == "recommended"
+    assert offer(1, "配送时长") == "already_considered"
+    assert offer(1, "配送时长中位数") == offer(2, "配送时长上四分位数") == "recommended"
+    assert offer(3, "城区配送时长") == "not_recommended"
+    assert rows[0].private_payload["proposal"]["fields"]["name"] == "cnt"
+    assert receipt_proposal(rows[0].private_payload)["fields"]["name"] == "配送时长"
+    rows[4].private_payload["complete"] = False
+    assert offer(4, "未完整读取") == "incomplete_result"
+    monkeypatch.setattr(results, "allows", lambda *_args, **_kwargs: False)
+    with pytest.raises(results.ModelError) as denied:
+        offer(0, "配送时长")
+    assert denied.value.code == "source_access_denied"

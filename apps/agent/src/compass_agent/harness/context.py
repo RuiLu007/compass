@@ -37,7 +37,7 @@ def build_messages(definition, command, instructions: str = "") -> list[ChatMess
                 if definition.system_prompt == SYSTEM_PROMPT
                 else definition.system_prompt
             )
-            + instructions,
+            + ("\n\n" + instructions if instructions else ""),
         )
     ]
     for turn in command.history:
@@ -51,6 +51,18 @@ def build_messages(definition, command, instructions: str = "") -> list[ChatMess
     return messages
 
 
+def validate_messages(messages):
+    if len(messages) > RUN_CONTEXT_MESSAGES:
+        raise ContextLimit()
+    visible = json.dumps(
+        [m.model_dump(mode="json", exclude_none=True) for m in messages],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode()
+    if len(visible) > 192 * 1024:
+        raise ContextLimit()
+
+
 def model_input(
     messages,
     continuation_token,
@@ -62,15 +74,8 @@ def model_input(
     deepseek=False,
     defer_budget=False,
 ) -> GenerateInput:
-    if not defer_budget and len(messages) > RUN_CONTEXT_MESSAGES:
-        raise ContextLimit()
-    visible = json.dumps(
-        [m.model_dump(mode="json", exclude_none=True) for m in messages],
-        ensure_ascii=False,
-        separators=(",", ":"),
-    ).encode()
-    if not defer_budget and len(visible) > 192 * 1024:
-        raise ContextLimit()
+    if not defer_budget:
+        validate_messages(messages)
     request = GenerateInput(
         messages=messages[-1:] if defer_budget else messages,
         stream=stream,

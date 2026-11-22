@@ -1,0 +1,11 @@
+{
+  "title": "企业经营语义层",
+  "subtitle": "Agent 上下文工程、语义工具、自然语言指标维护与场景提示词。",
+  "brand": "Compass",
+  "label": "第 22 课 · 技术方案",
+  "source": "../TECH_DESIGN.md",
+  "guide": "guide.md",
+  "output": "../TECH_DESIGN.html",
+  "artwork": "../../../../docs/assets/lesson-covers/lesson-22-semantic-governance.png",
+  "lesson": 22
+}

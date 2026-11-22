@@ -1,14 +1,8 @@
 import { z } from "zod";
-import {
-  id,
-  text,
-  queryParams,
-  type MetricView,
-  type SemanticCapability,
-} from "../../../contracts/semantic";
+import { id, text, queryParams, type MetricView } from "../../../contracts/semantic";
 import { reject } from "../../platform/errors";
-import type { Context } from "./access";
-import { digest, policies, published, releases } from "./catalog";
+import { publishedScopeIds, type Context } from "./access";
+import { digest, published, releases } from "./catalog";
 import { normalize as normalizeStoredName } from "./drafts";
 import { fullTextMatches, relatedMetrics } from "./retrieval";
 
@@ -18,28 +12,6 @@ function normalize(value: string) {
     /(?<=\p{Script=Han}) (?=[\p{L}\p{N}])|(?<=[\p{L}\p{N}]) (?=\p{Script=Han})/gu,
     "",
   );
-}
-
-export async function restrictRuntime(c: Context, releaseIds?: string[]): Promise<Context> {
-  const live = await releases(c);
-  const fixed = releaseIds ? await releases(c, releaseIds) : [];
-  const applicable = await policies(c, [...live, ...fixed]);
-  const disabled = new Set(applicable.flatMap((p) => p.policy.disabled_capabilities ?? []));
-  if (!disabled.size) return c;
-  const can = (key: SemanticCapability) =>
-    c.can(key) && !disabled.has(key) && (key !== "query" || !disabled.has("read"));
-  return {
-    ...c,
-    can,
-    scopes: c.scopes.map((s) => ({
-      ...s,
-      manage: s.manage && can("draft"),
-      share: s.share && can("draft"),
-      business: s.business && can("govern"),
-      data: s.data && can("govern"),
-      release: s.release && can("govern"),
-    })),
-  };
 }
 
 const pins = z.array(id).max(3);
@@ -116,20 +88,16 @@ function searchHit(
   if (score !== undefined) return { m, rank: 0.6 + Math.min(score, 0.3), reason: "全文词项匹配" };
   if (related.has(m.asset_id)) return { m, rank: 0.5, reason: "相关名称和定义" };
 }
-async function resolveMetric(
+export async function resolveMetric(
   c: Context,
-  operation: string,
   f: z.infer<typeof resolve>,
   all: MetricView[],
-  policy: Awaited<ReturnType<typeof policies>>,
   manifest_hash: string,
+  selectingOption = false,
 ) {
-  let direct =
-    operation === "choice" && f.metric_id
-      ? all.filter((m) => m.asset_id === f.metric_id)
-      : all.filter((m) => rank(m, f.mention) >= 3);
+  let direct = all.filter((m) => rank(m, f.mention) >= 3);
   let mention: string | undefined;
-  if (operation !== "choice" && direct.length) {
+  if (direct.length) {
     const question = normalize(f.mention);
     const matchedNames = direct.flatMap((m) => matchingNames(m, question));
     const specific = [...new Set(matchedNames)].filter(
@@ -144,48 +112,27 @@ async function resolveMetric(
       [m.code, m.name, ...m.aliases].map(normalize).some((n) => specific.includes(n)),
     );
   }
-  const terms = direct.filter((m) => m.kind === "term").map((m) => m.asset_id);
   const { rows: links } = await c.db.query<{ to_asset_id: string }>(
-    "SELECT to_asset_id FROM web.semantic_relations WHERE kind='denotes' AND from_version_id=ANY($1::uuid[]) AND scope_id=ANY($2::uuid[])",
-    [
-      direct.filter((m) => m.kind === "term").map((m) => m.version_id),
-      c.scopes.filter((s) => s.use).map((s) => s.id),
-    ],
+    `SELECT r.to_asset_id FROM web.semantic_relations r JOIN web.semantic_versions v ON v.version_id=r.from_version_id
+     WHERE r.kind='denotes' AND r.from_version_id=ANY($1::uuid[]) AND (r.scope_id=v.usage_scope_id OR r.scope_id=ANY($2::uuid[]))`,
+    [direct.filter((m) => m.kind === "term").map((m) => m.version_id), publishedScopeIds(c)],
   );
   const targets = new Set([...direct.map((m) => m.asset_id), ...links.map((l) => l.to_asset_id)]);
   const visible = all.filter((m) => m.kind === "metric" && targets.has(m.asset_id));
-  let matches = visible.filter((m) => m.binding_id);
-  const family = matches.map((m) => m.asset_id);
-  if (operation !== "choice") {
-    const specificity: Record<string, number> = {
-      platform: 0,
-      tenant: 1,
-      workspace: 2,
-      department: 2,
-      job: 2,
-      personal: 3,
+  const byId = selectingOption ? visible : all.filter((m) => m.kind === "metric");
+  const candidates = f.metric_id ? byId.filter((m) => m.asset_id === f.metric_id) : visible;
+  if (!candidates.length) return { status: "no_match", mention, manifest_hash };
+  if (candidates.length > 1)
+    return { status: "needs_clarification", mention, options: candidates.map(safe), manifest_hash };
+  const [m] = candidates;
+  if (!m.binding_id)
+    return {
+      status: c.can("query") ? "unavailable_binding" : "query_forbidden",
+      mention,
+      metric: safe(m),
+      manifest_hash,
     };
-    const candidates = policy.flatMap((p) =>
-      (p.policy.defaults ?? [])
-        .filter(
-          (d) =>
-            terms.includes(d.term_ref) && matches.some((m) => m.asset_id === d.target_metric_ref),
-        )
-        .map((d) => ({
-          id: d.target_metric_ref,
-          priority: specificity[c.scopes.find((s) => s.id === p.id)?.kind ?? "platform"],
-        })),
-    );
-    const nearest = Math.max(-1, ...candidates.map((c) => c.priority));
-    const defaults = new Set(candidates.filter((c) => c.priority === nearest).map((c) => c.id));
-    const preferred = matches.filter((m) => defaults.has(m.asset_id));
-    if (preferred.length) matches = preferred;
-  }
-  if (!matches.length)
-    return { status: visible.length ? "unavailable_binding" : "no_match", mention, manifest_hash };
-  if (matches.length > 1)
-    return { status: "needs_clarification", mention, options: matches.map(safe), manifest_hash };
-  const [m] = matches;
+  const family = visible.map((v) => v.asset_id);
   if (
     f.dimensions.some(
       (d) => !Array.isArray(m.definition.dimensions) || !m.definition.dimensions.includes(d),
@@ -201,11 +148,69 @@ async function resolveMetric(
     manifest_hash,
   };
 }
+// Published terms are shared context. Only a match to the question adds other asset kinds.
+export function initialItems(
+  all: MetricView[],
+  direct: string[],
+  related: string[],
+  question: string,
+  limit: number,
+) {
+  const byId = new Map(all.map((asset) => [asset.asset_id, asset]));
+  const selected = new Map<string, string>();
+  for (const [ids, reason] of [
+    [direct, "问题命中"],
+    [related, "相关候选"],
+  ] as const) {
+    for (const id of ids) {
+      const asset = byId.get(id);
+      if (selected.size >= limit) break;
+      if (asset && asset.kind !== "term" && !selected.has(id)) selected.set(id, reason);
+    }
+  }
+  const matches = [...selected].map(([id, context_reason]) => {
+    const asset = byId.get(id)!;
+    return {
+      ...safe(asset),
+      summary: asset.summary.slice(0, 360),
+      context_reason,
+      matched_terms: matchingNames(asset, normalize(question)),
+    };
+  });
+  const terms = all
+    .filter((asset) => asset.kind === "term")
+    .sort((a, b) => a.code.localeCompare(b.code) || a.asset_id.localeCompare(b.asset_id))
+    .map((asset) => ({
+      asset_id: asset.asset_id,
+      version_id: asset.version_id,
+      kind: asset.kind,
+      name: asset.name,
+      code: asset.code,
+      aliases: asset.aliases,
+      summary: asset.summary,
+      context_reason: "默认术语",
+    }));
+  return [...matches, ...terms];
+}
+
 export async function registry(c: Context, operation: string, raw: unknown, releaseIds?: string[]) {
   const fixed = await releases(c, releaseIds ? pins.parse(releaseIds) : undefined);
-  const all = await published(c, releaseIds);
-  const policy = await policies(c, fixed);
   const manifest_hash = digest(fixed.map((r) => [r.partition, r.id, r.digest]));
+  const capabilities = {
+    read: c.can("read"),
+    query: c.can("query"),
+    draft: c.can("draft"),
+    govern: c.can("govern"),
+  };
+  const release = { manifest_hash, releases: fixed.map((r) => r.id), capabilities };
+  if (operation === "manifest")
+    return { ...release, items: [], requested_metrics: [], max_search_rounds: 8 };
+  if (operation === "glossary") {
+    if (!c.can("read") && !c.sharedTermsOnly) reject("forbidden");
+    const terms = await published({ ...c, sharedTermsOnly: true }, release.releases);
+    return { ...release, items: initialItems(terms, [], [], "", 0) };
+  }
+  const all = await published(c, release.releases);
   if (operation === "authorize") {
     const { refs } = z
       .strictObject({
@@ -229,25 +234,20 @@ export async function registry(c: Context, operation: string, raw: unknown, rele
     );
     return { bindings: rows };
   }
-  if (operation === "manifest" || operation === "context") {
-    const pinned = new Set(policy.flatMap((p) => p.policy.pinned_asset_ids ?? []));
-    const maxItems = Math.min(8, ...policy.map((p) => p.policy.context_max_items ?? 8));
-    const { question } = z.object({ question: z.string().max(2400).optional() }).parse(raw ?? {});
+  if (operation === "context") {
+    const maxItems = 8;
+    const { question } = z
+      .object({
+        question: z.string().max(2400).optional(),
+        scene_hint: z.string().max(160).default(""),
+      })
+      .parse(raw ?? {});
     const intent = question
-      ? await resolveMetric(
-          c,
-          "resolve",
-          { mention: question, dimensions: [] },
-          all,
-          policy,
-          manifest_hash,
-        )
+      ? await resolveMetric(c, { mention: question, dimensions: [] }, all, manifest_hash)
       : undefined;
     const normalizedQuestion = normalize(question ?? "");
     const lexical =
-      question && !intent?.mention
-        ? relatedMetrics(all, question)
-        : { suggestions: [], byClause: [] };
+      question && !intent?.mention ? relatedMetrics(all, question) : { suggestions: [] };
     const metricNames = new Set(
       all.filter((m) => m.kind !== "entity").flatMap((m) => matchingNames(m, normalizedQuestion)),
     );
@@ -257,23 +257,12 @@ export async function registry(c: Context, operation: string, raw: unknown, rele
     const requested = new Map<string, { asset_id: string; code: string; name: string }>();
     if (explicitNames.length > 1 && explicitNames.length <= maxItems) {
       for (const name of explicitNames) {
-        const match = await resolveMetric(
-          c,
-          "resolve",
-          { mention: name, dimensions: [] },
-          all,
-          policy,
-          manifest_hash,
-        );
+        const match = await resolveMetric(c, { mention: name, dimensions: [] }, all, manifest_hash);
         if (match.status === "resolved" && match.metric) {
           const { asset_id, code, name } = match.metric;
           requested.set(asset_id, { asset_id, code, name });
         }
       }
-    }
-    if (!intent?.mention && lexical.byClause.length > 1 && lexical.byClause.length <= maxItems) {
-      for (const { asset_id, code, name } of lexical.byClause)
-        requested.set(asset_id, { asset_id, code, name });
     }
     const strength = (v: MetricView) =>
       Math.max(0, ...matchingNames(v, normalizedQuestion).map((n) => n.length));
@@ -288,9 +277,20 @@ export async function registry(c: Context, operation: string, raw: unknown, rele
           )
           .map((v) => v.asset_id)
       : [];
+    const items = initialItems(
+      all,
+      [
+        ...requested.keys(),
+        ...(intent?.metric ? [intent.metric.asset_id] : []),
+        ...(intent?.options ?? []).map((v) => v.asset_id),
+        ...matched,
+      ],
+      lexical.suggestions.map((v) => v.asset_id),
+      question ?? "",
+      maxItems,
+    );
     return {
-      manifest_hash,
-      releases: fixed.map((r) => r.id),
+      ...release,
       requested_metrics: [...requested.values()],
       resolution: intent
         ? {
@@ -298,29 +298,22 @@ export async function registry(c: Context, operation: string, raw: unknown, rele
             mention: intent.mention,
             metric: intent.metric,
             family: intent.family,
+            candidate_ids: intent.options
+              ?.map((v) => v.asset_id)
+              .filter((id) => items.some((item) => item.asset_id === id)),
             option_count: intent.options?.length,
+            clarification:
+              intent.status === "needs_clarification" && intent.mention
+                ? {
+                    tool: "resolve_semantics",
+                    arguments: { mention: intent.mention },
+                    accepts_custom_definition: true,
+                  }
+                : undefined,
           }
         : undefined,
-      items: [
-        ...new Set([
-          ...requested.keys(),
-          ...matched,
-          ...lexical.suggestions.map((v) => v.asset_id),
-          ...pinned,
-        ]),
-      ]
-        .flatMap((id) => {
-          const v = all.find((a) => a.asset_id === id);
-          return v ? [{ ...safe(v), matched_terms: matchingNames(v, normalizedQuestion) }] : [];
-        })
-        .slice(0, maxItems),
-      max_search_rounds: Math.min(8, ...policy.map((p) => p.policy.max_search_rounds ?? 8)),
-      capabilities: {
-        read: c.can("read"),
-        query: c.can("query"),
-        draft: c.can("draft"),
-        govern: c.can("govern"),
-      },
+      items,
+      max_search_rounds: 8,
     };
   }
   if (operation === "search") {
@@ -337,7 +330,7 @@ export async function registry(c: Context, operation: string, raw: unknown, rele
       .map((m) => searchHit(m, f.query, fullText, related))
       .filter((hit) => hit !== undefined)
       .sort((a, b) => b.rank - a.rank || a.m.asset_id.localeCompare(b.m.asset_id));
-    const limit = Math.min(f.limit, ...policy.map((p) => p.policy.page_size ?? 50));
+    const limit = f.limit;
     return {
       items: matches.slice(f.cursor, f.cursor + limit).map(({ m, reason }) => ({
         ...safe(m),
@@ -349,7 +342,7 @@ export async function registry(c: Context, operation: string, raw: unknown, rele
     };
   }
   if (operation === "resolve" || operation === "choice")
-    return resolveMetric(c, operation, resolve.parse(raw), all, policy, manifest_hash);
+    return resolveMetric(c, resolve.parse(raw), all, manifest_hash, operation === "choice");
   const f = z
     .strictObject({
       asset_id: id,

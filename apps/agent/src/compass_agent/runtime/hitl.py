@@ -127,6 +127,7 @@ class HumanDecisions:
                 "semantic_choice",
                 "semantic_result_choice",
                 "semantic_draft",
+                "semantic_revision",
                 "semantic_submit",
             }
             else None
@@ -255,7 +256,9 @@ class HumanDecisions:
             )
             if wait is None:
                 raise ModelError("not_found", 404)
-            self.assert_confirmation_scope(session, wait, context)
+            decision_kind = self.assert_confirmation_scope(session, wait, context)
+            if command.custom_definition is not None and decision_kind != "semantic_choice":
+                raise ModelError("invalid_parameters", 422)
             if (wait.proposal_id, wait.proposal_revision, wait.proposal_sha256) != (
                 command.proposal_id,
                 command.proposal_revision,
@@ -303,6 +306,7 @@ class HumanDecisions:
                     if (
                         private.get("kind", "").startswith("semantic_")
                         or command.choice_id
+                        or command.custom_definition
                         or command.draft_edits
                     ):
                         from compass_agent.semantic.clarification import retain_selection

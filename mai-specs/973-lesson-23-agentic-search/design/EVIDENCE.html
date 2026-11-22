@@ -1,0 +1,1616 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="工具回执怎样进入答案，读者如何重新打开原文" />
+    <title>经营结论与引用校验 · Compass</title>
+    <!-- prettier-ignore -->
+    <style>/* Adapted from the approved lesson 13 reading edition; no product-app dependency. */
+:root {
+  color-scheme: light;
+  --paper: #f9faf7;
+  --surface: #fff;
+  --ink: #172c25;
+  --muted: #5d6b64;
+  --green: #245847;
+  --soft: #edf2eb;
+  --line: #dce4db;
+  --lime: #d7edb4;
+  --mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+* {
+  box-sizing: border-box;
+}
+html {
+  scroll-padding-top: 96px;
+}
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--paper);
+  font: 14px/1.9 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+button,
+input {
+  font: inherit;
+}
+button,
+summary {
+  cursor: pointer;
+}
+button {
+  touch-action: manipulation;
+}
+a {
+  color: var(--green);
+  text-underline-offset: 4px;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid #598547;
+  outline-offset: 4px;
+}
+svg {
+  display: block;
+}
+.icon {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+}
+.skip {
+  position: fixed;
+  z-index: 100;
+  top: -80px;
+  left: 20px;
+  padding: 12px 20px;
+  background: var(--green);
+  color: white;
+}
+.skip:focus {
+  top: 10px;
+}
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: 72px;
+  background: rgba(249, 250, 247, 0.97);
+  border-bottom: 1px solid var(--line);
+}
+.topbar-inner {
+  max-width: 1440px;
+  height: 100%;
+  margin: auto;
+  padding: 0 40px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: var(--ink);
+  font-size: 21px;
+  font-weight: 650;
+  text-decoration: none;
+}
+.brand span {
+  border-left: 1px solid var(--line);
+  padding-left: 16px;
+  color: var(--muted);
+  font: 10px/1.3 var(--mono);
+}
+.top-links {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  font-size: 13px;
+}
+.top-links a {
+  text-decoration: none;
+  color: var(--muted);
+}
+.search-trigger,
+.plain-button,
+.close-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: white;
+  color: var(--ink);
+  font-size: 12px;
+}
+.close-button {
+  min-width: 44px;
+  font-size: 24px;
+}
+kbd {
+  padding: 4px;
+  border-radius: 3px;
+  background: var(--soft);
+  color: var(--muted);
+  font: 11px var(--mono);
+}
+.reading-progress {
+  position: absolute;
+  bottom: -1px;
+  height: 2px;
+  width: 100%;
+  background: var(--green);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+.hero {
+  max-width: 1200px;
+  margin: auto;
+  padding: 70px 40px 0;
+}
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 30px;
+  color: var(--green);
+  font: 11px/1.5 var(--mono);
+  letter-spacing: 0.06em;
+}
+.dash {
+  width: 25px;
+  height: 2px;
+  background: var(--green);
+}
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 52px;
+  align-items: center;
+}
+.hero-grid--solo {
+  grid-template-columns: 1fr;
+}
+h1 {
+  margin: 0 0 26px;
+  font-size: clamp(32px, 3.4vw, 50px);
+  line-height: 1.25;
+  letter-spacing: -0.04em;
+  overflow-wrap: anywhere;
+}
+h1 > span {
+  display: block;
+  margin-top: 18px;
+  font-size: clamp(22px, 2.4vw, 32px);
+  font-weight: 450;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+  color: var(--green);
+}
+h1 > span:empty {
+  display: none;
+}
+.hero-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+.hero-topics:empty {
+  display: none;
+}
+.hero-topics span {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: white;
+  padding: 5px 11px;
+  color: var(--green);
+  font: 12px/1.6 var(--mono);
+}
+.primary-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 18px;
+  border-radius: 5px;
+  background: var(--green);
+  color: white;
+  text-decoration: none;
+  font-size: 13px;
+}
+.hero-note {
+  margin-top: 22px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #67885b;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  margin-top: 48px;
+  padding: 28px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.metric {
+  padding: 0 24px;
+  border-left: 1px solid var(--line);
+}
+.metric:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+.metric strong {
+  font-size: 31px;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  margin-right: 8px;
+}
+.metric small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.metric p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.doc-layout {
+  max-width: 1200px;
+  margin: auto;
+  padding: 0 40px;
+}
+.document {
+  min-width: 0;
+  padding-top: 20px;
+}
+.document h2 {
+  margin: 64px 0 24px;
+  padding-top: 32px;
+  border-top: 1px solid var(--line);
+  font-size: 30px;
+  line-height: 1.4;
+  letter-spacing: -0.025em;
+}
+.document h3 {
+  margin: 40px 0 20px;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.document h4 {
+  margin: 32px 0 18px;
+  font-size: 19px;
+  font-weight: 600;
+}
+.document p {
+  margin: 16px 0;
+}
+.document strong {
+  font-weight: 650;
+}
+.document :not(pre) > code {
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: var(--green);
+  background: var(--soft);
+  font: 13px/1.7 var(--mono);
+  overflow-wrap: anywhere;
+}
+.table-wrap {
+  overflow-x: auto;
+  margin: 24px 0 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  text-align: left;
+}
+th,
+td {
+  min-width: 130px;
+  padding: 14px 16px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+th {
+  background: var(--soft);
+  color: #355442;
+  font-weight: 600;
+}
+td:first-child {
+  color: #305344;
+  font-weight: 500;
+}
+tr:last-child td {
+  border-bottom: 0;
+}
+.diagram {
+  overflow: hidden;
+  margin: 28px 0 40px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: white;
+}
+.hero .diagram {
+  margin: 0;
+}
+.figure-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: #f3f6ef;
+}
+.figure-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.figure-label small {
+  margin-right: 13px;
+  color: var(--muted);
+  font: 10px var(--mono);
+}
+.figure-bar button {
+  flex: none;
+}
+.diagram-stage {
+  padding: 22px;
+  overflow: auto;
+  background-image: radial-gradient(#dce6d8 0.7px, transparent 0.7px);
+  background-size: 16px 16px;
+}
+.diagram-stage > svg {
+  display: block;
+  margin-inline: auto;
+  max-height: none;
+}
+.source-details {
+  border-top: 1px solid var(--line);
+}
+.source-details summary {
+  padding: 10px 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.source-details .code-block {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+.code-block {
+  overflow: hidden;
+  margin: 24px 0 36px;
+  border: 1px solid #2d493d;
+  border-radius: 9px;
+  background: #182d25;
+  color: #e1eada;
+}
+.code-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: 49px;
+  padding: 8px 16px;
+  background: #213a2e;
+  border-bottom: 1px solid #365141;
+}
+.code-bar > span {
+  font: 11px/1.6 var(--mono);
+  color: #bad1af;
+  overflow-wrap: anywhere;
+}
+.code-tools {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+.code-tools button {
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid #54725a;
+  border-radius: 5px;
+  color: #d4e1ca;
+  background: transparent;
+  font-size: 12px;
+}
+.code-block pre {
+  overflow: auto;
+  max-height: 480px;
+  margin: 0;
+  padding: 20px 0;
+  font: 14px/1.85 var(--mono);
+  tab-size: 4;
+}
+.code-block.expanded pre {
+  max-height: none;
+}
+.code-block pre > code {
+  display: block;
+  min-width: max-content;
+}
+.code-line {
+  display: block;
+  padding-right: 24px;
+}
+.line-num {
+  display: inline-block;
+  width: 4ch;
+  margin: 0 20px 0 12px;
+  color: #819582;
+  text-align: right;
+  user-select: none;
+}
+.line-content {
+  white-space: pre;
+}
+.hljs-keyword,
+.hljs-meta {
+  color: #d8bded;
+}
+.hljs-string,
+.hljs-regexp {
+  color: #c9dfaa;
+}
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.function_ {
+  color: #bce3dd;
+}
+.hljs-number,
+.hljs-literal {
+  color: #efcb91;
+}
+.hljs-comment {
+  color: #9daf9b;
+  font-style: italic;
+}
+.hljs-built_in,
+.hljs-type {
+  color: #b3d9e7;
+}
+.hljs-attr,
+.hljs-params,
+.hljs-property {
+  color: #e1eada;
+}
+.footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  max-width: 1120px;
+  margin: 72px auto 0;
+  padding: 24px 0 36px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+.footer a {
+  margin-left: 18px;
+}
+dialog {
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 20px 80px #102c2533;
+}
+dialog::backdrop {
+  background: #12261f77;
+  backdrop-filter: blur(3px);
+}
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.dialog-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+#search-dialog {
+  width: min(720px, calc(100vw - 32px));
+  max-height: 85dvh;
+}
+.search-field {
+  padding: 18px 20px;
+}
+.search-field input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px 14px;
+  color: var(--ink);
+  background: white;
+}
+#search-results {
+  max-height: 50dvh;
+  overflow: auto;
+  padding: 0 20px;
+}
+.search-result {
+  display: block;
+  padding: 12px;
+  margin: 0 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  text-decoration: none;
+}
+.search-result:hover,
+.search-result:focus {
+  background: var(--soft);
+}
+.search-result strong {
+  font-size: 14px;
+}
+.search-result p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.search-meta {
+  padding: 0 20px 16px;
+  font-size: 12px;
+  color: var(--muted);
+}
+#diagram-dialog {
+  width: calc(100vw - 40px);
+  height: calc(100dvh - 40px);
+  max-width: 1600px;
+  max-height: none;
+}
+.zoom-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+#zoom-level {
+  min-width: 48px;
+  text-align: center;
+  font: 12px var(--mono);
+}
+.zoom-hint {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+#zoom-viewport {
+  overflow: auto;
+  height: calc(100% - 160px);
+  padding: 24px;
+  background: white;
+}
+#zoom-content {
+  margin: auto;
+}
+#zoom-content svg {
+  max-width: none !important;
+}
+.toast {
+  position: fixed;
+  z-index: 100;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  border-radius: 7px;
+  background: var(--green);
+  color: white;
+  font-size: 13px;
+}
+.toast:empty {
+  display: none;
+}
+.document [id]:target {
+  scroll-margin-top: 96px;
+}
+@media (max-width: 1000px) {
+  .top-links .desktop-link {
+    display: none;
+  }
+  .hero-grid {
+    gap: 28px;
+  }
+  .footer {
+    margin-inline: 40px;
+  }
+}
+@media (max-width: 760px) {
+  .topbar {
+    height: 64px;
+  }
+  .topbar-inner {
+    padding-inline: 20px;
+    gap: 10px;
+  }
+  .brand {
+    font-size: 18px;
+    gap: 9px;
+  }
+  .brand span {
+    padding-left: 9px;
+    font-size: 8px;
+  }
+  .search-trigger span,
+  .search-trigger kbd {
+    display: none;
+  }
+  .hero {
+    padding: 40px 20px 0;
+  }
+  .hero-grid {
+    grid-template-columns: 1fr;
+  }
+  .metrics {
+    grid-template-columns: 1fr 1fr;
+    padding-block: 0;
+  }
+  .metric,
+  .metric:first-child {
+    padding: 18px 12px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .metric:nth-child(2n) {
+    border-left: 1px solid var(--line);
+  }
+  .doc-layout {
+    padding-inline: 20px;
+  }
+  .document h2 {
+    font-size: 28px;
+  }
+  .document h3 {
+    font-size: 23px;
+  }
+  .diagram-stage {
+    padding: 16px;
+  }
+  .diagram-stage > svg {
+    max-width: none !important;
+  }
+  .figure-bar,
+  .code-bar {
+    flex-wrap: wrap;
+    padding-inline: 12px;
+  }
+  .figure-label small {
+    display: none;
+  }
+  .footer {
+    margin: 48px 20px 0;
+    flex-direction: column;
+    gap: 8px;
+  }
+  #diagram-dialog {
+    width: calc(100vw - 12px);
+    height: calc(100dvh - 12px);
+  }
+  .dialog-header {
+    padding: 10px 12px;
+  }
+  .zoom-toolbar {
+    padding: 8px;
+  }
+  .zoom-hint {
+    display: none;
+  }
+  #zoom-viewport {
+    height: calc(100% - 180px);
+    padding: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation: none !important;
+    transition: none !important;
+  }
+}
+@media print {
+  body {
+    background: white;
+  }
+  .topbar,
+  .skip,
+  .hero-actions,
+  .source-details,
+  .code-tools,
+  .figure-bar button,
+  dialog,
+  .toast {
+    display: none !important;
+  }
+  .hero {
+    padding-top: 0;
+  }
+  .hero,
+  .doc-layout {
+    max-width: none;
+    padding-inline: 0;
+  }
+  .hero-grid {
+    grid-template-columns: 1fr;
+  }
+  .table-wrap {
+    overflow: visible;
+  }
+  th,
+  td {
+    min-width: 0;
+  }
+  .code-block pre {
+    max-height: none;
+    overflow: visible;
+  }
+  .code-block {
+    background: #f4f5f2;
+    color: #1d3125;
+    border-color: #ccc;
+  }
+  .code-bar {
+    background: #edf2eb;
+    border-color: #ccc;
+  }
+  .code-bar > span,
+  .line-content span {
+    color: inherit;
+  }
+  .code-block pre > code {
+    min-width: 0;
+  }
+  .code-line,
+  .line-content {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .diagram-stage {
+    overflow: visible;
+  }
+  .diagram-stage > svg {
+    max-width: 100% !important;
+  }
+  h2,
+  h3,
+  h4 {
+    break-after: avoid;
+  }
+  .footer {
+    margin-top: 24px;
+  }
+}
+</style>
+  <!-- prettier-ignore --><style id="course-reader">.lesson-heading {
+  width: min(100%, 1200px);
+  margin: auto;
+  padding: 30px 40px 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 255px);
+  grid-template-areas: "title cover" "controls cover";
+  align-items: center;
+  gap: 12px 40px;
+}
+.lesson-number {
+  margin: 0 0 6px;
+  color: var(--green);
+  font-weight: 650;
+}
+.lesson-heading h1 {
+  margin: 0;
+  font-size: clamp(31px, 3.5vw, 48px);
+}
+.lesson-question {
+  margin: 8px 0 0;
+  font-size: clamp(16px, 1.6vw, 20px);
+  color: var(--muted);
+}
+.lesson-cover {
+  grid-area: cover;
+  justify-self: end;
+  width: 100%;
+}
+.lesson-cover summary {
+  position: relative;
+  display: block;
+  width: 100%;
+  color: var(--green);
+}
+.lesson-cover summary::-webkit-details-marker {
+  display: none;
+}
+.lesson-cover img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.lesson-cover summary span {
+  display: block;
+  margin-top: 2px;
+  text-align: right;
+  font-size: 12px;
+}
+.lesson-cover .cover-close,
+.lesson-cover[open] .cover-open {
+  display: none;
+}
+.lesson-cover[open] .cover-close {
+  display: block;
+}
+.lesson-heading:has(.lesson-cover[open]) {
+  grid-template-columns: 1fr;
+  grid-template-areas: "title" "controls" "cover";
+}
+.lesson-cover[open] {
+  max-width: 960px;
+  justify-self: start;
+}
+.lesson-controls {
+  grid-area: controls;
+  display: flex;
+  align-items: start;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.lesson-toc {
+  position: relative;
+}
+.lesson-toc summary {
+  padding: 8px 14px;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  line-height: 26px;
+}
+.lesson-toc nav {
+  position: absolute;
+  z-index: 4;
+  width: min(350px, 85vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px #172c2521;
+}
+.lesson-toc nav a {
+  display: block;
+  padding: 5px 10px;
+  text-decoration: none;
+}
+.lesson-toc nav a:hover,
+.lesson-toc nav a:focus-visible {
+  background: var(--soft);
+}
+.document {
+  padding-top: 0;
+  font-size: 15px;
+}
+.document > h2:first-child {
+  margin: 0 0 10px;
+  padding-top: 20px;
+}
+.document > h2:first-child + ul {
+  margin: 0;
+  padding-left: 1.5em;
+}
+.document > h2:first-child + ul li {
+  padding: 2px 0;
+}
+.document > h2:first-child + ul li::marker {
+  color: var(--green);
+}
+.document > h2:first-child + ul + h2 {
+  margin-top: 26px;
+  padding-top: 22px;
+}
+.document h2 + .diagram {
+  margin-top: 12px;
+}
+.diagram-stage:focus-visible {
+  outline-offset: -4px;
+}
+@media screen and (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --paper: #15201b;
+    --surface: #1b2b23;
+    --ink: #e6eee7;
+    --muted: #b0c1b5;
+    --green: #aed3b8;
+    --soft: #263a2f;
+    --line: #3b5042;
+  }
+  .topbar,
+  .search-trigger,
+  .plain-button,
+  .close-button,
+  .search-result,
+  .search-field input,
+  .source-details {
+    background: var(--surface);
+  }
+  .figure-bar {
+    background: var(--soft);
+  }
+  th,
+  td:first-child {
+    color: var(--ink);
+  }
+  .diagram-stage,
+  #zoom-viewport {
+    color-scheme: light;
+    background-color: #f8faf7;
+  }
+  .toast {
+    color: var(--paper);
+  }
+}
+@media (max-width: 760px) {
+  .lesson-heading {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "title title" "controls cover";
+    gap: 10px;
+    padding: 20px 20px 16px;
+  }
+  .lesson-heading > div:first-child {
+    grid-area: title;
+  }
+  .lesson-cover:not([open]) img {
+    display: none;
+  }
+  .lesson-cover summary span {
+    margin: 0;
+    padding: 10px 0;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .lesson-controls {
+    gap: 6px;
+  }
+}
+@media print {
+  .lesson-heading {
+    display: block;
+    padding: 0 0 16px;
+  }
+  .lesson-cover,
+  .lesson-controls {
+    display: none;
+  }
+}
+.document h2 {
+  margin-top: 38px;
+}
+.document h3 {
+  margin: 24px 0 10px;
+  font-size: clamp(18px, 2.1vw, 22px);
+}
+.document .diagram,
+.document .table-wrap,
+.document > .code-block {
+  margin-block: 12px 20px;
+}
+.document .table-wrap td {
+  vertical-align: top;
+}
+.document .table-wrap td:first-child {
+  min-width: 9em;
+}
+
+.lesson-heading:not(:has(.lesson-cover)) {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "title" "controls";
+}
+.lesson-toc nav {
+  max-width: calc(100vw - 42px);
+}
+.lesson-controls .plain-button {
+  min-height: 44px;
+}
+.document h2,
+.document h3,
+.lesson-heading {
+  overflow-wrap: anywhere;
+}
+@media print {
+  .document .table-wrap {
+    overflow: visible;
+  }
+}
+</style></head>
+  <body>
+    <a class="skip" href="#document">跳至设计正文</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="#top"
+          >Compass<span>ENGINEERING<br />DESIGN NOTES</span></a
+        >
+        <nav class="top-links" aria-label="快捷导航">
+          <a class="desktop-link" href="#section-0">1. 从一次工具调用追到一句结论</a><a class="desktop-link" href="#section-1">2. 三道校验与证据适用范围</a><a class="desktop-link" href="#section-2">3. 跨来源计算</a><a class="desktop-link" href="#section-3">4. 回答上下文和角标由谁生成</a>
+          <button class="search-trigger" type="button" data-search aria-label="检索文档">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="6.5" />
+              <path d="m16 16 5 5" />
+            </svg>
+            <span>检索文档</span><kbd>⌘ K</kbd>
+          </button>
+        </nav>
+      </div>
+      <div class="reading-progress" aria-hidden="true"></div>
+    </header>
+    <main id="top">
+      <header class="lesson-heading" aria-labelledby="page-title">
+    <div><p class="lesson-number">第 23 课 · 技术方案</p><h1 id="page-title">经营结论与引用校验</h1><p class="lesson-question">工具回执怎样进入答案，读者如何重新打开原文</p></div>
+    <div class="lesson-controls"><details class="lesson-toc"><summary>章节目录</summary><nav aria-label="章节目录"><a href="#section-0">1. 从一次工具调用追到一句结论</a><a href="#section-1">2. 三道校验与证据适用范围</a><a href="#section-2">3. 跨来源计算</a><a href="#section-3">4. 回答上下文和角标由谁生成</a><a href="#section-4">5. 保存、撤权与回看</a><a href="#section-5">6. 同一条查询行怎样进入两期比较表</a></nav></details><button class="plain-button" type="button" data-search>检索文档</button></div></header>
+      <div class="doc-layout"><article class="document" id="document"><p><a href="TECH_DESIGN.html">返回技术方案</a> · <a href="CODE_DESIGN.html">供评审的代码设计</a></p>
+<h2 id="section-0">1. 从一次工具调用追到一句结论</h2>
+<p>工具批次签收和模型草稿提交是两处强制检查。两处的调用点、输入、返回主模型的反馈和普通 Chat 交付路径见<a href="TECH_DESIGN.html#section-3">Verify 接入</a>。</p>
+<p>经理看到“建议选 6,000 元体验档”。点开角标后，可以看到对方的档位报价、适用的试投条款和上次纪要确认的挂账金额。三种材料各自需要当前主体可读，任意一项变化都可能改变这句建议。</p>
+<figure class="diagram" id="figure-0" data-title="从工具回执到用户角标"><div class="figure-bar"><span class="figure-label"><small>FIG. 01</small>从工具回执到用户角标</span><button class="plain-button" type="button" data-diagram>放大图表 ↗</button></div><div class="diagram-stage"><svg xmlns="http://www.w3.org/2000/svg" id="drawing-0-render-0" width="100%" class="flowchart" style="max-width: 100%; width: 1755.08px; height: auto;" viewBox="0 0 1755.078125 82.5" role="img" aria-roledescription="flowchart-v2" aria-label="从工具回执到用户角标"><style>#drawing-0-render-0{font-family:-apple-system,BlinkMacSystemFont,PingFang SC,Microsoft YaHei,sans-serif;font-size:15px;fill:#20372a;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#drawing-0-render-0 .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#drawing-0-render-0 .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#drawing-0-render-0 .error-icon{fill:#e9eff0;}#drawing-0-render-0 .error-text{fill:#16100f;stroke:#16100f;}#drawing-0-render-0 .edge-thickness-normal{stroke-width:1px;}#drawing-0-render-0 .edge-thickness-thick{stroke-width:3.5px;}#drawing-0-render-0 .edge-pattern-solid{stroke-dasharray:0;}#drawing-0-render-0 .edge-thickness-invisible{stroke-width:0;fill:none;}#drawing-0-render-0 .edge-pattern-dashed{stroke-dasharray:3;}#drawing-0-render-0 .edge-pattern-dotted{stroke-dasharray:2;}#drawing-0-render-0 .marker{fill:#6c8265;stroke:#6c8265;}#drawing-0-render-0 .marker.cross{stroke:#6c8265;}#drawing-0-render-0 svg{font-family:-apple-system,BlinkMacSystemFont,PingFang SC,Microsoft YaHei,sans-serif;font-size:15px;}#drawing-0-render-0 p{margin:0;}#drawing-0-render-0 .label{font-family:-apple-system,BlinkMacSystemFont,PingFang SC,Microsoft YaHei,sans-serif;color:#20372a;}#drawing-0-render-0 .cluster-label text{fill:#16100f;}#drawing-0-render-0 .cluster-label span{color:#16100f;}#drawing-0-render-0 .cluster-label span p{background-color:transparent;}#drawing-0-render-0 .label text,#drawing-0-render-0 span{fill:#20372a;color:#20372a;}#drawing-0-render-0 .node rect,#drawing-0-render-0 .node circle,#drawing-0-render-0 .node ellipse,#drawing-0-render-0 .node polygon,#drawing-0-render-0 .node path{fill:#eef4e7;stroke:#8ba67c;stroke-width:1px;}#drawing-0-render-0 .rough-node .label text,#drawing-0-render-0 .node .label text,#drawing-0-render-0 .image-shape .label,#drawing-0-render-0 .icon-shape .label{text-anchor:middle;}#drawing-0-render-0 .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#drawing-0-render-0 .rough-node .label,#drawing-0-render-0 .node .label,#drawing-0-render-0 .image-shape .label,#drawing-0-render-0 .icon-shape .label{text-align:center;}#drawing-0-render-0 .node.clickable{cursor:pointer;}#drawing-0-render-0 .root .anchor path{fill:#6c8265!important;stroke-width:0;stroke:#6c8265;}#drawing-0-render-0 .arrowheadPath{fill:#0b0b0b;}#drawing-0-render-0 .edgePath .path{stroke:#6c8265;stroke-width:2.0px;}#drawing-0-render-0 .flowchart-link{stroke:#6c8265;fill:none;}#drawing-0-render-0 .edgeLabel{background-color:#fff;text-align:center;}#drawing-0-render-0 .edgeLabel p{background-color:#fff;}#drawing-0-render-0 .edgeLabel rect{opacity:0.5;background-color:#fff;fill:#fff;}#drawing-0-render-0 .labelBkg{background-color:rgba(255, 255, 255, 0.5);}#drawing-0-render-0 .cluster rect{fill:#f6f8f1;stroke:#b4c6aa;stroke-width:1px;}#drawing-0-render-0 .cluster text{fill:#16100f;}#drawing-0-render-0 .cluster span{color:#16100f;}#drawing-0-render-0 div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:-apple-system,BlinkMacSystemFont,PingFang SC,Microsoft YaHei,sans-serif;font-size:12px;background:#e9eff0;border:1px solid hsl(188.5714285714, 0%, 82.7450980392%);border-radius:2px;pointer-events:none;z-index:100;}#drawing-0-render-0 .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#20372a;}#drawing-0-render-0 rect.text{fill:none;stroke-width:0;}#drawing-0-render-0 .icon-shape,#drawing-0-render-0 .image-shape{background-color:#fff;text-align:center;}#drawing-0-render-0 .icon-shape p,#drawing-0-render-0 .image-shape p{background-color:#fff;padding:2px;}#drawing-0-render-0 .icon-shape rect,#drawing-0-render-0 .image-shape rect{opacity:0.5;background-color:#fff;fill:#fff;}#drawing-0-render-0 .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#drawing-0-render-0 .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#drawing-0-render-0 :root{--mermaid-font-family:-apple-system,BlinkMacSystemFont,PingFang SC,Microsoft YaHei,sans-serif;}</style><g><marker id="drawing-0-render-0_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="drawing-0-render-0_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="drawing-0-render-0_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="drawing-0-render-0_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="drawing-0-render-0_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="drawing-0-render-0_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M163.078,41.25L188.078,41.25L209.078,41.25" id="drawing-0-L_Call_Obs_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_Call_Obs_0" data-points="W3sieCI6MTYzLjA3ODEyNSwieSI6NDEuMjV9LHsieCI6MTg4LjA3ODEyNSwieSI6NDEuMjV9LHsieCI6MjEzLjA3ODEyNSwieSI6NDEuMjV9XQ==" marker-end="url(#drawing-0-render-0_flowchart-v2-pointEnd)"/><path d="M472.078,41.25L497.078,41.25L518.078,41.25" id="drawing-0-L_Obs_Claim_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_Obs_Claim_0" data-points="W3sieCI6NDcyLjA3ODEyNSwieSI6NDEuMjV9LHsieCI6NDk3LjA3ODEyNSwieSI6NDEuMjV9LHsieCI6NTIyLjA3ODEyNSwieSI6NDEuMjV9XQ==" marker-end="url(#drawing-0-render-0_flowchart-v2-pointEnd)"/><path d="M751.078,41.25L776.078,41.25L797.078,41.25" id="drawing-0-L_Claim_Context_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_Claim_Context_0" data-points="W3sieCI6NzUxLjA3ODEyNSwieSI6NDEuMjV9LHsieCI6Nzc2LjA3ODEyNSwieSI6NDEuMjV9LHsieCI6ODAxLjA3ODEyNSwieSI6NDEuMjV9XQ==" marker-end="url(#drawing-0-render-0_flowchart-v2-pointEnd)"/><path d="M1060.078,41.25L1085.078,41.25L1106.078,41.25" id="drawing-0-L_Context_Line_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_Context_Line_0" data-points="W3sieCI6MTA2MC4wNzgxMjUsInkiOjQxLjI1fSx7IngiOjEwODUuMDc4MTI1LCJ5Ijo0MS4yNX0seyJ4IjoxMTEwLjA3ODEyNSwieSI6NDEuMjV9XQ==" marker-end="url(#drawing-0-render-0_flowchart-v2-pointEnd)"/><path d="M1264.078,41.25L1289.078,41.25L1310.078,41.25" id="drawing-0-L_Line_Gate_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_Line_Gate_0" data-points="W3sieCI6MTI2NC4wNzgxMjUsInkiOjQxLjI1fSx7IngiOjEyODkuMDc4MTI1LCJ5Ijo0MS4yNX0seyJ4IjoxMzE0LjA3ODEyNSwieSI6NDEuMjV9XQ==" marker-end="url(#drawing-0-render-0_flowchart-v2-pointEnd)"/><path d="M1543.078,41.25L1568.078,41.25L1589.078,41.25" id="drawing-0-L_Gate_Cite_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_Gate_Cite_0" data-points="W3sieCI6MTU0My4wNzgxMjUsInkiOjQxLjI1fSx7IngiOjE1NjguMDc4MTI1LCJ5Ijo0MS4yNX0seyJ4IjoxNTkzLjA3ODEyNSwieSI6NDEuMjV9XQ==" marker-end="url(#drawing-0-render-0_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g><rect class="background" style="stroke: none;"/></g><g><rect class="background" style="stroke: none;"/></g><g><rect class="background" style="stroke: none;"/></g><g><rect class="background" style="stroke: none;"/></g><g><rect class="background" style="stroke: none;"/></g><g><rect class="background" style="stroke: none;"/></g><g class="edgeLabel"><g class="label" data-id="L_Call_Obs_0" transform="translate(0, 0)"><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"/></text></g></g><g class="edgeLabel"><g class="label" data-id="L_Obs_Claim_0" transform="translate(0, 0)"><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"/></text></g></g><g class="edgeLabel"><g class="label" data-id="L_Claim_Context_0" transform="translate(0, 0)"><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"/></text></g></g><g class="edgeLabel"><g class="label" data-id="L_Context_Line_0" transform="translate(0, 0)"><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"/></text></g></g><g class="edgeLabel"><g class="label" data-id="L_Line_Gate_0" transform="translate(0, 0)"><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"/></text></g></g><g class="edgeLabel"><g class="label" data-id="L_Gate_Cite_0" transform="translate(0, 0)"><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"/></text></g></g></g><g class="nodes"><g class="node default" id="drawing-0-flowchart-Call-0" transform="translate(85.5390625, 41.25)"><rect class="basic label-container" x="-77.5390625" y="-33.25" width="155.078125" height="66.5"/><g class="label" transform="translate(0, -17.25)"><rect/><g><rect class="background" style="stroke: none;"/><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">Tool</tspan><tspan font-style="normal" class="text-inner-tspan" font-weight="normal"> call</tspan></tspan><tspan class="text-outer-tspan" x="0" y="1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">stepId</tspan><tspan font-style="normal" class="text-inner-tspan" font-weight="normal"> /</tspan><tspan font-style="normal" class="text-inner-tspan" font-weight="normal"> callId</tspan></tspan></text></g></g></g><g class="node default" id="drawing-0-flowchart-Obs-1" transform="translate(342.578125, 41.25)"><rect class="basic label-container" x="-129.5" y="-33.25" width="259" height="66.5"/><g class="label" transform="translate(0, -17.25)"><rect/><g><rect class="background" style="stroke: none;"/><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">Evidence</tspan></tspan><tspan class="text-outer-tspan" x="0" y="1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">本轮结果、版本、行或原文段</tspan></tspan></text></g></g></g><g class="node default" id="drawing-0-flowchart-Claim-3" transform="translate(636.578125, 41.25)"><rect class="basic label-container" x="-114.5" y="-33.25" width="229" height="66.5"/><g class="label" transform="translate(0, -17.25)"><rect/><g><rect class="background" style="stroke: none;"/><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">Claim</tspan></tspan><tspan class="text-outer-tspan" x="0" y="1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">断言、状态、支撑与反证</tspan></tspan></text></g></g></g><g class="node default" id="drawing-0-flowchart-Context-5" transform="translate(930.578125, 41.25)"><rect class="basic label-container" x="-129.5" y="-33.25" width="259" height="66.5"/><g class="label" transform="translate(0, -17.25)"><rect/><g><rect class="background" style="stroke: none;"/><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">回答上下文</tspan></tspan><tspan class="text-outer-tspan" x="0" y="1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">适用口径、事实、缺口、引用</tspan></tspan></text></g></g></g><g class="node default" id="drawing-0-flowchart-Line-7" transform="translate(1187.078125, 41.25)"><rect class="basic label-container" x="-77" y="-33.25" width="154" height="66.5"/><g class="label" transform="translate(0, -17.25)"><rect/><g><rect class="background" style="stroke: none;"/><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">模型选断言</tspan></tspan><tspan class="text-outer-tspan" x="0" y="1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">组织报告语句</tspan></tspan></text></g></g></g><g class="node default" id="drawing-0-flowchart-Gate-9" transform="translate(1428.578125, 41.25)"><rect class="basic label-container" x="-114.5" y="-33.25" width="229" height="66.5"/><g class="label" transform="translate(0, -17.25)"><rect/><g><rect class="background" style="stroke: none;"/><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">程序校验</tspan></tspan><tspan class="text-outer-tspan" x="0" y="1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">范围、状态、取值及权限</tspan></tspan></text></g></g></g><g class="node default" id="drawing-0-flowchart-Cite-11" transform="translate(1670.078125, 41.25)"><rect class="basic label-container" x="-77" y="-33.25" width="154" height="66.5"/><g class="label" transform="translate(0, -17.25)"><rect/><g><rect class="background" style="stroke: none;"/><text y="-10.1"><tspan class="text-outer-tspan" x="0" y="-0.1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">角标与详情</tspan></tspan><tspan class="text-outer-tspan" x="0" y="1em" dy="1.1em"><tspan font-style="normal" class="text-inner-tspan" font-weight="normal">回到原始位置</tspan></tspan></text></g></g></g></g></g></g></svg></div><details class="source-details"><summary>查看 Mermaid 源码</summary><div class="code-block" id="code-0"><div class="code-bar"><span>从工具回执到用户角标 · 图表源 · text / 7 LINES</span><div class="code-tools"><button type="button" data-copy="0">复制代码</button></div></div><pre id="code-0-pre" tabindex="0"><code><span class="code-line"><span class="line-num" aria-hidden="true">1</span><span class="line-content">flowchart LR</span></span><span class="code-line"><span class="line-num" aria-hidden="true">2</span><span class="line-content">    Call[&quot;Tool call&lt;br/&gt;stepId / callId&quot;] --&gt; Obs[&quot;Evidence&lt;br/&gt;本轮结果、版本、行或原文段&quot;]</span></span><span class="code-line"><span class="line-num" aria-hidden="true">3</span><span class="line-content">    Obs --&gt; Claim[&quot;Claim&lt;br/&gt;断言、状态、支撑与反证&quot;]</span></span><span class="code-line"><span class="line-num" aria-hidden="true">4</span><span class="line-content">    Claim --&gt; Context[&quot;回答上下文&lt;br/&gt;适用口径、事实、缺口、引用&quot;]</span></span><span class="code-line"><span class="line-num" aria-hidden="true">5</span><span class="line-content">    Context --&gt; Line[&quot;模型选断言&lt;br/&gt;组织报告语句&quot;]</span></span><span class="code-line"><span class="line-num" aria-hidden="true">6</span><span class="line-content">    Line --&gt; Gate[&quot;程序校验&lt;br/&gt;范围、状态、取值及权限&quot;]</span></span><span class="code-line"><span class="line-num" aria-hidden="true">7</span><span class="line-content">    Gate --&gt; Cite[&quot;角标与详情&lt;br/&gt;回到原始位置&quot;]</span></span></code></pre></div></details></figure><div class="table-wrap" tabindex="0" role="region" aria-label="设计表格"><table><thead>
+<tr>
+<th>记录</th>
+<th>由谁产生、存在哪里</th>
+<th>能解决什么问题</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>工具回执</td>
+<td>dispatcher 确认执行的 Run、step、call，适配器给出 <code>resultId</code> 或已读文档引用、质量状态及快照</td>
+<td>区分实际执行、缓存复用、模型候选和来源失败</td>
+</tr>
+<tr>
+<td>Evidence</td>
+<td>Agent 为被签收的结果签发本 Run 的 <code>evidenceId</code>。保留来源类别、原始版本、定位、内容摘要哈希、业务窗、K、权限引用和质量状态</td>
+<td>查明某次观察的确切含义。同一原件被多个工具、纪要转述或重试再次返回时保留共同来源，独立性只算一次</td>
+</tr>
+<tr>
+<td>Claim</td>
+<td>模型提出原子断言或修订，服务端分配 <code>claimId/revision</code>，保存对象、谓词、期间、值/单位、用途、依赖断言与证据边</td>
+<td>每一项金额、条件、结论或假设都能单独检查。证据边标为取值、适用规则、计算输入、支撑或反证</td>
+</tr>
+<tr>
+<td>发布清单</td>
+<td>成功交付时服务端将最终断言版本、全部父引用及正文位置与 <code>answerRevision</code> 固定</td>
+<td>同一份历史答案的编号、证据和正文对应。新报价或重新分析产生新 Run</td>
+</tr>
+</tbody>
+</table></div><p><strong>存储落点。</strong> Agent 通过 save_private / read_private 在现有 Run 内保存 search/evidence、search/batch 和 search/answer 私有记录。verify_batch 在持租事务中签收有序回执。publish_citations 按输出修订保存正文摘要、角标和来源详情。回看时核对当前主体权限与正文摘要。</p>
+<h2 id="section-1">2. 三道校验与证据适用范围</h2>
+<p><strong>第一道在工具适配层，确认收到了什么。</strong> 校验 scope、来源修订、原始 locator、K、业务期间、单位/粒度、齐备状态、截断和摘要。正式值必须有实际执行回执，指标定义只说明怎么算。SQL 预览标注 truncation 和可见行界限，包含整表统计的断言需完整聚合。明细中的原始字段回到授权实体键或有可核筛选的聚合，常数列、来源不可追或省略相关限制的计算只作查找线索。候选摘要可用于找文号，制度、档位和截止时间的事实取已读原段、完整表头及限制。输入中可能出现的操作指令按资料正文处理。</p>
+<p><strong>第二道在跨来源对齐时，确认是否在谈同一件事。</strong> 先对齐租户、组织/部门、数据 release、工作区、对象、销售地/履约地、渠道、单位、时间窗和经营截止。正式值再对齐指标身份、版本与归期。口径或粒度不同则保留两项。对齐后仍相反且同样适用的原始记录标成冲突，保留双方。优先来源按断言类别确定，规则在 Agent 适配与已发布语义契约中版本化。单项正式回执齐备即可支持一个简单取值。</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="设计表格"><table><thead>
+<tr>
+<th>断言类别</th>
+<th>可以采用的主来源</th>
+<th>能发表的范围</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>正式经营指标 / 定义</td>
+<td>已发布的语义绑定执行回执 / 已批准定义</td>
+<td>指定对象、粒度、单位和期间内的值 / 口径。单独的定义或周报数字不作正式取值</td>
+</tr>
+<tr>
+<td>已发生的交易、锁库、收货</td>
+<td>授权事实行，或按其键和窗口可复算的明细聚合</td>
+<td>单据的动作、数量、日期或该窗口的观察。计划、通知、调拨和采购实收各有独立含义</td>
+</tr>
+<tr>
+<td>规则、余额、可订档位</td>
+<td>在期的制度条款 / 当时获权的纪要原文 / 当期商业原函</td>
+<td>分别支持试投资格、挂账约定、整档金额与时限。纪要中的旧经营解释可作为假设</td>
+</tr>
+<tr>
+<td>派生值 / 建议 / 解释</td>
+<td>已支持的父断言及计算、适用条款和满足条件的回执</td>
+<td>金额、比较、差额或带前提的行动建议。相关性和历史类比留作假设，付费效果缺样本时列入待验证</td>
+</tr>
+</tbody>
+</table></div><p><strong>第三道在交付前，检查句子和引用。</strong> 模型可把复合句拆成“短缺率恢复”“已支付订单恢复”“恢复由付费投放引起”三个断言。运行侧根据证据边校验各自的覆盖范围。自由文本语义匹配只够提出候选，发布的确定陈述优先由结构化事实或真实原文生成。首版处理精确取值、可复算关系、原文限定和冲突，不设置整库统一置信分，也不单独调用模型给每条材料打分。</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="设计表格"><table><thead>
+<tr>
+<th>Claim 状态</th>
+<th>判定</th>
+<th>在最终回答里的位置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>supported</code></td>
+<td>证据适用、当前可读、必要字段齐备，已按业务类型核验</td>
+<td>已核事实或满足前提的建议</td>
+</tr>
+<tr>
+<td><code>refuted</code></td>
+<td>同一范围内有经核实的相反事实，原断言被否定</td>
+<td>以已支持的相反断言纠正用户前提，保留原断言与反证关系。如“三个月一直下跌”由三个月回执纠正</td>
+</tr>
+<tr>
+<td><code>insufficient</code></td>
+<td>缺关键材料、正式回执、完整样本或适用条款</td>
+<td>标作假设/待补项，并写明影响。资料不可读时只展示允许公开的缺口</td>
+</tr>
+<tr>
+<td><code>contested</code></td>
+<td>在同一比较坐标上仍有两条适用且互相矛盾的来源</td>
+<td>在有权范围内说明分歧，相关签批条件保持待核</td>
+</tr>
+</tbody>
+</table></div><h2 id="section-2">3. 跨来源计算</h2>
+<p>现有 <code>context_runtime/delivery.py</code> 的 <code>DeliveryDraft</code> 和 <code>_check_measurements</code> 核验结构化查询里的数值。主案例的余额来自纪要，比例来自制度，档位来自报价。<strong>8,000 元和 14,000 元都是跨来源派生值。</strong> 如果只验证“这些数字在上下文出现过”，换一张 9,000 元的报价仍可能输出旧建议。</p>
+<p>断言格式 SearchDraft 使用 targets、claimProposals、answerBlocks，以本轮观察为叶子；comparison_brief 格式另见第六节。数据叶子指定回执、列/行键、单位、范围和状态。文档叶子指定已读版本、段落、表行/字段或原文字符范围，校验原文、数值、币种、时区和语义标签。模型只提交引用及有限的计算表达式。校验器从私有观察重新读取值，按有界表达式验证“余额 × 比例”“余额 − 购买额”“上限内的最高完整档”“上线后首个工作日”。文字条款和建议附相应段落及资格判断依据。缺少正式回执、必要输入或可适用条款时，建议状态降为待核。选中档位、建议金额和余款须引用同一报价与同一余额，段落中的所有可选档由服务端整体读取。日历只对有权原文覆盖的日期作判定，跨出覆盖范围给出缺口。</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="设计表格"><table><thead>
+<tr>
+<th>校验层</th>
+<th>通过条件</th>
+<th>失败后的交付</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>经营取值</td>
+<td>正式口径带本 Run 的已发布版本、执行回执、齐备状态、对象与窗口。明细观察保留其粒度</td>
+<td>已核实的明细可以展示，签批所需的正式指标列为待补</td>
+</tr>
+<tr>
+<td>计算与选择</td>
+<td>金额按整数分，比例按 Decimal，无样本为未知。档位来自完整报价表且满足上限，资格比较引用适用条款</td>
+<td>明确缺口或暂缓。计算错误可用现有交付修复机会重写，仍受原预算限制</td>
+</tr>
+<tr>
+<td>正文投影</td>
+<td>建议、表格、摘要、标题与附件中的关键数字和日期都从已核 claim/既有已核 view 渲染，事实、解释、收益假设分开</td>
+<td>只能投影已核数字与允许公开的缺口，防止正文夹带未经核验的金额。缺少行动依据时抑制建议购买</td>
+</tr>
+<tr>
+<td>依赖关系</td>
+<td>每条派生值携带所有叶子的来源。型别、币种、主体、业务对象与时间关系满足表达式契约</td>
+<td>关系不匹配时不出数。只对未启用新模式的旧 Run 保留原草稿契约</td>
+</tr>
+</tbody>
+</table></div><p>通用校验器负责机械可验证的计算、取值与已声明条件。由模型识别该决策受哪些条款约束，把条款、事实及结论关联。其完整性由金标准、删源与反事实联合验收。生产代码不解释一部预装的复投办法。课堂呈现意见供经理签批，不连接采购或外发工具。</p>
+<p>经理点开三句话时，应看到不同的计算和来源。下表中的文号来自课程原件，运行时记录实际读到的修订、段落和行键。</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="设计表格"><table><thead>
+<tr>
+<th>正文里点开哪句话</th>
+<th>详情应展开什么</th>
+<th>什么变化会改变这句话</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>“内部上限为 8,000 元”</td>
+<td>纪要 H-0912 待办 3 的余额 20,000 元，以及制度 K-17 第 2 版的试投比例 40%。按分复算乘积</td>
+<td>单独更换媒介报价时上限仍为 8,000 元</td>
+</tr>
+<tr>
+<td>“建议订 6,000 元体验档”</td>
+<td>上限、已核净额与履约资格、当前库存，以及 E-1009 修订 2 的完整报价表。对两个整档分别比较额度，再核对条款的选择要求</td>
+<td>体验档换成 9,000 元，两个整档都不符合，意见改为暂缓</td>
+</tr>
+<tr>
+<td>“订后保留 14,000 元”</td>
+<td>H-0912 的余额减去同一份建议实际选中的档位金额。角标沿购买额回到完整报价及其父断言</td>
+<td>换价暂缓时保留 20,000 元。报价权限被收回后，再读原报告也会隐藏依赖该函的余款</td>
+</tr>
+</tbody>
+</table></div><h2 id="section-3">4. 回答上下文和角标由谁生成</h2>
+<p>生成前由 Context Runtime 提供四组内容。业务口径含组织、对象、时区、期间、K 和指标版本。已核事实含稳定断言 ID、允许展示的取值及必要原句。假设与缺口含反证、冲突对象、缺少什么以及它对行动的影响。候选引用清单只含当前可用的叶子及其定位。需要比较的坏消息和反证与正向事实拥有相同的保留优先级。</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="设计表格"><table><thead>
+<tr>
+<th>模型草稿</th>
+<th>服务端的检查与动作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>在 answerBlocks 中选用本轮提案的局部键，服务端为选中的结果签发 claimId 和 revision</td>
+<td>严格校验角色/用途、同一 Run/租户/工作区、修订、依赖闭包、当前 ACL、版本、有效期和质量</td>
+</tr>
+<tr>
+<td>引用一行报表或一段原文，指定它支撑哪项断言</td>
+<td>用真实 locator 重开对应行列或段落，校验范围、币种、时点、原文与筛选，复算金额和派生值。不同用途的同一数字不能相互替代</td>
+</tr>
+<tr>
+<td>确定表达顺序，可将一个句子关联多个断言</td>
+<td>校验所有关键陈述都有断言。数值和已确认的事实文字由已核对象投影，假设由带标注的独立段落呈现。任意新增的事实句、Markdown 链接或自造角标不直接发布</td>
+</tr>
+<tr>
+<td>校验失败</td>
+<td>向主 Agent 回传具体问题，如“该值只覆盖调拨行”或“缺少完整报价”。有合法取证空间可回 query/analyze，再次生成仍共享原预算。仅格式问题复用一次已有修复机会。穷尽路径时交付已核部分和缺口</td>
+</tr>
+</tbody>
+</table></div><p>服务端按最终正文首次使用的已核断言修订编号。同一断言复用编号，一个角标可关联多条原始引用，先按稳定键去重。把清单、受保护正文与其摘要按同一 Run 和输出 revision 原子保存。例如，上限 8,000 元的角标展开“纪要余额 × 有效制度比例”，余款 14,000 元的角标另展开“余额 − 已选整档”。教学页出现的编号为示意，生产编号始终由本次完成的清单生成。</p>
+<p><strong>点击与兼容契约。</strong> 既有 <code>MessageContent.text</code> 和 <code>RunCompleted.finalAnswer</code> 保留可读正文，旧客户端显示普通角标。Agent 的 <code>api/sessions.py</code> 提供两个只读方法，由 Web BFF 认证转发、校验 DTO 并返回 <code>no-store</code>。</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="设计表格"><table><thead>
+<tr>
+<th>Agent GET 端点</th>
+<th>授权返回</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/v1/analysis/runs/{run_id}/citations</code></td>
+<td>已发表答案的 <code>messageId, revision, textDigest, anchors[]</code>。每个 anchor 含 <code>citationId, ordinal, start, end</code>。偏移以原始 Markdown 文本 Unicode 码点计数、左闭右开。旧答案无清单时返回空列表</td>
+</tr>
+<tr>
+<td><code>/v1/analysis/runs/{run_id}/citations/{citation_id}</code></td>
+<td>当前有权的断言、来源名称、制度或指标版本、查询范围、行/段定位、必要原文或值、计算和验证状态。仅给已发表清单中的条目。未知、跨 Run 或撤权统一为不可查看，省略标题与片段。验权服务暂不可用时不给缓存详情</td>
+</tr>
+</tbody>
+</table></div><p>Web 将 BFF 的 <code>analysis/runs/{id}/citations</code> 两条路径接入已有分析模块。以服务端正文摘要、revision 与实际角标范围同时匹配为前提，按码点到浏览器文本位置的映射把对应角标显示为可用键盘打开的按钮。普通正文中的“[1]”维持原文。片段和来源标题使用安全文本渲染，模型无需构造 URL。详情复用现有弹层与焦点恢复。回答流只在结束并校验后提供可点击引用，新旧端可同时读原有字段。从 FastAPI 契约源生成 OpenAPI、Agent/Web 类型及 BFF 运行时校验。</p>
+<h2 id="section-4">5. 保存、撤权与回看</h2>
+<figure class="diagram" id="figure-1" data-title="撤权如何影响后续读取"><div class="figure-bar"><span class="figure-label"><small>FIG. 02</small>撤权如何影响后续读取</span><button class="plain-button" type="button" data-diagram>放大图表 ↗</button></div><div class="diagram-stage"><svg xmlns="http://www.w3.org/2000/svg" id="drawing-1-render-1" width="1037" height="751" viewBox="-50 -10 1037 751" role="img" aria-roledescription="sequence" aria-label="撤权如何影响后续读取" style="width: 1037px; max-width: 100%; height: auto;"><g><rect x="787" y="665" fill="#eaeaea" stroke="#666" width="150" height="65" name="P" rx="3" ry="3" class="actor actor-bottom"/><text x="862" y="697.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400; font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif;"><tspan x="862" dy="0">私有运行状态</tspan></text></g><g><rect x="599" y="665" fill="#eaeaea" stroke="#666" width="150" height="65" name="W" rx="3" ry="3" class="actor actor-bottom"/><text x="674" y="697.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400; font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif;"><tspan x="674" dy="0">Web 来源与成员</tspan></text></g><g><rect x="390" y="665" fill="#eaeaea" stroke="#666" width="150" height="65" name="A" rx="3" ry="3" class="actor actor-bottom"/><text x="465" y="697.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400; font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif;"><tspan x="465" dy="0">Agent</tspan></text></g><g><rect x="188" y="665" fill="#eaeaea" stroke="#666" width="150" height="65" name="M" rx="3" ry="3" class="actor actor-bottom"/><text x="263" y="697.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400; font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif;"><tspan x="263" dy="0">模型</tspan></text></g><g><rect x="0" y="665" fill="#eaeaea" stroke="#666" width="150" height="65" name="U" rx="3" ry="3" class="actor actor-bottom"/><text x="75" y="697.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400; font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif;"><tspan x="75" dy="0">经营者</tspan></text></g><g><line id="drawing-1-actor4" x1="862" y1="65" x2="862" y2="665" class="actor-line 200" stroke-width="0.5px" stroke="#999" name="P"/><g id="drawing-1-root-4"><rect x="787" y="0" fill="#eaeaea" stroke="#666" width="150" height="65" name="P" rx="3" ry="3" class="actor actor-top"/><text x="862" y="32.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400; font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif;"><tspan x="862" dy="0">私有运行状态</tspan></text></g></g><g><line id="drawing-1-actor3" x1="674" y1="65" x2="674" y2="665" class="actor-line 200" stroke-width="0.5px" stroke="#999" name="W"/><g id="drawing-1-root-3"><rect x="599" y="0" fill="#eaeaea" stroke="#666" width="150" height="65" name="W" rx="3" ry="3" class="actor actor-top"/><text x="674" y="32.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400; font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif;"><tspan x="674" dy="0">Web 来源与成员</tspan></text></g></g><g><line id="drawing-1-actor2" x1="465" y1="65" x2="465" y2="665" class="actor-line 200" stroke-width="0.5px" stroke="#999" name="A"/><g id="drawing-1-root-2"><rect x="390" y="0" fill="#eaeaea" stroke="#666" width="150" height="65" name="A" rx="3" ry="3" class="actor actor-top"/><text x="465" y="32.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400; font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif;"><tspan x="465" dy="0">Agent</tspan></text></g></g><g><line id="drawing-1-actor1" x1="263" y1="65" x2="263" y2="665" class="actor-line 200" stroke-width="0.5px" stroke="#999" name="M"/><g id="drawing-1-root-1"><rect x="188" y="0" fill="#eaeaea" stroke="#666" width="150" height="65" name="M" rx="3" ry="3" class="actor actor-top"/><text x="263" y="32.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400; font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif;"><tspan x="263" dy="0">模型</tspan></text></g></g><g><line id="drawing-1-actor0" x1="75" y1="65" x2="75" y2="665" class="actor-line 200" stroke-width="0.5px" stroke="#999" name="U"/><g id="drawing-1-root-0"><rect x="0" y="0" fill="#eaeaea" stroke="#666" width="150" height="65" name="U" rx="3" ry="3" class="actor actor-top"/><text x="75" y="32.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400; font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif;"><tspan x="75" dy="0">经营者</tspan></text></g></g><style>#drawing-1-render-1{font-family:-apple-system,BlinkMacSystemFont,PingFang SC,Microsoft YaHei,sans-serif;font-size:15px;fill:#20372a;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#drawing-1-render-1 .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#drawing-1-render-1 .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#drawing-1-render-1 .error-icon{fill:#e9eff0;}#drawing-1-render-1 .error-text{fill:#16100f;stroke:#16100f;}#drawing-1-render-1 .edge-thickness-normal{stroke-width:1px;}#drawing-1-render-1 .edge-thickness-thick{stroke-width:3.5px;}#drawing-1-render-1 .edge-pattern-solid{stroke-dasharray:0;}#drawing-1-render-1 .edge-thickness-invisible{stroke-width:0;fill:none;}#drawing-1-render-1 .edge-pattern-dashed{stroke-dasharray:3;}#drawing-1-render-1 .edge-pattern-dotted{stroke-dasharray:2;}#drawing-1-render-1 .marker{fill:#6c8265;stroke:#6c8265;}#drawing-1-render-1 .marker.cross{stroke:#6c8265;}#drawing-1-render-1 svg{font-family:-apple-system,BlinkMacSystemFont,PingFang SC,Microsoft YaHei,sans-serif;font-size:15px;}#drawing-1-render-1 p{margin:0;}#drawing-1-render-1 .actor{stroke:#8ba67c;fill:#e8f1df;}#drawing-1-render-1 text.actor&gt;tspan{fill:#20372a;stroke:none;}#drawing-1-render-1 .actor-line{stroke:#8ba67c;}#drawing-1-render-1 .innerArc{stroke-width:1.5;stroke-dasharray:none;}#drawing-1-render-1 .messageLine0{stroke-width:1.5;stroke-dasharray:none;stroke:#56704d;}#drawing-1-render-1 .messageLine1{stroke-width:1.5;stroke-dasharray:2,2;stroke:#56704d;}#drawing-1-render-1 #drawing-1-arrowhead path{fill:#56704d;stroke:#56704d;}#drawing-1-render-1 .sequenceNumber{fill:#937d9a;}#drawing-1-render-1 #drawing-1-sequencenumber{fill:#56704d;}#drawing-1-render-1 #drawing-1-crosshead path{fill:#56704d;stroke:#56704d;}#drawing-1-render-1 .messageText{fill:#20372a;stroke:none;}#drawing-1-render-1 .labelBox{stroke:#8ba67c;fill:#e8f1df;}#drawing-1-render-1 .labelText,#drawing-1-render-1 .labelText&gt;tspan{fill:#20372a;stroke:none;}#drawing-1-render-1 .loopText,#drawing-1-render-1 .loopText&gt;tspan{fill:#20372a;stroke:none;}#drawing-1-render-1 .loopLine{stroke-width:2px;stroke-dasharray:2,2;stroke:#8ba67c;fill:#8ba67c;}#drawing-1-render-1 .note{stroke:hsl(52.6829268293, 60%, 73.9215686275%);fill:#fff5ad;}#drawing-1-render-1 .noteText,#drawing-1-render-1 .noteText&gt;tspan{fill:#333;stroke:none;}#drawing-1-render-1 .activation0{fill:#f7f8ee;stroke:hsl(66, 41.6666666667%, 85.2941176471%);}#drawing-1-render-1 .activation1{fill:#f7f8ee;stroke:hsl(66, 41.6666666667%, 85.2941176471%);}#drawing-1-render-1 .activation2{fill:#f7f8ee;stroke:hsl(66, 41.6666666667%, 85.2941176471%);}#drawing-1-render-1 .actorPopupMenu{position:absolute;}#drawing-1-render-1 .actorPopupMenuPanel{position:absolute;fill:#e8f1df;box-shadow:0px 8px 16px 0px rgba(0,0,0,0.2);filter:drop-shadow(3px 5px 2px rgb(0 0 0 / 0.4));}#drawing-1-render-1 .actor-man line{stroke:#8ba67c;fill:#e8f1df;}#drawing-1-render-1 .actor-man circle,#drawing-1-render-1 line{stroke:#8ba67c;fill:#e8f1df;stroke-width:2px;}#drawing-1-render-1 :root{--mermaid-font-family:-apple-system,BlinkMacSystemFont,PingFang SC,Microsoft YaHei,sans-serif;}</style><g/><defs><symbol id="drawing-1-computer" width="24" height="24"><path transform="scale(.5)" d="M2 2v13h20v-13h-20zm18 11h-16v-9h16v9zm-10.228 6l.466-1h3.524l.467 1h-4.457zm14.228 3h-24l2-6h2.104l-1.33 4h18.45l-1.297-4h2.073l2 6zm-5-10h-14v-7h14v7z"/></symbol></defs><defs><symbol id="drawing-1-database" fill-rule="evenodd" clip-rule="evenodd"><path transform="scale(.5)" d="M12.258.001l.256.004.255.005.253.008.251.01.249.012.247.015.246.016.242.019.241.02.239.023.236.024.233.027.231.028.229.031.225.032.223.034.22.036.217.038.214.04.211.041.208.043.205.045.201.046.198.048.194.05.191.051.187.053.183.054.18.056.175.057.172.059.168.06.163.061.16.063.155.064.15.066.074.033.073.033.071.034.07.034.069.035.068.035.067.035.066.035.064.036.064.036.062.036.06.036.06.037.058.037.058.037.055.038.055.038.053.038.052.038.051.039.05.039.048.039.047.039.045.04.044.04.043.04.041.04.04.041.039.041.037.041.036.041.034.041.033.042.032.042.03.042.029.042.027.042.026.043.024.043.023.043.021.043.02.043.018.044.017.043.015.044.013.044.012.044.011.045.009.044.007.045.006.045.004.045.002.045.001.045v17l-.001.045-.002.045-.004.045-.006.045-.007.045-.009.044-.011.045-.012.044-.013.044-.015.044-.017.043-.018.044-.02.043-.021.043-.023.043-.024.043-.026.043-.027.042-.029.042-.03.042-.032.042-.033.042-.034.041-.036.041-.037.041-.039.041-.04.041-.041.04-.043.04-.044.04-.045.04-.047.039-.048.039-.05.039-.051.039-.052.038-.053.038-.055.038-.055.038-.058.037-.058.037-.06.037-.06.036-.062.036-.064.036-.064.036-.066.035-.067.035-.068.035-.069.035-.07.034-.071.034-.073.033-.074.033-.15.066-.155.064-.16.063-.163.061-.168.06-.172.059-.175.057-.18.056-.183.054-.187.053-.191.051-.194.05-.198.048-.201.046-.205.045-.208.043-.211.041-.214.04-.217.038-.22.036-.223.034-.225.032-.229.031-.231.028-.233.027-.236.024-.239.023-.241.02-.242.019-.246.016-.247.015-.249.012-.251.01-.253.008-.255.005-.256.004-.258.001-.258-.001-.256-.004-.255-.005-.253-.008-.251-.01-.249-.012-.247-.015-.245-.016-.243-.019-.241-.02-.238-.023-.236-.024-.234-.027-.231-.028-.228-.031-.226-.032-.223-.034-.22-.036-.217-.038-.214-.04-.211-.041-.208-.043-.204-.045-.201-.046-.198-.048-.195-.05-.19-.051-.187-.053-.184-.054-.179-.056-.176-.057-.172-.059-.167-.06-.164-.061-.159-.063-.155-.064-.151-.066-.074-.033-.072-.033-.072-.034-.07-.034-.069-.035-.068-.035-.067-.035-.066-.035-.064-.036-.063-.036-.062-.036-.061-.036-.06-.037-.058-.037-.057-.037-.056-.038-.055-.038-.053-.038-.052-.038-.051-.039-.049-.039-.049-.039-.046-.039-.046-.04-.044-.04-.043-.04-.041-.04-.04-.041-.039-.041-.037-.041-.036-.041-.034-.041-.033-.042-.032-.042-.03-.042-.029-.042-.027-.042-.026-.043-.024-.043-.023-.043-.021-.043-.02-.043-.018-.044-.017-.043-.015-.044-.013-.044-.012-.044-.011-.045-.009-.044-.007-.045-.006-.045-.004-.045-.002-.045-.001-.045v-17l.001-.045.002-.045.004-.045.006-.045.007-.045.009-.044.011-.045.012-.044.013-.044.015-.044.017-.043.018-.044.02-.043.021-.043.023-.043.024-.043.026-.043.027-.042.029-.042.03-.042.032-.042.033-.042.034-.041.036-.041.037-.041.039-.041.04-.041.041-.04.043-.04.044-.04.046-.04.046-.039.049-.039.049-.039.051-.039.052-.038.053-.038.055-.038.056-.038.057-.037.058-.037.06-.037.061-.036.062-.036.063-.036.064-.036.066-.035.067-.035.068-.035.069-.035.07-.034.072-.034.072-.033.074-.033.151-.066.155-.064.159-.063.164-.061.167-.06.172-.059.176-.057.179-.056.184-.054.187-.053.19-.051.195-.05.198-.048.201-.046.204-.045.208-.043.211-.041.214-.04.217-.038.22-.036.223-.034.226-.032.228-.031.231-.028.234-.027.236-.024.238-.023.241-.02.243-.019.245-.016.247-.015.249-.012.251-.01.253-.008.255-.005.256-.004.258-.001.258.001zm-9.258 20.499v.01l.001.021.003.021.004.022.005.021.006.022.007.022.009.023.01.022.011.023.012.023.013.023.015.023.016.024.017.023.018.024.019.024.021.024.022.025.023.024.024.025.052.049.056.05.061.051.066.051.07.051.075.051.079.052.084.052.088.052.092.052.097.052.102.051.105.052.11.052.114.051.119.051.123.051.127.05.131.05.135.05.139.048.144.049.147.047.152.047.155.047.16.045.163.045.167.043.171.043.176.041.178.041.183.039.187.039.19.037.194.035.197.035.202.033.204.031.209.03.212.029.216.027.219.025.222.024.226.021.23.02.233.018.236.016.24.015.243.012.246.01.249.008.253.005.256.004.259.001.26-.001.257-.004.254-.005.25-.008.247-.011.244-.012.241-.014.237-.016.233-.018.231-.021.226-.021.224-.024.22-.026.216-.027.212-.028.21-.031.205-.031.202-.034.198-.034.194-.036.191-.037.187-.039.183-.04.179-.04.175-.042.172-.043.168-.044.163-.045.16-.046.155-.046.152-.047.148-.048.143-.049.139-.049.136-.05.131-.05.126-.05.123-.051.118-.052.114-.051.11-.052.106-.052.101-.052.096-.052.092-.052.088-.053.083-.051.079-.052.074-.052.07-.051.065-.051.06-.051.056-.05.051-.05.023-.024.023-.025.021-.024.02-.024.019-.024.018-.024.017-.024.015-.023.014-.024.013-.023.012-.023.01-.023.01-.022.008-.022.006-.022.006-.022.004-.022.004-.021.001-.021.001-.021v-4.127l-.077.055-.08.053-.083.054-.085.053-.087.052-.09.052-.093.051-.095.05-.097.05-.1.049-.102.049-.105.048-.106.047-.109.047-.111.046-.114.045-.115.045-.118.044-.12.043-.122.042-.124.042-.126.041-.128.04-.13.04-.132.038-.134.038-.135.037-.138.037-.139.035-.142.035-.143.034-.144.033-.147.032-.148.031-.15.03-.151.03-.153.029-.154.027-.156.027-.158.026-.159.025-.161.024-.162.023-.163.022-.165.021-.166.02-.167.019-.169.018-.169.017-.171.016-.173.015-.173.014-.175.013-.175.012-.177.011-.178.01-.179.008-.179.008-.181.006-.182.005-.182.004-.184.003-.184.002h-.37l-.184-.002-.184-.003-.182-.004-.182-.005-.181-.006-.179-.008-.179-.008-.178-.01-.176-.011-.176-.012-.175-.013-.173-.014-.172-.015-.171-.016-.17-.017-.169-.018-.167-.019-.166-.02-.165-.021-.163-.022-.162-.023-.161-.024-.159-.025-.157-.026-.156-.027-.155-.027-.153-.029-.151-.03-.15-.03-.148-.031-.146-.032-.145-.033-.143-.034-.141-.035-.14-.035-.137-.037-.136-.037-.134-.038-.132-.038-.13-.04-.128-.04-.126-.041-.124-.042-.122-.042-.12-.044-.117-.043-.116-.045-.113-.045-.112-.046-.109-.047-.106-.047-.105-.048-.102-.049-.1-.049-.097-.05-.095-.05-.093-.052-.09-.051-.087-.052-.085-.053-.083-.054-.08-.054-.077-.054v4.127zm0-5.654v.011l.001.021.003.021.004.021.005.022.006.022.007.022.009.022.01.022.011.023.012.023.013.023.015.024.016.023.017.024.018.024.019.024.021.024.022.024.023.025.024.024.052.05.056.05.061.05.066.051.07.051.075.052.079.051.084.052.088.052.092.052.097.052.102.052.105.052.11.051.114.051.119.052.123.05.127.051.131.05.135.049.139.049.144.048.147.048.152.047.155.046.16.045.163.045.167.044.171.042.176.042.178.04.183.04.187.038.19.037.194.036.197.034.202.033.204.032.209.03.212.028.216.027.219.025.222.024.226.022.23.02.233.018.236.016.24.014.243.012.246.01.249.008.253.006.256.003.259.001.26-.001.257-.003.254-.006.25-.008.247-.01.244-.012.241-.015.237-.016.233-.018.231-.02.226-.022.224-.024.22-.025.216-.027.212-.029.21-.03.205-.032.202-.033.198-.035.194-.036.191-.037.187-.039.183-.039.179-.041.175-.042.172-.043.168-.044.163-.045.16-.045.155-.047.152-.047.148-.048.143-.048.139-.05.136-.049.131-.05.126-.051.123-.051.118-.051.114-.052.11-.052.106-.052.101-.052.096-.052.092-.052.088-.052.083-.052.079-.052.074-.051.07-.052.065-.051.06-.05.056-.051.051-.049.023-.025.023-.024.021-.025.02-.024.019-.024.018-.024.017-.024.015-.023.014-.023.013-.024.012-.022.01-.023.01-.023.008-.022.006-.022.006-.022.004-.021.004-.022.001-.021.001-.021v-4.139l-.077.054-.08.054-.083.054-.085.052-.087.053-.09.051-.093.051-.095.051-.097.05-.1.049-.102.049-.105.048-.106.047-.109.047-.111.046-.114.045-.115.044-.118.044-.12.044-.122.042-.124.042-.126.041-.128.04-.13.039-.132.039-.134.038-.135.037-.138.036-.139.036-.142.035-.143.033-.144.033-.147.033-.148.031-.15.03-.151.03-.153.028-.154.028-.156.027-.158.026-.159.025-.161.024-.162.023-.163.022-.165.021-.166.02-.167.019-.169.018-.169.017-.171.016-.173.015-.173.014-.175.013-.175.012-.177.011-.178.009-.179.009-.179.007-.181.007-.182.005-.182.004-.184.003-.184.002h-.37l-.184-.002-.184-.003-.182-.004-.182-.005-.181-.007-.179-.007-.179-.009-.178-.009-.176-.011-.176-.012-.175-.013-.173-.014-.172-.015-.171-.016-.17-.017-.169-.018-.167-.019-.166-.02-.165-.021-.163-.022-.162-.023-.161-.024-.159-.025-.157-.026-.156-.027-.155-.028-.153-.028-.151-.03-.15-.03-.148-.031-.146-.033-.145-.033-.143-.033-.141-.035-.14-.036-.137-.036-.136-.037-.134-.038-.132-.039-.13-.039-.128-.04-.126-.041-.124-.042-.122-.043-.12-.043-.117-.044-.116-.044-.113-.046-.112-.046-.109-.046-.106-.047-.105-.048-.102-.049-.1-.049-.097-.05-.095-.051-.093-.051-.09-.051-.087-.053-.085-.052-.083-.054-.08-.054-.077-.054v4.139zm0-5.666v.011l.001.02.003.022.004.021.005.022.006.021.007.022.009.023.01.022.011.023.012.023.013.023.015.023.016.024.017.024.018.023.019.024.021.025.022.024.023.024.024.025.052.05.056.05.061.05.066.051.07.051.075.052.079.051.084.052.088.052.092.052.097.052.102.052.105.051.11.052.114.051.119.051.123.051.127.05.131.05.135.05.139.049.144.048.147.048.152.047.155.046.16.045.163.045.167.043.171.043.176.042.178.04.183.04.187.038.19.037.194.036.197.034.202.033.204.032.209.03.212.028.216.027.219.025.222.024.226.021.23.02.233.018.236.017.24.014.243.012.246.01.249.008.253.006.256.003.259.001.26-.001.257-.003.254-.006.25-.008.247-.01.244-.013.241-.014.237-.016.233-.018.231-.02.226-.022.224-.024.22-.025.216-.027.212-.029.21-.03.205-.032.202-.033.198-.035.194-.036.191-.037.187-.039.183-.039.179-.041.175-.042.172-.043.168-.044.163-.045.16-.045.155-.047.152-.047.148-.048.143-.049.139-.049.136-.049.131-.051.126-.05.123-.051.118-.052.114-.051.11-.052.106-.052.101-.052.096-.052.092-.052.088-.052.083-.052.079-.052.074-.052.07-.051.065-.051.06-.051.056-.05.051-.049.023-.025.023-.025.021-.024.02-.024.019-.024.018-.024.017-.024.015-.023.014-.024.013-.023.012-.023.01-.022.01-.023.008-.022.006-.022.006-.022.004-.022.004-.021.001-.021.001-.021v-4.153l-.077.054-.08.054-.083.053-.085.053-.087.053-.09.051-.093.051-.095.051-.097.05-.1.049-.102.048-.105.048-.106.048-.109.046-.111.046-.114.046-.115.044-.118.044-.12.043-.122.043-.124.042-.126.041-.128.04-.13.039-.132.039-.134.038-.135.037-.138.036-.139.036-.142.034-.143.034-.144.033-.147.032-.148.032-.15.03-.151.03-.153.028-.154.028-.156.027-.158.026-.159.024-.161.024-.162.023-.163.023-.165.021-.166.02-.167.019-.169.018-.169.017-.171.016-.173.015-.173.014-.175.013-.175.012-.177.01-.178.01-.179.009-.179.007-.181.006-.182.006-.182.004-.184.003-.184.001-.185.001-.185-.001-.184-.001-.184-.003-.182-.004-.182-.006-.181-.006-.179-.007-.179-.009-.178-.01-.176-.01-.176-.012-.175-.013-.173-.014-.172-.015-.171-.016-.17-.017-.169-.018-.167-.019-.166-.02-.165-.021-.163-.023-.162-.023-.161-.024-.159-.024-.157-.026-.156-.027-.155-.028-.153-.028-.151-.03-.15-.03-.148-.032-.146-.032-.145-.033-.143-.034-.141-.034-.14-.036-.137-.036-.136-.037-.134-.038-.132-.039-.13-.039-.128-.041-.126-.041-.124-.041-.122-.043-.12-.043-.117-.044-.116-.044-.113-.046-.112-.046-.109-.046-.106-.048-.105-.048-.102-.048-.1-.05-.097-.049-.095-.051-.093-.051-.09-.052-.087-.052-.085-.053-.083-.053-.08-.054-.077-.054v4.153zm8.74-8.179l-.257.004-.254.005-.25.008-.247.011-.244.012-.241.014-.237.016-.233.018-.231.021-.226.022-.224.023-.22.026-.216.027-.212.028-.21.031-.205.032-.202.033-.198.034-.194.036-.191.038-.187.038-.183.04-.179.041-.175.042-.172.043-.168.043-.163.045-.16.046-.155.046-.152.048-.148.048-.143.048-.139.049-.136.05-.131.05-.126.051-.123.051-.118.051-.114.052-.11.052-.106.052-.101.052-.096.052-.092.052-.088.052-.083.052-.079.052-.074.051-.07.052-.065.051-.06.05-.056.05-.051.05-.023.025-.023.024-.021.024-.02.025-.019.024-.018.024-.017.023-.015.024-.014.023-.013.023-.012.023-.01.023-.01.022-.008.022-.006.023-.006.021-.004.022-.004.021-.001.021-.001.021.001.021.001.021.004.021.004.022.006.021.006.023.008.022.01.022.01.023.012.023.013.023.014.023.015.024.017.023.018.024.019.024.02.025.021.024.023.024.023.025.051.05.056.05.06.05.065.051.07.052.074.051.079.052.083.052.088.052.092.052.096.052.101.052.106.052.11.052.114.052.118.051.123.051.126.051.131.05.136.05.139.049.143.048.148.048.152.048.155.046.16.046.163.045.168.043.172.043.175.042.179.041.183.04.187.038.191.038.194.036.198.034.202.033.205.032.21.031.212.028.216.027.22.026.224.023.226.022.231.021.233.018.237.016.241.014.244.012.247.011.25.008.254.005.257.004.26.001.26-.001.257-.004.254-.005.25-.008.247-.011.244-.012.241-.014.237-.016.233-.018.231-.021.226-.022.224-.023.22-.026.216-.027.212-.028.21-.031.205-.032.202-.033.198-.034.194-.036.191-.038.187-.038.183-.04.179-.041.175-.042.172-.043.168-.043.163-.045.16-.046.155-.046.152-.048.148-.048.143-.048.139-.049.136-.05.131-.05.126-.051.123-.051.118-.051.114-.052.11-.052.106-.052.101-.052.096-.052.092-.052.088-.052.083-.052.079-.052.074-.051.07-.052.065-.051.06-.05.056-.05.051-.05.023-.025.023-.024.021-.024.02-.025.019-.024.018-.024.017-.023.015-.024.014-.023.013-.023.012-.023.01-.023.01-.022.008-.022.006-.023.006-.021.004-.022.004-.021.001-.021.001-.021-.001-.021-.001-.021-.004-.021-.004-.022-.006-.021-.006-.023-.008-.022-.01-.022-.01-.023-.012-.023-.013-.023-.014-.023-.015-.024-.017-.023-.018-.024-.019-.024-.02-.025-.021-.024-.023-.024-.023-.025-.051-.05-.056-.05-.06-.05-.065-.051-.07-.052-.074-.051-.079-.052-.083-.052-.088-.052-.092-.052-.096-.052-.101-.052-.106-.052-.11-.052-.114-.052-.118-.051-.123-.051-.126-.051-.131-.05-.136-.05-.139-.049-.143-.048-.148-.048-.152-.048-.155-.046-.16-.046-.163-.045-.168-.043-.172-.043-.175-.042-.179-.041-.183-.04-.187-.038-.191-.038-.194-.036-.198-.034-.202-.033-.205-.032-.21-.031-.212-.028-.216-.027-.22-.026-.224-.023-.226-.022-.231-.021-.233-.018-.237-.016-.241-.014-.244-.012-.247-.011-.25-.008-.254-.005-.257-.004-.26-.001-.26.001z"/></symbol></defs><defs><symbol id="drawing-1-clock" width="24" height="24"><path transform="scale(.5)" d="M12 2c5.514 0 10 4.486 10 10s-4.486 10-10 10-10-4.486-10-10 4.486-10 10-10zm0-2c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12zm5.848 12.459c.202.038.202.333.001.372-1.907.361-6.045 1.111-6.547 1.111-.719 0-1.301-.582-1.301-1.301 0-.512.77-5.447 1.125-7.445.034-.192.312-.181.343.014l.985 6.238 5.394 1.011z"/></symbol></defs><defs><marker id="drawing-1-arrowhead" refX="7.9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M -1 0 L 10 5 L 0 10 z"/></marker></defs><defs><marker id="drawing-1-crosshead" markerWidth="15" markerHeight="8" orient="auto" refX="4" refY="4.5"><path fill="none" stroke="#000000" stroke-width="1pt" d="M 1,2 L 6,7 M 6,2 L 1,7" style="stroke-dasharray: 0, 0;"/></marker></defs><defs><marker id="drawing-1-filled-head" refX="15.5" refY="7" markerWidth="20" markerHeight="28" orient="auto"><path d="M 18,7 L9,13 L14,7 L9,1 Z"/></marker></defs><defs><marker id="drawing-1-sequencenumber" refX="15" refY="15" markerWidth="60" markerHeight="40" orient="auto"><circle cx="15" cy="15" r="6"/></marker></defs><g><rect x="446" y="305" fill="#EDF2AE" stroke="#666" width="247" height="56" class="note"/><text x="570" y="310" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="noteText" dy="1em" style="font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; font-size: 16px; font-weight: 400;"><tspan x="570">交付、接管、回看与 SSE</tspan></text><text x="570" y="328" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="noteText" dy="1em" style="font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; font-size: 16px; font-weight: 400;"><tspan x="570">重连再次检查</tspan></text></g><g><line x1="64" y1="417" x2="873" y2="417" class="loopLine"/><line x1="873" y1="417" x2="873" y2="645" class="loopLine"/><line x1="64" y1="645" x2="873" y2="645" class="loopLine"/><line x1="64" y1="417" x2="64" y2="645" class="loopLine"/><line x1="64" y1="559" x2="873" y2="559" class="loopLine" style="stroke-dasharray: 3, 3;"/><polygon points="64,417 114,417 114,430 105.6,437 64,437" class="labelBox"/><text x="89" y="430" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="labelText" style="font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; font-size: 16px; font-weight: 400;">alt</text><text x="493.5" y="435" text-anchor="middle" class="loopText" style="font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; font-size: 16px; font-weight: 400;"><tspan x="493.5">[仍可读]</tspan></text><text x="468.5" y="577" text-anchor="middle" class="loopText" style="font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; font-size: 16px; font-weight: 400;">[已撤权或核验服务不可用]</text></g><text x="363" y="80" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; font-size: 16px; font-weight: 400;">查找或读取某段资料</text><line x1="264" y1="111" x2="461" y2="111" class="messageLine0" stroke-width="2" stroke="none" marker-end="url(#drawing-1-arrowhead)" style="fill: none;"/><text x="568" y="126" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; font-size: 16px; font-weight: 400;">本轮快照与当前身份</text><line x1="466" y1="157" x2="670" y2="157" class="messageLine0" stroke-width="2" stroke="none" marker-end="url(#drawing-1-arrowhead)" style="fill: none;"/><text x="571" y="172" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; font-size: 16px; font-weight: 400;">授权段落、定位和版本</text><line x1="673" y1="203" x2="469" y2="203" class="messageLine1" stroke-width="2" stroke="none" marker-end="url(#drawing-1-arrowhead)" style="stroke-dasharray: 3, 3; fill: none;"/><text x="662" y="218" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; font-size: 16px; font-weight: 400;">按 Run 与 epoch 登记观察和来源</text><line x1="466" y1="249" x2="858" y2="249" class="messageLine0" stroke-width="2" stroke="none" marker-end="url(#drawing-1-arrowhead)" style="fill: none;"/><text x="366" y="264" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; font-size: 16px; font-weight: 400;">可继续查询的观察</text><line x1="464" y1="295" x2="267" y2="295" class="messageLine1" stroke-width="2" stroke="none" marker-end="url(#drawing-1-arrowhead)" style="stroke-dasharray: 3, 3; fill: none;"/><text x="568" y="376" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; font-size: 16px; font-weight: 400;">批量复核所依赖的资料</text><line x1="466" y1="407" x2="670" y2="407" class="messageLine0" stroke-width="2" stroke="none" marker-end="url(#drawing-1-arrowhead)" style="fill: none;"/><text x="662" y="467" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; font-size: 16px; font-weight: 400;">读取并校验可展示结果</text><line x1="466" y1="498" x2="858" y2="498" class="messageLine0" stroke-width="2" stroke="none" marker-end="url(#drawing-1-arrowhead)" style="fill: none;"/><text x="272" y="513" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; font-size: 16px; font-weight: 400;">已核经营意见</text><line x1="464" y1="544" x2="79" y2="544" class="messageLine1" stroke-width="2" stroke="none" marker-end="url(#drawing-1-arrowhead)" style="stroke-dasharray: 3, 3; fill: none;"/><text x="272" y="604" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-family: -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; font-size: 16px; font-weight: 400;">隐藏受限结果，提示重新核实</text><line x1="464" y1="635" x2="79" y2="635" class="messageLine1" stroke-width="2" stroke="none" marker-end="url(#drawing-1-arrowhead)" style="stroke-dasharray: 3, 3; fill: none;"/></svg></div><details class="source-details"><summary>查看 Mermaid 源码</summary><div class="code-block" id="code-1"><div class="code-bar"><span>撤权如何影响后续读取 · 图表源 · text / 19 LINES</span><div class="code-tools"><button type="button" data-copy="1">复制代码</button></div></div><pre id="code-1-pre" tabindex="0"><code><span class="code-line"><span class="line-num" aria-hidden="true">1</span><span class="line-content">sequenceDiagram</span></span><span class="code-line"><span class="line-num" aria-hidden="true">2</span><span class="line-content">    participant U as 经营者</span></span><span class="code-line"><span class="line-num" aria-hidden="true">3</span><span class="line-content">    participant M as 模型</span></span><span class="code-line"><span class="line-num" aria-hidden="true">4</span><span class="line-content">    participant A as Agent</span></span><span class="code-line"><span class="line-num" aria-hidden="true">5</span><span class="line-content">    participant W as Web 来源与成员</span></span><span class="code-line"><span class="line-num" aria-hidden="true">6</span><span class="line-content">    participant P as 私有运行状态</span></span><span class="code-line"><span class="line-num" aria-hidden="true">7</span><span class="line-content">    M-&gt;&gt;A: 查找或读取某段资料</span></span><span class="code-line"><span class="line-num" aria-hidden="true">8</span><span class="line-content">    A-&gt;&gt;W: 本轮快照与当前身份</span></span><span class="code-line"><span class="line-num" aria-hidden="true">9</span><span class="line-content">    W--&gt;&gt;A: 授权段落、定位和版本</span></span><span class="code-line"><span class="line-num" aria-hidden="true">10</span><span class="line-content">    A-&gt;&gt;P: 按 Run 与 epoch 登记观察和来源</span></span><span class="code-line"><span class="line-num" aria-hidden="true">11</span><span class="line-content">    A--&gt;&gt;M: 可继续查询的观察</span></span><span class="code-line"><span class="line-num" aria-hidden="true">12</span><span class="line-content">    Note over A,W: 交付、接管、回看与 SSE 重连再次检查</span></span><span class="code-line"><span class="line-num" aria-hidden="true">13</span><span class="line-content">    A-&gt;&gt;W: 批量复核所依赖的资料</span></span><span class="code-line"><span class="line-num" aria-hidden="true">14</span><span class="line-content">    alt 仍可读</span></span><span class="code-line"><span class="line-num" aria-hidden="true">15</span><span class="line-content">        A-&gt;&gt;P: 读取并校验可展示结果</span></span><span class="code-line"><span class="line-num" aria-hidden="true">16</span><span class="line-content">        A--&gt;&gt;U: 已核经营意见</span></span><span class="code-line"><span class="line-num" aria-hidden="true">17</span><span class="line-content">    else 已撤权或核验服务不可用</span></span><span class="code-line"><span class="line-num" aria-hidden="true">18</span><span class="line-content">        A--&gt;&gt;U: 隐藏受限结果，提示重新核实</span></span><span class="code-line"><span class="line-num" aria-hidden="true">19</span><span class="line-content">    end</span></span></code></pre></div></details></figure><ul>
+<li>使用 <code>context_runtime/source_access.py</code> 的 <code>record_source</code>、<code>allows</code>、<code>require_run_sources</code>，扩展 <code>document</code> 引用及批量 Web 复核。搜索结果只要含片段，就先登记全部可见段落。原文和派生结果的依赖并入本 Run。若来源登记失败，本次内容不进入模型或流。对可重放的提交，沿用 Run 锁、epoch fence 与执行幂等键，事务完成后再投影工具结果。</li>
+<li>原文、观察值、候选片段和模型中间文本走已有私有载荷。公共运行事件只含阶段、无敏感信息的状态及可重验引用。工作区启用多源交付后，敏感正文缓冲至校验和授权完成。Web 用当前主体 <code>no-store</code> 投影视图。覆盖普通消息、SSE 增量/重连、会话续问重新组装上下文、文件下载、执行回执与讲师回放。日志只写引用、耗时、状态与用量。</li>
+<li>默认整份受影响的报告隐藏，避免余款等派生值间接泄露报价。授权恢复后仍须验证绑定、版本和摘要。可用当前权限新开 Run 生成部分报告。服务超时返回暂不可核验。新版本重跑不覆盖旧 Run。撤权约束作用于之后的每次交付与读取。</li>
+<li>来源集合保存在助手消息上。普通 Run 使用 64 个计数引用上限；搜索 Run 的 MAX_SEARCH_REFS 同步骤数、单步工具数一起计算。去重、剔除单独重验的默认术语后再计数；搜索来源超限写入 source_set_blocked，回看时保持封闭。</li>
+</ul>
+<h2 id="section-5">6. 同一条查询行怎样进入两期比较表</h2>
+<p>工作区可在 Run 快照选择 <code>comparison_brief</code>。每个比较项提供经营范围名称和两格来源，每格包含 evidenceId、从零起的 row 和可用的 column。Agent 从本次 Run 重开回执，用 leaf 检查有效值、行列可追溯性及单位，随后计算本期减基期、差额除基期。基期为零时显示“基期为零”。模型无法通过修改草稿里的金额改变这张表。</p>
+<p>华东本次合计行对应 100 万元和 88 万元，环比 −12%。模型还提交 interpretation、action、gap 三种说明，每条关联已读原段或实际查询行。表格项登记为 supported，文字说明保留来源并以 insufficient 状态展现；由审核者判断经营解释。所有角标沿用同一套发布、重验和回看接口。</p>
+<h3 id="section-6">管理员修改或停用分段后</h3>
+<p>文档引用携带文号、版本、分段标识和正文哈希。Web 在当前工作区重新检查知识库、文件、分段开关及哈希，编辑正文后旧引用退出可用范围。新一轮可取得修改后正文的引用。关闭分段会同时影响关键词检索、向量检索、相邻分段回读和交付时的引用复查。用户仍可在管理页查看停用分段及上传的原文件。</p>
+</article></div>
+    </main>
+    <footer class="footer">
+      <span>Compass · 第 23 课 · 技术方案</span><span>单文件 · 离线阅读 <a href="#top">返回顶部 ↑</a></span>
+    </footer>
+    <dialog id="search-dialog" aria-labelledby="search-title">
+      <div class="dialog-header">
+        <h2 id="search-title">检索设计与代码</h2>
+        <button class="close-button" type="button" data-close aria-label="关闭检索">×</button>
+      </div>
+      <div class="search-field">
+        <input
+          id="search-input"
+          aria-label="搜索章节、类型或设计内容"
+          placeholder="输入章节、类型或关键词…"
+          autocomplete="off"
+        />
+      </div>
+      <div id="search-results"></div>
+      <p class="search-meta" id="search-meta" role="status"></p>
+    </dialog>
+    <dialog id="diagram-dialog" aria-labelledby="zoom-title">
+      <div class="dialog-header">
+        <h2 id="zoom-title">设计图</h2>
+        <button class="close-button" type="button" data-close aria-label="关闭图表">×</button>
+      </div>
+      <div class="zoom-toolbar">
+        <button class="plain-button" type="button" data-zoom="out" aria-label="缩小图表">−</button>
+        <output id="zoom-level" aria-label="缩放比例">100%</output>
+        <button class="plain-button" type="button" data-zoom="in" aria-label="放大图表">+</button>
+        <button class="plain-button" type="button" data-zoom="fit">适应窗口</button>
+        <button class="plain-button" type="button" data-zoom="actual">原始尺寸</button>
+        <button class="plain-button" type="button" id="download-svg">下载 SVG</button>
+        <span class="zoom-hint">可横向、纵向滚动 · Esc 关闭</span>
+      </div>
+      <div id="zoom-viewport" tabindex="0" aria-label="图表滚动区域">
+        <div id="zoom-content"></div>
+      </div>
+    </dialog>
+    <div class="toast" role="status" aria-live="polite"></div>
+    <!-- prettier-ignore -->
+    <script type="application/json" id="document-data">{"search":[{"id":"section-0","title":"1. 从一次工具调用追到一句结论","text":"工具批次签收和模型草稿提交是两处强制检查。两处的调用点、输入、返回主模型的反馈和普通 Chat 交付路径见[Verify 接入](#publication-2)。 经理看到“建议选 6,000 元体验档”。点开角标后，可以看到对方的档位报价、适用的试投条款和上次纪要确认的挂账金额。三种材料各自需要当前主体可读，任意一项变化都可能改变这句建议。 flowchart LR\n    Call[\"Tool call\u003cbr/>stepId / callId\"] --> Obs[\"Evidence\u003cbr/>本轮结果、版本、行或原文段\"]\n    Obs --> Claim[\"Claim\u003cbr/>断言、状态、支撑与反证\"]\n    Claim --> Context[\"回答上下文\u003cbr/>适用口径、事实、缺口、引用\"]\n    Context --> Line[\"模型选断言\u003cbr/>组织报告语句\"]\n    Line --> Gate[\"程序校验\u003cbr/>范围、状态、取值及权限\"]\n    Gate --> Cite[\"角标与详情\u003cbr/>回到原始位置\"]\n 记录 由谁产生、存在哪里 能解决什么问题 工具回执 dispatcher 确认执行的 Run、step、call，适配器给出 `resultId` 或已读文档引用、质量状态及快照 区分实际执行、缓存复用、模型候选和来源失败 Evidence Agent 为被签收的结果签发本 Run 的 `evidenceId`。保留来源类别、原始版本、定位、内容摘要哈希、业务窗、K、权限引用和质量状态 查明某次观察的确切含义。同一原件被多个工具、纪要转述或重试再次返回时保留共同来源，独立性只算一次 Claim 模型提出原子断言或修订，服务端分配 `claimId/revision`，保存对象、谓词、期间、值/单位、用途、依赖断言与证据边 每一项金额、条件、结论或假设都能单独检查。证据边标为取值、适用规则、计算输入、支撑或反证 发布清单 成功交付时服务端将最终断言版本、全部父引用及正文位置与 `answerRevision` 固定 同一份历史答案的编号、证据和正文对应。新报价或重新分析产生新 Run **存储落点。** Agent 通过 save_private / read_private 在现有 Run 内保存 search/evidence、search/batch 和 search/answer 私有记录。verify_batch 在持租事务中签收有序回执。publish_citations 按输出修订保存正文摘要、角标和来源详情。回看时核对当前主体权限与正文摘要。"},{"id":"section-1","title":"2. 三道校验与证据适用范围","text":"**第一道在工具适配层，确认收到了什么。** 校验 scope、来源修订、原始 locator、K、业务期间、单位/粒度、齐备状态、截断和摘要。正式值必须有实际执行回执，指标定义只说明怎么算。SQL 预览标注 truncation 和可见行界限，包含整表统计的断言需完整聚合。明细中的原始字段回到授权实体键或有可核筛选的聚合，常数列、来源不可追或省略相关限制的计算只作查找线索。候选摘要可用于找文号，制度、档位和截止时间的事实取已读原段、完整表头及限制。输入中可能出现的操作指令按资料正文处理。 **第二道在跨来源对齐时，确认是否在谈同一件事。** 先对齐租户、组织/部门、数据 release、工作区、对象、销售地/履约地、渠道、单位、时间窗和经营截止。正式值再对齐指标身份、版本与归期。口径或粒度不同则保留两项。对齐后仍相反且同样适用的原始记录标成冲突，保留双方。优先来源按断言类别确定，规则在 Agent 适配与已发布语义契约中版本化。单项正式回执齐备即可支持一个简单取值。 断言类别 可以采用的主来源 能发表的范围 正式经营指标 / 定义 已发布的语义绑定执行回执 / 已批准定义 指定对象、粒度、单位和期间内的值 / 口径。单独的定义或周报数字不作正式取值 已发生的交易、锁库、收货 授权事实行，或按其键和窗口可复算的明细聚合 单据的动作、数量、日期或该窗口的观察。计划、通知、调拨和采购实收各有独立含义 规则、余额、可订档位 在期的制度条款 / 当时获权的纪要原文 / 当期商业原函 分别支持试投资格、挂账约定、整档金额与时限。纪要中的旧经营解释可作为假设 派生值 / 建议 / 解释 已支持的父断言及计算、适用条款和满足条件的回执 金额、比较、差额或带前提的行动建议。相关性和历史类比留作假设，付费效果缺样本时列入待验证 **第三道在交付前，检查句子和引用。** 模型可把复合句拆成“短缺率恢复”“已支付订单恢复”“恢复由付费投放引起”三个断言。运行侧根据证据边校验各自的覆盖范围。自由文本语义匹配只够提出候选，发布的确定陈述优先由结构化事实或真实原文生成。首版处理精确取值、可复算关系、原文限定和冲突，不设置整库统一置信分，也不单独调用模型给每条材料打分。 Claim 状态 判定 在最终回答里的位置 `supported` 证据适用、当前可读、必要字段齐备，已按业务类型核验 已核事实或满足前提的建议 `refuted` 同一范围内有经核实的相反事实，原断言被否定 以已支持的相反断言纠正用户前提，保留原断言与反证关系。如“三个月一直下跌”由三个月回执纠正 `insufficient` 缺关键材料、正式回执、完整样本或适用条款 标作假设/待补项，并写明影响。资料不可读时只展示允许公开的缺口 `contested` 在同一比较坐标上仍有两条适用且互相矛盾的来源 在有权范围内说明分歧，相关签批条件保持待核"},{"id":"section-2","title":"3. 跨来源计算","text":"现有 `context_runtime/delivery.py` 的 `DeliveryDraft` 和 `_check_measurements` 核验结构化查询里的数值。主案例的余额来自纪要，比例来自制度，档位来自报价。**8,000 元和 14,000 元都是跨来源派生值。** 如果只验证“这些数字在上下文出现过”，换一张 9,000 元的报价仍可能输出旧建议。 断言格式 SearchDraft 使用 targets、claimProposals、answerBlocks，以本轮观察为叶子；comparison_brief 格式另见第六节。数据叶子指定回执、列/行键、单位、范围和状态。文档叶子指定已读版本、段落、表行/字段或原文字符范围，校验原文、数值、币种、时区和语义标签。模型只提交引用及有限的计算表达式。校验器从私有观察重新读取值，按有界表达式验证“余额 × 比例”“余额 − 购买额”“上限内的最高完整档”“上线后首个工作日”。文字条款和建议附相应段落及资格判断依据。缺少正式回执、必要输入或可适用条款时，建议状态降为待核。选中档位、建议金额和余款须引用同一报价与同一余额，段落中的所有可选档由服务端整体读取。日历只对有权原文覆盖的日期作判定，跨出覆盖范围给出缺口。 校验层 通过条件 失败后的交付 经营取值 正式口径带本 Run 的已发布版本、执行回执、齐备状态、对象与窗口。明细观察保留其粒度 已核实的明细可以展示，签批所需的正式指标列为待补 计算与选择 金额按整数分，比例按 Decimal，无样本为未知。档位来自完整报价表且满足上限，资格比较引用适用条款 明确缺口或暂缓。计算错误可用现有交付修复机会重写，仍受原预算限制 正文投影 建议、表格、摘要、标题与附件中的关键数字和日期都从已核 claim/既有已核 view 渲染，事实、解释、收益假设分开 只能投影已核数字与允许公开的缺口，防止正文夹带未经核验的金额。缺少行动依据时抑制建议购买 依赖关系 每条派生值携带所有叶子的来源。型别、币种、主体、业务对象与时间关系满足表达式契约 关系不匹配时不出数。只对未启用新模式的旧 Run 保留原草稿契约 通用校验器负责机械可验证的计算、取值与已声明条件。由模型识别该决策受哪些条款约束，把条款、事实及结论关联。其完整性由金标准、删源与反事实联合验收。生产代码不解释一部预装的复投办法。课堂呈现意见供经理签批，不连接采购或外发工具。 经理点开三句话时，应看到不同的计算和来源。下表中的文号来自课程原件，运行时记录实际读到的修订、段落和行键。 正文里点开哪句话 详情应展开什么 什么变化会改变这句话 “内部上限为 8,000 元” 纪要 H-0912 待办 3 的余额 20,000 元，以及制度 K-17 第 2 版的试投比例 40%。按分复算乘积 单独更换媒介报价时上限仍为 8,000 元 “建议订 6,000 元体验档” 上限、已核净额与履约资格、当前库存，以及 E-1009 修订 2 的完整报价表。对两个整档分别比较额度，再核对条款的选择要求 体验档换成 9,000 元，两个整档都不符合，意见改为暂缓 “订后保留 14,000 元” H-0912 的余额减去同一份建议实际选中的档位金额。角标沿购买额回到完整报价及其父断言 换价暂缓时保留 20,000 元。报价权限被收回后，再读原报告也会隐藏依赖该函的余款"},{"id":"section-3","title":"4. 回答上下文和角标由谁生成","text":"生成前由 Context Runtime 提供四组内容。业务口径含组织、对象、时区、期间、K 和指标版本。已核事实含稳定断言 ID、允许展示的取值及必要原句。假设与缺口含反证、冲突对象、缺少什么以及它对行动的影响。候选引用清单只含当前可用的叶子及其定位。需要比较的坏消息和反证与正向事实拥有相同的保留优先级。 模型草稿 服务端的检查与动作 在 answerBlocks 中选用本轮提案的局部键，服务端为选中的结果签发 claimId 和 revision 严格校验角色/用途、同一 Run/租户/工作区、修订、依赖闭包、当前 ACL、版本、有效期和质量 引用一行报表或一段原文，指定它支撑哪项断言 用真实 locator 重开对应行列或段落，校验范围、币种、时点、原文与筛选，复算金额和派生值。不同用途的同一数字不能相互替代 确定表达顺序，可将一个句子关联多个断言 校验所有关键陈述都有断言。数值和已确认的事实文字由已核对象投影，假设由带标注的独立段落呈现。任意新增的事实句、Markdown 链接或自造角标不直接发布 校验失败 向主 Agent 回传具体问题，如“该值只覆盖调拨行”或“缺少完整报价”。有合法取证空间可回 query/analyze，再次生成仍共享原预算。仅格式问题复用一次已有修复机会。穷尽路径时交付已核部分和缺口 服务端按最终正文首次使用的已核断言修订编号。同一断言复用编号，一个角标可关联多条原始引用，先按稳定键去重。把清单、受保护正文与其摘要按同一 Run 和输出 revision 原子保存。例如，上限 8,000 元的角标展开“纪要余额 × 有效制度比例”，余款 14,000 元的角标另展开“余额 − 已选整档”。教学页出现的编号为示意，生产编号始终由本次完成的清单生成。 **点击与兼容契约。** 既有 `MessageContent.text` 和 `RunCompleted.finalAnswer` 保留可读正文，旧客户端显示普通角标。Agent 的 `api/sessions.py` 提供两个只读方法，由 Web BFF 认证转发、校验 DTO 并返回 `no-store`。 Agent GET 端点 授权返回 `/v1/analysis/runs/{run_id}/citations` 已发表答案的 `messageId, revision, textDigest, anchors[]`。每个 anchor 含 `citationId, ordinal, start, end`。偏移以原始 Markdown 文本 Unicode 码点计数、左闭右开。旧答案无清单时返回空列表 `/v1/analysis/runs/{run_id}/citations/{citation_id}` 当前有权的断言、来源名称、制度或指标版本、查询范围、行/段定位、必要原文或值、计算和验证状态。仅给已发表清单中的条目。未知、跨 Run 或撤权统一为不可查看，省略标题与片段。验权服务暂不可用时不给缓存详情 Web 将 BFF 的 `analysis/runs/{id}/citations` 两条路径接入已有分析模块。以服务端正文摘要、revision 与实际角标范围同时匹配为前提，按码点到浏览器文本位置的映射把对应角标显示为可用键盘打开的按钮。普通正文中的“[1]”维持原文。片段和来源标题使用安全文本渲染，模型无需构造 URL。详情复用现有弹层与焦点恢复。回答流只在结束并校验后提供可点击引用，新旧端可同时读原有字段。从 FastAPI 契约源生成 OpenAPI、Agent/Web 类型及 BFF 运行时校验。"},{"id":"section-4","title":"5. 保存、撤权与回看","text":"sequenceDiagram\n    participant U as 经营者\n    participant M as 模型\n    participant A as Agent\n    participant W as Web 来源与成员\n    participant P as 私有运行状态\n    M->>A: 查找或读取某段资料\n    A->>W: 本轮快照与当前身份\n    W-->>A: 授权段落、定位和版本\n    A->>P: 按 Run 与 epoch 登记观察和来源\n    A-->>M: 可继续查询的观察\n    Note over A,W: 交付、接管、回看与 SSE 重连再次检查\n    A->>W: 批量复核所依赖的资料\n    alt 仍可读\n        A->>P: 读取并校验可展示结果\n        A-->>U: 已核经营意见\n    else 已撤权或核验服务不可用\n        A-->>U: 隐藏受限结果，提示重新核实\n    end\n 使用 `context_runtime/source_access.py` 的 `record_source`、`allows`、`require_run_sources`，扩展 `document` 引用及批量 Web 复核。搜索结果只要含片段，就先登记全部可见段落。原文和派生结果的依赖并入本 Run。若来源登记失败，本次内容不进入模型或流。对可重放的提交，沿用 Run 锁、epoch fence 与执行幂等键，事务完成后再投影工具结果。 原文、观察值、候选片段和模型中间文本走已有私有载荷。公共运行事件只含阶段、无敏感信息的状态及可重验引用。工作区启用多源交付后，敏感正文缓冲至校验和授权完成。Web 用当前主体 `no-store` 投影视图。覆盖普通消息、SSE 增量/重连、会话续问重新组装上下文、文件下载、执行回执与讲师回放。日志只写引用、耗时、状态与用量。 默认整份受影响的报告隐藏，避免余款等派生值间接泄露报价。授权恢复后仍须验证绑定、版本和摘要。可用当前权限新开 Run 生成部分报告。服务超时返回暂不可核验。新版本重跑不覆盖旧 Run。撤权约束作用于之后的每次交付与读取。 来源集合保存在助手消息上。普通 Run 使用 64 个计数引用上限；搜索 Run 的 MAX_SEARCH_REFS 同步骤数、单步工具数一起计算。去重、剔除单独重验的默认术语后再计数；搜索来源超限写入 source_set_blocked，回看时保持封闭。"},{"id":"section-5","title":"6. 同一条查询行怎样进入两期比较表","text":"工作区可在 Run 快照选择 `comparison_brief`。每个比较项提供经营范围名称和两格来源，每格包含 evidenceId、从零起的 row 和可用的 column。Agent 从本次 Run 重开回执，用 leaf 检查有效值、行列可追溯性及单位，随后计算本期减基期、差额除基期。基期为零时显示“基期为零”。模型无法通过修改草稿里的金额改变这张表。 华东本次合计行对应 100 万元和 88 万元，环比 −12%。模型还提交 interpretation、action、gap 三种说明，每条关联已读原段或实际查询行。表格项登记为 supported，文字说明保留来源并以 insufficient 状态展现；由审核者判断经营解释。所有角标沿用同一套发布、重验和回看接口。"},{"id":"section-6","title":"管理员修改或停用分段后","text":"文档引用携带文号、版本、分段标识和正文哈希。Web 在当前工作区重新检查知识库、文件、分段开关及哈希，编辑正文后旧引用退出可用范围。新一轮可取得修改后正文的引用。关闭分段会同时影响关键词检索、向量检索、相邻分段回读和交付时的引用复查。用户仍可在管理页查看停用分段及上传的原文件。"},{"id":"code-0","title":"从工具回执到用户角标 · 图表源","text":"flowchart LR\n    Call[\"Tool call\u003cbr/>stepId / callId\"] --> Obs[\"Evidence\u003cbr/>本轮结果、版本、行或原文段\"]\n    Obs --> Claim[\"Claim\u003cbr/>断言、状态、支撑与反证\"]\n    Claim --> Context[\"回答上下文\u003cbr/>适用口径、事实、缺口、引用\"]\n    Context --> Line[\"模型选断言\u003cbr/>组织报告语句\"]\n    Line --> Gate[\"程序校验\u003cbr/>范围、状态、取值及权限\"]\n    Gate --> Cite[\"角标与详情\u003cbr/>回到原始位置\"]\n"},{"id":"code-1","title":"撤权如何影响后续读取 · 图表源","text":"sequenceDiagram\n    participant U as 经营者\n    participant M as 模型\n    participant A as Agent\n    participant W as Web 来源与成员\n    participant P as 私有运行状态\n    M->>A: 查找或读取某段资料\n    A->>W: 本轮快照与当前身份\n    W-->>A: 授权段落、定位和版本\n    A->>P: 按 Run 与 epoch 登记观察和来源\n    A-->>M: 可继续查询的观察\n    Note over A,W: 交付、接管、回看与 SSE 重连再次检查\n    A->>W: 批量复核所依赖的资料\n    alt 仍可读\n        A->>P: 读取并校验可展示结果\n        A-->>U: 已核经营意见\n    else 已撤权或核验服务不可用\n        A-->>U: 隐藏受限结果，提示重新核实\n    end\n"}],"codes":["flowchart LR\n    Call[\"Tool call\u003cbr/>stepId / callId\"] --> Obs[\"Evidence\u003cbr/>本轮结果、版本、行或原文段\"]\n    Obs --> Claim[\"Claim\u003cbr/>断言、状态、支撑与反证\"]\n    Claim --> Context[\"回答上下文\u003cbr/>适用口径、事实、缺口、引用\"]\n    Context --> Line[\"模型选断言\u003cbr/>组织报告语句\"]\n    Line --> Gate[\"程序校验\u003cbr/>范围、状态、取值及权限\"]\n    Gate --> Cite[\"角标与详情\u003cbr/>回到原始位置\"]\n","sequenceDiagram\n    participant U as 经营者\n    participant M as 模型\n    participant A as Agent\n    participant W as Web 来源与成员\n    participant P as 私有运行状态\n    M->>A: 查找或读取某段资料\n    A->>W: 本轮快照与当前身份\n    W-->>A: 授权段落、定位和版本\n    A->>P: 按 Run 与 epoch 登记观察和来源\n    A-->>M: 可继续查询的观察\n    Note over A,W: 交付、接管、回看与 SSE 重连再次检查\n    A->>W: 批量复核所依赖的资料\n    alt 仍可读\n        A->>P: 读取并校验可展示结果\n        A-->>U: 已核经营意见\n    else 已撤权或核验服务不可用\n        A-->>U: 隐藏受限结果，提示重新核实\n    end\n"]}</script>
+    <!-- prettier-ignore -->
+    <script>(() => {
+  "use strict";
+  const $ = (selector, root = document) => root.querySelector(selector);
+  const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+  const { search: searchIndex, codes } = JSON.parse($("#document-data").textContent);
+  const toast = $(".toast");
+  let toastTimer;
+  function announce(message) {
+    toast.textContent = message;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toast.textContent = "";
+    }, 2400);
+  }
+  async function copy(text) {
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const field = document.createElement("textarea");
+      field.value = text;
+      field.style.cssText = "position:fixed;left:-10000px;top:0";
+      document.body.append(field);
+      field.select();
+      const succeeded = document.execCommand("copy");
+      field.remove();
+      if (!succeeded) {
+        announce("请选中代码后复制");
+        return;
+      }
+    }
+    announce("代码已复制");
+  }
+  $$("[data-copy]").forEach((button) =>
+    button.addEventListener("click", () => {
+      void copy(codes[Number(button.dataset.copy)]);
+    }),
+  );
+  $$("[data-expand]").forEach((button) =>
+    button.addEventListener("click", () => {
+      const expanded = button.closest(".code-block").classList.toggle("expanded");
+      button.textContent = expanded ? "收起代码" : "展开代码";
+      button.setAttribute("aria-expanded", String(expanded));
+    }),
+  );
+  function reveal(id) {
+    const node = document.getElementById(id);
+    if (!node) return;
+    let parent = node.parentElement;
+    while (parent) {
+      if (parent.tagName === "DETAILS") parent.open = true;
+      parent = parent.parentElement;
+    }
+    const code = node.closest(".code-block");
+    if (code) {
+      code.classList.add("expanded");
+      const expand = $("[data-expand]", code);
+      if (expand) {
+        expand.textContent = "收起代码";
+        expand.setAttribute("aria-expanded", "true");
+      }
+    }
+    node.scrollIntoView({ block: "start" });
+    if (!node.hasAttribute("tabindex")) node.setAttribute("tabindex", "-1");
+    node.focus({ preventScroll: true });
+  }
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest('a[href^="#"]');
+    if (!link) return;
+    const id = decodeURIComponent(link.hash.slice(1));
+    if (!document.getElementById(id)) return;
+    event.preventDefault();
+    $$(".mobile-nav[open]").forEach((details) => {
+      details.open = false;
+    });
+    history.pushState(null, "", "#" + id);
+    reveal(id);
+  });
+  window.addEventListener("hashchange", () => reveal(decodeURIComponent(location.hash.slice(1))));
+  if (location.hash)
+    requestAnimationFrame(() => reveal(decodeURIComponent(location.hash.slice(1))));
+
+  const searchDialog = $("#search-dialog");
+  const searchInput = $("#search-input");
+  const results = $("#search-results");
+  function search() {
+    const query = searchInput.value.trim().toLowerCase();
+    const words = query.split(/\s+/).filter(Boolean);
+    const matches = searchIndex
+      .filter((item) =>
+        words.every((word) => (item.title + " " + item.text).toLowerCase().includes(word)),
+      )
+      .sort(
+        (a, b) =>
+          Number(b.title.toLowerCase().includes(query)) -
+          Number(a.title.toLowerCase().includes(query)),
+      );
+    results.replaceChildren();
+    for (const item of matches.slice(0, 25)) {
+      const a = document.createElement("a");
+      a.className = "search-result";
+      a.href = "#" + item.id;
+      const title = document.createElement("strong");
+      title.textContent = item.title;
+      const description = document.createElement("p");
+      const index = query ? item.text.toLowerCase().indexOf(query) : 0;
+      const start = Math.max(0, index - 24);
+      description.textContent = item.text.slice(start, start + 110);
+      a.append(title, description);
+      a.addEventListener("click", () => searchDialog.close());
+      results.append(a);
+    }
+    $("#search-meta").textContent = query
+      ? "找到 " + matches.length + " 项" + (matches.length > 25 ? "，显示前 25 项" : "")
+      : "输入章节、字段或关键词 · Tab 选择结果 · Enter 跳转";
+  }
+  $$("[data-search]").forEach((button) =>
+    button.addEventListener("click", () => {
+      searchDialog.showModal();
+      search();
+      searchInput.focus();
+    }),
+  );
+  searchInput.addEventListener("input", search);
+  searchInput.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      $(".search-result", results)?.focus();
+    }
+    if (event.key === "Enter") $(".search-result", results)?.click();
+  });
+  document.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      if (!searchDialog.open) searchDialog.showModal();
+      search();
+      searchInput.focus();
+    }
+  });
+  $$("[data-close]").forEach((button) =>
+    button.addEventListener("click", () => button.closest("dialog").close()),
+  );
+  $$("dialog").forEach((dialog) =>
+    dialog.addEventListener("click", (event) => {
+      if (event.target !== dialog) return;
+      const bounds = dialog.getBoundingClientRect();
+      if (
+        event.clientX < bounds.left ||
+        event.clientX > bounds.right ||
+        event.clientY < bounds.top ||
+        event.clientY > bounds.bottom
+      )
+        dialog.close();
+    }),
+  );
+
+  const diagramDialog = $("#diagram-dialog");
+  const zoomContent = $("#zoom-content");
+  const zoomViewport = $("#zoom-viewport");
+  let diagramSource,
+    diagramName,
+    svgWidth = 1,
+    svgHeight = 1,
+    scale = 1;
+  function setScale(next) {
+    scale = Math.max(0.07, Math.min(3, next));
+    const svg = $("svg", zoomContent);
+    if (!svg) return;
+    svg.style.width = svgWidth * scale + "px";
+    svg.style.height = svgHeight * scale + "px";
+    zoomContent.style.width = svgWidth * scale + "px";
+    $("#zoom-level").textContent = Math.round(scale * 100) + "%";
+  }
+  function fit() {
+    setScale(
+      Math.min(
+        (zoomViewport.clientWidth - 64) / svgWidth,
+        (zoomViewport.clientHeight - 64) / svgHeight,
+      ),
+    );
+  }
+  $$("[data-diagram]").forEach((button) =>
+    button.addEventListener("click", () => {
+      const figure = button.closest(".diagram");
+      const original = $(".diagram-stage > svg", figure);
+      diagramSource = original.outerHTML;
+      diagramName = figure.dataset.title;
+      $("#zoom-title").textContent = diagramName;
+      const svg = original.cloneNode(true);
+      // Namespace the copy so SVG marker references do not collide with the source.
+      const nodes = [svg, ...$$("*", svg)];
+      const ids = new Map(
+        nodes.filter((node) => node.id).map((node) => [node.id, "zoom-" + node.id]),
+      );
+      for (const node of nodes) {
+        for (const attribute of [...node.attributes]) {
+          let value = attribute.value.replace(/url\(['"]?#([^)'"]+)['"]?\)/g, (match, id) =>
+            ids.has(id) ? `url(#${ids.get(id)})` : match,
+          );
+          if (attribute.name === "id") value = ids.get(value);
+          else if (/^(?:xlink:)?href$/.test(attribute.name) && ids.has(value.slice(1)))
+            value = "#" + ids.get(value.slice(1));
+          else if (/^aria-(?:labelledby|describedby)$/.test(attribute.name))
+            value = value
+              .split(/\s+/)
+              .map((id) => ids.get(id) ?? id)
+              .join(" ");
+          node.setAttribute(attribute.name, value);
+        }
+        if (node.localName === "style")
+          node.textContent = node.textContent.replace(/#([A-Za-z_][\w:-]*)/g, (match, id) =>
+            ids.has(id) ? "#" + ids.get(id) : match,
+          );
+      }
+      zoomContent.replaceChildren(svg);
+      const viewBox = original.viewBox.baseVal;
+      svgWidth = viewBox.width;
+      svgHeight = viewBox.height;
+      diagramDialog.showModal();
+      fit();
+      zoomViewport.scrollTop = 0;
+      zoomViewport.scrollLeft = 0;
+    }),
+  );
+  $$("[data-zoom]").forEach((button) =>
+    button.addEventListener("click", () => {
+      const mode = button.dataset.zoom;
+      if (mode === "fit") fit();
+      else setScale(mode === "actual" ? 1 : scale * (mode === "in" ? 1.3 : 1 / 1.3));
+    }),
+  );
+  $("#download-svg").addEventListener("click", () => {
+    if (!diagramSource) return;
+    const url = URL.createObjectURL(
+      new Blob([diagramSource], { type: "image/svg+xml;charset=utf-8" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "design-" + diagramName.replace(/[^\w\u4e00-\u9fff-]+/g, "-") + ".svg";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+
+  let scheduled = false;
+  function updateReading() {
+    scheduled = false;
+    const total = document.documentElement.scrollHeight - innerHeight;
+    $(".reading-progress").style.transform =
+      "scaleX(" + (total > 0 ? Math.min(1, scrollY / total) : 0) + ")";
+  }
+  addEventListener(
+    "scroll",
+    () => {
+      if (!scheduled) {
+        scheduled = true;
+        requestAnimationFrame(updateReading);
+      }
+    },
+    { passive: true },
+  );
+  addEventListener("resize", updateReading);
+  updateReading();
+})();
+</script>
+  <script>(() => {
+    const menu = document.querySelector(".lesson-toc");
+    menu.addEventListener("click", (event) => { if (event.target.closest("a")) menu.open = false; });
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape" && menu.open) { menu.open = false; menu.querySelector("summary").focus(); } });
+    document.addEventListener("pointerdown", (event) => { if (menu.open && !menu.contains(event.target)) menu.open = false; });
+  })()</script></body>
+</html>

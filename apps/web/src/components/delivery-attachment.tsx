@@ -123,7 +123,11 @@ export function DeliveryAttachment({
           credentials: "same-origin",
         });
         if (!res.ok)
-          throw new Error(res.status === 403 ? "当前权限无法读取这份产物。" : "读取失败，请重试。");
+          throw new Error(
+            res.status === 403
+              ? "当前账号无法读取这份产物。请联系工作区管理员申请产物及其来源数据的读取权限。"
+              : "读取失败，请重试。",
+          );
         const bytes = await res.arrayBuffer();
         const checksum = Array.from(
           new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),

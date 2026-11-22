@@ -1,21 +1,3 @@
-.edition-title {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 32px 40px 0;
-}
-.edition-title h1 {
-  margin: 0;
-  font-size: clamp(1.75rem, 3.2vw, 2.75rem);
-  line-height: 1.25;
-  letter-spacing: -0.035em;
-}
-.document > h2:first-child {
-  margin: 0 0 10px;
-  padding-top: 16px;
-}
-.document > h2:first-child + p {
-  margin: 0 0 18px;
-}
 .layer-index {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -78,49 +60,9 @@
 .diagram-stage > svg {
   max-width: 100%;
 }
-.mobile-nav {
-  display: none;
-}
-@media (max-width: 1000px) {
-  .mobile-nav {
-    display: block;
-    position: relative;
-  }
-  .mobile-nav summary {
-    padding: 8px;
-    color: var(--green);
-  }
-  .mobile-nav > div {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    width: min(270px, 78vw);
-    max-height: 70dvh;
-    overflow-y: auto;
-    padding: 6px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: var(--surface);
-    box-shadow: 0 8px 24px #172c2521;
-  }
-  .mobile-nav a {
-    display: block;
-    padding: 6px 10px;
-  }
-  .mobile-nav .level-2 {
-    color: var(--ink);
-    font-weight: 650;
-  }
-  .mobile-nav .level-3 {
-    padding-left: 22px;
-  }
-}
 @media (max-width: 760px) {
-  .edition-title {
-    padding: 22px 20px 0;
-  }
   .layer-index {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
   .layer-index a {
     padding: 9px 11px;
@@ -133,9 +75,6 @@
   }
 }
 @media print {
-  .edition-title {
-    padding: 0;
-  }
   .layer-index,
   .asset-dictionary {
     break-inside: auto;

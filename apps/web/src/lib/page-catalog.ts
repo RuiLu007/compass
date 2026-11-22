@@ -58,17 +58,13 @@ group("data", "数据与语义", "workspace", "module.admin.data", [
   ["data-sources", "数据连接", "admin/data/sources", "implemented"],
   ["data-catalog", "数据目录", "admin/data/catalog"],
   ["data-metrics", "指标口径", "admin/data/metrics", "implemented"],
-  ["data-queries", "可信查询", "admin/data/queries"],
-  ["data-quality", "数据质量", "admin/data/quality"],
-  ["data-documents", "知识文档", "admin/data/documents"],
+  ["data-documents", "知识文档", "admin/data/documents", "implemented"],
 ]);
-group("capabilities", "Agent 与能力", "workspace", "module.admin.capabilities", [
-  ["capabilities-agent", "主 Agent", "admin/capabilities/agent"],
-  ["capabilities-tools", "工具策略", "admin/capabilities/tools"],
-  ["capabilities-skills", "Skill 与流程", "admin/capabilities/skills"],
+group("models", "模型路由", "workspace", "module.admin.capabilities", [
   ["capabilities-models", "模型路由", "admin/capabilities/models", "implemented"],
+]);
+group("sandbox", "代码环境", "workspace", "module.admin.capabilities", [
   ["capabilities-sandbox", "代码环境", "admin/capabilities/sandbox"],
-  ["capabilities-hitl", "协同策略", "admin/capabilities/hitl"],
 ]);
 group("runs", "运行与调度", "workspace", "module.admin.runs", [
   ["runs-tasks", "运行任务", "admin/runs/tasks"],
@@ -118,8 +114,10 @@ group("workspaces", "工作空间", "self", undefined, [
 ]);
 group("platform", "平台管理", "platform", undefined, [
   ["platform-tenants", "平台租户管理", "platform/tenants", "implemented"],
-  ["platform-promptops", "Prompts", "platform/promptops", "implemented"],
   ["platform-models", "平台模型管理", "platform/models", "implemented"],
+]);
+group("promptops", "PromptOps", "platform", undefined, [
+  ["platform-promptops", "Prompts", "platform/promptops", "implemented"],
 ]);
 for (const page of pages) {
   if (page.section === "security" || page.id === "admin-overview") page.aggregate = true;
@@ -133,7 +131,9 @@ export const PRIMARY_SECTIONS = ["analysis", "reports", "plugins", "automations"
 export const ADMIN_SECTIONS = [
   "admin-overview",
   "data",
-  "capabilities",
+  "models",
+  "promptops",
+  "sandbox",
   "runs",
   "quality",
   "security",

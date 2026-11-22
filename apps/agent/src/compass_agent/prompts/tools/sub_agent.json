@@ -2,7 +2,7 @@
   "type": "function",
   "function": {
     "name": "sub_agent",
-    "description": "将一个明确的只读分析子任务交给独立 Agent。在 prompt 提供必要背景、数据范围和预期输出。仅返回子任务结论。",
+    "description": "**用途与调用规则**\n\n- 将一个明确的只读分析子任务交给独立 Agent。\n- 在 prompt 提供必要背景、数据范围和预期输出。\n- 仅返回子任务结论。",
     "parameters": {
       "additionalProperties": false,
       "properties": {

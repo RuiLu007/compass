@@ -9,13 +9,16 @@ import { prepareLessonResources } from "../scripts/lesson-resources.mjs";
 const app = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const lessons = JSON.parse(await readFile(path.join(app, "src/lib/lesson-resources.json"), "utf8"));
 
-test("lesson 11–23 reading editions exist and are included in cache inputs", async () => {
+test("course resources list lessons 11–23 in order", () => {
   assert.deepEqual(
     lessons.map((lesson) => lesson.number),
     [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23],
   );
-  const turbo = JSON.parse(await readFile(path.join(app, "turbo.json"), "utf8"));
-  for (const lesson of lessons) {
+});
+
+for (const lesson of lessons) {
+  test(`lesson ${lesson.number} editions exist and are included in cache inputs`, async () => {
+    const turbo = JSON.parse(await readFile(path.join(app, "turbo.json"), "utf8"));
     for (const artifact of lesson.artifacts) {
       const source = await readFile(path.resolve(app, "../..", artifact.source), "utf8");
       assert.match(source, /<!doctype html>/i);
@@ -33,8 +36,8 @@ test("lesson 11–23 reading editions exist and are included in cache inputs", a
           assert.ok(turbo.tasks[task].inputs.includes(`$TURBO_ROOT$/${source}`));
       }
     }
-  }
-});
+  });
+}
 
 test("distribution preserves multiple artifacts per lesson and rejects missing sources", async () => {
   const fixture = await mkdtemp(path.join(tmpdir(), "compass-lessons-"));
@@ -73,6 +76,47 @@ test("distribution preserves multiple artifacts per lesson and rejects missing s
       await readFile(path.join(fixture, "public/resources/lessons/11/design.html"), "utf8"),
       /home-reader-overrides/,
     );
+  } finally {
+    await rm(fixture, { recursive: true, force: true });
+  }
+});
+
+test("single lesson publication preserves other lessons and distributes linked editions", async () => {
+  const fixture = await mkdtemp(path.join(tmpdir(), "compass-lesson-publish-"));
+  try {
+    const source = path.join(fixture, "reference/lessons/23");
+    const previous = path.join(fixture, "public/resources/lessons/22");
+    await mkdir(source, { recursive: true });
+    await mkdir(previous, { recursive: true });
+    await mkdir(path.join(fixture, "src/lib"), { recursive: true });
+    await writeFile(path.join(previous, "technical-design.html"), "previous edition");
+    const lesson = (number) => ({
+      number,
+      artifacts: [
+        { source: "TECH_DESIGN.html", href: `/resources/lessons/${number}/technical-design.html` },
+        { source: "VECTOR_SEARCH.html", href: `/resources/lessons/${number}/vector-search.html` },
+      ],
+    });
+    await writeFile(
+      path.join(fixture, "src/lib/lesson-resources.json"),
+      JSON.stringify([lesson(22), lesson(23)]),
+    );
+    await writeFile(
+      path.join(source, "technical-design.html"),
+      '<html><head></head><a href="VECTOR_SEARCH.html#section-2">专题</a></html>',
+    );
+    await writeFile(path.join(source, "vector-search.html"), "<html><head></head></html>");
+    await prepareLessonResources(fixture, 23);
+    assert.equal(
+      await readFile(path.join(previous, "technical-design.html"), "utf8"),
+      "previous edition",
+    );
+    const published = await readFile(
+      path.join(fixture, "public/resources/lessons/23/technical-design.html"),
+      "utf8",
+    );
+    assert.match(published, /href="vector-search\.html#section-2"/);
+    await assert.rejects(prepareLessonResources(fixture, 99), /Unknown lesson/);
   } finally {
     await rm(fixture, { recursive: true, force: true });
   }

@@ -9,8 +9,10 @@ from compass_agent.runtime.private_state import digest
 from compass_agent.semantic.entities import SemanticMetricOffer
 from compass_agent.tools.contracts import ToolRejected
 
+MAX_SEARCH_ROUNDS = 8
 
-def accept_page(service, execution, search_key, offset, result, budget):
+
+def accept_page(service, execution, search_key, offset, result):
     run_id = service.journal.run_id
     call = f"{execution.step_id}:{execution.call_id}"
     request = digest([search_key, offset])
@@ -35,7 +37,7 @@ def accept_page(service, execution, search_key, offset, result, budget):
             .where(SemanticMetricOffer.run_id == run_id, SemanticMetricOffer.kind == "search")
         )
         repeated = tx.get(SemanticMetricOffer, uuid5(run_id, "search:" + stamp)) is not None
-        if repeated or used >= budget:
+        if repeated or used >= MAX_SEARCH_ROUNDS:
             response = {"status": "budget_exhausted", "items": []}
             authority = None
         else:

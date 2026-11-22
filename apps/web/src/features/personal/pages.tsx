@@ -1,5 +1,6 @@
 "use client";
 import { AppLink } from "@/components/shell/app-link";
+import { UiPageHeading } from "@/components/ui/page-heading";
 import { useState } from "react";
 import type { PagePayload, AuditPage } from "@/contracts/page";
 import { useDocumentSession } from "@/components/shell/session-boundary";
@@ -290,17 +291,13 @@ export function GovernancePages({ payload }: { payload: PagePayload }) {
   if (page.id === "security-audit")
     return (
       <section className="panel">
-        <div className="section-heading">
-          <div>
-            <h2>Web 审计日志</h2>
-            <p className="muted">当前获权范围内的身份、成员、空间与配置变更。</p>
-          </div>
+        <UiPageHeading title="Web 审计日志">
           {pageData.canExportAudit && (
             <button className="secondary" disabled={busy} onClick={exportCsv}>
               {busy ? "正在生成…" : "导出 CSV"}
             </button>
           )}
-        </div>
+        </UiPageHeading>
         <form method="get" className="audit-filters">
           <label>
             动作

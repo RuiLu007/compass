@@ -2,7 +2,7 @@
   "type": "function",
   "function": {
     "name": "search_semantics",
-    "description": "搜索当前发布及授权范围内的术语、指标和实体，按名称、别名和业务域检索。\n\n下一页沿用本次检索条件及返回的 cursor。更改条件时从第一页开始。",
+    "description": "**用途与调用规则**\n\n- 搜索当前发布及授权范围内的术语、指标和实体，按名称、别名和业务域检索。\n- 下一页沿用本次检索条件及返回的 cursor。\n- 更改条件时从第一页开始。",
     "parameters": {
       "additionalProperties": false,
       "properties": {

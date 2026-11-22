@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { handleAnalysisRunRequest, isAnalysisRunRoute } from "./analysis-run-handler";
 import { handleDurableAnalysis, isDurableAnalysisRoute } from "./durable-analysis-handler";
+import { handleKnowledge } from "./knowledge-handler";
 import { handleSemantic } from "./semantic-handler";
 import { handlePromptOps, isPromptOpsRoute } from "./promptops-handler";
 import { handleModelRequest, isModelRoute } from "./model-handler";
@@ -56,6 +57,7 @@ async function dispatchWebRequest(request: Request): Promise<Response> {
     const route = path.join("/");
     const method = request.method;
     const token = tokenFromCookie(request.headers.get("cookie"));
+    if (path[0] === "knowledge") return handleKnowledge(request, token, path.slice(1));
     if (path[0] === "semantic") return handleSemantic(request, path.slice(1));
     if (isPromptOpsRoute(route)) return handlePromptOps(request, token, route, queryValues(url));
     if (isDurableAnalysisRoute(route, request)) return handleDurableAnalysis(request, token);

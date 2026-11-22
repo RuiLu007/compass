@@ -126,7 +126,7 @@ def input_budget(limits: "ModelTokenLimits", output: int):
     return min(candidates) - 32
 
 
-def collect(messages, required_positions=(), metric_access=()):
+def collect(messages, required_positions=(), metric_access=(), organization_position=None):
     """Keep complete conversational turns and assistant/tool result batches together."""
     items = []
     group = 0
@@ -143,7 +143,9 @@ def collect(messages, required_positions=(), metric_access=()):
             else "conversation"
         )
         trust = "managed" if m.role == "system" else "observation" if kind == "tool" else "actor"
-        if i in required_positions:
+        if i == organization_position:
+            required, kind, trust = True, "organization", "observation"
+        elif i in required_positions:
             kind, trust = "metric", "dictionary"
         payload = canonical(m.model_dump(mode="json", exclude_none=True))
         items.append(
@@ -165,8 +167,16 @@ def collect(messages, required_positions=(), metric_access=()):
 FRAME_BYTE_LIMIT = 192 * 1024
 
 
-def fit(value, limit, *, continuation_extra=0, required_positions=(), metric_access=()):
-    items = collect(value.messages, required_positions, metric_access)
+def fit(
+    value,
+    limit,
+    *,
+    continuation_extra=0,
+    required_positions=(),
+    metric_access=(),
+    organization_position=None,
+):
+    items = collect(value.messages, required_positions, metric_access, organization_position)
     selected = list(items)
     decisions = []
 
@@ -231,6 +241,7 @@ def prepare_input(
     support_paths=(),
     question=None,
     registry_context=None,
+    run_facts=None,
 ):
     from compass_agent.promptops.template import render
 
@@ -278,6 +289,7 @@ def prepare_input(
     selected_metrics = []
     semantic = {"status": "unconfigured", "candidates": [], "excluded": []}
     required_positions = ()
+    organization_position = None
     if draft.continuation_token:
         if not previous or not set(previous.get("tools", ())).issubset(available):
             raise ModelError("context_access_changed", 403)
@@ -300,14 +312,21 @@ def prepare_input(
         if "database_query" in [t.function.name for t in declared]:
             used_sources = {**used_sources, **current}
     else:
-        prompt = "\n\n".join(render(f.path, f.body, variables) for f in files)
+        sections = [render(f.path, f.body, variables) for f in files]
+        if ctx.phase != "identify":
+            (scene_catalog,) = exact(tx, binding, ["support/routing/scenes.json"])
+            scene = json.loads(scene_catalog.body)["scenes"].get(ctx.scene, {})
+            if sop := scene.get("sop"):
+                sections.append(sop)
+                receipts.append(scene_catalog.receipt())
+        prompt = "\n\n".join(sections)
         messages = [
             ChatMessage(role="system", content=prompt),
             *(m for m in draft.messages if m.role != "system"),
         ]
         dictionary = (
             None
-            if search or binding.get("registry")
+            if search or binding.get("registry") or binding.get("registryIssue")
             else catalog.resolve(binding.get("dictionaryDigest"))
         )
         if registry_context and ctx.phase != "identify":
@@ -324,19 +343,30 @@ def prepare_input(
                 "requested_metrics": registry_context.get("requested_metrics", []),
             }
             if search:
-                content = {
-                    "source": "publishedSemanticRegistry",
-                    "items": [
-                        {
-                            k: item[k]
-                            for k in ("asset_id", "version_id", "code", "name")
-                            if k in item
-                        }
-                        for item in registry_context["items"]
-                    ],
-                }
+                content.pop("previous_results")
             messages.insert(1, ChatMessage(role="user", content=canonical(content).decode()))
             required_positions = (1,)
+            if decisions := registry_context.get("owner_clarifications"):
+                owner_turn = max(i for i, message in enumerate(messages) if message.role == "user")
+                names = {
+                    item.get("asset_id"): item.get("name") for item in registry_context["items"]
+                }
+                confirmations = []
+                for choice in decisions:
+                    selected = (
+                        choice.get("definition")
+                        or names.get(choice.get("metric_id"))
+                        or choice["metric_id"]
+                    )
+                    confirmations.append(f"「{choice['mention']}」使用：{selected}")
+                latest = messages[owner_turn]
+                messages[owner_turn] = latest.model_copy(
+                    update={
+                        "content": (latest.content or "")
+                        + "\n\n我刚在本轮选择卡确认了以下口径，请按此完成原问题：\n"
+                        + "\n".join(confirmations)
+                    }
+                )
         if dictionary and messages:
             question = question or next(
                 (m.content or "" for m in reversed(messages) if m.role == "user"), ""
@@ -364,6 +394,11 @@ def prepare_input(
             }
             messages.insert(1, ChatMessage(role="user", content=canonical(metric_data).decode()))
             required_positions = (1,)
+        if run_facts:
+            messages = run_facts.messages(messages)
+            if run_facts.organization:
+                organization_position = 1
+                required_positions = tuple(i + 1 for i in required_positions)
         used_sources = {m.source: current[m.source] for m in selected_metrics}
         metric_ids = [m.metric_id for m in selected_metrics]
         metric_sources = used_sources
@@ -397,6 +432,7 @@ def prepare_input(
         limit,
         continuation_extra=continuation_extra,
         required_positions=required_positions,
+        organization_position=organization_position,
         metric_access=tuple(
             AccessRef(ctx.tenant_id, ctx.workspace_id, key, str(rev))
             for key, rev in used_sources.items()

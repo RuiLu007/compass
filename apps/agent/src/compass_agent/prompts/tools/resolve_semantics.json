@@ -2,7 +2,7 @@
   "type": "function",
   "function": {
     "name": "resolve_semantics",
-    "description": "解析本次提问指向的正式指标。多个合法口径时由原会话用户选择。用签发的 query_ref 计算。\n正式取数需在 parameters 中提交 start 和 end，并指定需要的分组及过滤。服务端按 Run 的受理时刻填写 as_of，仅在用户明确指定历史数据截止时提交 historical_as_of。query_metric 复用返回的规范化参数。\n\nprevious_equal_window 提供紧邻本期且天数相同的上一业务日期区间，使用相同分组、筛选和截止时刻。\n\n若收到 invalid_parameters，请按 field、filter_types 和 group_by_options 修正。筛选值使用绑定要求的 JSON 类型，编号型维度填整数。",
+    "description": "**用途与调用规则**\n\n- 解析本次提问指向的正式指标。\n- 根据前文或本次要求确定指标后可直接传可见 metric_id。\n- 仍有歧义时省略 ID，让用户选择或补充计算方法。\n- 无绑定时返回可见定义，按当前授权继续分析。\n- 用签发的 query_ref 计算。\n- 正式取数需在 parameters 中提交 start 和 end，并指定需要的分组及过滤。\n- 服务端按 Run 的受理时刻填写 as_of，仅在用户明确指定历史数据截止时提交 historical_as_of。\n- query_metric 复用返回的规范化参数。\n- previous_equal_window 提供紧邻本期且天数相同的上一业务日期区间，使用相同分组、筛选和截止时刻。\n- 若收到 invalid_parameters，请按 field、filter_types 和 group_by_options 修正。\n- 筛选值使用绑定要求的 JSON 类型，编号型维度填整数。",
     "parameters": {
       "$defs": {
         "Parameters": {

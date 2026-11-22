@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { executionActive, type ExecutionNode } from "@/contracts/execution-node";
 import { UiCodeBlock } from "./code-block";
+import { withDatabaseQuerySummary } from "./database-query-summary";
 
 const kinds = {
   model: { icon: BrainCircuit, label: "思考" },
@@ -42,6 +43,7 @@ export type ExecutionEntry = Pick<ExecutionNode, "id" | "kind" | "status" | "tit
   context?: string[];
   input?: string | null;
   output?: string | null;
+  queryResult?: string;
   thinking?: string | null;
   narration?: string | null;
   toolType?: "database" | "sandbox" | "mcp";
@@ -99,7 +101,7 @@ export function executionEntries(
               : undefined;
       const thinking = node.detail?.thinking;
       const narration = node.detail?.narration;
-      return {
+      const entry: ExecutionEntry = {
         id: node.id,
         kind: node.kind,
         status: !active && executionActive(node) ? "incomplete" : node.status,
@@ -118,6 +120,9 @@ export function executionEntries(
         narration,
         toolType,
       };
+      return toolType === "database" && node.origin?.toolName === "database_query"
+        ? withDatabaseQuerySummary(entry)
+        : entry;
     });
 }
 
@@ -145,9 +150,16 @@ function EntryLine({ entry }: { entry: ExecutionEntry }) {
   return (
     <>
       <Icon size={16} aria-hidden="true" />
-      <span className="ui-timeline-text">
-        {label}
-        {content && ` · ${content.replace(/\s+/g, " ")}`}
+      <span
+        className={entry.queryResult ? "ui-timeline-text ui-timeline-query" : "ui-timeline-text"}
+      >
+        <span>
+          {label}
+          {content && ` · ${content.replace(/\s+/g, " ")}`}
+        </span>
+        {entry.queryResult && (
+          <span className="ui-timeline-query-result">→ {entry.queryResult}</span>
+        )}
       </span>
       <span className="ui-timeline-status" data-status={entry.status}>
         {spinning && (
@@ -258,7 +270,9 @@ export function UiExecutionTimeline({
   const latest = entries.find((entry) => entry.id === latestId) ?? entries.at(-1);
   const showLatest = running && !expanded && latest;
   const latestLabel = latest
-    ? [entryKind(latest).label, latest.title, statuses[latest.status]].filter(Boolean).join(" · ")
+    ? [entryKind(latest).label, latest.title, latest.queryResult, statuses[latest.status]]
+        .filter(Boolean)
+        .join(" · ")
     : "";
 
   useEffect(() => {

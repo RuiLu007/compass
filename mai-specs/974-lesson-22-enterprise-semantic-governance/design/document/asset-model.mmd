@@ -1,0 +1,30 @@
+%%{init: {"themeCSS": ".edgeLabel rect.background{fill:#fff!important}.edgeLabel text,.edgeLabel tspan{fill:#243e32!important}"}}%%
+erDiagram
+    semantic_assets ||--o{ semantic_versions : "一项资产历次怎样定义"
+    semantic_versions ||--o{ semantic_relations : "从这一版出发"
+    semantic_assets ||--o{ semantic_relations : "指向哪项资产"
+    semantic_versions ||--o{ execution_bindings : "为这一版指标取数"
+    workspace ||--o{ execution_bindings : "在哪个工作区执行"
+    semantic_assets["资产 · semantic_assets"] {
+        uuid asset_id PK
+        text kind "实体、术语或指标"
+        text code "业务键"
+    }
+    semantic_versions["定义版本 · semantic_versions"] {
+        uuid version_id PK
+        uuid asset_id FK
+        integer version_no "修订序号"
+        jsonb definition "字段、释义或公式"
+    }
+    semantic_relations["对象关系 · semantic_relations"] {
+        uuid from_version_id FK
+        text kind "关联、指向或来源"
+        uuid to_asset_id FK
+    }
+    execution_bindings["执行绑定 · execution_bindings"] {
+        uuid version_id FK
+        uuid workspace_id FK "与租户组成外键"
+        text source_ref "业务数据来源"
+        text target_hash "模板摘要"
+    }
+    workspace["工作区 · workspace"]

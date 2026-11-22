@@ -63,6 +63,20 @@ export async function provision() {
         `GRANT CONNECT ON DATABASE ${identifier(name)} TO compass_web_migrator,compass_web_runtime`,
       );
     }
+    const target = new URL(admin);
+    target.pathname = migration.pathname;
+    const extension = new pg.Client({ connectionString: target.href });
+    await extension.connect();
+    try {
+      await extension.query("CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public");
+      const installed = await extension.query(
+        "SELECT extnamespace='public'::regnamespace AS ok FROM pg_extension WHERE extname='vector'",
+      );
+      if (!installed.rows[0]?.ok)
+        throw new Error("Web document vectors require pgvector in public");
+    } finally {
+      await extension.end();
+    }
     return rows.length ? "already_provisioned" : "provisioned";
   } finally {
     await client.end();

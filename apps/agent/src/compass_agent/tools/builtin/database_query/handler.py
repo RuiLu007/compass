@@ -56,14 +56,6 @@ def registration(
         from compass_agent.execution_context import current_execution
 
         journal = current_execution.get()
-        if journal and (getattr(journal, "context_binding", None) or {}).get("registry"):
-            from compass_agent.semantic.service import RegistryTools
-
-            progress = getattr(journal, "search_progress", None)
-            if not (progress and progress.independent_detail()) and await asyncio.to_thread(
-                RegistryTools(journal, context.trusted).formal_query_started
-            ):
-                raise ToolRejected("formal_metric_requires_query_metric")
         action = DATABASE_ACTION.validate_python(args)
         if isinstance(action, ListConnections):
             visible = bindings

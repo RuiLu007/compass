@@ -54,6 +54,30 @@ class QueryFields(Visitor):
         return ast.ParamRef(number=self.index)
 
 
+def projection_formula(statement):
+    if statement.larg is not None and statement.rarg is not None:
+        op = statement.op.name.removeprefix("SETOP_") + (" ALL" if statement.all else "")
+        return f"({projection_formula(statement.larg)}) {op} ({projection_formula(statement.rarg)})"
+    return ", ".join(
+        RawStream()(target.val)
+        for target in statement.targetList or ()
+        if isinstance(target, ast.ResTarget)
+    )
+
+
+def receipt_proposal(data):
+    if recommendation := data.get("recommendation"):
+        return recommendation
+    proposal = data.get("proposal", {})
+    fields = proposal.get("fields", {})
+    query = (data.get("query") or {}).get("sql")
+    if fields.get("formula") == "" and query:
+        # Older set queries stored their signature and parameters but an empty projection.
+        repaired = definition_from_query(query, data["columns"], data.get("question", ""))
+        return {**proposal, "fields": {**fields, "formula": repaired["fields"]["formula"]}}
+    return proposal
+
+
 def definition_from_query(query, columns, question):
     statement = parse_sql(query)[0].stmt
     if not isinstance(statement, ast.SelectStmt):
@@ -76,10 +100,6 @@ def definition_from_query(query, columns, question):
     visitor = QueryFields()
     visitor(statement)
     labels = [str(col)[:100] for col in columns][:16]
-    expressions = []
-    for target in statement.targetList or ():
-        if isinstance(target, ast.ResTarget):
-            expressions.append(RawStream()(target.val))
     groups = [RawStream()(group) for group in groups]
     aggregates = visitor.aggregates
     name = (labels[-1] if labels else "")[:120]
@@ -88,7 +108,7 @@ def definition_from_query(query, columns, question):
         "summary": ("按" + "、".join(groups) + "统计" + name if groups else name + "汇总")
         if aggregates
         else question[:600],
-        "formula": ", ".join(expressions)[:1800],
+        "formula": projection_formula(statement)[:1800],
         "grain": "、".join(groups)[:150]
         if groups
         else ("当前筛选范围汇总" if aggregates else "查询明细"),
@@ -96,7 +116,7 @@ def definition_from_query(query, columns, question):
         "event_time": "、".join(dict.fromkeys(visitor.time_fields))[:150],
         "dimensions": groups[:16],
         "filters": list(dict.fromkeys(visitor.conditions))[:16],
-        "unit": "次" if aggregates == ["count"] else "",
+        "unit": "",
     }
     return {
         "query_signature": signature,
@@ -104,5 +124,4 @@ def definition_from_query(query, columns, question):
         "parameter_examples": list(dict.fromkeys(visitor.parameters))[:8],
         "missing": [k for k in ("event_time", "unit", "aggregation") if not fields[k]]
         + ["domain", "responsible"],
-        "reusable": bool(aggregates),
     }

@@ -2,7 +2,7 @@
 
 第 14 课的独立 `observability` profile 在同一 Compose 网络部署本机 Langfuse，入口为 `pnpm observability`，UI 使用 loopback 8104。主 Agent / Web 可选加载忽略 Git 的观测配置，停止观测栈保留卷且不停止业务应用。镜像、初始化、数据格式、多实例接入与恢复见 [Langfuse 运行说明](observability/README.md)。
 
-`compose/compose.yaml` 提供带 pgvector 的 PostgreSQL 17 与持久 Redis，镜像以 digest 固定；当前不启用向量扩展或创建向量索引。`app` profile 加入 Agent 迁移与 seed、Web 独立数据库供应/迁移、FastAPI 与 Next.js standalone。`web` profile 只启动 PostgreSQL、Web 迁移和 Web，无 Python 服务依赖。所有宿主机端口绑定 127.0.0.1；演示账号和合成数据仅供本地。
+`compose/compose.yaml` 提供带 pgvector 的 PostgreSQL 17 与持久 Redis，镜像以 digest 固定。Web 数据库的供应步骤安装 vector 扩展，0009 迁移创建知识库片段向量表。`app` profile 加入 Agent 迁移与 seed、Web 独立数据库供应/迁移、FastAPI 与 Next.js standalone。`web` profile 只启动 PostgreSQL、Web 迁移和 Web，无 Python 服务依赖。所有宿主机端口绑定 127.0.0.1；演示账号和合成数据仅供本地。
 
 根目录使用以下统一入口，镜像构建上下文始终为 Compass 根目录：
 
@@ -71,7 +71,7 @@ docker compose -f deploy/compose/compose.yaml --profile web run --rm web-migrate
 
 ## 模型 Runtime 配置
 
-Agent 迁移容器先供应独立 `compass_agent` 库，再迁移至 `0017` 并写入幂等工程样本；运行容器仅持有 `compass_agent_runtime` 凭据。既有旧版 `compass` 演示库保留，接管步骤见 [agent/main](../apps/agent/db/main/README.md)。自定义已存在角色时可通过 `COMPASS_AGENT_RUNTIME_URL` / `COMPASS_AGENT_MIGRATOR_URL` 提供原凭据，供应不会覆盖密码。
+Agent 迁移容器先供应独立 `compass_agent` 库，再迁移至 `0018` 并写入幂等工程样本；运行容器仅持有 `compass_agent_runtime` 凭据。既有旧版 `compass` 演示库保留，接管步骤见 [agent/main](../apps/agent/db/main/README.md)。自定义已存在角色时可通过 `COMPASS_AGENT_RUNTIME_URL` / `COMPASS_AGENT_MIGRATOR_URL` 提供原凭据，供应不会覆盖密码。
 
 `pnpm run deploy` 不读取根 `.env`。启用模型能力时从受控进程环境传入 `COMPASS_AGENT_SERVICE_TOKEN`、`COMPASS_MODEL_ENCRYPTION_KEY`、`COMPASS_MODEL_ALLOWED_ORIGINS`；前两项默认空，模型入口会明确不可用。模型 Key 经平台页面录入；数据库备份与加密密钥分别保存。完整接入见 [Agent 说明](../apps/agent/README.md#模型接入)。
 
@@ -99,7 +99,7 @@ Agent 部署需显式提供独立 Fernet `COMPASS_RUNTIME_STATE_KEY`，同时保
 
 ## 工作区经营语义 Registry
 
-备份两库与 Agent 私有状态密钥，暂停受理，排空使用旧策略的在途和等待任务，停止旧 Agent 与 Scheduler。先迁移 Web 至 `0006_semantic_search`，再迁移 Agent 至 `0017`。0017 清空旧执行策略指纹，首个新版副本登记当前配置，随后启动其余副本与 Scheduler。在 Web 的 PromptOps 导入随包变更并整体发布。复用任意原发布时仍需保留对应的提示词代次与代码策略。
+备份两库与 Agent 私有状态密钥，暂停受理，排空使用旧策略的在途和等待任务，停止旧 Agent 与 Scheduler。停用旧应用后迁移 Web 至 `0008_semantic_asset_grants`（其中 `0007_semantic_cleanup` 完成目录收缩），再迁移 Agent 至 `0018`。Web 先检查旧发布是否仍限制访问，Agent 核对 Run 已固定的发布清单。升级成功后启动新版 Web、Agent 和 Scheduler。在 Web 的 PromptOps 导入随包变更并整体发布。复用任意原发布时仍需保留对应的提示词代次与代码策略。
 
 在「数据与语义 → 指标口径」登记来源与维护范围，由两名独立责任人依次审核定义和工作区绑定。先发布平台定义，再按工作区发布本地执行绑定。把获准工作区 UUID 用逗号分隔写入 `COMPASS_SEMANTIC_WORKSPACES`，所有 Agent 副本采用同一配置，按集群策略变更流程重启。默认空值使用已配置的文件字典。切换后用一个已发布指标核对实际来源、单位和期间，再恢复新流量。
 
@@ -112,3 +112,5 @@ Agent 部署需显式提供独立 Fernet `COMPASS_RUNTIME_STATE_KEY`，同时保
 Web 容器以 `node` 用户将 Run 固定记录写入 `/var/lib/compass/document-pins`。Compose 默认使用 `documents-pins` 持久卷。已有共享文件系统可设置宿主 `COMPASS_DOCUMENTS_PIN_DIR` 为可写的绝对路径，确保 UID 1000 有目录权限并支持同目录硬链接；所有 Web 实例使用同一套发布目录与固定记录。备份时一并保存两者和 Agent 数据库。回看旧 Run 时由 Web 读取其固定记录，并重新核对当前授予的权限。
 
 在所有 Agent 副本上登记相同的 `COMPASS_SEARCH_WORKSPACES`，启用受控模型预算并发布对应 PromptOps 版本。只有被登记工作区的新 Run 固定检索时点、只读连接及资料版本。课堂专用时点副本和验收入口位于[第 23 课案例目录](../examples/showcases/lesson-23-agentic-search/)。
+
+Web 数据库迁移到 0010_knowledge_library 后可从管理页导入文件。先部署含 knowledge-embeddings 接口的 Agent，再启动新版 Web。复用已安装的 pgvector 扩展与 Agent 的 OpenAI Provider。管理页修改后的文件分段及向量在 Web 数据库备份内；由新 Run 固定的内容快照保存在现有 documents-pins 卷。

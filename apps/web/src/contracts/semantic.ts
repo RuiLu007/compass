@@ -25,6 +25,41 @@ export const metricFields = z.strictObject({
   filters: names.default([]),
   aliases: names.default([]),
   dependencies: z.array(id).max(40).default([]),
+  metric_details: z
+    .strictObject({
+      components: note.optional(),
+      numerator: note.optional(),
+      denominator: note.optional(),
+      additivity: note.optional(),
+      calendar: note.optional(),
+      window: note.optional(),
+      known_at: note.optional(),
+      exceptions: note.optional(),
+      display: note.optional(),
+      blocked_reason: note.optional(),
+    })
+    .optional(),
+  initial_context: z.enum(["auto", "prefer", "on_demand"]).optional(),
+  question: note.optional(),
+  counterexample: note.optional(),
+  table: short.optional(),
+  primary_key: names.optional(),
+  visible_time: short.optional(),
+  fields: z.record(text, text).optional(),
+  links: z
+    .array(
+      z.strictObject({
+        target_id: id,
+        local: names.optional(),
+        remote: names.optional(),
+        cardinality: short.optional(),
+        use: note.optional(),
+        nullable: z.boolean().optional(),
+        validity: short.optional(),
+      }),
+    )
+    .max(80)
+    .optional(),
   source_id: id.nullish(),
   source_position: short.default(""),
   owner_scope_id: id.optional(),
@@ -113,3 +148,20 @@ export const queryParams = z.strictObject({
   group_by: short.optional(),
   filters: z.record(text, z.union([z.number().finite(), text, z.boolean()])).optional(),
 });
+
+export type AssetRelation = {
+  kind: string;
+  target_id: string;
+  code: string;
+  name: string;
+  rule: Record<string, unknown>;
+  editable: boolean;
+};
+
+export type AssetGrantMode = "department" | "member";
+export type AssetGrantDirectory = {
+  departments: { id: string; name: string }[];
+  members: { id: string; name: string; login: string }[];
+  assets: { id: string; name: string; code: string; kind: string }[];
+  grants: { mode: AssetGrantMode; target_id: string; asset_id: string }[];
+};

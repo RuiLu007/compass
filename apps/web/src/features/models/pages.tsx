@@ -5,6 +5,7 @@ import type { PagePayload } from "@/contracts/page";
 import { useDocumentSession } from "@/components/shell/session-boundary";
 import { AppLink } from "@/components/shell/app-link";
 import { Modal } from "@/components/ui/dialog";
+import { UiPageHeading } from "@/components/ui/page-heading";
 import { ProviderEditor } from "./provider-editor";
 import { ObservabilityPanel } from "./observability-panel";
 import { ReliabilityPanel } from "./reliability-panel";
@@ -47,20 +48,14 @@ function WorkspaceModels({ payload }: { payload: PagePayload }) {
   }, [api, payload.session.scope, attempt]);
   return (
     <section className="model-page">
-      <div className="model-page-head">
-        <div>
-          <p className="eyebrow">MODEL PROVIDERS</p>
-          <h2>工作区可用模型</h2>
-          <p className="muted">模型由平台统一管理。这里展示向当前租户提供的 Chat 模型摘要。</p>
-        </div>
+      <UiPageHeading title="工作区可用模型">
         {payload.session.isPlatformAdmin && (
           <AppLink className="button secondary" href="/platform/models">
             平台模型管理
             <ArrowUpRight size={16} />
           </AppLink>
         )}
-      </div>
-      <p className="model-notice">本页为只读视图。模型连接、凭据和能力测试由平台管理员管理。</p>
+      </UiPageHeading>
       {error ? (
         <div role="alert" className="panel">
           <p>{error}</p>
@@ -172,19 +167,12 @@ function PlatformModels() {
     );
   return (
     <section className="model-page">
-      <div className="model-page-head">
-        <div>
-          <p className="eyebrow">PLATFORM · MODEL PROVIDERS</p>
-          <h2>
-            模型 Provider <span className="status status-muted">平台统一管理</span>
-          </h2>
-          <p className="muted">连接模型、验证能力，为各租户提供可选择的主模型。</p>
-        </div>
+      <UiPageHeading title="模型 Provider">
         <button onClick={() => setEditing("new")}>
           <Plus size={17} />
           添加 Provider
         </button>
-      </div>
+      </UiPageHeading>
       <div className="model-notice">
         配置面向所有租户生效。支持 LiteLLM 的生成模型协议；平台控制分析 Chat
         的可用模型，决策模型在管理端测试。

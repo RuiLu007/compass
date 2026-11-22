@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import type { MetricView, SemanticCapability } from "../../../contracts/semantic";
+import type { MetricView } from "../../../contracts/semantic";
 import { reject } from "../../platform/errors";
-import type { Context } from "./access";
+import { publishedScopeIds, type Context } from "./access";
 
 export function digest(value: unknown): string {
   // JSON object order is immaterial to approvals and idempotency.
@@ -23,10 +23,7 @@ export type Entry = {
   attachment?: boolean;
   dependencies?: Record<string, string>;
 };
-export type Manifest = { assets: Record<string, Entry>; policies: Record<string, number> };
-export function policyPartitionKind(kind: string) {
-  return kind === "platform" || kind === "workspace" ? kind : "tenant";
-}
+export type Manifest = { assets: Record<string, Entry> };
 export type Release = {
   id: string;
   partition: string;
@@ -58,8 +55,8 @@ export async function releases(c: Context, pins?: string[]): Promise<Release[]> 
 export const versionSelect = `SELECT a.asset_id,a.owner_scope_id,a.code,a.domain,a.kind,a.responsible_ref AS responsible,a.lifecycle,
   a.creator_user_id AS creator,v.editor_user_id AS editor,v.version_id,v.draft_id,v.usage_scope_id,v.version_no,
   v.name,v.summary,v.grain,v.unit,v.digest,v.definition,v.source_id,v.source_position,
-  ARRAY(SELECT alias.display_alias FROM web.semantic_aliases alias WHERE alias.origin_version_id=v.version_id AND alias.scope_id=ANY($1::uuid[])) AS aliases,
-  ARRAY(SELECT rel.to_asset_id FROM web.semantic_relations rel WHERE rel.from_version_id=v.version_id AND rel.kind IN ('depends_on','derived_from') AND rel.scope_id=ANY($1::uuid[])) AS dependencies
+  ARRAY(SELECT alias.display_alias FROM web.semantic_aliases alias WHERE alias.origin_version_id=v.version_id AND (alias.scope_id=v.usage_scope_id OR alias.scope_id=ANY($1::uuid[]))) AS aliases,
+  ARRAY(SELECT rel.to_asset_id FROM web.semantic_relations rel WHERE rel.from_version_id=v.version_id AND rel.kind IN ('depends_on','derived_from') AND (rel.scope_id=v.usage_scope_id OR rel.scope_id=ANY($1::uuid[]))) AS dependencies
   FROM web.semantic_versions v JOIN web.semantic_assets a ON a.asset_id=v.asset_id`;
 export type Version = Omit<
   MetricView,
@@ -82,7 +79,7 @@ export async function latest(c: Context, assetId: string, lock = false): Promise
     versionSelect + " WHERE a.asset_id=$2 ORDER BY v.version_no DESC LIMIT 1",
     [c.scopes.map((s) => s.id), assetId],
   );
-  if (!rows[0]) reject("not_found");
+  if (!rows[0] || (lock && rows[0].lifecycle === "archived")) reject("not_found");
   return rows[0];
 }
 export async function targetPartition(
@@ -138,15 +135,37 @@ function definitions(c: Context, list: Release[]) {
   return map;
 }
 export async function published(c: Context, pins?: string[]) {
-  if (!c.can("read")) return [];
+  if (!c.can("read") && !c.sharedTermsOnly) return [];
   const current = await releases(c);
   const active = definitions(c, current);
   const fixed = pins ? definitions(c, await releases(c, pins)) : active;
-  const use = c.scopes.filter((s) => s.use).map((s) => s.id);
   const ids = [...fixed.values(), ...active.values()].map((v) => v.entry.version);
   const versions = await c.db.query<Version>(
-    versionSelect + " WHERE v.version_id=ANY($2::uuid[]) AND v.usage_scope_id=ANY($1::uuid[])",
-    [use, ids],
+    versionSelect +
+      ` JOIN web.semantic_scopes audience ON audience.scope_id=v.usage_scope_id
+        WHERE a.lifecycle<>'archived' AND v.version_id=ANY($2::uuid[])
+        AND (audience.kind='platform' OR (audience.tenant_id=$3 AND (audience.workspace_id IS NULL OR audience.workspace_id=$4)))
+        AND (audience.kind<>'personal' OR audience.owner_user_id=$5)
+        AND (NOT $6::bool OR (a.kind='term' AND audience.kind<>'personal'))
+        AND (a.kind='term' OR $7::bool OR audience.kind='personal' OR a.owner_scope_id=ANY($8::uuid[])
+          OR (audience.kind='job' AND audience.scope_id=ANY($1::uuid[]))
+          OR (audience.kind='department' AND audience.scope_id=ANY($9::uuid[]) AND NOT EXISTS (
+            SELECT FROM web.semantic_asset_grants g WHERE g.workspace_id=$4 AND g.asset_id=a.asset_id
+              AND g.department_id=audience.scope_id AND NOT g.active))
+          OR EXISTS (SELECT FROM web.semantic_asset_grants g WHERE g.workspace_id=$4 AND g.asset_id=a.asset_id
+            AND g.active AND (g.member_id=$10 OR g.department_id=ANY($9::uuid[]))))`,
+    [
+      publishedScopeIds(c),
+      ids,
+      c.target.tenantId,
+      c.target.workspaceId,
+      c.actor.userId,
+      c.sharedTermsOnly,
+      c.actor.isPlatformAdmin || c.tenantAdmin,
+      c.scopes.filter((s) => s.manage).map((s) => s.id),
+      c.scopes.filter((s) => s.use && s.kind === "department").map((s) => s.id),
+      c.memberId,
+    ],
   );
   const allowed = new Map(versions.rows.map((v) => [v.version_id, v]));
   const { rows: local } = await c.db.query<{ binding_id: string }>(
@@ -195,30 +214,4 @@ export async function published(c: Context, pins?: string[]) {
     ...v,
     dependencies: v.dependencies.filter((asset) => visibleAssets.has(asset)),
   }));
-}
-export async function policies(c: Context, list: Release[]) {
-  const revisions = list.flatMap((r) => {
-    const partition = c.scopes.find((s) => s.id === r.partition);
-    return Object.entries(r.manifest.policies).filter(([id]) => {
-      const owner = c.scopes.find((s) => s.id === id);
-      return owner && partition?.kind === policyPartitionKind(owner.kind);
-    });
-  });
-  const visible = c.scopes.filter((s) => s.use).map((s) => s.id);
-  const { rows } = await c.db.query<{
-    id: string;
-    revision: number;
-    policy: {
-      pinned_asset_ids?: string[];
-      defaults?: { term_ref: string; target_metric_ref: string }[];
-      page_size?: number;
-      context_max_items?: number;
-      max_search_rounds?: number;
-      disabled_capabilities?: SemanticCapability[];
-    };
-  }>(
-    "SELECT scope_id AS id,revision,policy FROM web.semantic_policy WHERE scope_id=ANY($1::uuid[]) ORDER BY scope_id",
-    [visible],
-  );
-  return rows.filter((p) => revisions.some(([id, rev]) => id === p.id && rev === p.revision));
 }

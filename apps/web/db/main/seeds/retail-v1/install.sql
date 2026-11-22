@@ -14,7 +14,8 @@ BEGIN
     SELECT digest INTO installed_digest FROM web.semantic_source
         WHERE locator=edition->>'locator' AND source_version=edition->>'version';
     IF FOUND THEN
-        IF installed_digest <> expected_digest THEN
+        IF installed_digest <> expected_digest AND installed_digest IS DISTINCT FROM
+           (SELECT compatible_digest FROM pg_temp.seed_input) THEN
             RAISE EXCEPTION 'Semantic content differs for this edition; use a new reviewed version';
         END IF;
         UPDATE pg_temp.seed_input SET outcome='already_installed';
@@ -80,18 +81,6 @@ BEGIN
     FROM pg_temp.seed_input CROSS JOIN LATERAL jsonb_array_elements(body->'bindings') b;
 
     -- Pins affect discovery. Only explicit term -> metric mappings supply a departmental default.
-    INSERT INTO web.semantic_policy(scope_id,revision,source_id,policy)
-    SELECT s.id,1,(SELECT source_id FROM web.semantic_source WHERE locator=body->'edition'->>'locator'
-                   AND source_version=body->'edition'->>'version'),
-           jsonb_build_object('pinned_asset_ids',
-               (SELECT jsonb_agg(a.asset ORDER BY pin.ord) FROM jsonb_array_elements_text(v->'pins')
-                  WITH ORDINALITY AS pin(ref,ord) JOIN pg_temp.seed_assets a USING (ref)),
-               'defaults',CASE WHEN v ? 'term' THEN jsonb_build_array(jsonb_build_object(
-                   'term_ref',(SELECT asset FROM pg_temp.seed_assets WHERE ref=v->>'term'),
-                   'target_metric_ref',(SELECT asset FROM pg_temp.seed_assets WHERE ref=v->>'default'),
-                   'applicable_scope_ref',s.id)) ELSE '[]'::jsonb END)
-    FROM pg_temp.seed_input CROSS JOIN LATERAL jsonb_array_elements(body->'edition'->'policies') v
-    JOIN pg_temp.seed_scopes s ON s.key=v->>'scope';
     UPDATE pg_temp.seed_input SET outcome='installed';
 END
 $semantic_import$;

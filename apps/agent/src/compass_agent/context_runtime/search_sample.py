@@ -337,9 +337,7 @@ def matches_sample(fact, clause, windows, dimensions):
     expected = {k + "_id": str(v) for k, v in dimensions.items() if k + "_id" in proof["columns"]}
     for field, values in proof["constraints"].items():
         matches_for_field = [
-            str(value)
-            for name, value in dimensions.items()
-            if field == name + "_id" or field.endswith("_" + name + "_id")
+            str(value) for name, value in dimensions.items() if field == name + "_id"
         ]
         if len(matches_for_field) != 1 or values != {matches_for_field[0]}:
             return False

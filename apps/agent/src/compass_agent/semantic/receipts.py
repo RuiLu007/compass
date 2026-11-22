@@ -2,7 +2,6 @@
 
 import json
 from decimal import Decimal
-from itertools import combinations
 
 from compass_agent.semantic.execution import exact_sum, observed_value
 
@@ -124,57 +123,10 @@ def group_reconciliation_lines(observations):
     return lines
 
 
-def reconciliation_lines(observations, requested):
-    """Compare requested additive totals only within the same authorized source and window."""
-    targets = {m["asset_id"]: m["name"] for m in requested if "asset_id" in m and "name" in m}
-    if not 2 <= len(targets) <= 4:
-        return []
-    groups = {}
-    for record in observations.values():
-        metric = record.get("metric", {}).get("asset_id")
-        if metric not in targets or not str(record.get("aggregation", "")).startswith("additive"):
-            continue
-        source = record.get("source_scope_hash")
-        if not source or not record.get("manifest_hash"):
-            continue
-        for window in record.get("time_range", []):
-            if window.get("group_by", "total") != "total":
-                continue
-            for values in record.get("rows", []):
-                row = dict(zip(record["columns"], values, strict=True))
-                if (
-                    row.get("group_key") != "total"
-                    or row.get("period_start") != window["start"]
-                    or row.get("period_end") != window["end"]
-                    or (value := observed_value(row)) is None
-                ):
-                    continue
-                key = (
-                    window["start"],
-                    window["end"],
-                    record["unit"],
-                    source,
-                    record["manifest_hash"],
-                    record.get("as_of"),
-                    record["metric"].get("timezone"),
-                    json.dumps(window.get("filters") or {}, sort_keys=True),
-                )
-                groups.setdefault(key, {})[metric] = value
-    lines = []
-    for (start, end, unit, *_), values in groups.items():
-        for a, b in combinations((m for m in targets if m in values), 2):
-            change = exact_sum([values[a], values[b].copy_negate()])
-            lines.append(
-                f"{start} 至 {end}（结束日不含） · {targets[a]} 减 {targets[b]} = {change:f} {unit}"
-            )
-    return lines
-
-
-def with_scope(text, observations, limit, *, requested=()):
+def with_scope(text, observations, limit):
     lines = [
         *scope_lines(observations),
         *group_reconciliation_lines(observations),
-        *reconciliation_lines(observations, requested),
     ]
     if lines:
         suffix = "\n\n取数口径\n\n" + "\n".join("- " + line for line in lines)

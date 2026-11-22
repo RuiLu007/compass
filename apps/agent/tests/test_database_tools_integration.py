@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import LiteralString, cast
 from urllib.parse import unquote, urlsplit, urlunsplit
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import psycopg
 import pytest
@@ -34,6 +34,7 @@ from psycopg import sql
 from psycopg.conninfo import conninfo_to_dict
 from pydantic import SecretStr
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 SPEC = importlib.util.spec_from_file_location(
@@ -1070,13 +1071,13 @@ def test_0012_provider_upgrade_preserves_binding_and_defaults_to_null(targets, m
 
 @pytest.mark.parametrize("mode", ["native", "sql"])
 def test_0017_reopens_drained_control_and_protects_semantic_receipts(targets, mode):
-    runtime, _ = targets("registry_" + mode)
+    runtime, migration = targets("registry_" + mode)
     assert db.migrate(target="0016") == "applied"
     with psycopg.connect(db.dsn(runtime)) as old:
         old.execute(
             "UPDATE agent_runtime_control SET policy_sha256=%s WHERE key='execution'", ("b" * 64,)
         )
-    assert db.migrate(mode=mode, start="0016") == "applied"
+    assert db.migrate(start="0016", target="0017") == "applied"
     with psycopg.connect(db.dsn(runtime)) as upgraded:
         assert upgraded.execute(
             "SELECT policy_sha256 FROM agent_runtime_control WHERE key='execution'"
@@ -1088,6 +1089,48 @@ def test_0017_reopens_drained_control_and_protects_semantic_receipts(targets, mo
             has_column_privilege('semantic_metric_offer','private_payload','UPDATE'),
             has_column_privilege('semantic_metric_offer','owner_id','UPDATE')"""
         ).fetchone() == (True, False, False, True, False)
+    from compass_agent.runtime.store import RuntimeStore
+
+    from .test_agent_run import CHAT
+    from .test_durable_runtime_integration import command
+
+    engine = create_engine(runtime)
+    try:
+        store = RuntimeStore(
+            engine,
+            Fernet.generate_key().decode(),
+            settings=Settings(
+                compass_context_runtime_enabled=False,
+                compass_semantic_workspaces="",
+                compass_search_workspaces="",
+            ),
+        )
+        store.ready = True
+        run_id = store.submit(command(), CHAT)["runId"]
+        assert CHAT.scope.kind == "tenant"
+        with psycopg.connect(db.dsn(migration)) as c:
+            c.execute("SET ROLE compass_agent_owner")
+            c.execute(
+                """INSERT INTO semantic_run_binding
+                VALUES (%s,%s,%s,'registry',repeat('b',64),'[]',now())""",
+                (run_id, CHAT.scope.tenant_id, CHAT.scope.workspace_id),
+            )
+        with pytest.raises(DBAPIError, match="Registry binding differs"):
+            db.migrate(mode=mode, start="0017")
+        registry = {"registry": {"manifest": "b" * 64, "pins": []}}
+        with psycopg.connect(db.dsn(migration)) as c:
+            c.execute("SET ROLE compass_agent_owner")
+            c.execute(
+                """UPDATE agent_run SET config_snapshot=jsonb_set(
+                config_snapshot,'{contextRuntime}',%s::jsonb) WHERE id=%s""",
+                (json.dumps(registry), run_id),
+            )
+        assert db.migrate(mode=mode, start="0017") == "applied"
+        assert store.read_run(UUID(run_id)).config_snapshot["contextRuntime"] == registry
+    finally:
+        engine.dispose()
+    with psycopg.connect(db.dsn(runtime)) as upgraded:
+        assert upgraded.execute("SELECT to_regclass('semantic_run_binding')").fetchone() == (None,)
 
 
 @pytest.mark.parametrize("mode", ["native", "sql"])

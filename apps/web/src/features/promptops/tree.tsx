@@ -1,4 +1,4 @@
-import { ChevronRight, FileText, Folder } from "lucide-react";
+import { ChevronRight, FileText, Folder, Plus } from "lucide-react";
 import { useState } from "react";
 import type { Entry } from "./client";
 type Branch = { dirs: Map<string, Branch>; files: Entry[] };
@@ -8,13 +8,13 @@ export function FileTree({
   selected,
   onSelect,
   searching,
-  onDirectory,
+  onCreate,
 }: {
   items: Entry[];
   selected: string;
   onSelect: (p: string) => void;
   searching: boolean;
-  onDirectory: (p: string) => void;
+  onCreate: (p: string) => void;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const root = branch();
@@ -27,30 +27,35 @@ export function FileTree({
     }
     dir.files.push(item);
   }
-  function children(dir: Branch, prefix: string) {
+  function children(dir: Branch, prefix: string, hidden = false) {
     return (
-      <ul>
+      <ul hidden={hidden}>
         {[...dir.dirs].map(([name, group]) => {
           const folder = prefix + name + "/";
+          const open = searching || (expanded[folder] ?? true);
           return (
             <li key={folder}>
-              <details
-                open={searching || (expanded[folder] ?? selected.startsWith(folder))}
-                onToggle={(event) => {
-                  if (searching) return;
-                  const open = event.currentTarget.open;
-                  setExpanded((current) =>
-                    current[folder] === open ? current : { ...current, [folder]: open },
-                  );
-                }}
-              >
-                <summary title={folder} onClick={() => onDirectory(folder)}>
+              <div className="prompt-directory-row">
+                <button
+                  className="secondary prompt-directory-toggle"
+                  title={folder}
+                  aria-expanded={open}
+                  onClick={() => setExpanded((current) => ({ ...current, [folder]: !open }))}
+                >
                   <ChevronRight className="prompt-tree-chevron" size={15} aria-hidden="true" />
                   <Folder size={15} aria-hidden="true" />
                   <span>{name}</span>
-                </summary>
-                {children(group, folder)}
-              </details>
+                </button>
+                <button
+                  className="secondary prompt-directory-add"
+                  aria-label={`在 ${folder} 中新建提示词`}
+                  title="新建提示词"
+                  onClick={() => onCreate(folder)}
+                >
+                  <Plus size={16} aria-hidden="true" />
+                </button>
+              </div>
+              {children(group, folder, !open)}
             </li>
           );
         })}

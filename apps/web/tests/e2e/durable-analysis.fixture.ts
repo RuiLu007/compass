@@ -189,6 +189,12 @@ export class DurableAnalysisFixture {
   holdNext() {
     this.held = true;
   }
+  publishExecution(value: Schema["RunExecutionNode"]) {
+    this.emit(this.required(), {
+      type: "view.upsert",
+      payload: { kind: "execution.node", objectId: value.id, revision: value.revision, value },
+    });
+  }
   loseFirstStream() {
     this.loseNextStream = true;
   }
@@ -651,6 +657,7 @@ export class DurableAnalysisFixture {
     }
     const run = this.runs.get(parts[1]);
     if (!run) return json({ error: { code: "not_found", message: "测试会话不存在" } }, 404);
+    if (parts[2] === "semantic-results" && request.method() === "GET") return json({ items: [] });
     if (parts[2] === "cancel") {
       this.cancelCount++;
       this.controls.push({ runId: run.id, body: request.postDataJSON() });

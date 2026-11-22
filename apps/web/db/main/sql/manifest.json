@@ -1,9 +1,9 @@
 {
   "owner": "web",
   "databaseKey": "main",
-  "feature": "974",
+  "feature": "973",
   "from": "empty",
-  "to": "0006_semantic_search",
+  "to": "0010_knowledge_library",
   "engine": "PostgreSQL 17",
   "tool": "node-pg-migrate 9.0.0",
   "sourceRevision": "working-tree; fixed by source SHA-256",
@@ -31,15 +31,31 @@
     {
       "source": "migrations/0006_semantic_search.sql",
       "sha256": "8b5883ab958b27786f83b0389e903474f9716052426d90228c6e9a16987fa6ea"
+    },
+    {
+      "source": "migrations/0007_semantic_cleanup.sql",
+      "sha256": "7c5502cb83de788d9d132d97fa617c750f711035ff9909bae3f9f644453caf17"
+    },
+    {
+      "source": "migrations/0008_semantic_asset_grants.sql",
+      "sha256": "e6c5c724540eea430dab7d25640826e54e408c37ad836a20a66bc5fac5743de4"
+    },
+    {
+      "source": "migrations/0009_document_vectors.sql",
+      "sha256": "44a107ced8a696b3ec414c2981eff0c38e568463bbb13dbf5fb4205be007a66d"
+    },
+    {
+      "source": "migrations/0010_knowledge_library.sql",
+      "sha256": "ec2baa7541d88d0d2dfa118a79147fb4181a36fcdb50600522b80a2829bf9985"
     }
   ],
   "bootstrap": "sql/bootstrap.sql",
-  "bootstrapSha256": "84f2f8673da17e123f85c897b5e125eab01281d1aef920dd412cf9c3500f49f1",
-  "incremental": "sql/upgrades/0005_semantic_governance__0006_semantic_search.sql",
+  "bootstrapSha256": "0f45930d4ed9de16815c07c8b296cd469760caef8f162f4465a566b5c6dca1ab",
+  "incremental": "sql/upgrades/0009_document_vectors__0010_knowledge_library.sql",
   "generate": "pnpm db:sql -F web",
-  "apply": "pnpm db:apply-sql -F web -- --from empty --to 0006_semantic_search",
-  "prerequisites": "Provisioned owned empty web/main database, owner/migrator/runtime roles; managed target checks and lock",
+  "apply": "pnpm db:apply-sql -F web -- --from empty --to 0010_knowledge_library",
+  "prerequisites": "pgvector provisioned in public; owned empty web/main database, owner/migrator/runtime roles; managed target checks and lock",
   "transaction": "single transaction",
-  "dataImpact": "Adds scoped semantic governance, immutable reviews, release manifests and full-text indexes for versions and aliases",
+  "dataImpact": "Adds workspace knowledge libraries, original files and editable pgvector chunks; preserves existing releases",
   "recovery": "Restore verified backup into a new owned database; verify permissions/revision; revoke sessions before switching"
 }

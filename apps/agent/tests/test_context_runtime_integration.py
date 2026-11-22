@@ -7,10 +7,11 @@ from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID, uuid4
 
+import pytest
 from compass_agent.context_runtime.contracts import ContextRequest
 from compass_agent.context_runtime.delivery import output_contract
 from compass_agent.context_runtime.pipeline import pin, prepare_input
-from compass_agent.context_runtime.profiles import FINANCE_REPORT, PHASES, TASKS, ScopeRule
+from compass_agent.context_runtime.profiles import PHASES, SCOPED_SCENE_FILES, TASKS, ScopeRule
 from compass_agent.context_runtime.semantics import Dictionary, MetricCatalog
 from compass_agent.data_connections.entities import DataConnection
 from compass_agent.execution_context import current_execution
@@ -187,9 +188,9 @@ def test_published_assembly_matrix_and_durable_deliveries(targets):
                         paths = {f["path"] for f in r["files"]}
                         assert f"shared/stages/{phase}.md" in paths
                         assert (f"tasks/{task}/system.md" in paths) == (phase != "identify")
-                        assert (FINANCE_REPORT in paths) == (
-                            i in {0, 3} and task == "business_report" and phase != "identify"
-                        )
+                        assert (
+                            SCOPED_SCENE_FILES[("business_report", "SC-29", "finance")] in paths
+                        ) == (i in {0, 3} and task == "business_report" and phase != "identify")
                         assert r["metrics"] == [
                             metric_ids[str(scope.tenant_id), str(scope.workspace_id)]
                         ]
@@ -210,6 +211,65 @@ def test_published_assembly_matrix_and_durable_deliveries(targets):
                             i != 3 and task == "business_report" and phase in {"plan", "generate"}
                         )
                         samples += 1
+            # A scene with no dedicated Markdown still receives exactly its published SOP.
+            from compass_agent.promptops.reader import PromptReader
+
+            account = peers[0]
+            binding = pin(tx, account, store)
+            generation = binding["generation"]
+            scope = account.scope
+            assert isinstance(scope, TenantScope)
+            scene_request = ContextRequest(
+                str(uuid4()),
+                "model:scene",
+                str(scope.tenant_id),
+                str(scope.workspace_id),
+                binding["scopeProfile"],
+                "data_analysis",
+                "SC-03",
+                "query",
+                generation,
+                1,
+            )
+            (scene_file,) = PromptReader.load_exact(tx, generation, ["support/routing/scenes.json"])
+            scenes = json.loads(scene_file.body)["scenes"]
+            assert len(scenes) == 40 and all(row["sop"] for row in scenes.values())
+            initial = {
+                "items": [
+                    {
+                        "kind": "term",
+                        "name": "返工",
+                        "summary": "复验未通过后的修复",
+                        "grain": "每件",
+                    }
+                ],
+                "owner_clarifications": [{"mention": "返工量", "definition": "按验收日期去重计件"}],
+            }
+            for search in ({}, {"search": {"kinds": ["semantic"], "skillEnabled": True}}):
+                compiled = prepare_input(
+                    tx,
+                    scene_request,
+                    {**binding, **search, "registry": {"pins": []}},
+                    GenerateInput(messages=[ChatMessage(role="user", content="看看近期经营变化")]),
+                    LIMITS,
+                    account,
+                    {"analysis": True, "model": True, "plugins": False},
+                    dictionary,
+                    variables={},
+                    as_of=date(2026, 1, 1),
+                    registry_context=initial,
+                )
+                system, first, *turns = compiled.request.messages
+                assert turns[-1].role == "user"
+                assert "看看近期经营变化" in (turns[-1].content or "")
+                assert "按验收日期去重计件" in (turns[-1].content or "")
+                assert "按验收日期去重计件" not in (first.content or "")
+                assert system.role == "system" and scenes["SC-03"]["sop"] in system.content
+                assert scenes["SC-01"]["sop"] not in system.content
+                assert (
+                    first.role == "user"
+                    and json.loads(first.content or "{}")["items"] == initial["items"]
+                )
         assert samples == 80
         asyncio.run(exercise_deliveries(engine, store, key, owner))
         asyncio.run(exercise_classifiers(engine, store, owner))
@@ -327,7 +387,14 @@ async def exercise_delivery(engine, store, key, owner, task, topic):
         question=f"请按{task}形式交付本期{topic[0]}。",
         selection=cast(Any, {"mode": "fixed", "provider_id": PROVIDER_ID}),
     )
-    run_id = UUID(store.submit(command, owner)["runId"])
+    environment = {
+        "tenantName": "集成租户",
+        "workspaceName": "经营团队",
+        "timezone": "Asia/Shanghai",
+    }
+    run_id = UUID(store.submit(command, owner, run_environment=environment)["runId"])
+    retry = store.submit(command, owner, run_environment={**environment, "tenantName": "改名"})
+    assert retry["runId"] == str(run_id)
     epoch = store.claim(run_id, uuid4())
     secrets = SecretStore(key)
     turn = FixtureTurn(secrets, topic)
@@ -383,9 +450,21 @@ async def exercise_delivery(engine, store, key, owner, task, topic):
             .order_by(AgentStep.ordinal)
         ).all()
         assert len(prepared) == calls and all(prepared)
+        from zoneinfo import ZoneInfo
+
+        accepted = store.read_run(run_id).created_at.astimezone(ZoneInfo("Asia/Shanghai"))
         phases = []
         for sealed in prepared:
             frame = store.private.open(run_id, "model-frame", sealed)
+            messages = frame["input"]["request"]["messages"]
+            assert messages[0]["content"].count("本轮运行环境") == 1
+            assert accepted.isoformat(timespec="seconds") in messages[0]["content"]
+            assert sum(m.get("content") == messages[1]["content"] for m in messages) == 1
+            assert json.loads(messages[1]["content"]) == {
+                "source": "runOrganization",
+                "tenantName": "集成租户",
+                "workspaceName": "经营团队",
+            }
             phases.append(frame["receipt"]["phase"])
             assert frame["input"]["request"]["thinking"] is not (
                 phases[-1] == "generate" and task != "business_qa"
@@ -399,7 +478,6 @@ async def exercise_delivery(engine, store, key, owner, task, topic):
 
 
 async def exercise_classifiers(engine, store, owner):
-    import pytest
     from compass_agent.context_runtime.classifier import call_classifier
     from compass_agent.models.errors import ModelError
     from compass_agent.routing.intent import decision_input, flash_input
@@ -413,7 +491,8 @@ async def exercise_classifiers(engine, store, owner):
             "selection": {"mode": "fixed", "provider_id": str(PROVIDER_ID)},
         }
     )
-    rid = UUID(store.submit(submit, owner)["runId"])
+    env = {"tenantName": "分类器租户", "workspaceName": "北区", "timezone": "Asia/Shanghai"}
+    rid = UUID(store.submit(submit, owner, run_environment=env)["runId"])
     journal = ExecutionJournal(store, LocalPublisher(), rid, store.claim(rid, uuid4()))
     journal.capabilities = lambda: capability_grants(owner)
     metrics, exporter = observer(compass_observability_sample_ratio=1)
@@ -422,6 +501,13 @@ async def exercise_classifiers(engine, store, owner):
 
     async def dispatch(_command, _owner, role, _provider, prepared, *_args):
         sent.append(role)
+        assert journal.prompt_facts is not None
+        if role == "intent_jev":
+            assert journal.prompt_facts.instructions in prepared.questions["scene"].instructions
+            assert prepared.state["runOrganization"]["tenantName"] == env["tenantName"]
+        else:
+            assert journal.prompt_facts.instructions in prepared.messages[0].content
+            assert json.loads(prepared.messages[1].content)["tenantName"] == env["tenantName"]
         assert "latest-private-query" in prepared.model_dump_json()
         assert "old-private-query" not in prepared.model_dump_json()
         return model_result(text="{}")
@@ -488,3 +574,43 @@ async def exercise_classifiers(engine, store, owner):
     finally:
         root.end()
         metrics.shutdown()
+
+
+@pytest.mark.parametrize(("search", "key"), [(False, "registry"), (True, "glossary")])
+def test_empty_registry_release_accepts_and_pins_first_run(targets, monkeypatch, search, key):
+    from compass_agent.documents import client as documents
+    from compass_agent.semantic import client
+
+    url, _ = targets("empty_registry")
+    db.migrate()
+    engine = install_prompts(create_engine(url))
+    workspace = uuid4()
+    owner = CHAT.model_copy(
+        update={"scope": TenantScope(kind="tenant", tenant_id=uuid4(), workspace_id=workspace)}
+    )
+    settings = Settings(
+        compass_semantic_workspaces=str(workspace),
+        compass_search_workspaces=str(workspace) if search else "",
+        compass_context_runtime_enabled=True,
+    )
+    store = RuntimeStore(engine, Fernet.generate_key().decode(), settings=settings)
+    store.ready = True
+    command = SessionSubmit.model_validate(
+        {
+            "requestId": str(uuid4()),
+            "question": "我部门的指标如何计算？",
+            "selection": {"mode": "fixed", "provider_id": str(PROVIDER_ID)},
+        }
+    )
+    monkeypatch.setattr(documents, "accept", lambda *_: {"kinds": ["knowledge"]})
+    monkeypatch.setattr(client, "request", lambda *_: {"manifest_hash": "e" * 64, "releases": []})
+    try:
+        run_id = UUID(store.submit(command, owner)["runId"])
+        binding = store.read_run(run_id).config_snapshot["contextRuntime"]
+        assert ("registry" in binding) is not search
+        assert binding[key] == {
+            "pins": [],
+            "manifest": "e" * 64,
+        }
+    finally:
+        engine.dispose()

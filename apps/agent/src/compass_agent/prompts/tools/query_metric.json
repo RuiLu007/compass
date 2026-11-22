@@ -2,7 +2,7 @@
   "type": "function",
   "function": {
     "name": "query_metric",
-    "description": "通过已发布执行绑定按期间、维度和过滤查询正式指标。比较时传两个可比期间。返回受信结果引用、口径、单位与数据截止。\n\n只传 query_ref 即可执行已解析的查询。对比前一等长期间时传 operation=\"compare\"，服务端按本期左闭右开的天数推算上一期。用户另行指定对照期时传 comparison。新的本期或维度需要先重新解析。\n\n对比结果的 current_minus_comparison 表示本期减对照期，由执行器对齐两期分组，负值表示下降。完整可加金额中仅一期出现的分组按另一侧零参与差额；缺报或没有可比值时差额为空。period_totals 给出完整可加分组的各期合计。\n\n下钻时，把子分组和父级筛选写进解析参数，再将相同筛选作为 parent_group。从全体授权数据下钻时填写 parent_group=\"total\"。",
+    "description": "**用途与调用规则**\n\n- 通过已发布执行绑定按期间、维度和过滤查询正式指标。\n- 比较时传两个可比期间。\n- 返回受信结果引用、口径、单位与数据截止。\n- 只传 query_ref 即可执行已解析的查询。\n- 对比时传 operation=\"compare\" 和明确的 comparison。\n- 用户要求紧邻的前一等长期间时可采用解析结果中的 previous_equal_window。\n- 新的本期或维度需要先重新解析。\n- 对比结果的 current_minus_comparison 表示本期减对照期，由执行器对齐两期分组，负值表示下降。\n- 完整可加金额中仅一期出现的分组按另一侧零参与差额；缺报或没有可比值时差额为空。\n- period_totals 给出完整可加分组的各期合计。\n- 下钻时，把子分组和父级筛选写进解析参数，再将相同筛选作为 parent_group。\n- 从全体授权数据下钻时填写 parent_group=\"total\"。",
     "parameters": {
       "$defs": {
         "Parameters": {
@@ -103,7 +103,7 @@
             }
           ],
           "default": null,
-          "description": "自定义对照期。对比紧邻的前一等长期间时省略，由服务端计算日期。"
+          "description": "比较时填写用户所指的对照期。"
         },
         "parent_group": {
           "anyOf": [

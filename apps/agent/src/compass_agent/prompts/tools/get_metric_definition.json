@@ -2,7 +2,7 @@
   "type": "function",
   "function": {
     "name": "get_metric_definition",
-    "description": "读取已发布定义、统计粒度、期间、单位、适用维度与可见关系。",
+    "description": "**用途与调用规则**\n\n- 读取已发布定义、统计粒度、期间、单位、适用维度与可见关系。",
     "parameters": {
       "additionalProperties": false,
       "properties": {

@@ -128,6 +128,7 @@ export async function authorizeRuntime(
   },
   approval: boolean,
   capabilityGrants = false,
+  includeRunEnvironment = false,
 ) {
   return withTransaction("query", async (client) => {
     const { identity, access } = bind(client);
@@ -168,7 +169,17 @@ export async function authorizeRuntime(
         requirePermission(current, "models.invoke", scope);
       }
     }
+    const tenant = includeRunEnvironment ? await access.tenant(scope.tenantId) : undefined;
     return {
+      ...(tenant
+        ? {
+            runEnvironment: {
+              tenantName: tenant.name,
+              workspaceName: workspace.name,
+              timezone: tenant.timezone,
+            },
+          }
+        : {}),
       details: current.role === "admin",
       revision: current.authzVersion,
       ...(capabilityGrants

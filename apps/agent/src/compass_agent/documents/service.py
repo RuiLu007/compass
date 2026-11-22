@@ -8,6 +8,7 @@ from time import monotonic
 from uuid import UUID, uuid5
 
 from compass_agent.context_runtime.source_access import assistant_message, record_sources
+from compass_agent.documents.embeddings import INDEX, EmbeddingUnavailable, embed
 from compass_agent.runtime.private_state import digest
 from compass_agent.semantic.client import read_document_operation
 from compass_agent.tools.contracts import ToolRejected
@@ -49,6 +50,13 @@ class DocumentTools:
             if not source:
                 raise ToolRejected("document_unavailable")
             args = {"sourceRef": source, "offset": args["offset"]}
+        if op == "search" and self.snapshot.get("vectorIndex") == INDEX:
+            try:
+                query = " ".join(filter(None, (args["query"], args.get("entity"))))
+                vectors = await embed(self.store.engine, self.store.source_settings, [query])
+                args = {**args, "queryVector": vectors[0]}
+            except EmbeddingUnavailable:
+                pass  # The Web owner can still serve the authorized lexical search.
         result = await read_document_operation(
             self.store.source_settings, self.trusted, self.journal.run_id, op, args
         )

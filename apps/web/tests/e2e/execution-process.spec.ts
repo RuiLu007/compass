@@ -17,9 +17,10 @@ test("执行时间线在桌面与窄屏支持键盘、详情和完成后重新�
   const toggle = guide.locator(".analysis-process-toggle");
   const list = guide.getByRole("list", { name: "执行过程" });
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(toggle).toContainText("查询数据 · 执行 SELECT COUNT(*) AS orders FROM sales");
   await toggle.press("Enter");
   const rows = list.locator(":scope > li");
-  await expect(rows).toHaveCount(10);
+  await expect(rows).toHaveCount(11);
   const group = list.getByRole("button", { name: /商品贡献与口径复核/ });
   await group.press("Space");
   await expect(list.getByText("并行", { exact: true })).toBeVisible();
@@ -33,6 +34,9 @@ test("执行时间线在桌面与窄屏支持键盘、详情和完成后重新�
   await guide.getByRole("button", { name: "失败", exact: true }).click();
   await expect(tool).toHaveAttribute("aria-expanded", "true");
   await expect(list.getByRole("button", { name: /独立口径复核/ })).toContainText("失败");
+  const query = list.getByRole("button", { name: /查询数据 · 执行 SELECT/ });
+  await expect(query).toContainText("失败");
+  await expect(query).not.toContainText("返回");
 
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.locator("main").evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
@@ -50,4 +54,14 @@ test("执行时间线在桌面与窄屏支持键盘、详情和完成后重新�
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
   await toggle.press("Enter");
   await expect(tool).toHaveAttribute("aria-expanded", "true");
+  await expect(query).toContainText("返回 1 行 · orders=128");
+  await expect(query).toHaveAttribute("aria-expanded", "false");
+  const resultSnippet = query.locator(".ui-timeline-query-result");
+  expect(await resultSnippet.evaluate((el) => el.clientWidth)).toBeGreaterThan(48);
+  await query.press("Enter");
+  await expect(query.locator("..").getByRole("region", { name: "调用入参" })).toContainText(
+    "FROM sales",
+  );
+  await query.press("Space");
+  await expect(query).toHaveAttribute("aria-expanded", "false");
 });

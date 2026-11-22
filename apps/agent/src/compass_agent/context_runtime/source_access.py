@@ -15,7 +15,10 @@ from compass_agent.models.errors import ModelError
 from compass_agent.runtime.entities import AgentMessage, AgentRun
 from compass_agent.schemas import RUN_STREAM_LIMITS, TenantScope
 
-RESTRICTED = "这份结果的来源当前不可读取。请在当前权限下重新查询。"
+RESTRICTED = (
+    "这份结果的来源当前不可读取。请重新查询。"
+    "如仍缺少访问权限，请联系工作区管理员申请该结果所用数据的读取权限。"
+)
 REFERENCE = "结果已保存。"
 # A semantic discovery can admit 50 items, plus the class guard. Keep capacity
 # for initial context references independently of the owner's HTTP page size.
@@ -58,7 +61,7 @@ def record_sources_locked(store, tx, run, incoming, epoch):
             ref = {**ref, "epoch": str(epoch), "capturedAt": datetime.now(UTC).isoformat()}
         if ref not in refs:
             refs.append(ref)
-        if search:
+        if search and not ref.get("default_term"):
             kind = ref.get("kind")
             source = (
                 "semantic"
@@ -77,7 +80,9 @@ def record_sources_locked(store, tx, run, incoming, epoch):
                 }
                 if guard not in refs:
                     refs.append(guard)
-    if len(refs) > (MAX_SEARCH_REFS if search else 64):
+    # Default terms are reauthorized in batches independently of the tool reference budget.
+    counted = sum(not (r.get("kind") == "semantic" and r.get("default_term")) for r in refs)
+    if counted > (MAX_SEARCH_REFS if search else 64):
         refs = [{"kind": "source_set_blocked" if search else "transient"}]
     message.source_refs = refs
 
@@ -267,12 +272,29 @@ def _current_relations(binding, refs):
         return True
 
 
+def source_denial(refs):
+    # Return only a public resource category, never a protected name or row identifier.
+    categories = {
+        "document": "document_access_denied",
+        "retail": "database_access_denied",
+        "metadata": "database_access_denied",
+        "semantic_open": "database_access_denied",
+        "semantic": "metric_access_denied",
+        "semantic_result": "metric_access_denied",
+        "metric_dictionary": "metric_access_denied",
+        "transient": "source_result_expired",
+    }
+    kinds = {categories.get(ref.get("kind")) for ref in refs}
+    reason = kinds.pop() if len(kinds) == 1 else None
+    return ModelError("source_access_denied", 403, reason_code=reason)
+
+
 def require_run_sources(store, run_id, context, *, epoch=None):
     with Session(store.engine) as tx:
         message = assistant_message(tx, run_id)
         refs = message.source_refs if message else []
-    if not allows(store, context, refs, epoch=epoch):
-        raise ModelError("source_access_denied", 403)
+    if not allows(store, context, refs, epoch=epoch, raise_unavailable=True):
+        raise source_denial(refs)
 
 
 def require_search_sources(journal, context, *, refs=None, epoch=None):
@@ -293,7 +315,7 @@ def require_search_sources(journal, context, *, refs=None, epoch=None):
     if rebuilding and signature == journal.rebuilt_source_digest:
         return
     if not allows(journal.store, context, refs, epoch=epoch, raise_unavailable=True):
-        raise ModelError("source_access_denied", 403)
+        raise source_denial(refs)
     if rebuilding:
         journal.rebuilt_source_digest = signature
 
@@ -353,6 +375,8 @@ def project_sources(store, response, context, *, live_since=None):
     value = response.model_dump(mode="json", by_alias=True)
     decisions = {}
     statuses = {}
+    denied_status = {}
+    unavailable = set()
     search_runs = set()
     visible = []
     with Session(store.engine) as tx:
@@ -367,21 +391,47 @@ def project_sources(store, response, context, *, live_since=None):
                         search_runs.add(identifier)
                     statuses[identifier] = run.public_view["run"]
                     message = assistant_message(tx, identifier)
-                    decisions[identifier] = allows(
-                        store,
-                        context,
-                        message.source_refs if message else [],
-                        live_since=live_since,
-                    )
+                    refs = (message.source_refs if message else None) or []
+                    try:
+                        decisions[identifier] = allows(
+                            store, context, refs, live_since=live_since, raise_unavailable=True
+                        )
+                    except ModelError as exc:
+                        if exc.status < 500:
+                            raise
+                        decisions[identifier] = False
+                        unavailable.add(identifier)
+                    if not decisions[identifier] and statuses[identifier]["status"] == "failed":
+                        denied_status[identifier] = (
+                            "source_authorization_unavailable"
+                            if identifier in unavailable
+                            else source_denial(refs).reason_code or "restricted_run_result"
+                        )
+                        statuses[identifier] = {
+                            **statuses[identifier],
+                            "reasonCode": denied_status[identifier],
+                        }
             allowed = decisions[identifier]
             event = packet["event"]
             if allowed is not None:
                 payload = event["payload"]
+                if (
+                    event["type"] == "run.upsert"
+                    and payload["status"] == "failed"
+                    and identifier in denied_status
+                ):
+                    payload["reasonCode"] = denied_status[identifier]
                 if event["type"] == "message.upsert" and payload["role"] == "assistant":
                     if not allowed:
                         payload["content"] = {
                             **payload["content"],
-                            "text": RESTRICTED,
+                            "text": (
+                                ""
+                                if identifier in denied_status
+                                else "数据访问权限暂时无法核验，请稍后刷新。"
+                                if identifier in unavailable
+                                else RESTRICTED
+                            ),
                             "artifactIds": [],
                         }
                     elif payload["status"] in {"completed", "incomplete"}:

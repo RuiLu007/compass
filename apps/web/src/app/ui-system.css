@@ -41,6 +41,26 @@
   --ui-fast: 140ms;
 }
 
+.ui-page-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.ui-page-heading > h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-title);
+}
+.ui-page-heading > :is(a, button) {
+  flex: none;
+  white-space: nowrap;
+}
+
 .ui-panel {
   min-width: 0;
   padding: var(--space-5);
@@ -529,6 +549,19 @@ button.ui-timeline-row {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.ui-timeline-query {
+  display: flex;
+  gap: var(--space-1);
+}
+.ui-timeline-query > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ui-timeline-query-result {
+  flex: 0 0 auto;
+  max-width: 46%;
+}
 .ui-timeline-time,
 .ui-timeline-status {
   flex: 0 0 auto;
@@ -632,6 +665,33 @@ button.ui-timeline-row {
   font-size: 0.875rem;
 }
 
+.conversation-group + .conversation-group {
+  margin-top: var(--space-3);
+}
+.conversation-group h3 {
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-meta);
+  font-weight: 500;
+}
+.conversation-feedback {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-meta);
+}
+.conversation-feedback p {
+  margin: 0;
+}
+.conversation-list .conversation-more {
+  width: 100%;
+  min-height: 44px;
+  margin-block: var(--space-2);
+  color: var(--muted);
+}
 .conversation-row {
   --conversation-row-surface: #f5f7f2;
   position: relative;
@@ -655,8 +715,12 @@ button.ui-timeline-row {
   padding-inline-end: var(--space-1);
   min-height: 44px;
   border-radius: var(--radius-control);
-  color: var(--ink);
+  color: var(--muted);
   text-decoration: none;
+}
+.conversation-row:is(:hover, :focus-within) .conversation-item,
+.conversation-item[aria-current="page"] {
+  color: var(--primary);
 }
 .conversation-item > svg {
   flex-shrink: 0;
@@ -668,7 +732,7 @@ button.ui-timeline-row {
   flex: 1;
   min-width: 0;
   font-size: var(--text-control);
-  font-weight: 500;
+  font-weight: 400;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -770,6 +834,24 @@ button.ui-timeline-row {
 }
 .durable-approval button {
   min-height: 44px;
+}
+
+.semantic-revision-preview {
+  flex: 1 0 100%;
+  min-width: 0;
+}
+
+.semantic-revision-preview label {
+  display: grid;
+  gap: 4px;
+  margin-block: 12px;
+  overflow-wrap: anywhere;
+}
+
+.semantic-revision-preview textarea {
+  width: 100%;
+  min-height: 44px;
+  resize: vertical;
 }
 
 .schedule-page,

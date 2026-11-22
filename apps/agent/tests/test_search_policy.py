@@ -1,10 +1,15 @@
 from copy import deepcopy
+from functools import partial
 from uuid import uuid4
 
 import pytest
+from compass_agent.context_runtime.profiles import search_pack
 from compass_agent.context_runtime.search_claims import SearchGap, render
 
 from .test_search_verification import draft, metric, proposal, record
+
+render_retail = partial(render, pack=search_pack({"scenePack": "retail"}, None))
+
 
 K = "2025-10-09T01:00:00Z"
 POLICY = """以下条件须同时满足。
@@ -153,7 +158,7 @@ def fixture():
 
 def test_purchase_and_action_require_each_original_and_carry_them_into_the_answer():
     data, facts = fixture()
-    body, manifest = render(uuid4(), draft(facts, ["decision", "action"]), data)
+    body, manifest = render_retail(uuid4(), draft(facts, ["decision", "action"]), data)
     assert all(
         t in body
         for t in (
@@ -170,7 +175,7 @@ def test_purchase_and_action_require_each_original_and_carry_them_into_the_answe
     )
     assert len(manifest["anchors"]) == 2
     data["offer"]["record"]["text"] = OFFER.replace("6,000", "9,000")
-    assert "暂缓采购" in render(uuid4(), draft(facts, ["decision"]), data)[0]
+    assert "暂缓采购" in render_retail(uuid4(), draft(facts, ["decision"]), data)[0]
 
 
 @pytest.mark.parametrize(
@@ -237,7 +242,7 @@ def test_rule_checks_do_not_accept_unmatched_values(change):
     elif change == "empty_selected_window":
         data["samples"]["record"]["rows"][1][0] = "缺失"
     with pytest.raises(ValueError):
-        render(uuid4(), draft(facts, ["decision", "action"]), data)
+        render_retail(uuid4(), draft(facts, ["decision", "action"]), data)
 
 
 def with_event_window(explicit):
@@ -293,14 +298,14 @@ def with_event_window(explicit):
 @pytest.mark.parametrize("explicit", [True, False])
 def test_both_shapes_bind_receipt_and_policy_to_selected_window(explicit):
     data, facts = with_event_window(explicit)
-    body, manifest = render(uuid4(), draft(facts, ["decision"]), data)
+    body, manifest = render_retail(uuid4(), draft(facts, ["decision"]), data)
     assert "6,000.00 元" in body
     sources = next(iter(manifest["details"].values()))["sources"]
     assert any(s["title"] == "入库作业" for s in sources)
     assert any("实际收货 = RECEIVED" in s["excerpt"] for s in sources)
     data["event"]["sql"] = data["event"]["sql"].replace("'RECEIVED'", "'TRANSFER'")
     with pytest.raises(ValueError):
-        render(uuid4(), draft(facts, ["decision"]), data)
+        render_retail(uuid4(), draft(facts, ["decision"]), data)
 
 
 @pytest.mark.parametrize("change", ["missing_event", "prior_period", "wrong_sku", "other_policy"])
@@ -315,7 +320,7 @@ def test_mismatched_receipt_does_not_qualify(change):
     else:
         data["window"]["title"] = "其他手册"
     with pytest.raises(ValueError):
-        render(uuid4(), draft(facts, ["decision"]), data)
+        render_retail(uuid4(), draft(facts, ["decision"]), data)
 
 
 @pytest.mark.parametrize("explicit", [True, False])
@@ -325,7 +330,7 @@ def test_missing_dictionary_guides_a_new_lookup_with_actual_field_and_value(expl
     definitions = event["dictionaries"]
     event["dictionaries"] = [definitions[1]]
     with pytest.raises(SearchGap) as missing:
-        render(uuid4(), draft(facts, ["decision"]), data)
+        render_retail(uuid4(), draft(facts, ["decision"]), data)
     assert all(
         token in str(missing.value)
         for token in (
@@ -338,15 +343,15 @@ def test_missing_dictionary_guides_a_new_lookup_with_actual_field_and_value(expl
     event["dictionaries"] = definitions
     del event["columnDictionary"]["core.moves.occurred_at"]
     with pytest.raises(SearchGap, match=r"describe_table.*core\.moves.*occurred_at"):
-        render(uuid4(), draft(facts, ["decision"]), data)
+        render_retail(uuid4(), draft(facts, ["decision"]), data)
 
 
 def test_missing_population_dictionary_reports_only_when_used_as_eligibility():
     data, facts = fixture()
     data["samples"]["dictionaries"] = []
     with pytest.raises(SearchGap, match=r"core\.visits\.event_type.*VIEW"):
-        render(uuid4(), draft(facts, ["decision"]), data)
+        render_retail(uuid4(), draft(facts, ["decision"]), data)
     # The same accepted SQL count remains a source-backed raw observation.
     count = next(p for p in facts if p["key"] == "sample")
-    _, manifest = render(uuid4(), draft([count], ["sample"]), data)
+    _, manifest = render_retail(uuid4(), draft([count], ["sample"]), data)
     assert all(d["status"] == "supported" for d in manifest["details"].values())

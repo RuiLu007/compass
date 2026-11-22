@@ -8,17 +8,39 @@ import { DEFAULT_TEMPLATES } from "../src/server/modules/access/domain/permissio
 
 // Stable, explicitly requested teaching data. Never resets an existing account or grant.
 export const fixtureId = (n) => `99500000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+async function ensureDemoAdminMemberships(client) {
+  const { rows } = await client.query(
+    `INSERT INTO web.tenant_member(id,tenant_id,user_id,role_key)
+     SELECT gen_random_uuid(),t.id,u.id,'admin' FROM web.tenant t CROSS JOIN web.app_user u
+     WHERE t.id=ANY($1::uuid[]) AND t.status='active' AND u.id=$2
+       AND u.login_name='teaching.platform' AND u.is_platform_admin AND u.status='active'
+     ON CONFLICT (tenant_id,user_id) DO NOTHING RETURNING tenant_id,id`,
+    [[fixtureId(10), fixtureId(11)], fixtureId(1)],
+  );
+  for (const row of rows) {
+    await client.query("UPDATE web.tenant SET authz_version=authz_version+1 WHERE id=$1", [
+      row.tenant_id,
+    ]);
+    await client.query(
+      "INSERT INTO web.audit_event(id,event_key,tenant_id,action,target_type,target_id,outcome) VALUES($1,$2,$3,'fixture.admin_membership','tenant_member',$4,'success')",
+      [randomUUID(), "fixture:admin:" + row.id, row.tenant_id, row.id],
+    );
+  }
+  return rows.length;
+}
 export async function seedTeaching(password, url) {
-  const encoded = await encodePassword(password);
   const client = await connectManaged(url);
   try {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock(995002)");
     const { rows } = await client.query("SELECT id FROM web.app_user WHERE id=$1", [fixtureId(1)]);
     if (rows.length) {
+      const added = await ensureDemoAdminMemberships(client);
       await client.query("COMMIT");
-      return { status: "already_seeded" };
+      return { status: "already_seeded", adminMembershipsAdded: added };
     }
+    if (!password) throw new Error("WEB_FIXTURE_PASSWORD is required for new teaching accounts");
+    const encoded = await encodePassword(password);
     const names = ["platform", "admin", "analyst", "viewer", "auditor", "outsider"];
     for (let i = 0; i < names.length; i++)
       await client.query(
@@ -76,6 +98,7 @@ export async function seedTeaching(password, url) {
           DEFAULT_TEMPLATES[role],
         ],
       );
+    await ensureDemoAdminMemberships(client);
     const eventId = randomUUID();
     await client.query(
       "INSERT INTO web.audit_event(id,event_key,action,target_type,outcome,safe_summary) VALUES($1,'fixture:teaching','fixture.created','fixture','success','{}')",
@@ -105,11 +128,20 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
       console.log("Web seed skipped: request --fixture teaching explicitly.");
       return;
     }
+    if (values.fixture === "retail-semantics-v3") {
+      const { publishRetailTerms } = await import("./retail-semantic-release.mjs");
+      console.log(JSON.stringify(await publishRetailTerms()));
+      return;
+    }
+    if (values.fixture === "retail-semantics-v2") {
+      const { publishRetailDefinitions } = await import("./retail-semantic-release.mjs");
+      console.log(JSON.stringify(await publishRetailDefinitions()));
+      return;
+    }
     if (values.fixture === "retail-semantics") {
       console.log(JSON.stringify(await seedRetailSemantics()));
       return;
     }
     if (values.fixture !== "teaching") throw new Error("Unknown fixture");
-    if (!process.env.WEB_FIXTURE_PASSWORD) throw new Error("WEB_FIXTURE_PASSWORD is required");
     console.log(JSON.stringify(await seedTeaching(process.env.WEB_FIXTURE_PASSWORD)));
   });

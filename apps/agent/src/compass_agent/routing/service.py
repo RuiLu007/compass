@@ -8,6 +8,7 @@ from uuid import uuid5
 
 from starlette.concurrency import run_in_threadpool
 
+from compass_agent.context_runtime.run_facts import current_facts, prompt_environment
 from compass_agent.llm.policy import LogicalPolicy
 from compass_agent.models import RoutingGrant
 from compass_agent.models.errors import ModelError
@@ -207,7 +208,7 @@ class RoutingService:
                     context,
                     "intent_jev",
                     jev_id,
-                    decision_input(command.input, managed=managed),
+                    decision_input(command.input, managed=managed, facts=current_facts()),
                     min(classification_deadline, loop.time() + POLICY.jev_seconds),
                     "classifier",
                     metrics,
@@ -242,7 +243,7 @@ class RoutingService:
                 context,
                 "intent_flash",
                 flash_id,
-                flash_input(command.input, managed=managed),
+                flash_input(command.input, managed=managed, facts=current_facts()),
                 min(classification_deadline, loop.time() + POLICY.flash_seconds),
                 "classifier",
                 metrics,
@@ -366,6 +367,10 @@ class RoutingService:
         return current_bodies(self.models.repository.engine, paths)
 
     async def run(self, command, context, emit=None) -> Any:
+        with prompt_environment(context):
+            return await self._run_with_prompts(command, context, emit)
+
+    async def _run_with_prompts(self, command, context, emit):
         from compass_agent.prompt_assets import use_prompts
 
         if self.settings.compass_context_runtime_enabled:
@@ -413,6 +418,8 @@ class RoutingService:
                         max_tokens=512,
                         continuation_token=None,
                     )
+                if facts := current_facts():
+                    updates["messages"] = facts.messages(updates["messages"])
                 generated = command.input.model_copy(update=updates)
                 result = await self._stage(
                     command,

@@ -11,5 +11,35 @@
         "path": "analysis/pos-first-report-brief.md"
       }
     ]
+  },
+  {
+    "title": "第 22 课 · 经营语义与指标口径",
+    "suggestions": [
+      {
+        "label": "失败支付最多那天，销售额也掉了吗？",
+        "path": "analysis/failed-payments-sales.md"
+      },
+      {
+        "label": "这周有几种支付方式真的付成功了？",
+        "path": "analysis/payment-method-count.md"
+      },
+      {
+        "label": "把已有指标的去重规则写清楚",
+        "path": "analysis/revise-payment-method.md"
+      },
+      {
+        "label": "联席会的“销售额”用哪个口径？",
+        "path": "analysis/choose-sales-definition.md"
+      }
+    ]
+  },
+  {
+    "title": "第 23 课 · Agentic Search（华东区域工作区）",
+    "suggestions": [
+      {
+        "label": "华东区 GMV 为什么下降了 12%？",
+        "path": "analysis/east-gmv-diagnosis.md"
+      }
+    ]
   }
 ]

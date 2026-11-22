@@ -18,7 +18,9 @@ def catalog():
     )
     scenes = {
         key: {
-            field: item for field, item in row.items() if field not in {"description", "examples"}
+            field: item
+            for field, item in row.items()
+            if field not in {"description", "examples", "sop"}
         }
         for key, row in value["scenes"].items()
     }
@@ -46,3 +48,10 @@ def descriptions():
         + ("\n识别示例：\n" + "\n".join(row["examples"]) if row.get("examples") else "")
         for key, row in document["scenes"].items()
     }
+
+
+def semantic_context_args(question: str, scene_id: str | None = None):
+    args = {"question": question[:2400]}
+    if scene := catalog()[1].get(scene_id):
+        args["scene_hint"] = (scene["category_name"] + " " + scene["name"])[:160]
+    return args

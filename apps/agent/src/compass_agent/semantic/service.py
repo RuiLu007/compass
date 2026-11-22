@@ -50,10 +50,11 @@ class RegistryTools:
         self.journal = journal
         self.trusted = trusted
         self.store = journal.store
-        self.pins = (journal.context_binding or {}).get("registry", {}).get("pins", [])
+        binding = journal.context_binding or {}
+        self.pins = (binding.get("registry") or binding.get("glossary") or {}).get("pins", [])
 
     async def api(self, op, args=None):
-        if snapshot := getattr(self.journal, "search_snapshot", None):
+        if op != "glossary" and (snapshot := getattr(self.journal, "search_snapshot", None)):
             from compass_agent.documents.client import verify
 
             if "semantic" not in snapshot["kinds"] or not await asyncio.to_thread(
@@ -170,20 +171,6 @@ class RegistryTools:
             None,
         )
 
-    def formal_query_started(self):
-        with self.store.transaction() as tx:
-            return (
-                tx.scalar(
-                    select(SemanticMetricOffer.offer_id)
-                    .where(
-                        SemanticMetricOffer.run_id == self.journal.run_id,
-                        SemanticMetricOffer.kind.in_(("formal", "plan", "result")),
-                    )
-                    .limit(1)
-                )
-                is not None
-            )
-
     def metric_ref(self, metric):
         return {
             "kind": "semantic",
@@ -200,7 +187,13 @@ class RegistryTools:
 
     def record_page(self, items):
         if items:
-            record_sources(self.journal, [self.metric_ref(item) for item in items])
+            refs = []
+            for item in items:
+                ref = self.metric_ref(item)
+                if item.get("kind") == "term" and "context_reason" in item:
+                    ref["default_term"] = True
+                refs.append(ref)
+            record_sources(self.journal, refs)
 
     async def run(self, op, args, execution):
         match op:
@@ -216,9 +209,8 @@ class RegistryTools:
                 result = await self.api(op, {**conditions, "cursor": offset})
                 from compass_agent.semantic.search import accept_page
 
-                budget = (await self.api("context"))["max_search_rounds"]
                 page = await asyncio.to_thread(
-                    accept_page, self, execution, search_key, offset, result, budget
+                    accept_page, self, execution, search_key, offset, result
                 )
                 await asyncio.to_thread(self.record_page, page["items"])
                 return page
@@ -234,42 +226,26 @@ class RegistryTools:
                 intent = {k: v for k, v in args.items() if k != "historical_as_of"}
                 if intent.get("parameters"):
                     intent["parameters"] = {**intent["parameters"], "as_of": cutoff.isoformat()}
-                try:
-                    resolved = await self.api(op, intent)
-                except Exception:
-                    self.put("formal", "protected", {})
-                    raise
-                if resolved["status"] != "no_match":
-                    self.put("formal", "protected", {})
+                grant = self.approved(execution)
+                saved = grant or await asyncio.to_thread(self.choice, intent["mention"])
+                if saved and saved.get("customDefinition") and not intent.get("metric_id"):
+                    return {
+                        "status": "user_definition",
+                        "confirmed_by": "current_user",
+                        "mention": intent["mention"],
+                        "definition": saved["customDefinition"],
+                    }
+                resolved = await self.api(op, intent)
                 if resolved["status"] == "needs_clarification":
-                    grant = self.approved(execution)
-                    picked = grant.get("choiceId") if grant else None
-                    if not picked:
-                        saved = await asyncio.to_thread(self.choice, intent["mention"])
-                        picked = saved.get("asset_id") if saved else None
-                    if not picked:
-                        picked = (getattr(self.journal, "registry_selected", None) or {}).get(
-                            "asset_id"
-                        )
+                    picked = (saved or {}).get("choiceId") or (saved or {}).get("asset_id")
                     if picked not in [v["asset_id"] for v in resolved["options"]]:
                         raise ToolRejected("semantic_choice_required")
                     resolved = await self.api("choice", {**intent, "metric_id": picked})
-                    if resolved["status"] == "resolved":
-                        self.put(
-                            "choice",
-                            intent["mention"].strip().casefold(),
-                            {"asset_id": picked, "version_id": resolved["metric"]["version_id"]},
-                        )
                 if resolved["status"] != "resolved":
+                    if resolved.get("metric"):
+                        await asyncio.to_thread(self.record, resolved["metric"])
                     return resolved
                 metric = resolved["metric"]
-                selected = getattr(self.journal, "registry_selected", None)
-                if (
-                    selected
-                    and metric["asset_id"] in getattr(self.journal, "registry_family", ())
-                    and metric["asset_id"] != selected["asset_id"]
-                ):
-                    return {"status": "use_selected_metric", "metric": selected}
                 await asyncio.to_thread(self.record, metric)
                 plan = {
                     "asset_id": metric["asset_id"],
@@ -305,6 +281,18 @@ class RegistryTools:
             case "query":
                 return await self.query(args, execution)
             case "discover":
+                if args["trigger"] == "suggest":
+                    from compass_agent.semantic.results import nominate
+
+                    return await asyncio.to_thread(nominate, self, args)
+                if args.get("revise_metric"):
+                    view = await self.api(
+                        "revision-lookup",
+                        {"metric": args["revise_metric"], "changes": args["fields"]},
+                    )
+                    if view.get("status"):
+                        return view
+                    raise ToolRejected("semantic_confirmation_required")
                 if ref := await self.requested_result(args):
                     return await self.propose({**args, "result_ref": ref}, execution)
                 return await self.api(
@@ -385,12 +373,12 @@ class RegistryTools:
                 raise ToolRejected("semantic_rebind_parameters")
         windows = [parameters]
         if args.get("operation") == "compare":
-            previous = args.get("comparison") or previous_equal_window(parameters)
-            if (
-                not previous
-                or previous["end"] <= previous["start"]
-                or previous.get("group_by", "total") != parameters.get("group_by", "total")
-            ):
+            previous = args.get("comparison")
+            if not previous:
+                return {"status": "needs_parameters", "required": ["comparison"]}
+            if previous["end"] <= previous["start"] or previous.get(
+                "group_by", "total"
+            ) != parameters.get("group_by", "total"):
                 raise ToolRejected("invalid_parameters")
             if previous.get("filters", {}) != parameters.get("filters", {}):
                 raise ToolRejected("invalid_parameters")
@@ -492,8 +480,19 @@ class RegistryTools:
             allows, self.store, self.trusted, result["refs"], epoch=self.journal.epoch
         ):
             raise ToolRejected("semantic_reference_expired")
+        from compass_agent.semantic.draft_fields import authored_preview
+        from compass_agent.semantic.extraction import receipt_proposal
+
         grant = self.approved(execution)
         if not grant:
+            if not authored_preview(result, args.get("fields"), ref):
+                return {
+                    "status": "needs_metric_definition",
+                    "result_ref": ref,
+                    "question": result.get("question"),
+                    "source_calculation": receipt_proposal(result),
+                    "required_fields": ["name", "summary", "formula"],
+                }
             raise ToolRejected("semantic_confirmation_required")
         if grant.get("kind") == "semantic_result_choice":
             picked = grant["choiceId"]
@@ -506,7 +505,8 @@ class RegistryTools:
             return {
                 "status": "preview_required",
                 "result_ref": picked,
-                "proposal": retained.get("proposal", {}),
+                "source_calculation": receipt_proposal(retained),
+                "required_fields": ["name", "summary", "formula"],
             }
         from compass_agent.schemas import SemanticResultDecision
         from compass_agent.semantic.results import decide_result
@@ -604,7 +604,7 @@ def remember_open(journal, context, args, result, binding):
             "revision": binding.revision,
             "fingerprint": open_digest(result),
             "definition_hash": signature,
-            "reusable": proposal["reusable"] and not result.truncated,
+            "complete": not result.truncated,
             "proposal": proposal,
             "question": question[:320],
         },
@@ -694,6 +694,11 @@ def session_results(journal, trusted):
         {
             "result_ref": ref,
             "columns": data["columns"],
+            "title": (
+                data.get("recommendation", {}).get("fields", {}).get("name")
+                or data.get("question")
+                or "已查询的结果"
+            )[:160],
             "created_at": data["created_at"],
             "status": status,
             "reusable": ref in eligible,

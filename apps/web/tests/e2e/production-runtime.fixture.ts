@@ -349,7 +349,19 @@ export class ProductionRuntimeFixture {
       this.sessionListReads++;
       return json({ items: item ? [item] : [], nextCursor: null });
     }
-    if (path === "workflows") return json({ items: [] });
+    if (path === "prompt-starters") {
+      const question = "如何拆解销售增长的影响因素？";
+      return json({
+        generation: 1,
+        analysis: [
+          { title: "经营分析", suggestions: [{ label: question, question, constraints: null }] },
+        ],
+        default_choice: null,
+        tool_description: null,
+      } satisfies Schema["PromptStarterCards"]);
+    }
+    if (path === "workflows" || path === `runs/${runtimeIds.run}/semantic-results`)
+      return json({ items: [] });
     if (!this.protocol || this.deleted)
       return json({ error: { code: "not_found", message: "无此任务。" } }, 404);
     if (path === `sessions/${runtimeIds.session}`) {

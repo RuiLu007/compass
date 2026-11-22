@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
@@ -79,24 +78,11 @@ class RuntimeTurn(AgentExecutor):
             journal.state_providers[execution_path.get()] = controlled.checkpoint_state
         budget = controlled.budget if controlled else None
         repaired = False
-        semantic_retries = 0
-        retry_formal = False
         next_phase = None
         original_messages = list(state.messages)
         question = next(
             (m.content or "" for m in reversed(original_messages) if m.role == "user"), ""
         )
-        dated = len(re.findall(r"\d{4}-\d{1,2}-\d{1,2}", question)) >= 2
-        lookup = (
-            managed
-            and route.task_type != "指标解释"
-            and (
-                dated
-                or route.task_type in {"查数查询", "对比拆解"}
-                or route.deliverable != "business_qa"
-            )
-        )
-
         if (
             getattr(journal, "context_binding", None)
             and journal.context_binding.get("registry")
@@ -110,12 +96,6 @@ class RuntimeTurn(AgentExecutor):
                 continuation := await continue_selected_result(registry_tools)
             ):
                 return continuation
-            if lookup:
-                from compass_agent.semantic.clarification import check
-
-                decision = await check(registry_tools, question)
-                if decision is not None and not (search and isinstance(decision, RunCompleted)):
-                    return decision
 
         def begin_phase(phase, correction=None, analysis=None):
             nonlocal next_phase
@@ -164,16 +144,6 @@ class RuntimeTurn(AgentExecutor):
             )
             if state.tools is not None:
                 request = request.model_copy(update={"tools": state.tools.definitions()})
-            if retry_formal and next_phase == "query":
-                request = request.model_copy(
-                    update={
-                        "tools": [
-                            t
-                            for t in request.tools
-                            if t.function.name in {"resolve_semantics", "query_metric"}
-                        ],
-                    }
-                )
             if managed:
                 journal.context_questions[execution_path.get()] = question
                 if not state.continuation_token:
@@ -213,7 +183,7 @@ class RuntimeTurn(AgentExecutor):
             return completed
 
         async def handle(step, result, prepared):
-            nonlocal repaired, semantic_retries, retry_formal
+            nonlocal repaired
             calls = tuple(result.tool_calls)
             if search:
                 from compass_agent.context_runtime.search_control import parse_targets
@@ -238,6 +208,7 @@ class RuntimeTurn(AgentExecutor):
                                 context,
                                 route.deliverable,
                                 checkpoint=True,
+                                scene=route.scene_id,
                             )
                         except ValueError as error:
                             search.claim_feedback = {"correction": validation_feedback(error)}
@@ -287,9 +258,19 @@ class RuntimeTurn(AgentExecutor):
                         verify_draft,
                     )
 
+                    comparison = search.pin.get("reportFormat") == "comparison_brief"
+                    if comparison and journal.context_phase != "generate":
+                        begin_phase("generate")
+                        return RepeatStep()
                     try:
                         candidate = await asyncio.to_thread(
-                            verify_draft, journal, step, result.text, context, route.deliverable
+                            verify_draft,
+                            journal,
+                            step,
+                            result.text,
+                            context,
+                            route.deliverable,
+                            scene=route.scene_id,
                         )
                     except ValueError as error:
                         from pydantic import ValidationError
@@ -348,29 +329,6 @@ class RuntimeTurn(AgentExecutor):
                 if managed and journal.context_phase == "plan":
                     begin_phase("query")
                     return RepeatStep()
-                if (
-                    managed
-                    and journal.context_binding.get("registry")
-                    and journal.context_phase == "query"
-                    and (
-                        getattr(journal, "registry_resolution", None)
-                        in {"resolved", "needs_clarification"}
-                        or (getattr(journal, "registry_initial_context", {}) or {}).get(
-                            "requested_metrics"
-                        )
-                    )
-                    and lookup
-                    and dated
-                ):
-                    from compass_agent.semantic.clarification import pending_queries
-
-                    if missing := pending_queries(journal, state.steps):
-                        if semantic_retries >= 2:
-                            raise RunFailure("model_incomplete")
-                        semantic_retries += 1
-                        retry_formal = True
-                        begin_phase("query", missing)
-                        return RepeatStep()
                 if managed and route.deliverable != "business_qa":
                     if journal.context_phase != "generate":
                         observed = any(
@@ -434,9 +392,6 @@ class RuntimeTurn(AgentExecutor):
                         answer,
                         query_observations(state),
                         RUN_STREAM_LIMITS["answerBytes"],
-                        requested=(getattr(journal, "registry_initial_context", {}) or {}).get(
-                            "requested_metrics", []
-                        ),
                     )
                 candidate = RunCompleted(
                     status="completed",
@@ -454,6 +409,18 @@ class RuntimeTurn(AgentExecutor):
             if state.tools is None:
                 raise RunFailure("internal_error")
             waiting = await state.tools.dispatch(step, request.tools)
+            # The provider's native continuation accepts tool observations only. Start a
+            # fresh frame when the owner has spoken, so their answer has the user role.
+            if (
+                managed
+                and not search
+                and not waiting
+                and any(
+                    choice.get("kind") == "semantic_choice" and choice.get("stepId") == str(step.id)
+                    for choice in journal.approved_proposals
+                )
+            ):
+                begin_phase("query")
             if search and not waiting:
                 from compass_agent.context_runtime.search_control import delivery_reserve
 
@@ -490,6 +457,12 @@ class RuntimeTurn(AgentExecutor):
 
         async def handle_incomplete(step, result):
             nonlocal repaired
+            if result.error_code == "empty_output":
+                if search and search.evidence and not search.format_repaired:
+                    search.format_repaired = True
+                    begin_phase("generate", "请用本轮已打开的原文和查询结果交付分析。")
+                    return RepeatStep()
+                return None
             if (
                 search
                 and not repaired
@@ -503,7 +476,9 @@ class RuntimeTurn(AgentExecutor):
                 search.format_repaired = True
                 begin_phase(
                     "generate",
-                    "请用 series 的 rows / columns 提交表格。已有草稿只需提交改动项。",
+                    "请用 comparisons 引用两期查询行，并在 notes 中提交判断及行动。"
+                    if search.pin.get("reportFormat") == "comparison_brief"
+                    else "请用 series 的 rows / columns 提交表格。已有草稿只需提交改动项。",
                 )
                 return RepeatStep()
             if search:

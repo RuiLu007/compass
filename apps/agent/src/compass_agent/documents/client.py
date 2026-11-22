@@ -23,11 +23,13 @@ class SearchSnapshot(BaseModel):
     knownAt: AwareDatetime
     timezone: str
     collectionDigest: str = Field(pattern=r"^[a-f0-9]{64}$")
-    connectionId: UUID
-    connectionRevision: int = Field(ge=1)
+    connectionId: UUID | None = None
+    connectionRevision: int | None = Field(default=None, ge=1)
     dataRelease: str = Field(min_length=1, max_length=240)
     kinds: list[Kind] = Field(max_length=5)
     skillEnabled: bool
+    reportFormat: Literal["comparison_brief"] | None = None
+    vectorIndex: Literal["text-embedding-3-small:1024:v1"] | None = None
     scenePack: Literal["retail"] | None = None
     maxToolCalls: int | None = Field(default=None, ge=0, le=400)
 
@@ -96,8 +98,8 @@ def restrict_connections(targets, snapshot):
         for b in targets
         if (str(b.connection_id), b.revision, str(b.tenant_id), str(b.workspace_id))
         == (
-            snapshot["connectionId"],
-            snapshot["connectionRevision"],
+            snapshot.get("connectionId"),
+            snapshot.get("connectionRevision"),
             snapshot["tenantId"],
             snapshot["workspaceId"],
         )

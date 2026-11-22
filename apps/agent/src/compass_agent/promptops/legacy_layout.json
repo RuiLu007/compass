@@ -372,6 +372,22 @@
       "path": "support/starters/analysis.json",
       "keys": ["questions", "pos-first-report-brief"]
     },
+    "support/starters/analysis/failed-payments-sales.md": {
+      "path": "support/starters/semantic-analysis.json",
+      "keys": ["questions", "failed-payments-sales"]
+    },
+    "support/starters/analysis/payment-method-count.md": {
+      "path": "support/starters/semantic-analysis.json",
+      "keys": ["questions", "payment-method-count"]
+    },
+    "support/starters/analysis/revise-payment-method.md": {
+      "path": "support/starters/semantic-analysis.json",
+      "keys": ["questions", "revise-payment-method"]
+    },
+    "support/starters/analysis/choose-sales-definition.md": {
+      "path": "support/starters/semantic-analysis.json",
+      "keys": ["questions", "choose-sales-definition"]
+    },
     "support/starters/analysis/queue-daily.md": {
       "path": "support/starters/analysis.json",
       "keys": ["questions", "queue-daily"]
@@ -470,9 +486,11 @@
     }
   },
   "policy_digests": [
+    "6e66e1cb2f6c6fba3c51bf40938e3eaaf881000d32ca4b3acd873c66e3241fbb",
     "d5575c265450e0bb62e40f8bfa925b1f498ac091afa0b760f248e9ad42734caf",
     "04c629644c5adc3ac4a8cd995e157045cd8d5a48cb2eca01128fb5f7985c1cf2",
     "3d67e05e650d5b593b6fa131403bcb37ffc4d5b8948fb9a59d003c7bc56ce553",
-    "f0f6f4ac927468562c1f19ccddd7d603e4b650afb9e309a8ede66dfc49d91978"
+    "f0f6f4ac927468562c1f19ccddd7d603e4b650afb9e309a8ede66dfc49d91978",
+    "b9ba8bcc35bacb2eadc4359c6221a0ef371449beae2fb209ba594e30c3004e2f"
   ]
 }

@@ -192,6 +192,70 @@ test("composer starts centered, docks on the first send, keeps history scrolling
   await expect(select).toHaveValue("auto");
 });
 
+test("连续的数据库查询分别更新摘要，刷新会话后可查看对应的入参和结果", async ({
+  page,
+  context,
+}) => {
+  const fixture = await enter(page, context);
+  fixture.holdNext();
+  await page.getByLabel("分析问题").fill("核对付款记录和退款记录");
+  await page.getByRole("button", { name: "发送消息", exact: true }).click();
+  await expect.poll(() => fixture.runs.size).toBe(1);
+  const toggle = page.locator(".analysis-process-toggle");
+  const sql = "SELECT COUNT(*) AS n FROM payments";
+  const first = {
+    id: "98900000-0000-4000-8000-000000000321",
+    revision: 1,
+    kind: "tool",
+    status: "running",
+    title: "查询数据库",
+    origin: { kind: "builtin", toolName: "database_query" },
+    startedAtMs: 1000,
+    display: { policy: "summary" },
+    detail: { input: JSON.stringify({ op: "query", sql }) },
+  } as const;
+  fixture.publishExecution(first);
+  await expect(toggle).toContainText(`执行 ${sql}`);
+  await expect(toggle).not.toContainText("返回");
+  const output = (n: number) =>
+    JSON.stringify({ status: "ok", columns: ["n"], rows: [[n]], truncated: false });
+  fixture.publishExecution({
+    ...first,
+    revision: 2,
+    endedAtMs: 2000,
+    status: "completed",
+    detail: { ...first.detail, output: output(128) },
+  });
+  await expect(toggle).toContainText("返回 1 行 · n=128");
+  fixture.publishExecution({
+    ...first,
+    id: "98900000-0000-4000-8000-000000000322",
+    startedAtMs: 2100,
+    endedAtMs: 2200,
+    status: "completed",
+    detail: {
+      input: JSON.stringify({ op: "query", sql: "SELECT COUNT(*) AS n FROM refunds" }),
+      output: output(3),
+    },
+  });
+  fixture.release();
+  await expect(toggle).toContainText("已完成");
+  await page.reload();
+  await toggle.press("Enter");
+  const queries = page.locator('.ui-execution-timeline > [data-kind="tool"]');
+  await expect(queries.locator(".ui-timeline-text")).toHaveText([
+    /FROM payments.*返回 1 行 · n=128$/,
+    /FROM refunds.*返回 1 行 · n=3$/,
+  ]);
+  await queries.last().getByRole("button").press("Enter");
+  await expect(queries.last().getByRole("region", { name: "调用入参" })).toContainText(
+    "FROM refunds",
+  );
+  await expect(queries.last().getByRole("region", { name: "调用结果" })).toContainText(
+    '"rows":[[3]]',
+  );
+});
+
 test("completed answers remain in server history and durable CSV downloads retain server bytes and filename", async ({
   page,
   context,

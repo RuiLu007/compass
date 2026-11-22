@@ -320,12 +320,23 @@ class RuntimeStore:
         tx.add(box)
         return box
 
-    def submit(self, command: SessionSubmit, context: TrustedContext, imported_history=None):
+    def submit(
+        self,
+        command: SessionSubmit,
+        context: TrustedContext,
+        imported_history=None,
+        *,
+        run_environment=None,
+    ):
         if context.scope.kind != "tenant":
             raise ModelError("forbidden", 403)
         with self.transaction(admission=True) as tx:
             return self.submit_in_transaction(
-                tx, command, context, imported_history=imported_history
+                tx,
+                command,
+                context,
+                imported_history=imported_history,
+                run_environment=run_environment,
             )
 
     @staticmethod
@@ -335,7 +346,9 @@ class RuntimeStore:
             payload.pop("constraints", None)
         return payload
 
-    def submit_in_transaction(self, tx, command, context, *, imported_history=None, schedule=None):
+    def submit_in_transaction(
+        self, tx, command, context, *, imported_history=None, schedule=None, run_environment=None
+    ):
         payload = self.submission_payload(command)
         kind = "schedule_submit" if schedule else "submit"
         old = self.command(tx, context, command.request_id, payload)
@@ -411,6 +424,7 @@ class RuntimeStore:
         config = {
             "command": payload,
             "context": context.model_dump(mode="json"),
+            "promptEnvironment": run_environment or {},
             "schemaVersion": 1,
             "deepseekThinking": True,
             "timeoutSeconds": (command.constraints.timeout_seconds if command.constraints else None)
@@ -433,22 +447,21 @@ class RuntimeStore:
             from compass_agent.context_runtime.pipeline import pin
 
             config["contextRuntime"] = pin(tx, context, self)
-            from compass_agent.semantic.client import enabled, request
+            from compass_agent.semantic.client import enabled, pin_manifest
 
             if search_enabled:
                 snapshot = documents.accept(self.source_settings, context, run_id)
                 config["searchSnapshot"] = snapshot
                 config["contextRuntime"]["search"] = snapshot
-            if enabled(self.source_settings, session.workspace_id) and (
-                not search_enabled or "semantic" in config["searchSnapshot"]["kinds"]
-            ):
-                registry = request(self.source_settings, context, run_id, "manifest")
-                if not registry.get("releases"):
-                    raise ModelError("context_policy_unavailable", 503)
-                config["contextRuntime"]["registry"] = {
-                    "manifest": registry["manifest_hash"],
-                    "pins": registry["releases"],
-                }
+            if enabled(self.source_settings, session.workspace_id):
+                key = (
+                    "registry"
+                    if not search_enabled or "semantic" in config["searchSnapshot"]["kinds"]
+                    else "glossary"
+                )
+                config["contextRuntime"].update(
+                    pin_manifest(self.source_settings, context, run_id, key)
+                )
         run = AgentRun(
             id=run_id,
             session_id=session.id,
@@ -467,20 +480,6 @@ class RuntimeStore:
         run.public_view = {"schemaVersion": 1, "run": public_run(run), "objects": {}}
         tx.add(run)
         tx.flush()
-        if registry_pin := config.get("contextRuntime", {}).get("registry"):
-            from compass_agent.semantic.entities import SemanticRunBinding
-
-            tx.add(
-                SemanticRunBinding(
-                    run_id=run_id,
-                    tenant_id=session.tenant_id,
-                    workspace_id=session.workspace_id,
-                    catalog_kind="registry",
-                    manifest_hash=registry_pin["manifest"],
-                    partition_releases=registry_pin["pins"],
-                    bound_at=now(),
-                )
-            )
         messages = []
         for ordinal, role, content, status in [
             (1, "user", command.question, "completed"),

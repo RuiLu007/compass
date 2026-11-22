@@ -2,10 +2,12 @@
 
 from copy import deepcopy
 from decimal import Decimal
+from functools import partial
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from compass_agent.context_runtime.profiles import search_pack
 from compass_agent.context_runtime.search_claims import (
     Checked,
     DraftRevision,
@@ -13,11 +15,13 @@ from compass_agent.context_runtime.search_claims import (
     SearchDraft,
     SearchGap,
     evaluate,
-    next_workday,
     render,
 )
 from compass_agent.context_runtime.search_sql import source_columns
+from compass_agent.documents.retail_claims import next_workday
 from compass_agent.schemas import CitationDetail
+
+render_retail = partial(render, pack=search_pack({"scenePack": "retail"}, None))
 
 
 def record(kind, title, text=None, **kw) -> dict:
@@ -106,9 +110,9 @@ def test_private_revision_reopens_operands_and_cannot_publish_a_stale_purchase()
     data, claims = setup_offer("6,000")
     original = draft(claims, ["purchase", "retained"])
     no_edits = DraftRevision(revise=True)
-    assert "建议订基础档" in render(uuid4(), no_edits.apply(original), data)[0]
+    assert "建议订基础档" in render_retail(uuid4(), no_edits.apply(original), data)[0]
     replaced, _ = setup_offer("9,000")
-    body, _ = render(uuid4(), no_edits.apply(original), replaced)
+    body, _ = render_retail(uuid4(), no_edits.apply(original), replaced)
     assert "暂缓采购" in body and "20,000.00 元" in body
     patch = DraftRevision.model_validate(
         {
@@ -120,7 +124,7 @@ def test_private_revision_reopens_operands_and_cannot_publish_a_stale_purchase()
         }
     )
     with pytest.raises(ValueError, match="断言 new"):
-        render(uuid4(), patch.apply(original), data)
+        render_retail(uuid4(), patch.apply(original), data)
     with pytest.raises(ValueError, match="断言依赖"):
         DraftRevision(revise=True, remove=["cap"]).apply(original)
 
@@ -131,7 +135,9 @@ def test_private_revision_reopens_operands_and_cannot_publish_a_stale_purchase()
 )
 def test_offer_change_recomputes_full_parent_chain_and_server_anchors(price, action, retained):
     data, claims = setup_offer(price)
-    body, manifest = render(uuid4(), draft(claims, ["cap", "purchase", "retained", "cap"]), data)
+    body, manifest = render_retail(
+        uuid4(), draft(claims, ["cap", "purchase", "retained", "cap"]), data
+    )
     assert action in body and retained in body and "8,000.00 元" in body
     assert [a["ordinal"] for a in manifest["anchors"]] == [1, 2, 3, 1]
     detail = CitationDetail.model_validate(
@@ -188,7 +194,7 @@ def test_incomplete_receipt_cannot_become_true_zero_or_qualify_purchase():
     data, claims = setup_offer("6,000")
     data["current"] = metric("本期净额", None, status="NO_FACTS")
     with pytest.raises(ValueError, match="父断言"):
-        render(uuid4(), draft(claims, ["purchase"]), data)
+        render_retail(uuid4(), draft(claims, ["purchase"]), data)
     d = draft(
         [proposal("current", "cell", evidenceId="current", row=0, column="value")], ["current"]
     )
@@ -212,7 +218,7 @@ def test_original_plan_sources_open_gaps_and_counterevidence():
         stalled={},
     )
     with pytest.raises(SearchGap, match="保留"):
-        render(uuid4(), draft(claims, ["cap"]), data, progress=progress)
+        render_retail(uuid4(), draft(claims, ["cap"]), data, progress=progress)
     with pytest.raises(SearchGap, match="指定来源"):
         render(
             uuid4(),
@@ -267,7 +273,7 @@ def test_closed_expression_rejects_truncated_sum_and_mismatched_balance():
     claims.insert(-1, proposal("other", "measure", evidenceId="other", quote="20,000 元"))
     claims[-1]["parents"] = ["other", "purchase"]
     with pytest.raises(ValueError, match="同一余额"):
-        render(uuid4(), draft(claims, ["retained"]), data)
+        render_retail(uuid4(), draft(claims, ["retained"]), data)
 
 
 def test_scope_fields_are_in_details_and_not_repeated_as_answer_lines():
@@ -283,7 +289,9 @@ def test_scope_fields_are_in_details_and_not_repeated_as_answer_lines():
     d = draft([proposal(k, "cell", evidenceId="r", column=k, row=0) for k in keys], keys)
     body, index = render(uuid4(), d, {"r": row})
     assert "180,840.20 元" in body and "2025-09-30" in body and "按期间扣除同期退款" in body
-    assert "地区 1" in body and "CNY" not in body and len(index["anchors"]) == 1
+    assert "region 1" in body and "CNY" not in body and len(index["anchors"]) == 1
+    localized, _ = render_retail(uuid4(), d, {"r": row})
+    assert "地区 1" in localized
 
 
 def test_expired_threshold_cannot_authorize_later_business_window():
@@ -538,3 +546,23 @@ def test_business_timezone_month_is_admitted_by_readonly_dispatch_and_lineage():
         parse_read_sql(
             "SELECT other_schema.timezone('Asia/Shanghai', p.paid_at) FROM core.payment p"
         )
+
+
+def test_business_proofs_require_the_same_pack_in_schema_and_publication():
+    from compass_agent.context_runtime.search_verification import search_draft_schema
+
+    data, claims = setup_offer("6,000")
+    for pack in ({}, search_pack({"scenePack": "retail"}, "SC-38")):
+        for revising in (False, True):
+            operations = search_draft_schema(revising, pack=pack)["$defs"]["Proposal"][
+                "properties"
+            ]["op"]["enum"]
+            assert "whole_tier" not in operations and "cell" in operations
+        with pytest.raises(ValueError, match="未启用"):
+            render(uuid4(), draft(claims, ["purchase"]), data, pack=pack)
+    retail = search_pack({"scenePack": "retail"}, "SC-01")
+    assert (
+        "whole_tier"
+        in search_draft_schema(pack=retail)["$defs"]["Proposal"]["properties"]["op"]["enum"]
+    )
+    assert "建议订" in render(uuid4(), draft(claims, ["purchase"]), data, pack=retail)[0]

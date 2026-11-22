@@ -2,7 +2,7 @@
   "type": "function",
   "function": {
     "name": "search_documents",
-    "description": "检索当前工作区已发布、当前可阅的制度知识、历史产物或外部资料。query 可用作者原词、文号、实体和同义词，kind 分别为 knowledge、history、external。businessDate 为条款的业务适用日，historical=true 时必须指定。最多返回前三段线索与 ref，核实条款或报价前须读取原段。",
+    "description": "**用途与调用规则**\n\n- 检索当前工作区已发布、当前可阅的制度知识、历史产物或外部资料。\n- query 可用作者原词、文号、实体和同义词，kind 分别为 knowledge、history、external。\n- 查过去的活动或政策时，businessDate 填业务发生日。\n- 系统另按资料封版时点过滤可见版本。\n- historical=true 时必须给出 businessDate；不确定资料类别时可省略 kind。\n- 最多返回前三段线索与 ref，核实条款或报价前须读取原段。",
     "parameters": {
       "additionalProperties": false,
       "properties": {

@@ -129,10 +129,13 @@ def test_scene_catalog_publishes_descriptions_and_examples_as_one_asset(system):
     candidate = json.loads(catalog.bundled()[path])
     candidate["scenes"]["SC-01"]["description"] = "按授权指标查询一个经营数值"
     candidate["scenes"]["SC-01"]["examples"] = ["昨天的销售额是多少？"]
+    candidate["scenes"]["SC-01"]["sop"] = "新版工作方法仅在已路由场景使用。"
     save(client, path, dumps(candidate))
     released = publish(client, "file", path=path)
     with Session(engine) as tx, use_prompts(reader(tx, released["generation"])):
         assert "昨天的销售额是多少" in descriptions()["SC-01"]
+        assert "新版工作方法" not in descriptions()["SC-01"]
+        assert "新版工作方法" in reader(tx, released["generation"])(path)
         assert len(descriptions()) == 40
         member = PromptReader.load_exact(
             tx, released["generation"], ["support/routing/scenes/sc-01.md"]
@@ -142,6 +145,7 @@ def test_scene_catalog_publishes_descriptions_and_examples_as_one_asset(system):
         assert member.receipt()["assetSha256"] == asset.sha256
     with Session(engine) as tx, use_prompts(reader(tx, initial["generation"])):
         assert "昨天的销售额是多少" not in descriptions()["SC-01"]
+        assert "新版工作方法" not in reader(tx, initial["generation"])(path)
     candidate["scenes"]["SC-01"]["response_mode"] = "dashboard"
     rejected_save(client, path, candidate)
 

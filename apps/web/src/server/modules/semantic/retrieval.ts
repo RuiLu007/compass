@@ -1,5 +1,5 @@
 import type { MetricView } from "../../../contracts/semantic";
-import type { Context } from "./access";
+import { publishedScopeIds, type Context } from "./access";
 
 export async function fullTextMatches(c: Context, query: string, visible: MetricView[]) {
   if (!query.trim() || !visible.length) return new Map<string, number>();
@@ -8,15 +8,15 @@ export async function fullTextMatches(c: Context, query: string, visible: Metric
      hits AS (
        SELECT v.version_id, ts_rank(to_tsvector('simple'::regconfig, v.name || ' ' || v.summary), q.words) AS score
        FROM web.semantic_versions v CROSS JOIN q
-       WHERE v.version_id = ANY($2::uuid[]) AND v.usage_scope_id = ANY($3::uuid[])
+       WHERE v.version_id = ANY($2::uuid[])
          AND to_tsvector('simple'::regconfig, v.name || ' ' || v.summary) @@ q.words
        UNION ALL
        SELECT a.origin_version_id, ts_rank(to_tsvector('simple'::regconfig, a.display_alias), q.words)
-       FROM web.semantic_aliases a CROSS JOIN q
-       WHERE a.origin_version_id = ANY($2::uuid[]) AND a.scope_id = ANY($3::uuid[])
+       FROM web.semantic_aliases a JOIN web.semantic_versions v ON v.version_id=a.origin_version_id CROSS JOIN q
+       WHERE a.origin_version_id = ANY($2::uuid[]) AND (a.scope_id=v.usage_scope_id OR a.scope_id = ANY($3::uuid[]))
          AND to_tsvector('simple'::regconfig, a.display_alias) @@ q.words)
      SELECT version_id, max(score) AS score FROM hits GROUP BY version_id`,
-    [query, visible.map((m) => m.version_id), c.scopes.filter((s) => s.use).map((s) => s.id)],
+    [query, visible.map((m) => m.version_id), publishedScopeIds(c)],
   );
   return new Map(rows.map((row) => [row.version_id, row.score]));
 }
@@ -38,9 +38,15 @@ function terms(value: string) {
 }
 
 export function relatedMetrics(items: MetricView[], question: string) {
-  const metrics = items.filter((m) => m.kind === "metric");
+  return relatedAssets(
+    items.filter((m) => m.kind === "metric"),
+    question,
+  );
+}
+
+export function relatedAssets(assets: MetricView[], question: string) {
   const frequency = new Map<string, number>();
-  const entries = metrics.map((metric) => {
+  const entries = assets.map((metric) => {
     const names = terms([metric.name, metric.code, ...metric.aliases].join(" "));
     const description = terms(
       [metric.summary, metric.definition.formula, metric.definition.exceptions].join(" "),
@@ -51,7 +57,6 @@ export function relatedMetrics(items: MetricView[], question: string) {
     return { metric, names, description };
   });
   const suggestions = new Map<string, MetricView>();
-  const explicit = new Map<string, MetricView>();
   for (const clause of question.split(/[。！？；，、,;!?\n]+/u)) {
     const words = [...terms(clause)];
     const matches = entries
@@ -59,22 +64,13 @@ export function relatedMetrics(items: MetricView[], question: string) {
         const hits = words.filter((w) => names.has(w) || description.has(w));
         if (!hits.some((w) => names.has(w)) || hits.length < 2) return [];
         const score = hits.reduce((total, w) => {
-          const weight = Math.log1p(metrics.length / (frequency.get(w) ?? 1));
+          const weight = Math.log1p(assets.length / (frequency.get(w) ?? 1));
           return total + weight * (names.has(w) ? 2 : 1);
         }, 0);
-        const distinctive = hits.some((w) => frequency.get(w) === 1);
-        return [{ metric, score, distinctive }];
+        return [{ metric, score }];
       })
       .sort((a, b) => b.score - a.score || a.metric.asset_id.localeCompare(b.metric.asset_id));
     for (const { metric } of matches.slice(0, 3)) suggestions.set(metric.asset_id, metric);
-    const best = matches[0];
-    if (
-      best?.distinctive &&
-      best.score > (matches[1]?.score ?? 0) * 1.15 &&
-      best.metric.binding_id
-    ) {
-      explicit.set(best.metric.asset_id, best.metric);
-    }
   }
-  return { suggestions: [...suggestions.values()], byClause: [...explicit.values()] };
+  return { suggestions: [...suggestions.values()] };
 }

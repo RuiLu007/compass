@@ -108,8 +108,10 @@ async def submit(
     response: Response,
     request: Request,
 ):
-    await service.access.check(context)
-    receipt = await asyncio.to_thread(service.store.submit, command, context)
+    environment = await service.access.check(context, run_environment=True)
+    receipt = await asyncio.to_thread(
+        service.store.submit, command, context, run_environment=environment
+    )
     run_id = UUID(receipt["runId"])
     run = await asyncio.to_thread(service.store.read_run, run_id, context)
     response.headers.update(

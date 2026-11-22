@@ -1,28 +1,32 @@
 "use client";
-import { useEffect, useId, useRef, useState, type FormEvent, type PointerEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+  type PointerEvent,
+} from "react";
 import { Ellipsis, MessageSquare, Pencil, Trash2, Workflow } from "lucide-react";
 import { Dialog, DropdownMenu } from "radix-ui";
 import { ApiError } from "@/client/request-scope";
 import { sessionsChanged, type SessionListItem } from "@/client/analysis-sessions";
-import type { components } from "@/generated/api";
+import {
+  groupByTime,
+  mergeItems,
+  refreshFirstPage,
+  type SessionList,
+} from "./conversation-history";
 import type { PagePayload } from "@/contracts/page";
 import { useDocumentSession } from "./session-boundary";
 import { AppLink } from "./app-link";
 import { UiButton } from "../ui/button";
 
-type SessionList = components["schemas"]["SessionList"];
 type SessionAction = {
   kind: "rename" | "delete";
   item: SessionListItem;
 };
-
-function mergeItems(current: SessionListItem[], incoming: SessionListItem[]) {
-  const items = new Map(current.map((item) => [item.sessionId, item]));
-  for (const item of incoming) {
-    if ((items.get(item.sessionId)?.version ?? 0) <= item.version) items.set(item.sessionId, item);
-  }
-  return [...items.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-}
 
 function scrollTitle(event: PointerEvent<HTMLDivElement>) {
   if (event.pointerType !== "mouse" || matchMedia("(prefers-reduced-motion: reduce)").matches)
@@ -53,21 +57,20 @@ function resetTitle(event: PointerEvent<HTMLDivElement>) {
   title.title = title.textContent ?? "";
 }
 
-export function ConversationList({
-  payload,
-  order,
-}: {
-  payload: PagePayload;
-  order: "time" | "topic";
-}) {
+export function ConversationList({ payload, active }: { payload: PagePayload; active: boolean }) {
   const api = useDocumentSession();
   const [list, setList] = useState<SessionList | null>(null);
-  const [error, setError] = useState("");
+  const [refreshFailed, setRefreshFailed] = useState(false);
+  const [refreshAttempt, setRefreshAttempt] = useState(0);
+  const [today, setToday] = useState(() => new Date());
   const [action, setAction] = useState<SessionAction | null>(null);
   const [title, setTitle] = useState("");
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState("");
   const [loadingMore, setLoadingMore] = useState(false);
+  const [failedCursor, setFailedCursor] = useState<string | null>(null);
+  const moreRequest = useRef<AbortController | null>(null);
+  const moreButton = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const errorId = useId();
   const deleted = useRef(new Set<string>());
@@ -79,7 +82,7 @@ export function ConversationList({
   const allowed = payload.session.capabilities.includes("models.invoke");
   const target = payload.session.navigation.find((entry) => entry.id === "analysis-new")?.href;
   useEffect(() => {
-    if (!target || !allowed) return;
+    if (!active || !target || !allowed) return;
     const controller = new AbortController();
     let latestRead = 0;
     async function load() {
@@ -92,27 +95,11 @@ export function ConversationList({
           { signal: controller.signal },
         );
         if (!controller.signal.aborted && latestRead === read) {
-          setList((previous) => {
-            const firstPage = value.items.filter((item) => !deleted.current.has(item.sessionId));
-            const cutoff = value.items.at(-1)?.updatedAt;
-            const retained = (previous?.items ?? []).filter(
-              (item) =>
-                !deleted.current.has(item.sessionId) &&
-                (firstPage.some((entry) => entry.sessionId === item.sessionId) ||
-                  (value.nextCursor && cutoff && item.updatedAt <= cutoff)),
-            );
-            return {
-              items: mergeItems(retained, firstPage),
-              nextCursor:
-                retained.length > firstPage.length && previous
-                  ? previous.nextCursor
-                  : value.nextCursor,
-            };
-          });
-          setError("");
+          setList((previous) => refreshFirstPage(previous, value, deleted.current));
+          setRefreshFailed(false);
         }
       } catch {
-        if (!controller.signal.aborted && latestRead === read) setError("会话列表加载失败");
+        if (!controller.signal.aborted && latestRead === read) setRefreshFailed(true);
       }
     }
     void load();
@@ -136,14 +123,14 @@ export function ConversationList({
       window.removeEventListener(sessionsChanged, changed);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, [api, scope, target, allowed]);
+  }, [active, api, scope, target, allowed, refreshAttempt]);
   const pendingIds = JSON.stringify(
     list?.items.filter((item) => item.titleStatus === "pending").map((item) => item.sessionId) ??
       [],
   );
   useEffect(() => {
     const ids: string[] = JSON.parse(pendingIds);
-    if (!ids.length) return;
+    if (!active || !ids.length) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     async function refreshTitles() {
@@ -181,17 +168,81 @@ export function ConversationList({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [api, pendingIds, scope]);
+  }, [active, api, pendingIds, scope]);
+
+  useEffect(() => {
+    const midnight = new Date(today);
+    midnight.setHours(24, 0, 0, 0);
+    const timer = setTimeout(() => setToday(new Date()), midnight.getTime() - Date.now());
+    return () => clearTimeout(timer);
+  }, [today]);
+
+  const cursor = list?.nextCursor;
+  const loadMore = useCallback(async () => {
+    if (!active || !allowed || !cursor || moreRequest.current) return;
+    const controller = new AbortController();
+    moreRequest.current = controller;
+    setLoadingMore(true);
+    setFailedCursor(null);
+    try {
+      const page = await api.request<SessionList>(
+        `analysis/sessions?${scope}&cursor=${encodeURIComponent(cursor)}`,
+        "GET",
+        undefined,
+        { signal: controller.signal },
+      );
+      if (!controller.signal.aborted)
+        setList((current) =>
+          current?.nextCursor === cursor
+            ? {
+                items: mergeItems(
+                  current.items,
+                  page.items.filter((item) => !deleted.current.has(item.sessionId)),
+                ),
+                nextCursor: page.nextCursor,
+              }
+            : current,
+        );
+    } catch {
+      if (!controller.signal.aborted) setFailedCursor(cursor);
+    } finally {
+      if (moreRequest.current === controller) {
+        moreRequest.current = null;
+        setLoadingMore(false);
+      }
+    }
+  }, [active, allowed, api, scope, cursor]);
+
+  useEffect(() => () => moreRequest.current?.abort(), [api, scope, active]);
+  useEffect(() => {
+    if (
+      !active ||
+      !cursor ||
+      loadingMore ||
+      failedCursor === cursor ||
+      !moreButton.current ||
+      !listRef.current ||
+      typeof IntersectionObserver === "undefined"
+    )
+      return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) void loadMore();
+      },
+      { root: listRef.current, rootMargin: "0px 0px 96px" },
+    );
+    observer.observe(moreButton.current);
+    return () => observer.disconnect();
+  }, [active, cursor, loadingMore, failedCursor, loadMore]);
   if (!target) return null;
   if (!allowed)
     return (
-      <div className="conversation-list" data-group-by={order}>
+      <div className="conversation-list">
         <p className="conversation-empty">获得模型调用权限后可查看分析会话。</p>
       </div>
     );
   const selected = new URL(payload.viewKey, "https://compass.local").searchParams.get("session");
-  const items = [...(list?.items ?? [])];
-  if (order === "topic") items.sort((a, b) => a.sessionType.localeCompare(b.sessionType));
+  const groups = groupByTime(list?.items ?? [], today);
   function openAction(kind: SessionAction["kind"], item: SessionListItem) {
     dialogOpener.current =
       listRef.current?.querySelector(`[data-session-menu="${item.sessionId}"]`) ?? null;
@@ -248,95 +299,99 @@ export function ConversationList({
     }
   }
   return (
-    <div
-      className="conversation-list"
-      ref={listRef}
-      tabIndex={-1}
-      aria-label="分析会话"
-      data-group-by={order}
-    >
-      {error && <p role="alert">{error}</p>}
-      {!list && !error && <p className="conversation-empty">正在读取会话…</p>}
-      {list && !items.length && <p className="conversation-empty">暂无分析会话</p>}
-      {items.map((item) => (
-        <div
-          className="conversation-row"
-          key={item.sessionId}
-          onPointerEnter={scrollTitle}
-          onPointerLeave={resetTitle}
-        >
-          <AppLink
-            className="conversation-item"
-            href={`${target}?session=${item.sessionId}`}
-            aria-current={selected === item.sessionId ? "page" : undefined}
-          >
-            {item.iconKey === "workflow" ? (
-              <Workflow size={16} aria-hidden="true" />
-            ) : (
-              <MessageSquare size={16} aria-hidden="true" />
-            )}
-            <span className="conversation-title" key={item.title} title={item.title}>
-              <span>{item.title}</span>
-            </span>
-          </AppLink>
-          <DropdownMenu.Root modal={false}>
-            <DropdownMenu.Trigger
-              className="conversation-menu-trigger"
-              aria-label={`会话操作 · ${item.title}`}
-              data-session-menu={item.sessionId}
+    <div className="conversation-list" ref={listRef} tabIndex={-1} aria-label="分析会话">
+      {!list && !refreshFailed && (
+        <p className="conversation-empty" role="status">
+          正在读取会话…
+        </p>
+      )}
+      {list && !groups.size && !refreshFailed && <p className="conversation-empty">暂无分析会话</p>}
+      {Array.from(groups, ([label, items]) => (
+        <section className="conversation-group" key={label} aria-label={label}>
+          <h3>{label}</h3>
+          {items.map((item) => (
+            <div
+              className="conversation-row"
+              key={item.sessionId}
+              onPointerEnter={scrollTitle}
+              onPointerLeave={resetTitle}
             >
-              <Ellipsis size={16} aria-hidden="true" />
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content
-                className="dropdown conversation-menu"
-                align="end"
-                sideOffset={4}
-                data-sensitive-portal
-                onCloseAutoFocus={(event) => {
-                  if (dialogOpener.current?.dataset.sessionMenu === item.sessionId)
-                    event.preventDefault();
-                }}
+              <AppLink
+                className="conversation-item"
+                href={`${target}?session=${item.sessionId}`}
+                aria-current={selected === item.sessionId ? "page" : undefined}
               >
-                <DropdownMenu.Item onSelect={() => openAction("rename", item)}>
-                  <Pencil size={14} aria-hidden="true" /> 改名
-                </DropdownMenu.Item>
-                <DropdownMenu.Item
-                  className="conversation-delete"
-                  onSelect={() => openAction("delete", item)}
+                {item.iconKey === "workflow" ? (
+                  <Workflow size={16} aria-hidden="true" />
+                ) : (
+                  <MessageSquare size={16} aria-hidden="true" />
+                )}
+                <span className="conversation-title" key={item.title} title={item.title}>
+                  <span>{item.title}</span>
+                </span>
+              </AppLink>
+              <DropdownMenu.Root modal={false}>
+                <DropdownMenu.Trigger
+                  className="conversation-menu-trigger"
+                  aria-label={`会话操作 · ${item.title}`}
+                  data-session-menu={item.sessionId}
                 >
-                  <Trash2 size={14} aria-hidden="true" /> 删除
-                </DropdownMenu.Item>
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
-        </div>
+                  <Ellipsis size={16} aria-hidden="true" />
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content
+                    className="dropdown conversation-menu"
+                    align="end"
+                    sideOffset={4}
+                    data-sensitive-portal
+                    onCloseAutoFocus={(event) => {
+                      if (dialogOpener.current?.dataset.sessionMenu === item.sessionId)
+                        event.preventDefault();
+                    }}
+                  >
+                    <DropdownMenu.Item onSelect={() => openAction("rename", item)}>
+                      <Pencil size={14} aria-hidden="true" /> 改名
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      className="conversation-delete"
+                      onSelect={() => openAction("delete", item)}
+                    >
+                      <Trash2 size={14} aria-hidden="true" /> 删除
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
+            </div>
+          ))}
+        </section>
       ))}
-      {list?.nextCursor && (
+      {active && refreshFailed && (
+        <div className="conversation-feedback">
+          <p role="alert">暂时无法刷新会话。</p>
+          <button
+            className="secondary compact"
+            onClick={() => {
+              setRefreshFailed(false);
+              setRefreshAttempt((attempt) => attempt + 1);
+            }}
+          >
+            重试
+          </button>
+        </div>
+      )}
+      {cursor && (
         <button
-          className="secondary compact"
-          disabled={loadingMore}
-          onClick={async () => {
-            setLoadingMore(true);
-            try {
-              const next = await api.request<SessionList>(
-                `analysis/sessions?${scope}&cursor=${encodeURIComponent(list.nextCursor!)}`,
-              );
-              setList((current) => ({
-                items: mergeItems(
-                  current?.items ?? [],
-                  next.items.filter((item) => !deleted.current.has(item.sessionId)),
-                ),
-                nextCursor: next.nextCursor,
-              }));
-            } catch {
-              setError("更早会话加载失败");
-            } finally {
-              setLoadingMore(false);
-            }
-          }}
+          ref={moreButton}
+          className="secondary compact conversation-more"
+          disabled={!active || loadingMore}
+          aria-busy={loadingMore}
+          onClick={() => void loadMore()}
         >
-          加载更多会话
+          {loadingMore
+            ? "正在加载…"
+            : failedCursor === cursor
+              ? "重试加载更早会话"
+              : "加载更多会话"}
         </button>
       )}
       <Dialog.Root

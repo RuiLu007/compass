@@ -121,6 +121,133 @@ for (const width of [1440, 390]) {
   });
 }
 
+test("new analysis retains history during navigation and refreshes once the page is ready", async ({
+  page,
+  context,
+}) => {
+  const fixture = await enter(page, context);
+  const question = "查看昨天的销售额";
+  await submit(page, fixture, question);
+  fixture.update((protocol) => protocol.complete());
+  await expect(page.getByRole("region", { name: "最终回答" })).toBeVisible();
+  const list = page.locator("#secondary-sidebar .conversation-list");
+  const history = list.getByRole("link", { name: question, exact: true });
+  await expect(history).toBeVisible();
+  const reads = fixture.sessionListReads;
+  let release!: () => void;
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/web/v1/session?**", async (route) => {
+    await hold;
+    await route.continue();
+  });
+  await page.getByRole("button", { name: "新建分析", exact: true }).click();
+  try {
+    await expect(page.locator("#main-content")).toHaveAttribute("aria-busy", "true");
+    await expect(history).toBeVisible();
+    await expect(list.getByRole("alert")).toHaveCount(0);
+  } finally {
+    release();
+  }
+  await expect(page.getByLabel("分析问题")).toBeEmpty();
+  await expect.poll(() => fixture.sessionListReads).toBeGreaterThan(reads);
+  await expect(history).toBeVisible();
+  await expect(list.getByRole("alert")).toHaveCount(0);
+});
+
+test.describe("conversation history", () => {
+  test.use({ timezoneId: "Asia/Shanghai" });
+
+  test("groups by local time and appends older pages on scroll with keyboard retry", async ({
+    page,
+    context,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.clock.setFixedTime(new Date("2025-01-02T00:30:00+08:00"));
+    const fixture = await enter(page, context);
+    const stamps = [
+      ...Array.from({ length: 17 }, (_, i) =>
+        new Date(Date.UTC(2025, 0, 1, 16, 20 - i)).toISOString(),
+      ),
+      "2025-01-01T15:59:59Z",
+      "2024-12-29T16:00:00Z",
+      "2024-12-29T15:59:59Z",
+      "2024-12-22T15:59:59Z",
+      "2024-11-30T12:00:00Z",
+    ];
+    const items = stamps.map((updatedAt, i) => ({
+      sessionId: `99500000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`,
+      title: `历史分析 ${i + 1}`,
+      titleStatus: "manual",
+      iconKey: "chat",
+      sessionType: "chat",
+      version: 1,
+      updatedAt,
+      latestRunId: null,
+      executionStatus: null,
+    }));
+    let headReads = 0,
+      olderReads = 0;
+    await page.route("**/api/web/v1/analysis/sessions?**", (route) => {
+      const cursor = new URL(route.request().url()).searchParams.get("cursor");
+      const headers = { "X-Compass-View-Revision": fixture.revision };
+      if (cursor === null) {
+        headReads++;
+        if (headReads === 1)
+          return route.fulfill({
+            status: 503,
+            headers,
+            json: { error: { message: "暂时不可用" } },
+          });
+        return route.fulfill({
+          headers,
+          json: { items: items.slice(0, 20), nextCursor: "page/2+" },
+        });
+      }
+      olderReads++;
+      if (cursor === "page/2+")
+        return route.fulfill({
+          headers,
+          json: { items: items.slice(19, 21), nextCursor: "page/3+" },
+        });
+      expect(cursor).toBe("page/3+");
+      if (olderReads === 2)
+        return route.fulfill({ status: 503, headers, json: { error: { message: "暂时不可用" } } });
+      return route.fulfill({ headers, json: { items: items.slice(20), nextCursor: null } });
+    });
+    const refresh = () =>
+      page.evaluate(() => window.dispatchEvent(new Event("compass-sessions-changed")));
+    await refresh();
+    const list = page.locator("#secondary-sidebar .conversation-list");
+    await expect(list.getByRole("alert")).toBeVisible();
+    await list.getByRole("button", { name: "重试", exact: true }).press("Enter");
+    const headings = list.getByRole("heading");
+    await expect(headings).toHaveText(["今天", "昨天", "本周", "上周"]);
+    const titles = list.getByRole("link");
+    await expect(titles).toHaveText(items.slice(0, 20).map((item) => item.title));
+    await expect(list.getByRole("alert")).toHaveCount(0);
+    expect(olderReads).toBe(0);
+    await list.hover();
+    await page.mouse.wheel(0, 1200);
+    await expect(headings).toHaveText(["今天", "昨天", "本周", "上周", "更早"]);
+    await expect(titles).toHaveCount(21);
+    await page.mouse.wheel(0, 600);
+    const retry = list.getByRole("button", { name: "重试加载更早会话" });
+    await expect(retry).toBeVisible();
+    expect(olderReads).toBe(2);
+    await retry.press("Enter");
+    await expect(titles).toHaveText(items.map((item) => item.title));
+    expect(await list.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+    const readsBeforeRefresh = headReads;
+    await refresh();
+    await expect.poll(() => headReads).toBeGreaterThan(readsBeforeRefresh);
+    await expect(list.getByRole("button", { name: "加载更多会话" })).toHaveCount(0);
+    await expect(titles).toHaveCount(22);
+    expect(olderReads).toBe(3);
+  });
+});
+
 test("session list refreshes on return to the tab and on session changes", async ({
   page,
   context,

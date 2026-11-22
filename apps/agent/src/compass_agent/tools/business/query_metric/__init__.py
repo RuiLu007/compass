@@ -12,9 +12,7 @@ class Input(Arguments):
     query_ref: UUID
     operation: Literal["query", "compare", "drilldown"] = "query"
     parameters: Parameters | None = None
-    comparison: Parameters | None = Field(
-        default=None, description="自定义对照期。对比紧邻的前一等长期间时省略，由服务端计算日期。"
-    )
+    comparison: Parameters | None = Field(default=None, description="比较时填写用户所指的对照期。")
     parent_group: dict[str, str | int | bool] | Literal["total"] | None = Field(
         default=None, description="下钻起点。填写 total 或已绑定的父级筛选条件。"
     )

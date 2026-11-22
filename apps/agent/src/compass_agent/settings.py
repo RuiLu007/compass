@@ -99,6 +99,7 @@ class Settings(BaseSettings):
     compass_runtime_tenant_overrides: str = "{}"
     compass_runtime_lease_seconds: int = Field(default=15, ge=3, le=300)
     compass_semantic_workspaces: str = ""
+    compass_embedding_provider_id: str = ""
     compass_search_workspaces: str = ""
     compass_web_authz_url: str = "http://127.0.0.1:8100/api/internal/analysis/authorize"
     compass_demo_enabled: bool = False

@@ -360,17 +360,13 @@ def complete_delivery(task, text, state, step, journal, *, allow_verified_report
     if draft is None:
         if not may_recover:
             raise ValueError("delivery requires valid model output")
-        selected = getattr(journal, "registry_selected", None) or (
-            initial.get("resolution") or {}
-        ).get("metric")
+        selected = (initial.get("resolution") or {}).get("metric")
         targets = requested or ([selected] if selected else [])
         recovered = verified_report(observations, targets)
         if recovered is None:
             raise ValueError("report requires formal results for every requested metric")
         draft, widgets = recovered, _widgets(recovered.views, state)
-    summary = with_scope(
-        draft.summary, observations, RUN_STREAM_LIMITS["answerBytes"], requested=requested
-    )
+    summary = with_scope(draft.summary, observations, RUN_STREAM_LIMITS["answerBytes"])
     receipt = RunCompleted(
         status="completed", finalAnswer=summary, file=AnalysisFileNone(status="none")
     )
@@ -403,7 +399,7 @@ def complete_delivery(task, text, state, step, journal, *, allow_verified_report
             body += "\n### " + _markdown_cell(widget.title) + "\n\n"
             for row in [widget.columns, ["---"] * len(widget.columns), *widget.rows]:
                 body += "| " + " | ".join(map(_markdown_cell, row)) + " |\n"
-        body = with_scope(body, observations, 2 * 1024 * 1024, requested=requested)
+        body = with_scope(body, observations, 2 * 1024 * 1024)
         file = Delivery(node_key, "report", "report.md", "text/markdown", body.encode())
     elif task == "data_analysis" and widgets:
         stream = io.StringIO(newline="")

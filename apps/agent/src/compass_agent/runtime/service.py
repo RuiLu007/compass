@@ -102,6 +102,16 @@ ToolsProvider = Callable[
 ]
 
 
+def route_supports_tools(selected, journal):
+    if getattr(journal, "context_binding", None) and selected.deliverable in {
+        "existing",
+        "clarify",
+    }:
+        if selected.features.response_mode == "clarify":
+            return False
+    return selected.provider.capabilities.tools.state == "supported"
+
+
 class RunService(RuntimeTurn):
     def __init__(
         self,
@@ -137,6 +147,12 @@ class RunService(RuntimeTurn):
         *,
         verifiers: tuple[RunVerifier, ...] = (),
     ) -> RunResult:
+        from compass_agent.context_runtime.run_facts import prompt_environment
+
+        with prompt_environment(context):
+            return await self._run(command, context, control, emit, verifiers=verifiers)
+
+    async def _run(self, command, context, control, emit, *, verifiers):
         trace = ExecutionTrace(emit)
         emit = trace.emit
         state: TaskState | None = None
@@ -192,7 +208,7 @@ class RunService(RuntimeTurn):
             )
             stage = "tool_setup"
             capabilities = selected.provider.capabilities
-            supported = capabilities.tools.state == "supported"
+            supported = route_supports_tools(selected, journal)
             route = RunRoute(
                 provider_id=selected.provider.id,
                 binding_version=selected.provider.binding_version,
@@ -326,7 +342,15 @@ class RunService(RuntimeTurn):
             self._close_open_step(state, "failed", emit)
             if error.code in {"intent_invalid", "intent_unavailable"}:
                 stop_reason = error.code
-            _failure_diagnostic(emit, control, stage, error, error.code)
+            _failure_diagnostic(
+                emit,
+                control,
+                stage,
+                error,
+                (error.reason_code or error.code)
+                if error.code == "source_access_denied"
+                else error.code,
+            )
             code = (
                 "workflow_failed"
                 if error.code == "workflow_replay_mismatch"
@@ -366,8 +390,10 @@ class RunService(RuntimeTurn):
             grants = await journal.capabilities() if journal.capabilities else {}
             if not grants.get("analysis") or not grants.get("model"):
                 raise ModelError("forbidden", 403)
-            if grants.get("plugins") is not True or (
-                binding["scopeProfile"] == "finance" and not binding.get("registry")
+            from compass_agent.context_runtime.profiles import discover_plugins
+
+            if grants.get("plugins") is not True or not discover_plugins(
+                binding["scopeProfile"], bool(binding.get("registry"))
             ):
                 return None
         options = (
@@ -387,7 +413,11 @@ class RunService(RuntimeTurn):
             from compass_agent.semantic.service import RegistryTools
 
             semantic = RegistryTools(journal, context)
-            grants = (await semantic.api("context"))["capabilities"]
+            try:
+                grants = (await semantic.api("manifest"))["capabilities"]
+            except ModelError as exc:
+                journal.registry_issue = {"status": "unavailable", "code": exc.code}
+                grants = {}
             capabilities = capabilities | {f"semantic_{k}" for k, v in grants.items() if v}
         documents = None
         if search := getattr(journal, "search_snapshot", None):
@@ -467,7 +497,9 @@ class RunService(RuntimeTurn):
         if getattr(journal, "context_binding", None):
             from compass_agent.context_runtime.source_access import require_run_sources
 
-            await asyncio.to_thread(require_run_sources, journal.store, journal.run_id, context)
+            await asyncio.to_thread(
+                require_run_sources, journal.store, journal.run_id, context, epoch=journal.epoch
+            )
         return await recorded(
             "routing_host"
             if getattr(journal, "context_binding", None)

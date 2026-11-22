@@ -51,9 +51,14 @@ class TriggerAdmissionService:
 
     async def submit(self, trigger_id, token):
         context, command, accepted = await asyncio.to_thread(self.source, trigger_id)
+        environment = None
         if accepted is None:
-            await self.runtime.access.check(context, purpose="schedule_run")
-        return await asyncio.to_thread(self.apply, trigger_id, token, context, command)
+            environment = await self.runtime.access.check(
+                context, purpose="schedule_run", run_environment=True
+            )
+        return await asyncio.to_thread(
+            self.apply, trigger_id, token, context, command, run_environment=environment
+        )
 
     async def reconcile(self, trigger_id, token):
         context, command, _ = await asyncio.to_thread(self.source, trigger_id)
@@ -61,7 +66,9 @@ class TriggerAdmissionService:
             self.apply, trigger_id, token, context, command, reconciliation=True
         )
 
-    def apply(self, trigger_id, token, context, command, *, reconciliation=False):
+    def apply(
+        self, trigger_id, token, context, command, *, reconciliation=False, run_environment=None
+    ):
         store = self.runtime.store
         assert store.scheduler is not None
         with store.transaction() as tx:
@@ -97,6 +104,7 @@ class TriggerAdmissionService:
                 tx,
                 command,
                 context,
+                run_environment=run_environment,
                 schedule={"scheduleId": str(trigger.schedule_id), "triggerId": str(trigger_id)},
             )
             # Recheck the database clock after admission and initialization.

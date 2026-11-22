@@ -145,7 +145,7 @@ function postgresTool(tool: string, url: string, input?: Buffer): Buffer {
   };
   const args =
     tool === "pg_dump"
-      ? ["--format=custom"]
+      ? ["--format=custom", "--schema=web", "--schema=web_meta"]
       : [
           "--exit-on-error",
           "--no-owner",
@@ -188,11 +188,35 @@ it("restores representative data and permissions into a new database, then inval
     password: "restore-test-password",
     url: source,
   });
+  const tenantId = randomUUID(),
+    workspaceId = randomUUID(),
+    fileId = randomUUID();
+  const embedding = JSON.stringify(Array(1024).fill(0.25));
   const client = await connectManaged(source);
   try {
     await client.query(
       "INSERT INTO web.web_session(id,user_id,token_hash,device_label,expires_at) VALUES($1,$2,$3,'Restore fixture',now()+interval '1 hour')",
       [randomUUID(), created.id, Buffer.alloc(32, 1)],
+    );
+    await client.query(
+      "INSERT INTO web.tenant(id,name,slug,timezone) VALUES($1,'Restore tenant','restore-tenant','UTC')",
+      [tenantId],
+    );
+    await client.query(
+      "INSERT INTO web.workspace(id,tenant_id,name,slug) VALUES($1,$2,'Restore space','restore-space')",
+      [workspaceId, tenantId],
+    );
+    const base = await client.query(
+      "INSERT INTO web.knowledge_base(tenant_id,workspace_id,name) VALUES($1,$2,'Restore library') RETURNING id",
+      [tenantId, workspaceId],
+    );
+    await client.query(
+      "INSERT INTO web.knowledge_file(id,base_id,name,format,original,status,source_id) VALUES($1,$2,'notes.txt','txt',$3,'ready','original')",
+      [fileId, base.rows[0].id, Buffer.from("initial source")],
+    );
+    await client.query(
+      "INSERT INTO web.knowledge_chunk(file_id,ordinal,section_id,heading,body,section_hash,enabled,embedding) VALUES($1,1,'s1','运输','edited text',$2,false,$3::public.vector)",
+      [fileId, "a".repeat(64), embedding],
     );
   } finally {
     await client.end();
@@ -204,6 +228,21 @@ it("restores representative data and permissions into a new database, then inval
   expect(await migrate({ url: destination })).toBe("already_applied");
   const restored = await connectManaged(destination);
   try {
+    const saved = await restored.query(
+      `SELECT convert_from(f.original,'UTF8') AS original,c.body,c.enabled,public.vector_dims(c.embedding) AS dimensions,
+      c.embedding OPERATOR(public.<->) $2::public.vector AS distance FROM web.knowledge_file f JOIN web.knowledge_chunk c ON c.file_id=f.id WHERE f.id=$1`,
+      [fileId, embedding],
+    );
+    expect(saved.rows).toEqual([
+      {
+        original: "initial source",
+        body: "edited text",
+        enabled: false,
+        dimensions: 1024,
+        distance: 0,
+      },
+    ]);
+
     expect(
       (await restored.query("SELECT display_name FROM web.app_user WHERE id=$1", [created.id]))
         .rows[0].display_name,
@@ -361,6 +400,11 @@ it("installs a single retail edition after v3, preserves scope and refuses conte
   const client = await connectManaged(url);
   try {
     const query = (sql: string) => client.query(sql).then((r) => r.rows);
+    expect(
+      await query(
+        "SELECT to_regclass('web.semantic_policy') AS policy, to_regclass('web.semantic_feedback') AS feedback",
+      ),
+    ).toEqual([{ policy: null, feedback: null }]);
     // The independently distributed SQL must agree with the repository edition already installed.
     await client.query(
       await readFile(new URL("../../db/main/seeds/retail-v1.sql", import.meta.url), "utf8"),
@@ -374,15 +418,6 @@ it("installs a single retail edition after v3, preserves scope and refuses conte
         "SELECT count(*)::int AS n FROM web.execution_bindings WHERE validation_receipt IS NOT NULL",
       ),
     ).toEqual([{ n: 0 }]);
-    expect(
-      await query(`SELECT s.department_key AS department,a.code FROM web.semantic_policy p
-        JOIN web.semantic_scopes s USING(scope_id) CROSS JOIN jsonb_array_elements(p.policy->'defaults') d
-        JOIN web.semantic_assets a ON a.asset_id=(d->>'target_metric_ref')::uuid ORDER BY s.tenant_id,1`),
-    ).toEqual([
-      { department: "finance", code: "finance.recognized_revenue" },
-      { department: "sales", code: "sales.paid_gmv" },
-      { department: "sales", code: "sales.net_gmv" },
-    ]);
     expect(
       await query(`SELECT count(DISTINCT a.asset_id)::int AS definitions,count(*)::int AS bindings
         FROM web.semantic_assets a JOIN web.semantic_versions v USING(asset_id)
@@ -406,7 +441,12 @@ it("adds both full-text indexes to v5 with native and incremental SQL, preservin
   for (const [index, url] of urls.entries()) {
     await migrate({ url, to: "0005_semantic_governance" });
     const before = await schema(url);
-    await migrate({ url, from: "0005_semantic_governance", mode: index ? "sql" : "native" });
+    await migrate({
+      url,
+      from: "0005_semantic_governance",
+      to: "0006_semantic_search",
+      mode: index ? "sql" : "native",
+    });
     const after = await schema(url);
     expect(after.grants).toEqual(before.grants);
     expect(after.columnGrants).toEqual(before.columnGrants);
@@ -416,7 +456,7 @@ it("adds both full-text indexes to v5 with native and incremental SQL, preservin
         .map((entry) => entry.indexname)
         .sort(),
     ).toEqual(["semantic_alias_search", "semantic_version_search"]);
-    expect(await migrate({ url })).toBe("already_applied");
+    expect(await migrate({ url, to: "0006_semantic_search" })).toBe("already_applied");
   }
   expect(await schema(urls[0])).toEqual(await schema(urls[1]));
 }, 30000);
@@ -492,3 +532,80 @@ it("keeps cash, posting, attribution revisions and period-end stock at their sou
     await client.end();
   }
 });
+
+it("backfills missing demo admin memberships while preserving an explicit suspension", async () => {
+  const url = await target("demo_admin");
+  await migrate({ url });
+  await seedTeaching("isolated-teaching-fixture", url);
+  const client = await connectManaged(url);
+  try {
+    const { rows } = await client.query(
+      "SELECT m.id,m.role_key FROM web.tenant_member m JOIN web.app_user u ON m.user_id=u.id WHERE u.login_name='teaching.platform' ORDER BY m.tenant_id",
+    );
+    expect(rows.map((row) => row.role_key)).toEqual(["admin", "admin"]);
+    await client.query("DELETE FROM web.tenant_member WHERE id=$1", [rows[0].id]);
+    await client.query("UPDATE web.tenant_member SET status='disabled' WHERE id=$1", [rows[1].id]);
+    expect(await seedTeaching(undefined, url)).toMatchObject({ adminMembershipsAdded: 1 });
+    expect(await seedTeaching(undefined, url)).toMatchObject({ adminMembershipsAdded: 0 });
+    expect(
+      (await client.query("SELECT status FROM web.tenant_member WHERE id=$1", [rows[1].id])).rows[0]
+        .status,
+    ).toBe("disabled");
+  } finally {
+    await client.end();
+  }
+});
+
+it.each(["native", "sql"])(
+  "removes retired tables after resolving restricted releases (%s)",
+  async (mode) => {
+    const url = await target("cleanup_" + mode);
+    await migrate({ url, to: "0006_semantic_search" });
+    await seedTeaching("isolated-cleanup-fixture", url);
+    await seedRetailSemantics(url);
+    const client = await connectManaged(url);
+    try {
+      const {
+        rows: [v],
+      } = await client.query(
+        "SELECT owner_scope_id, source_id, version_id, editor_user_id FROM web.semantic_assets JOIN web.semantic_versions USING(asset_id) LIMIT 1",
+      );
+      await client.query(
+        "INSERT INTO web.semantic_policy(scope_id,revision,source_id,policy) VALUES ($1,1,$2,$3)",
+        [v.owner_scope_id, v.source_id, { disabled_capabilities: ["query"] }],
+      );
+      const {
+        rows: [r],
+      } = await client.query(
+        "INSERT INTO web.semantic_release(partition_id,generation,manifest,digest) VALUES ($1,1,$2,repeat('a',64)) RETURNING release_id",
+        [v.owner_scope_id, { assets: {}, policies: { [v.owner_scope_id]: 1 } }],
+      );
+      await client.query(
+        "INSERT INTO web.semantic_feedback(workspace_id,version_id,actor_id,category,note) SELECT id,$1,$2,'definition','sample' FROM web.workspace LIMIT 1",
+        [v.version_id, v.editor_user_id],
+      );
+      await expect(migrate({ url, mode, from: "0006_semantic_search" })).rejects.toThrow();
+      expect(
+        (await client.query("SELECT count(*)::int AS n FROM web.semantic_feedback")).rows[0].n,
+      ).toBe(1);
+      await client.query(
+        "INSERT INTO web.semantic_revocation(release_id,actor_id,reason) VALUES($1,$2,'retired')",
+        [r.release_id, v.editor_user_id],
+      );
+      expect(await migrate({ url, mode, from: "0006_semantic_search" })).toBe("applied");
+      expect(
+        (
+          await client.query(
+            "SELECT to_regclass('web.semantic_policy') AS policy,to_regclass('web.semantic_feedback') AS feedback",
+          )
+        ).rows[0],
+      ).toEqual({ policy: null, feedback: null });
+      expect(
+        (await client.query("SELECT count(*)::int AS n FROM web.semantic_assets")).rows[0].n,
+      ).toBe(121);
+    } finally {
+      await client.end();
+    }
+  },
+  30000,
+);

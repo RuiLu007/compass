@@ -21,6 +21,7 @@ const unique = (values: string[]) => new Set(values).size === values.length;
 const doc = z
   .strictObject({
     kind: docKind,
+    workspaceReference: z.literal(true).optional(),
     docId: name,
     version: name,
     title: name,
@@ -59,12 +60,14 @@ export const binding = z.strictObject({
     }
   }),
   collectionDigest: digest,
-  connectionId: z.uuid(),
-  connectionRevision: z.number().int().positive(),
+  connectionId: z.uuid().optional(),
+  connectionRevision: z.number().int().positive().optional(),
   dataRelease: name,
   maxToolCalls: z.number().int().min(0).max(400).optional(),
   kinds: z.array(sourceKind).max(5).refine(unique),
   skillEnabled: z.boolean(),
+  reportFormat: z.literal("comparison_brief").optional(),
+  vectorIndex: z.literal("text-embedding-3-small:1024:v1").optional(),
   scenePack: z.literal("retail").optional(),
   policies: z.record(name, z.strictObject({ enabled: z.boolean(), audienceWorkspaceId: audience })),
 });
@@ -86,6 +89,7 @@ export const sourceRef = z.strictObject({
 export const searchArgs = z
   .strictObject({
     query: z.string().trim().min(1).max(256),
+    queryVector: z.array(z.number().finite()).length(1024).optional(),
     kind: docKind.optional(),
     entity: name.optional(),
     businessDate: date.optional(),

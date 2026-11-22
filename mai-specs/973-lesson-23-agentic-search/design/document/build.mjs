@@ -1,3 +1,5 @@
+import { applyCourseReader } from "../../../../scripts/course-design/reader.mjs";
+import { buildSupplements } from "./supplements.mjs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -147,7 +149,7 @@ function scope() {
   return `<div class="scope-pair"><div><h3>模型工具清单</h3><p class="subline">${tools.rows.length} 个工具（${tools.rows.length - plans} 个检索，${plans} 个计划）· 新增 ${added} 个，复用 ${tools.rows.length - added} 个</p>${contractList(tools, "tool")}</div>
     <div><h3>经营语义层</h3><p class="subline">${metrics.rows.length - newlyAdded(metrics)} 项已有口径，新增 ${newlyAdded(metrics)} 项履约缺货率</p>${contractList(metrics, "metric")}
     <div class="fact-note"><b>0/57 与零尝试</b><p>水位齐备、57 次尝试均未短缺，缺货率为 0%。零尝试返回 <code>NO_FACTS</code> 与空值。</p></div></div></div>
-    <aside class="implementation-note"><b>两类查询怎样在同一 Run 共存</b><p>当前正式解析会拦住后续 SQL。本课允许已接受的独立明细事项查询采购实收。明细结果标记为 <code>open_sql</code>，正式指标仍须由同范围的 <code>query_metric</code> 回执支撑。</p></aside>
+    <aside class="implementation-note"><b>两类查询怎样在同一 Run 共存</b><p>搜索计划中已接受的独立明细事项允许模型查询采购实收。明细结果标记为 <code>open_sql</code>，正式指标仍须由同范围的 <code>query_metric</code> 回执支撑。</p></aside>
     ${disclosure("课堂验收目标", referenceTable(goals, "课堂验收目标"), "goals")}`;
 }
 
@@ -180,19 +182,19 @@ function prompts() {
         : `<p class="skill-tail">${esc(line)}</p>`;
     })
     .join("");
-  return `<div class="prompt-pair"><div class="prompt-base"><h3>systemPrompt</h3><small>shared/fragments/base.md · 拟增规则</small>${base.map((t) => `<p>${esc(t)}</p>`).join("")}</div>
-    <div class="prompt-skill"><h3>agentic-search Skill</h3><small>shared/execution.json · 拟议正文</small>${skillLines}</div></div>
+  return `<div class="prompt-pair"><div class="prompt-base"><h3>systemPrompt</h3><small>shared/fragments/base.md · 原文摘录</small>${base.map((t) => `<p>${esc(t)}</p>`).join("")}</div>
+    <div class="prompt-skill"><h3>agentic-search Skill</h3><small>shared/execution.json · 已登记正文</small>${skillLines}</div></div>
     <div class="message-strip"><div><code>system</code><p>平台、场景与当前阶段的指引</p></div><div><code>tools[]</code><p>当前获准的声明，生成阶段为空</p></div><div><code>messages[]</code><p>用户问题、原生调用、观察与运行反馈</p></div></div>
-    <p class="section-note">查询阶段可以选择原生工具调用，或提交 <code>targets / claimProposals / answerBlocks</code> 草稿。服务端核验后签发 <code>claimId/revision</code>，模型用这些键组织回答。</p>
+    <p class="section-note">查询阶段可以选择原生工具调用，或提交 <code>targets / claimProposals / answerBlocks</code> 草稿。服务端核验后签发 <code>claimId/revision</code>，比较简报改用 comparisons 和 notes，表内数值引用已签收的行列。</p>
     ${disclosure("查看 5 处 Prompt 资产与加载时机", referenceTable(assets, "Prompt 资产与装配位置"))}`;
 }
 
 function verify() {
-  const claim = feedback.changedClaims[0],
+  const observation = feedback.newFacts[0],
     gap = feedback.openGaps[0];
   return `<div class="verify-pair"><div><code>verify_batch</code><h3>工具返回之后</h3><p><code>RunToolBindings.dispatch</code> 在记录工具消息前签收有序回执，核对范围、水位和权限，再给主模型新事实、缺口和预算。</p></div>
     <div><code>verify_draft</code><h3>答案发表之前</h3><p><code>RuntimeTurn.execute_turn</code> 的 <code>handle</code> 在问答或报告交付前复核断言、计算与引用。缺口可补就返回 <code>query</code>，由模型选下一步。</p></div></div>
-    <aside class="feedback-preview"><h3>一次回到模型的反馈</h3><dl><div><dt>已取得</dt><dd>${esc(feedback.newFacts[0].date)} · ${esc(feedback.newFacts[0].fact)}</dd></div><div><dt>已核断言</dt><dd>${esc(claim.target)} · [${esc(claim.start)}, ${esc(claim.endExclusive)})</dd></div><div><dt>仍缺什么</dt><dd>${esc(gap.missing)}</dd></div><div><dt>工具余量</dt><dd>${esc(feedback.remaining.toolCalls)} 次 · 本批示例</dd></div></dl></aside>
+    <aside class="feedback-preview"><h3>一次回到模型的反馈</h3><dl><div><dt>已取得</dt><dd>${esc(observation.locator)} · ${esc(observation.columns.join("、"))}</dd></div><div><dt>已签收</dt><dd>${esc(observation.kind)} · ${observation.rowCount} 行</dd></div><div><dt>仍缺什么</dt><dd>${esc(gap.goal)}</dd></div><div><dt>工具余量</dt><dd>${esc(feedback.remaining.toolCalls)} 次 · 本批示例</dd></div></dl></aside>
     <p class="section-note">草稿此时若写“可以试投”，Runtime 会返回缺少的正式缺货率回执。签发引用前还要复核每个数字的对象、窗口、单位和行或段落位置。交付与回看时重验父来源权限。两次校验都在 Agent 进程内完成，额外模型调用为 0。</p>
     ${disclosure("查看接入位置、输出与回看约束", referenceTable(checks, "Verify 接入点"))}`;
 }
@@ -241,9 +243,7 @@ const offer = matched(business, /报价\s*([\d,]+)\s*\/\s*([\d,]+)\s*元/u)
   .map(number);
 const newLow = number(matched(variant, /最低档为\s*([\d,]+)\s*元/u)[1]);
 const cap = (balance * fraction) / 100;
-const receiptMonth = Number(feedback.newFacts[0].date.slice(5, 7));
 const netExample = matched(chapters[5].body, /即可给出 ([\d,.]+) 元并收口/u)[1];
-const windowText = matched(walk.rows[1][1], /恢复窗改为\s*(.+?日)/u)[1];
 function offerPanel(low) {
   const tiers = [low, offer[1]],
     eligible = tiers.filter((n) => n <= cap);
@@ -276,10 +276,18 @@ function caseStudy() {
         `<li><span class="timeline-dot" aria-hidden="true"></span><div><h4>${esc(names[i])}</h4><p>${rich(fact)}</p><dl><div><dt>校验反馈</dt><dd>${rich(change)}</dd></div><div><dt>模型决策</dt><dd>${rich(next)}</dd></div></dl></div></li>`,
     )
     .join("");
-  return `<h3>最低报价变了，意见怎样变</h3>${switcher("quote", "选择报价版本", [
-    [`原报价 · ${money(offer[0])} 元起`, offerPanel(offer[0])],
-    [`换价 · ${money(newLow)} 元起`, offerPanel(newLow)],
-  ])}
+  const weekly = chapters[5].body.split("### 普通 Chat 实跑")[1];
+  return `<h3>华东区 GMV 为什么下降 12%？</h3>${md
+    .render(weekly.slice(weekly.indexOf("\n")))
+    .replace("<table>", "<div class='table-wrap' tabindex='0'><table>")
+    .replace("</table>", "</table></div>")}<h3>最低报价变了，意见怎样变</h3>${switcher(
+    "quote",
+    "选择报价版本",
+    [
+      [`原报价 · ${money(offer[0])} 元起`, offerPanel(offer[0])],
+      [`换价 · ${money(newLow)} 元起`, offerPanel(newLow)],
+    ],
+  )}
     <h3>从周会待办追到签批意见</h3><ol class="timeline">${timeline}</ol>
     <aside class="implementation-note"><b>简单查数的短路径</b><p>只问九月华东小程序扣退款后的成交额时，取得同范围的正式回执即可回答 ${esc(netExample)} 元并收口。</p></aside>`;
 }
@@ -291,20 +299,17 @@ function delivery() {
       return `<details class="milestone"><summary><span>${esc(index)}</span><strong>${esc(title)}</strong></summary><dl><dt>改动位置与交付物</dt><dd>${rich(files)}</dd><dt>完成判据</dt><dd>${rich(done)}</dd></dl></details>`;
     })
     .join("");
-  return `<div class="milestones">${list}</div><div class="release-note"><b>发布与回切</b><p>先准备资料与语义增量，再发布支持新引用的 Agent/BFF，最后为工作区启用。首版沿用现有表。回切调整新 Run 的配置，已有 Run 由兼容读端按固定版本恢复，历史读取复核当前权限。</p></div>`;
+  return `<div class="milestones">${list}</div><p><a href="VECTOR_SEARCH.html">向量检索与华东 GMV</a> · <a href="CODE_DESIGN.html">代码实现</a> · <a href="EVIDENCE.html">引用校验</a> · <a href="RETAIL_CASE.html">零售数据与验收</a></p><div class="release-note"><b>发布与回切</b><p>先准备资料与语义增量，再发布支持新引用的 Agent/BFF，最后为工作区启用。Agent 复用运行表；Web 迁移 0009_document_vectors 保存向量。回切调整新 Run 的配置，已有 Run 由兼容读端按固定版本恢复，历史读取复核当前权限。</p></div>`;
 }
 
 const region = { scope, context, prompts, verify, governance, case: caseStudy, delivery };
 const foldNames = {
   layers: "查看上下文分层图",
-  decision: "查看草稿核验分支的设计代码",
+  decision: "查看两期比较的计算代码",
   feedback: "查看这一批的原始反馈 JSON",
   architecture: "查看主 Agent、Runtime 与数据源的架构图",
 };
 const chapterLinks = chapters.map((ch) => `<a href="#${ch.id}">${esc(ch.title)}</a>`).join("");
-function hero() {
-  return `<section class="lesson-hero" aria-labelledby="page-title"><div class="hero-intro"><p class="lesson-meta">第 23 课 <span>/</span> 技术方案 · 待评审</p><h1 id="page-title">Agentic Search</h1><p class="hero-subtitle">主 Agent 如何决定下一问</p><p class="hero-description">华东渠道要给跑鞋引流款定档。主 Agent 逐轮查指标、入库单与原件，把能核实的经营判断交给经理签批。</p><div class="hero-links"><a class="primary-link" href="#section-0">阅读实施清单 <span aria-hidden="true">↓</span></a><a href="#section-5">看零售案例 <span aria-hidden="true">↗</span></a></div></div><div class="hero-observation"><p class="observation-label">一次改变查询的观察</p><div class="hero-fact"><strong>${esc(feedback.newFacts[0].date.slice(5).replace("-", "."))}</strong><span>${esc(feedback.newFacts[0].fact)}</span></div><div class="hero-branches"><div><small>确定恢复窗</small><b>${receiptMonth} 月 ${esc(windowText)}</b></div><div><small>模型的下一问</small><b>这五天的锁库缺货率是多少？</b></div></div></div></section>`;
-}
 
 const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "compass-lesson23-"));
 try {
@@ -332,7 +337,7 @@ try {
     '<div class="diagram-stage">',
     '<div class="diagram-stage" tabindex="0" role="region" aria-label="设计图，可横向滚动">',
   );
-  html = html.replace(/<section class="hero"[\s\S]*?<\/section>/u, () => hero());
+
   html = html.replace(
     /<a class="desktop-link"[\s\S]*?(?=<button class="search-trigger")/u,
     () =>
@@ -368,7 +373,10 @@ try {
       return open + json(data) + close;
     },
   );
-  const originals = chapters.map((ch) => ({ title: ch.title, html: md.render(ch.body) }));
+  const originals = chapters.map((ch) => ({
+    title: ch.title,
+    html: md.render(ch.body).replace(/<a [^>]*>([\s\S]*?)<\/a>/gu, "$1"),
+  }));
   if (/\{\{(?:view|fold|endfold)/u.test(html)) throw new Error("Unresolved reading layout marker");
   const sourceDigest = createHash("sha256").update(source).digest("hex");
   html = html.replace(
@@ -381,6 +389,15 @@ try {
     () =>
       `<dialog id="original-dialog" aria-labelledby="original-heading"><div class="dialog-header"><h2 id="original-heading">主方案原文</h2><button type="button" class="close-button" aria-label="关闭原文">×</button></div><div class="original-copy"></div></dialog><!-- prettier-ignore --><script type="application/json" id="chapter-originals">${json(originals)}</script><!-- prettier-ignore --><script>${interactions}</script></body>`,
   );
+  html = await applyCourseReader(html, {
+    lesson: 23,
+    title: "Agentic Search",
+    subtitle: "主 Agent 怎样从原文和账本查明经营变化",
+    cover: {
+      file: path.resolve(here, "../../context/agentic-search-architecture.png"),
+      alt: "跨源经营诊断的 Agentic Search 架构图",
+    },
+  });
   const target = path.resolve(here, config.output);
   const staged = target + "." + process.pid + ".tmp";
   try {
@@ -400,3 +417,5 @@ try {
 } finally {
   await fs.rm(tmp, { recursive: true, force: true });
 }
+
+await buildSupplements(path.resolve(here, ".."));
