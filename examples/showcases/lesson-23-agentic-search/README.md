@@ -10,8 +10,8 @@
 
 1. 为教学 Web 和 Agent 各准备独立、已迁移的 `compass_web_test_*` 与 `compass_agent_test_*` 数据库。使用本地测试部署的应用和迁移账户配置 `WEB_DATABASE_URL`、`WEB_TEST_MIGRATION_DATABASE_URL`、`DATABASE_URL`、`AGENT_MIGRATION_DATABASE_URL`。设置专用服务令牌、状态加密密钥和 Redis 密码，配置 Web 与 Agent 内部 HTTP 地址。教学身份密码通过 `WEB_FIXTURE_PASSWORD` 与 `WEB_TEST_PASSWORD` 提供。Web 及其配置运行于本机回环地址。初始化步骤见 [Web 教学环境](../../../apps/web/README.md)和 [Agent 部署](../../../apps/agent/README.md)。
 2. 依次执行 `pnpm db:seed -F web -- --fixture teaching` 和 `pnpm db:seed -F web -- --fixture retail-semantics`，为工作区提供六个合成账户、零售语义资产和审批基础数据。使用有权的账户在产品中配置可用模型，核对工具能力，给分析员授予模型调用权。将实际 Provider ID 设为 `COMPASS_SEARCH_MODEL`。
-3. Web 配置 `COMPASS_DOCUMENTS_ROOT`、`COMPASS_DOCUMENTS_PIN_DIR` 为两个独立的服务端私有目录。Agent 配置 `COMPASS_SEARCH_WORKSPACES` 和 `COMPASS_SEMANTIC_WORKSPACES`，包含教学工作区 `99500000-0000-4000-8000-000000000020`。启用 Context Runtime、PromptOps 和受控自主执行，为同一 Provider 配置可用步数、token、费用与总时长。将 `127.0.0.1:55473` 加入 `COMPASS_RETAIL_ALLOWED_ENDPOINTS`。用 `WEB_PUBLIC_ORIGIN` 指向此教学 Web。启动 Web/Agent，检查 Agent 的 `/readyz`。
-4. 在权限隔离的终端按下列顺序装配。仅 `freeze.py` 新建数据库集群，输出目录须为新路径。随后 `configure.py` 为销售部门分析员及报价受众组配置授权，将受限账号绑定到教学工作区，发布资料。最后 `publish_metrics.py` 走试算、两名独立评审和发布流程。创建后的连接口令只保存在权限为 0600 的文件中。
+3. Web 配置 `COMPASS_DOCUMENTS_ROOT`、`COMPASS_DOCUMENTS_PIN_DIR` 为两个独立的服务端私有目录。Agent 配置 `COMPASS_SEMANTIC_WORKSPACES`，包含教学工作区 `99500000-0000-4000-8000-000000000020`。启用 Context Runtime、PromptOps 和受控自主执行，为同一 Provider 配置可用步数、token、费用与总时长。将 `127.0.0.1:55473` 加入 `COMPASS_RETAIL_ALLOWED_ENDPOINTS`。用 `WEB_PUBLIC_ORIGIN` 指向此教学 Web。启动 Web/Agent，检查 Agent 的 `/readyz`。新 Run 默认使用通用 Loop，文档工具首次调用时固定资料，无搜索模式开关。使用当前真实时钟回放历史案例时，在问题中明确分析时点为 2025-10-09 09:00（北京时间），并在验收中记录该输入条件。
+4. 在权限隔离的终端按下列顺序装配。仅 `freeze.py` 新建数据库集群，输出目录须为新路径。随后 `configure.py` 为销售部门分析员及报价受众组配置授权，将受限账号绑定到教学工作区，发布资料。最后 `publish_metrics.py` 走试算、两名独立评审和发布流程，并通过现有资产授权 API 为教学分析员授予本案例 21 项指标／实体的使用权限。创建后的连接口令只保存在权限为 0600 的文件中。
 
 已有教学库升级时，先在载入该库 Agent 环境的终端运行 `.venv/bin/python -m compass_agent.promptops.sync` 预览提示词更新，再加 `--apply --backup-dir work/lesson-23-runtime/prompt-backup` 发布并保存旧版本。新会话会固定当时发布的 PromptOps 清单。
 
@@ -22,8 +22,7 @@ class_data=work/lesson-23-runtime/frozen
 .venv/bin/python "$case_dir/configure.py" "$class_data" "$COMPASS_DOCUMENTS_ROOT"
 .venv/bin/python "$case_dir/publish_metrics.py" --frozen "$class_data"
 .venv/bin/python "$case_dir/verify_dataset.py" "$class_data"
-.venv/bin/python "$case_dir/documents_acceptance.py" --web "$WEB_PUBLIC_ORIGIN" \
-  --runtime-connection "$class_data/connection.json"
+.venv/bin/python "$case_dir/documents_acceptance.py" --web "$WEB_PUBLIC_ORIGIN"
 ```
 
 `verify_dataset.py` 通过独立讲师连接运行金标准 SQL，再以分析员和冻结库受限身份查询五项已发布绑定、支付及净额按自然月的三行结果、无样本、覆盖缺口和延迟状态。还会核对地区、渠道、地点、行为事件、库存单据、库存流水的正式值域。三个类型字段的枚举均来自受限连接的列注释，并经各自的正式实体定义登记中英文含义。`documents_acceptance.py` 在同一部署内建立独立测试主体并检查 12 个资料探针、历史版本、撤权与恢复。需要停止冻结库时运行 `pg_ctl -D "$class_data/pgdata" stop`。下次启动同一数据可使用 `pg_ctl -D "$class_data/pgdata" -l "$class_data/postgres.log" -o '-h 127.0.0.1 -k /tmp -p 55473' start`。
@@ -66,3 +65,5 @@ out=work/lesson-23-runtime/results
 ```
 
 在命令中加入 `--full-case`，可在同一个新 Run 中核对完整的 G1–G7，包括七至九月现金流、两个五日窗的业务记录、库存与预算行动。结果文件的 `anchorsByKey` 列出各项判断在产品报告里的角标和引用 ID。
+
+2026-11-22 的默认协议验收使用通用 Loop 与 final_answer。资料 HTTP 探针直接运行 documents_acceptance.py；历史 runtime_sources_acceptance.py 依赖旧搜索快照与 SearchDispatch，只用于旧协议回放。通用协议的恢复、空库、来源重验及交付边界由 Agent 的单元和 PostgreSQL 集成测试覆盖。

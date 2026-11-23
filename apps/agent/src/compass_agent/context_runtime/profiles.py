@@ -154,6 +154,7 @@ def enumerate_usages(policy_version=POLICY_VERSION) -> tuple[PathUsage, ...]:
         raise ValueError("incompatible context policy")
     return (
         PathUsage(BASE),
+        PathUsage("shared/fragments/answer-protocol.md"),
         PathUsage("shared/fragments/search-protocol.md"),
         *(PathUsage(p["path"]) for p in ASSEMBLY["searchPacks"].values()),
         PathUsage("shared/fragments/semantics.md"),
@@ -184,6 +185,8 @@ def resolve_profile(
     enabled: bool = True,
     registry: bool = False,
     search: dict | None = None,
+    answer_protocol: int = 1,
+    intermediate: bool = False,
 ) -> Profile:
     stage_tools = {
         "identify": frozenset(),
@@ -192,9 +195,13 @@ def resolve_profile(
         "analyze": None,
         "generate": frozenset(),
     }[phase]
+    if answer_protocol == 2 and phase != "identify":
+        stage_tools = None
     from compass_agent.tools.catalog import TOOLS
 
     ceiling = ASSEMBLY["scopeProfiles"][scope].get("toolCeiling")
+    if answer_protocol == 2:
+        ceiling = None
     scope_tools = set(ceiling["base"]) if ceiling else set()
     plugin_prefixes = ()
     if ceiling and registry:
@@ -235,6 +242,10 @@ def resolve_profile(
     paths.append(f"shared/stages/{phase}.md")
     skills = []
     for skill in SKILLS:
+        if skill.key == "agentic-search" and answer_protocol == 2:
+            # The default protocol already contains the search method, without legacy gates.
+            skills.append(skill.key)
+            continue
         if skill.key == "agentic-search" and not (search and search.get("skillEnabled")):
             continue
         if phase not in skill.phases or task not in skill.tasks:
@@ -244,4 +255,6 @@ def resolve_profile(
             continue
         paths.append(skill.path)
         skills.append(skill.key)
+    if answer_protocol == 2 and phase != "identify" and not intermediate:
+        paths.append("shared/fragments/answer-protocol.md")
     return Profile(tuple(paths), tuple(allowed), tuple(skills), tuple(excluded))

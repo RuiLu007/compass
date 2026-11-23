@@ -60,8 +60,11 @@ export async function internalDocuments(request: Request, operation: string) {
         const catalog = await knowledgeCatalog(db, s);
         const current = catalog.binding;
         if (op === "pin") {
-          z.strictObject({}).parse(s.args);
-          return acceptPin(s, current, catalog.changed ? catalog.live : undefined);
+          const args = z.strictObject({ protocol: z.literal(2).optional() }).parse(s.args);
+          return acceptPin(s, current, catalog.changed ? catalog.live : undefined, {
+            protocol: args.protocol,
+            emptyReason: catalog.emptyReason,
+          });
         }
         const pin = await readPin(s);
         const verification = op === "verify" ? verifyArgs.parse(s.args) : undefined;
@@ -160,6 +163,7 @@ export async function internalDocuments(request: Request, operation: string) {
         return {
           ...(args ? { retrievalMode: semantic.length ? "hybrid" : "lexical" } : {}),
           status: sections.length ? "ok" : "empty",
+          ...(!sections.length && args ? { reason: pin.emptyReason ?? "no_match" } : {}),
           knownAt: pin.knownAt,
           collectionDigest: pin.collectionDigest,
           sections,

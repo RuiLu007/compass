@@ -20,8 +20,7 @@ function readable({ access, pin, current, collection }: Corpus, d: Document, dat
     current.tenantId === pin.tenantId &&
     current.workspaceId === pin.workspaceId &&
     allowed(access, "module.analysis", pin) &&
-    pin.kinds.includes(d.kind) &&
-    current.kinds.includes(d.kind) &&
+    (pin.protocol === 2 || (pin.kinds.includes(d.kind) && current.kinds.includes(d.kind))) &&
     policy?.enabled &&
     [d.audienceWorkspaceId, policy.audienceWorkspaceId].every(
       (group) => group === null || access.workspacePermissions.has(group),

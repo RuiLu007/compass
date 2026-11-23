@@ -199,3 +199,36 @@ describe("database query timeline", () => {
     ]);
   });
 });
+
+describe("context optimization process", () => {
+  it("keeps a completed model node with an optimization summary visible", () => {
+    const [entry] = executionEntries(
+      [node(90, { kind: "model", status: "completed", summary: "历史保留 5 轮，移出 3 轮" })],
+      false,
+    );
+    expect(entry).toMatchObject({ title: "整理上下文", summary: "历史保留 5 轮，移出 3 轮" });
+  });
+  it("shows the original row count independently of its five-row preview", () => {
+    const [entry] = executionEntries(
+      [
+        node(91, {
+          kind: "tool",
+          status: "completed",
+          origin: { kind: "builtin", toolName: "database_query" },
+          detail: {
+            input: '{"op":"query","sql":"SELECT * FROM daily"}',
+            output: JSON.stringify({
+              returnedRows: 10000,
+              complete: true,
+              ref: "results/original.jsonl",
+              columns: ["id"],
+              preview: [[1], [2], [3], [4], [5]],
+            }),
+          },
+        }),
+      ],
+      false,
+    );
+    expect(entry.queryResult).toContain("返回 10000 行（原件已保存）");
+  });
+});

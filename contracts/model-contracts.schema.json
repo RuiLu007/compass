@@ -3271,7 +3271,7 @@
           "items": {
             "$ref": "#/$defs/ToolDefinition"
           },
-          "maxItems": 16,
+          "maxItems": 32,
           "title": "Tools",
           "type": "array"
         },
@@ -3832,6 +3832,21 @@
     "MessageContent": {
       "additionalProperties": false,
       "properties": {
+        "answerMode": {
+          "anyOf": [
+            {
+              "enum": [
+                "plain",
+                "evidence"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Answermode"
+        },
         "artifactIds": {
           "items": {
             "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
@@ -3840,6 +3855,21 @@
           "maxItems": 40,
           "title": "Artifactids",
           "type": "array"
+        },
+        "completion": {
+          "anyOf": [
+            {
+              "enum": [
+                "complete",
+                "partial"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Completion"
         },
         "text": {
           "maxLength": 32768,

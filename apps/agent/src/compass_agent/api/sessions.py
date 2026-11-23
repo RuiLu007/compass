@@ -57,7 +57,7 @@ Runtime = Annotated[DurableRuntime, Depends(runtime)]
 
 @router.get("/runs/{run_id}/citations", response_model=RunCitations)
 async def citations(run_id: UUID, context: RunContext, service: Runtime, response: Response):
-    from compass_agent.context_runtime.search_verification import read_citations
+    from compass_agent.context_runtime.citations import read_citations
 
     await service.access.check(context)
     response.headers["Cache-Control"] = "no-store"
@@ -68,7 +68,7 @@ async def citations(run_id: UUID, context: RunContext, service: Runtime, respons
 async def citation_detail(
     run_id: UUID, citation_id: UUID, context: RunContext, service: Runtime, response: Response
 ):
-    from compass_agent.context_runtime.search_verification import read_citations
+    from compass_agent.context_runtime.citations import read_citations
 
     await service.access.check(context)
     response.headers["Cache-Control"] = "no-store"

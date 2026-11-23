@@ -31,6 +31,33 @@ async def dispatch_batch(
 ) -> tuple[ToolExecutionResult, ...]:
     if not calls or len(calls) > 16 or len({c.id for c in calls}) != len(calls):
         raise ToolRejected("invalid_batch")
+    # Reject the entire batch before approval preparation or any tool can execute.
+    if len(calls) > 1 and any(
+        entry.completion
+        for call in calls
+        if (entry := dispatcher.registry.entries.get(call.function.name)) is not None
+    ):
+        rejected = tuple(
+            ToolExecutionResult(call.id, "rejected", reason_code="completion_requires_single_call")
+            for call in calls
+        )
+        for call, result in zip(calls, rejected, strict=True):
+            context.emit(
+                ToolExecutionEvent(
+                    context.run_id,
+                    context.step_id,
+                    call.id,
+                    call.function.name,
+                    "none",
+                    "unknown",
+                    "required",
+                    result.status,
+                    result.cleanup,
+                    0,
+                    result.reason_code,
+                )
+            )
+        return rejected
     emitted: set[str] = set()
     publish = context.emit
 

@@ -29,6 +29,7 @@ READ_TOOLS = {
     "resolve_semantics",
     "query_metric",
     "database_query",
+    "read_tool_result",
     "search_documents",
     "read_document",
 }

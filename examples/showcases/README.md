@@ -13,3 +13,5 @@
 [第 23 课华东 GMV 下降 12%](lesson-23-east-gmv-rag/README.md)提供 12 份长篇 Markdown 业务原文、可查询的经营账本与讲师验收，用于 RAG 切片、检索和多轮经营归因。
 
 [第 22 课经营语义与指标口径](lesson-22-semantic-governance/README.md)提供新建分析的四道题、纯 NL2SQL 对照方法及指标保存、修订和冲突选择的课堂操作。
+
+[第 24 课动态上下文选择与压缩](lesson-24-context-selection/README.md)提供新建分析里的两道交接题、分批长记录和追问对照。

@@ -31,7 +31,7 @@ from compass_agent.tools.contracts import (
     ToolRejected,
     json_bytes,
 )
-from compass_agent.tools.registry import ToolRegistry
+from compass_agent.tools.registry import ToolRegistry, bounded_payload, check_depth
 
 
 class ExecutionSlots:
@@ -226,7 +226,8 @@ class ToolDispatcher:
                 if result is not None:
                     return result
                 if not context.search_dispatch:
-                    context.budget.start_tool()
+                    if not prepared.tool.completion:
+                        context.budget.start_tool()
                     context.on_start(prepared)
                 control = CallControl(
                     context.control,
@@ -351,7 +352,7 @@ class ToolDispatcher:
 
     async def _invoke(self, prepared, context):
         if prepared.tool.local_effect:
-            return await self._invoke_live(prepared, context)
+            return await self._govern(await self._invoke_live(prepared, context), context)
         if not isinstance(
             prepared.tool.binding, InProcessBinding
         ) or prepared.tool.policy.effect in {"external_write", "unknown"}:
@@ -388,19 +389,43 @@ class ToolDispatcher:
             value["file"] = (
                 base64.b64decode(value["file"], validate=True) if value["file"] else None
             )
-            return ExecutionReceipt(**value)
-        return await self._invoke_live(prepared, context)
+            return await self._govern(ExecutionReceipt(**value), context)
+        return await self._govern(await self._invoke_live(prepared, context), context)
+
+    async def _govern(self, receipt, context):
+        results = getattr(current_execution.get(), "context_results", None)
+        return await results.govern(receipt, context) if results is not None else receipt
 
     async def _invoke_live(self, prepared, context):
         binding = prepared.tool.binding
         if isinstance(binding, InProcessBinding):
-            invoke = binding.handler
+            original_invoke = binding.handler
         elif isinstance(binding, SandboxBinding) and self.sandbox:
-            invoke = partial(self.sandbox.execute, binding)
+            original_invoke = partial(self.sandbox.execute, binding)
         elif isinstance(binding, McpBinding) and self.mcp:
-            invoke = partial(self.mcp.execute, binding)
+            original_invoke = partial(self.mcp.execute, binding)
         else:
             raise ToolRejected("tool_backend_unavailable")
+
+        async def invoke(args, call_context):
+            receipt = await original_invoke(args, call_context)
+            journal = current_execution.get()
+            results = getattr(journal, "context_results", None)
+            if results is not None:
+                try:
+                    if receipt.context_result is None:
+                        if prepared.tool.validate_payload is bounded_payload:
+                            check_depth(receipt.payload, maximum_nodes=None)
+                            json_bytes(receipt.payload)
+                        elif receipt.payload is not None or receipt.status in {"ok", "empty"}:
+                            receipt = replace(
+                                receipt, payload=prepared.tool.validate_payload(receipt.payload)
+                            )
+                except (ValueError, TypeError, RecursionError, ToolRejected):
+                    return replace(
+                        receipt, status="error", reason_code="invalid_tool_result", payload=None
+                    )
+            return receipt
 
         root = context.observation
         # Durable handlers can replay accepted inner operations. The committed tool
@@ -430,7 +455,11 @@ class ToolDispatcher:
     def _receive(self, prepared, receipt, context):
         try:
             payload = (
-                prepared.tool.validate_payload(receipt.payload)
+                (
+                    bounded_payload
+                    if receipt.context_result is not None or receipt.governed
+                    else prepared.tool.validate_payload
+                )(receipt.payload)
                 if receipt.payload is not None or receipt.status in {"ok", "empty"}
                 else None
             )
@@ -445,6 +474,7 @@ class ToolDispatcher:
                 receipt.cleanup,
                 receipt.reason_code,
                 payload=payload,
+                context_result=receipt.context_result,
             )
         refs, artifact_status = (), "none"
         if receipt.file is not None:
@@ -462,4 +492,5 @@ class ToolDispatcher:
             payload=payload,
             artifacts=refs,
             artifact_status=artifact_status,
+            context_result=receipt.context_result,
         )

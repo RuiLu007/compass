@@ -451,7 +451,8 @@ export const AnalysisRunTurn = memo(function AnalysisRunTurn({
           {finalMessage?.status === "incomplete" &&
           durable &&
           scope &&
-          /\[\d+\]/.test(partialText) ? (
+          (finalMessage.content.answerMode === "evidence" ||
+            (!finalMessage.content.answerMode && /\[\d+\]/.test(partialText))) ? (
             <CitedAnswer
               key={finalMessage.messageId + ":" + finalMessage.revision}
               source={partialText}
@@ -468,7 +469,14 @@ export const AnalysisRunTurn = memo(function AnalysisRunTurn({
       )}
       {completed && (
         <section className="analysis-final-answer" aria-label="最终回答">
-          {finalMessage && durable && scope && /\[\d+\]/.test(completed.finalAnswer) ? (
+          {finalMessage?.content.completion === "partial" && (
+            <p className="text-sm text-muted-foreground">部分回答</p>
+          )}
+          {finalMessage &&
+          durable &&
+          scope &&
+          (finalMessage.content.answerMode === "evidence" ||
+            (!finalMessage.content.answerMode && /\[\d+\]/.test(completed.finalAnswer))) ? (
             <CitedAnswer
               key={
                 finalMessage.messageId + ":" + finalMessage.revision + ":" + completed.finalAnswer

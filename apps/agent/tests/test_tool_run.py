@@ -9,7 +9,7 @@ import pytest
 from compass_agent.runtime.context import compass_definition
 from compass_agent.runtime.control import OwnerKey, RunRegistry
 from compass_agent.runtime.service import RunService
-from compass_agent.schemas import StreamExtension, ToolApprovalProposal
+from compass_agent.schemas import TOOL_CATALOG_LIMIT, StreamExtension, ToolApprovalProposal
 from compass_agent.tools.builtin.database_query import DatabaseResult
 from compass_agent.tools.builtin.database_query.handler import registration as database_registration
 from compass_agent.tools.contracts import ExecutionReceipt, ToolBatchPolicy
@@ -211,7 +211,7 @@ async def test_parallel_builtin_run_preserves_start_sequence_and_model_result_or
 @pytest.mark.anyio
 async def test_combined_catalog_limit_rejects_before_routing_or_inference():
     class Discovered:
-        entries = tuple(registration(f"remote_{i}", ok) for i in range(15))
+        entries = tuple(registration(f"remote_{i}", ok) for i in range(TOOL_CATALOG_LIMIT - 1))
         closed = False
 
         async def close(self):

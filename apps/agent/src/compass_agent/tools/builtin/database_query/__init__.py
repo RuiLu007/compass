@@ -200,6 +200,7 @@ class DatabaseResult:
     truncated: bool
     next_offset: int | None = None
     source_ref: dict | None = None
+    context_result: dict | None = None
 
     def observation(self, *, include_result_id: bool = True) -> str:
         payload = {
@@ -324,6 +325,15 @@ async def query_database_live(
                 if isinstance(action, ReadSql)
                 else None
             )
+            from compass_agent.execution_context import current_execution
+
+            journal = current_execution.get()
+            if isinstance(action, ReadSql) and getattr(journal, "context_results", None):
+                from compass_agent.tools.builtin.database_query.result_output import full_result
+
+                return await full_result(
+                    cursor, query, binding, control, journal, projected, call.id
+                )
             preview = (
                 "SELECT pg_catalog.left(pg_catalog.row_to_json(result)::text, "
                 f"{MAX_RESULT_BYTES + 1}) AS line FROM ({query}) AS result LIMIT {MAX_ROWS + 1}"
@@ -364,7 +374,14 @@ async def query_database_live(
 
             return replace(_bounded_result(rows, offset), source_ref=ref)
 
-        return await read_database(binding, control, read)
+        from compass_agent.execution_context import current_execution
+
+        return await read_database(
+            binding,
+            control,
+            read,
+            repeatable_read=bool(getattr(current_execution.get(), "context_results", None)),
+        )
     except (ValueError, RecursionError):
         return "invalid_parameters"
     except DatabaseIdentityMismatch:

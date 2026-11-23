@@ -56,6 +56,12 @@ class RuntimeTurn(AgentExecutor):
         from compass_agent.execution_context import current_execution, execution_path
 
         journal = current_execution.get()
+        if (getattr(journal, "context_binding", None) or {}).get("answerProtocol") == 2:
+            from compass_agent.runtime.answer_turn import execute_answer_turn
+
+            return await execute_answer_turn(
+                self, state, route, context, control, controlled, emit, max_steps=max_steps
+            )
         managed = bool(getattr(journal, "context_binding", None)) and route.deliverable in (
             "business_qa",
             "data_analysis",
@@ -518,5 +524,6 @@ class RuntimeTurn(AgentExecutor):
             budget=budget,
             publish_text=publish_text,
             model_timeout=None if search else 25,
+            public_response=lambda response: not bool(search),
             handle_incomplete=handle_incomplete,
         )

@@ -1,183 +1,115 @@
-# 第 23 课 · 代码设计与实现入口
+# 第 23 课 · 通用校验与答案交付的代码设计
 
-[主方案](TECH_DESIGN.md) · [向量专题](VECTOR_SEARCH.md) · [结论与引用](EVIDENCE.md)
+[主方案](TECH_DESIGN.md) · [回答契约](EVIDENCE.md) · [知识库专题](VECTOR_SEARCH.md) · [离线阅读版](CODE_DESIGN.html)
 
-以下片段来自当前工作区。按模型调用、来源约束、交付核验三个时机阅读。投放复议和两周 GMV 比较使用同一组通用工具，各自在工作区绑定中选择数据、文档版本和交付格式。
+**2026-11-22 实现核对版。** 下列入口对应本轮实际源码，代码块摘录现有定义。验证结果见 [验收记录](../test/ACCEPTANCE.md)。
 
-## 1. Run 接受时固定资料版本
+## 1. Loop 与工具注册
 
-Agent 接收 Web 签发的来源快照。保存前比对租户、工作区、使用者、Run 身份和时点。复议均使用固定发布；GMV 资料包另带向量配置与比较简报格式。
+| 入口 | 实际责任 |
+| --- | --- |
+| harness/executor.py::AgentLoop.execute_tools | 共用 prepare、accept、dispatch、RepeatStep；公开响应采用通用回调 |
+| runtime/turn.py → answer_turn.py | answerProtocol=2 时装配答案协议；仍调用同一个 execute_tools |
+| runtime/tool_bindings.py | 工具执行后调用 after_tool_batch；完成能力和 status_only 控制公开投影 |
+| tools/catalog_contracts.py / contracts.py | 可选 evidence_adapter、completion、public_projection 字段；默认值兼容已有工具 |
+| tools/builtin/final_answer | 静态 SPEC、参数 Schema、私有候选收据；不执行业务操作 |
+| context_runtime/evidence.py | 执行域内证据与批次记录，重放复用已签收结果 |
+| context_runtime/answer_verification.py | 结构、引用、计算和 Review 绑定，返回下一步动作 |
+| runtime/store.py | 校验接受记录与输出摘要；原子保存正文、引用、产物和出箱事件 |
 
-实现入口为 [client.py](../../../apps/agent/src/compass_agent/documents/client.py)。
+完成能力独占一批调用。混合批次在实际执行与审批之前整体拒绝；完成工具不占业务工具次数。MCP 的返回内容无法自授 completion 能力。静态与动态工具由同一注册表装配，模型工具目录容量沿统一契约限制为 32。
 
-```python client.py · 现有实现
-class SearchSnapshot(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    tenantId: UUID
-    workspaceId: UUID
-    runId: UUID
-    actorUserId: UUID
-    knownAt: AwareDatetime
-    timezone: str
-    collectionDigest: str = Field(pattern=r"^[a-f0-9]{64}$")
-    connectionId: UUID
-    connectionRevision: int = Field(ge=1)
-    dataRelease: str = Field(min_length=1, max_length=240)
-    kinds: list[Kind] = Field(max_length=5)
-    skillEnabled: bool
-    reportFormat: Literal["comparison_brief"] | None = None
-    vectorIndex: Literal["text-embedding-3-small:1024:v1"] | None = None
-    scenePack: Literal["retail"] | None = None
-    maxToolCalls: int | None = Field(default=None, ge=0, le=400)
+## 2. 结果适配与知识库
+
+文档适配器保留段落版本、字符定位及 Web 来源句柄；查询适配器保留真实行列、单位、范围和完整状态。Python 结果登记父查询 ID，Journal 将其关联到本执行域证据。MCP／工作流使用通用产物回执，保留内容摘要和所有者权限句柄，具体业务字段继续作为结果数据。
+
+适配器只接收已签收的结果。没有适配器的工具照常执行并记录观察；适配失败返回引用定位反馈。恢复先读已持久化的批次与证据，保持 ID、修订和语义一致。
+
+知识库默认装配。documents/service.py 首次执行时通过 journal.local_read 固定资料；同 Run 的并发首次调用共用锁和持久 pin。空库保留 no_library / no_indexed_documents，跳过 Embedding，返回可继续处理的空结果。工具每次读取都使用当前可信身份访问 Web owner。新 Run 不读取搜索工作区开关。
+
+## 3. Verify 决策与接入
+
+```python 实际决策定义
+@dataclass(frozen=True)
+class Decision:
+    action: Literal["accept", "act", "revise", "partial", "review"]
+    feedback: str = ""
+    body: str = ""
+    citations: dict | None = None
 ```
 
-## 2. 候选排序之前圈定可读版本
+before_delivery 是纯检查函数。review 动作由 answer_turn 把下一次主模型调用设为 purpose=verify，工具列表置空；结果仍经现有持久模型调用、预算和取消机制执行。Review 使用原问题、候选和当前证据，声明目标覆盖、模式与每项结论的支持程度；程序复核候选摘要、证据修订和完整 ID 集合。
 
-Web 的 readable 检查固定快照与当前访问范围、审批、发布日期和适用业务日。向量查询的 SQL 也只接收这些文档的授权标识，词频统计的总体同样来自此集合。
+当前 plain 和 evidence 都走同主模型审阅。act / revise / partial 通过普通反馈回到工作步骤。已经准确说明缺口、满足部分交付条件的候选可以接受。通用终态 verify_result(hooks) 继续处理只读一致性，不在 hook 中隐藏第二次模型调度。
 
-实现入口为 [search.ts](../../../apps/web/src/server/modules/documents/search.ts)。
-
-```typescript search.ts · 现有实现
-export function visibleDocuments(c: Corpus, args: SearchArgs) {
-  const date = args.businessDate ?? businessDay(c.pin);
-  return c.collection.documents.filter(
-    (d) => readable(c, d, date) && (!args.kind || args.kind === d.kind),
-  );
-}
-```
-
-## 3. 在 Markdown 自然段边界切片
-
-一个章节可以包含多段。目标长度 600 字符，超长的整段或表格独立成片，ID 由章节号和片号组成。发布时另算 sectionHash；正文有变化时生成新的资料摘要。
-
-实现入口为 [publish.py](../../../examples/showcases/lesson-23-east-gmv-rag/publish.py)。
-
-```python publish.py · 现有实现
-def chunks(body):
-    blocks = re.split(r"^## (.+)$", body, flags=re.M)
-    for index, (heading, text) in enumerate(zip(blocks[1::2], blocks[2::2], strict=True), 1):
-        part = ""
-        number = 1
-        for paragraph in re.split(r"\n\s*\n", text.strip()):
-            if part and len(part) + len(paragraph) + 2 > 600:
-                yield f"s{index}-{number}", heading, part
-                number += 1
-                part = ""
-            part = (part + "\n\n" + paragraph).strip()
-        if part:
-            yield f"s{index}-{number}", heading, part
-```
-
-## 4. 写入和检索使用同一向量空间
-
-发布器每批最多送入 32 段；查询阶段发送当前检索文本。Agent 从现有加密 OpenAI Provider 连接取得凭据，在服务端完成调用并检查返回模型、顺序、数量、维度和有限数值。
-
-实现入口为 [embeddings.py](../../../apps/agent/src/compass_agent/documents/embeddings.py)。
-
-```python embeddings.py · 现有实现
-MODEL = "text-embedding-3-small"
-DIMENSIONS = 1024
-INDEX = f"{MODEL}:{DIMENSIONS}:v1"
-```
-
-## 5. 合并两路召回
-
-BM25 取可见段落中评分为正的前十名。pgvector 返回按余弦距离排序的前十名。下面的 i 从零起算，第一个结果的贡献为 1/61。精确文号优先，同一条款有多个适用版本时保留对应版本，最多三段返回给模型。
-
-实现入口为 [search.ts](../../../apps/web/src/server/modules/documents/search.ts)。
-
-```typescript search.ts · 现有实现
-const fused = new Map<string, number>();
-for (const list of [ranked.slice(0, 10).map(key), semantic]) {
-  list.forEach((k, i) => fused.set(k, (fused.get(k) ?? 0) + 1 / (61 + i)));
-}
-```
-
-## 6. 正式取值后的独立明细
-
-普通正式指标题使用 query_metric。需要另查货池流水或采购单时，Run 快照必须开放 detail，而且已接受的调查目标要包含 detail。SQL 回执和正式指标保留各自的来源类型。
-
-实现入口为 [search_control.py](../../../apps/agent/src/compass_agent/context_runtime/search_control.py)。
-
-```python search_control.py · 现有实现
-def independent_detail(self):
-    return "detail" in self.pin["kinds"] and any(
-        t.source == "detail" for t in self.targets.values()
+```python 实际交付预算预留
+def needs_delivery_reserve(budget, route, output_tokens):
+    """Forecast delivery headroom from settled usage; hard limits stay in the budget."""
+    if budget is None:
+        return False
+    if budget.steps >= budget.limits.steps - 3:
+        return True
+    if not budget.attempts:
+        return False
+    profiles = [
+        p
+        for p in budget.profiles
+        if (p.provider_id, p.binding_version) == (route.provider_id, route.binding_version)
+    ]
+    if not profiles:
+        return False  # The budget's normal reservation reports unsupported profiles.
+    # A profile's input bound may span the provider's entire context window.
+    # Reserving it repeatedly would close tools before even a small task starts.
+    tokens = budget.tokens // budget.attempts + output_tokens
+    cost = budget.cost_microusd // budget.attempts + max(
+        output_tokens * p.output_microusd for p in profiles
+    )
+    child_tokens = sum(c.limits.tokens for c in budget.children)
+    child_cost = sum(c.limits.cost_microusd for c in budget.children)
+    return (
+        budget.tokens + child_tokens + 3 * tokens > budget.limits.tokens
+        or budget.cost_microusd + child_cost + 3 * cost > budget.limits.cost_microusd
     )
 ```
 
-## 7. 从查询格计算两期差异
+工作步骤与工具额度临近上限，以及 Token／成本的已结算用量估计无法覆盖继续工作、候选和审阅三次调用时，仅保留完成能力。模型及工具批次实际耗时用于估计交付时间。所有实际调用仍按原预算器预留与结算；硬预算不足结束为未完成状态。
 
-每格包含当轮来源、从零起的行号和列名。leaf 复查回执与列来源，金额先统一单位。经营判断、行动及待查事项另列，引用打开的原文或具体查询行。
+## 4. 候选、审阅与发布边界
 
-实现入口为 [comparison_brief.py](../../../apps/agent/src/compass_agent/context_runtime/comparison_brief.py)。
-
-```python comparison_brief.py · 现有实现
-before, after = cells
-if (
-    before.value is None
-    or after.value is None
-    or before.status != "supported"
-    or after.status != "supported"
-    or before.unit != after.unit
-):
-    raise ValueError(f"{pair.label} 需要两格同单位的有效数值")
-delta = after.value - before.value
-percent = (
-    "基期为零" if not before.value else f"{delta / before.value * Decimal(100):.2f}%"
-)
+```mermaid 私有候选与公开正文
+flowchart LR
+ C["私有 Candidate"] --> V["结构与引用检查"]
+ V --> R["同 Loop 主模型 Review"]
+ R -->|补查或修订| W["主循环工作步骤"]
+ W --> C
+ R --> A["绑定摘要的接受记录"]
+ A --> T["租约／来源重验与原子事务"]
+ T --> P["正文＋引用＋附件＋出箱事件"]
 ```
 
-## 8. 预算、无进展和可发表范围
+私有记录键：answer/v2/candidate/{id}、answer/v2/evidence/{id}、answer/v2/batch/{path}/{step}、answer/v2/accepted/{id}。身份由 Run、执行路径和实际调用派生；候选参数只返回 candidate_received，不公开草稿和 Review 文本。
 
-恢复后重建已签收批次与工具额度。两个连续批次都没有取得新结果的可行分支触发停搜判断。generate 使用既有来源。在正式签批路径，服务端重开草稿依赖复算整档与剩余额度。在比较简报路径，服务端复算数值表。
+接受记录绑定 candidateDigest、evidenceRevision、textDigest、citationsDigest、artifactDigest、mode、completion 和 executionPath。store.finish 要求根执行域的持久接受记录与本次参数、正文、引用及附件完全一致。取消阻止终稿发布；恢复沿既有租约和幂等出箱执行。
 
-实现入口为 [search_control.py](../../../apps/agent/src/compass_agent/context_runtime/search_control.py)。
+content.answerMode 与 content.completion 仅随被接受的正文发布。旧消息省略这两个字段，新初始空消息保持原投影。前端按显式模式选普通 Markdown 或 CitedAnswer；引用目录中的 revision 和 textDigest 绑定正文，点击再取详情。旧引用存储键保留，公共读取入口已迁到 context_runtime/citations.py。
 
-```python search_control.py · 现有实现
-if remaining(budget)["toolCalls"] <= 0:
-    self.stop_reason = "budget_exhausted"
-elif self.targets and not viable:
-    self.stop_reason = "blocked"
-elif viable and all(self.stalled.get(k, 0) >= 2 for k in viable):
-    self.stop_reason = "blocked" if viable.issubset(failed) else "no_progress"
-```
+## 5. 权限与兼容
 
-## 9. 签发引用与回看
+新工具调用的拒绝是工具反馈，可以继续使用其他获准工具。已经进入当前模型上下文的来源被撤权时，复用既有来源重验终止该 Run，并限制历史、引用和产物读取；后续新问题重新执行。当前上下文没有实现局部清除后继续生成。
 
-| 时机               | 现有入口                                                | 检查结果                                               |
-| ------------------ | ------------------------------------------------------- | ------------------------------------------------------ |
-| 签收一批工具结果   | `context_runtime/search_verification.py::verify_batch`  | 将来源、可用字段、行数或段落定位写入 Run 私有记录      |
-| 核验断言或经营简报 | `verify_draft`、`comparison_delivery`                   | 按固定格式重开回执和当前权限；可修复的问题反馈给主模型 |
-| 编号及存储         | `search_claims.py::format_checked`、`publish_citations` | 记录 Markdown 正文偏移、摘要、消息修订及来源详情       |
-| 回看已发表答案     | `read_citations`、Web 的 `CitedAnswer`                  | 重新核验正文、修订和可读范围，合法角标打开相应详情     |
+子 Agent 按注册的效果、审批、本地变更、编排与完成元数据继承当前可见的只读能力，模型上下文使用 intermediate 角色。返回内部中间结果和证据，需要用户确认的事项交回父级，父 Agent 负责最终候选。旧 Run 保留固定的旧协议和搜索快照恢复；新 Run 的查询、候选和发布不进入旧搜索专属裁决分支。原零售场景判断留在历史兼容路径，默认协议仅使用通用目标、来源、计算和模型审阅。
 
-华东 GMV 案例的工作区上限是 52 次工具调用。完整记录含 10 次混合检索、15 次原文读取和 9 次实际 SQL 查询，另有发现连接、列出表和读取表结构。这里的调用次数是单次运行结果，模型可以为下一个问题选择不同路径。
+## 6. 验证入口
 
-## 10. 投放复议的正式指标与撤权
+- test_answer_protocol.py：模式、引用、计算、目标、Review 摘要、部分交付、混合批次、预算与旧消息序列化。
+- test_document_tools.py：首次并发 pin、空库跳过 Embedding、来源 owner 重验。
+- test_context_runtime_integration.py：真实 PostgreSQL 上的 plain / evidence / schema fallback、Markdown／CSV／看板、原子发布、拒绝被改写正文、恢复复用。
+- Web 知识库集成与真实浏览器：资料来源、正文边界、引用入口、窄屏及键盘操作；具体运行记录见验收文档。
 
-履约锁库缺货率由正式查询回执带回分子、分母和覆盖状态。57 次尝试、0 次短缺得到 0%；零尝试或覆盖不齐将保留相应状态。整档采购使用纪要余额、当期有效制度、完整报价及复投资格复算；换价后用同一笔余额重算。学员可在[零售数据与验收](RETAIL_CASE.md)中对照反事实变体。
+工具观察中的 `recordRef` 是指向同一回执原始结果的 JSON Pointer，仅合并完全相同的记录。未完全相同的记录仍完整展示，私有证据与摘要保持原样，旧协议观察继续兼容。
 
-来源权限在取回回执、写入交付和重新打开历史答案时重新检查。搜索来源集超出运行允许的数量时，受保护的输出保留阻断标记。下面是 source_access.py 中的实际分支。
+候选和 Review 的输出额度以模型与预算能力为界，最高 8,192 token；普通问答的历史 2,048 token 默认值不再限制新协议的结构化候选。截断输出不执行工具，返回缩短重提反馈。父子共享的模型步骤也预留提交与审阅空间。
 
-```python source_access.py · 已去重来源的计数
-    counted = sum(not (r.get("kind") == "semantic" and r.get("default_term")) for r in refs)
-    if counted > (MAX_SEARCH_REFS if search else 64):
-        refs = [{"kind": "source_set_blocked" if search else "transient"}]
-    message.source_refs = refs
-```
+子任务回传证据 ID；父级适配器声明 `importEvidenceId`，通用 `after_tool_batch` 从当前 Run 私有存储导入原记录并复核来源关系。导入保持原 ID、工具与调用关系，模型观察只展示事实定位。Review 保留完整事实和证据摘要，权限记录继续在服务端用于恢复、发布与回看重验。
 
-## 11. 工作区资料管理如何接入检索
-
-管理页的 retrieval-drawer.tsx 提交关键词至 knowledge/catalog/search 或 knowledge/bases/search。knowledge-handler.ts 在生成查询向量前后复核权限，modules/documents/retrieval.ts 使用已存向量和 pgvector 余弦距离返回前十个片段。向量生成复用 indexing.ts，Agent 端允许受信的平台管理与工作区知识管理上下文。检索测试呈现余弦分数及分段详情。
-
-平台管理员使用只读接口 `GET /api/web/v1/knowledge/catalog` 浏览各租户的知识库，服务端按当前登录身份复核平台权限。目录携带每个库的租户、工作区及可维护状态。文件列表、原文件、分段通过同一目录读取，服务端校验库与文件的归属关系。创建使用当前工作区，编辑使用目录返回的归属工作区。
-
-Web 页面使用 knowledge/bases 管理当前工作区的知识库。文件导入分两次请求，第一次保存原始字节，第二次取得处理权、解析正文并生成索引。PDF 使用 unpdf 的文本层提取，Markdown 与 TXT 使用 UTF-8 解码。数据库事务结束后才调用 Agent，索引完成时再次检查身份、工作区、文件和处理批次。请求中断后可从文档列表重试。单文件上限 5 MB，文本 PDF 最多 300 页，每份文件最多生成 256 个分段。
-
-| 操作         | 实现位置                                                            | 对检索的影响                                        |
-| ------------ | ------------------------------------------------------------------- | --------------------------------------------------- |
-| 上传及编辑   | Web 的 http/knowledge-handler.ts 与 modules/documents/indexing.ts   | 已提交的正文和 1024 维向量一并可见                  |
-| 生成向量     | Agent 的 models/knowledge-embeddings 路由与 documents/embeddings.py | Web 传入文本，Agent 使用其管理的 OpenAI Provider    |
-| 固定可读内容 | Web 的 modules/documents/library.ts 与 store.ts                     | 沿用已有文号、时间与受众，新 Run 按摘要固定可读章节 |
-| 回读及停用   | Web 的 http/documents-handler.ts                                    | 当前启用的哈希同时约束词法、向量、引用和相邻段落    |
+Review 的模型回执继续持久提交检查点，当前 worker 接着完成接受与发布检查。该边界不主动交还租约，避免发布前再次完整重放历史。进程退出仍从已有模型回执恢复；工作模型步骤保留原调度边界。

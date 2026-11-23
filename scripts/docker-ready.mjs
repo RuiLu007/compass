@@ -22,6 +22,7 @@ export async function dockerAvailable(env, signal, timeout = 3000) {
 }
 export async function ensureDocker({
   launch,
+  recover,
   probe,
   signal,
   timeout = 120000,
@@ -30,15 +31,26 @@ export async function ensureDocker({
 }) {
   signal?.throwIfAborted();
   if (await probe(3000)) return;
-  await launch();
-  const deadline = now() + timeout;
-  while (now() < deadline) {
-    signal?.throwIfAborted();
-    if (await probe(Math.max(1, Math.min(3000, deadline - now())))) return;
-    const remaining = deadline - now();
-    if (remaining > 0) await wait(Math.min(1000, remaining));
+  for (let attempt = 0; attempt < (recover ? 2 : 1); attempt++) {
+    try {
+      await launch();
+      const deadline = now() + timeout;
+      while (now() < deadline) {
+        signal?.throwIfAborted();
+        if (await probe(Math.max(1, Math.min(3000, deadline - now())))) return;
+        const remaining = deadline - now();
+        if (remaining > 0) await wait(Math.min(1000, remaining));
+      }
+    } catch (error) {
+      signal?.throwIfAborted();
+      if (attempt || !recover) throw error;
+    }
+    if (attempt === 0 && recover) {
+      signal?.throwIfAborted();
+      await recover();
+    }
   }
   throw new Error(
-    "Docker API did not become ready within 120 seconds. Open Docker Desktop and check its engine status, then run pnpm start again.",
+    `Docker API did not become ready after ${recover ? "two attempts" : `${timeout / 1000} seconds`}. Open Docker Desktop and check its engine status.`,
   );
 }

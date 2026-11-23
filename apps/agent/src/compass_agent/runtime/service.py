@@ -103,6 +103,8 @@ ToolsProvider = Callable[
 
 
 def route_supports_tools(selected, journal):
+    if (getattr(journal, "context_binding", None) or {}).get("answerProtocol") == 2:
+        return selected.provider.capabilities.tools.state == "supported"
     if getattr(journal, "context_binding", None) and selected.deliverable in {
         "existing",
         "clarify",
@@ -163,6 +165,8 @@ class RunService(RuntimeTurn):
         from compass_agent.execution_context import current_execution
 
         journal = current_execution.get()
+        if journal:
+            journal.execution_trace = trace
         search = (getattr(journal, "context_binding", None) or {}).get("search")
         if search and search.get("maxToolCalls") is not None:
             limits = replace(limits, tools=min(limits.tools, search["maxToolCalls"]))
@@ -215,6 +219,7 @@ class RunService(RuntimeTurn):
                 model_label=selected.provider.alias,
                 scene_id=selected.intent.scene_id,
                 task_type=selected.features.task_type,
+                schema_output=capabilities.schema_output.state == "supported",
                 route_prompt=selected.prompt,
                 stream=capabilities.stream.state == "supported",
                 thinking=capabilities.thinking.state == "supported",
@@ -392,8 +397,9 @@ class RunService(RuntimeTurn):
                 raise ModelError("forbidden", 403)
             from compass_agent.context_runtime.profiles import discover_plugins
 
-            if grants.get("plugins") is not True or not discover_plugins(
-                binding["scopeProfile"], bool(binding.get("registry"))
+            if grants.get("plugins") is not True or (
+                binding.get("answerProtocol") != 2
+                and not discover_plugins(binding["scopeProfile"], bool(binding.get("registry")))
             ):
                 return None
         options = (
@@ -405,6 +411,11 @@ class RunService(RuntimeTurn):
 
     async def tool_catalog(self, context, journal, entries, discovered, snapshot):
         capabilities = self.definition.builtin_tools
+        answer_protocol = (getattr(journal, "context_binding", None) or {}).get(
+            "answerProtocol"
+        ) == 2
+        if answer_protocol:
+            capabilities |= {"completion", "documents"}
         schedules = self.schedules if journal and journal.schedule_tools else None
         if schedules:
             capabilities |= await self.schedule_capabilities(context, journal, snapshot)
@@ -420,14 +431,22 @@ class RunService(RuntimeTurn):
                 grants = {}
             capabilities = capabilities | {f"semantic_{k}" for k, v in grants.items() if v}
         documents = None
-        if search := getattr(journal, "search_snapshot", None):
+        if answer_protocol:
+            from compass_agent.documents.service import DocumentTools
+
+            documents = DocumentTools(journal, context)
+        elif search := getattr(journal, "search_snapshot", None):
             if set(search["kinds"]) & {"knowledge", "history", "external"}:
                 from compass_agent.documents.service import DocumentTools
 
                 documents = DocumentTools(journal, context)
                 capabilities = capabilities | {"documents"}
+        result_reader = getattr(journal, "context_results", None)
+        if result_reader is not None:
+            capabilities = capabilities | {"context_results"}
         catalog = CatalogContext(
             frozenset(capabilities),
+            result_reader=result_reader.read if result_reader else None,
             documents=documents,
             semantics=semantic,
             sandbox=self.tool_loader.sandbox is not None,
@@ -437,7 +456,7 @@ class RunService(RuntimeTurn):
         declarations = [entry.definition for entry in entries if entry.definition is not None]
         declarations.extend(catalog_definitions(catalog))
         if discovered:
-            if schedules:
+            if schedules or answer_protocol:
                 self.fit_mcp_tools(declarations, discovered, snapshot)
             else:
                 declarations.extend(
@@ -494,6 +513,12 @@ class RunService(RuntimeTurn):
         from compass_agent.execution_context import current_execution, recorded
 
         journal = current_execution.get()
+        if getattr(journal, "context_optimizer", None) and not journal.context_binding.get(
+            "search"
+        ):
+            journal.context_routing_messages = await journal.context_optimizer.before_route(
+                self.models, context, control, budget, question
+            )
         if getattr(journal, "context_binding", None):
             from compass_agent.context_runtime.source_access import require_run_sources
 
@@ -533,7 +558,10 @@ class RunService(RuntimeTurn):
 
         messages = []
         binding = getattr(current_execution.get(), "context_binding", None) or {}
-        if binding and not binding.get("search"):
+        optimizer = getattr(current_execution.get(), "context_optimizer", None)
+        if optimizer and not binding.get("search"):
+            messages = getattr(current_execution.get(), "context_routing_messages", [])
+        elif binding and not binding.get("search"):
             for pair in command.history:
                 messages.extend(
                     (
@@ -544,7 +572,9 @@ class RunService(RuntimeTurn):
         routing_command = ChatCallInput(
             call_id=uuid5(control.id, "routing"),
             main_model=command.selection,
-            input=GenerateInput(messages=[*messages, ChatMessage(role="user", content=question)]),
+            input=GenerateInput(messages=[ChatMessage(role="user", content=question)]).model_copy(
+                update={"messages": [*messages, ChatMessage(role="user", content=question)]}
+            ),
         )
         try:
             return await self.routing.select_route(

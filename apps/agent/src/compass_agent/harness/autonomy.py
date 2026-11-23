@@ -86,25 +86,28 @@ class AutonomyBudget:
             if (profile.provider_id, profile.binding_version, profile.sdk_model, profile.api_base)
             == (spec.provider_id, spec.binding_version, spec.sdk_model, spec.api_base)
         ]
+        decision = value.kind == "decision" and spec.adapter == "systemone_decision"
+        output_limit = (
+            matches[0].output_tokens if decision and matches else getattr(value, "max_tokens", 0)
+        )
         if (
             len(matches) != 1
-            or spec.adapter != "litellm_chat"
-            or value.kind != "generate"
-            or (value.thinking and spec.vendor != "deepseek")
+            or not (decision or (spec.adapter == "litellm_chat" and value.kind == "generate"))
+            or (value.kind == "generate" and value.thinking and spec.vendor != "deepseek")
             or request.access.connection_params
-            or value.max_tokens > matches[0].output_tokens
+            or output_limit > matches[0].output_tokens
         ):
             self.reason = "model_budget_unavailable"
             return False
         profile = matches[0]
-        reservation = Reservation(profile, value.max_tokens)
+        reservation = Reservation(profile, output_limit)
         first_step = self.generation == request.context.call_id != self.counted_generation
         if first_step and self.steps >= self.limits.steps:
             self.reason = "max_steps"
-        elif self.tokens + profile.input_tokens + value.max_tokens > self.limits.tokens:
+        elif self.tokens + profile.input_tokens + output_limit > self.limits.tokens:
             self.reason = "token_budget"
         elif (
-            self.cost_microusd + reservation.cost(profile.input_tokens, value.max_tokens)
+            self.cost_microusd + reservation.cost(profile.input_tokens, output_limit)
             > self.limits.cost_microusd
         ):
             self.reason = "cost_budget"

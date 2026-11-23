@@ -2821,8 +2821,12 @@ export interface components {
         };
         /** MessageContent */
         MessageContent: {
+            /** Answermode */
+            answerMode?: ("plain" | "evidence") | null;
             /** Artifactids */
             artifactIds?: string[];
+            /** Completion */
+            completion?: ("complete" | "partial") | null;
             /** Text */
             text: string;
         };

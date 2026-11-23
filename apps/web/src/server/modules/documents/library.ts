@@ -35,7 +35,6 @@ export async function knowledgeCatalog(
   const standalone = !base;
   if (base) original = await loadCollection(base);
   else {
-    if (!rows.some((r) => !r.origin_digest)) reject("unavailable");
     // A workspace without a retail binding can expose documents on their own.
     original = { schemaVersion: 1, tenantId: s.tenant_id, documents: [], aliases: {} };
     base = {
@@ -134,5 +133,13 @@ export async function knowledgeCatalog(
       }),
     };
   }
-  return { binding: base, originDigest, live, changed, authorizedSnapshot };
+  let emptyReason: "no_library" | "no_indexed_documents" | undefined;
+  if (!live.documents.length) {
+    const existing = await db.query(
+      "SELECT id FROM web.knowledge_base WHERE tenant_id=$1 AND workspace_id=$2 AND NOT deleted LIMIT 1",
+      [s.tenant_id, s.workspace_id],
+    );
+    emptyReason = existing.rows.length ? "no_indexed_documents" : "no_library";
+  }
+  return { binding: base, originDigest, live, changed, authorizedSnapshot, emptyReason };
 }

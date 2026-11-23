@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from compass_agent.context_runtime.model_step import model_limits, observe, observe_failure
 from compass_agent.context_runtime.pipeline import canonical, exact, input_budget
-from compass_agent.context_runtime.source_access import require_run_sources
+from compass_agent.context_runtime.source_access import allows, record_sources, require_run_sources
 from compass_agent.execution_context import execution_path
 from compass_agent.harness.context import ContextLimit
 from compass_agent.llm.policy import OutputLimits
@@ -97,6 +97,7 @@ async def call_classifier(
                 transforms.append({"group": str(offset), "before": size})
                 offset = following
 
+        routing_groups: list = getattr(journal, "context_routing_groups", [])
         receipt = {
             "generation": binding["generation"],
             "phase": "identify",
@@ -132,6 +133,12 @@ async def call_classifier(
                 "method": method,
             },
             "requestDigest": sha256(canonical(data)).hexdigest(),
+            "sourceDeps": [
+                ref
+                for i, group in enumerate(routing_groups)
+                if 2 * i + 1 >= offset
+                for ref in group.source_deps
+            ],
         }
         return {
             "input": {
@@ -163,8 +170,15 @@ async def call_classifier(
             journal.store,
             journal.run_id,
             context,
-            epoch=journal.epoch if fresh else None,
+            epoch=journal.epoch,
         )
+        sources = frame["receipt"].get("sourceDeps", ())
+        if not await asyncio.to_thread(
+            allows, journal.store, context, sources, epoch=journal.epoch, raise_unavailable=True
+        ):
+            raise ModelError("context_access_changed", 403)
+        if sources:
+            await asyncio.to_thread(record_sources, journal, sources)
         observe(root, frame["receipt"], restored=not fresh)
 
     async def dispatch():

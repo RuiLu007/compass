@@ -364,6 +364,7 @@ class ChatMessage(StrictModel):
 
 
 RUN_CONTEXT_MESSAGES = 512
+TOOL_CATALOG_LIMIT = 32
 
 
 class GenerateInput(StrictModel):
@@ -372,7 +373,7 @@ class GenerateInput(StrictModel):
     stream: bool = False
     thinking: bool = False
     reasoning_effort: Literal["low", "medium", "high", "max"] | None = None
-    tools: list[ToolDefinition] = Field(default_factory=list, max_length=16)
+    tools: list[ToolDefinition] = Field(default_factory=list, max_length=TOOL_CATALOG_LIMIT)
     output_format: Literal["text", "json", "schema"] = "text"
     output_schema: dict | None = None
     max_tokens: int = Field(default=8192, ge=1, le=32768)
@@ -748,6 +749,7 @@ class RunArtifact(RunContractModel):
 class RunCompleted(RunContractModel):
     _delivery: Any = PrivateAttr(default=None)
     _citations: Any = PrivateAttr(default=None)
+    _answer_acceptance: Any = PrivateAttr(default=None)
     status: Literal["completed"]
     final_answer: Annotated[
         str,
@@ -1667,6 +1669,12 @@ class RunPublicSnapshot(RunContractModel):
 
 class MessageContent(RunContractModel):
     text: str = Field(max_length=RUN_STREAM_LIMITS["answerBytes"])
+    answer_mode: Literal["plain", "evidence"] | None = Field(
+        default_factory=lambda: None, alias="answerMode", exclude_if=lambda value: value is None
+    )
+    completion: Literal["complete", "partial"] | None = Field(
+        default_factory=lambda: None, exclude_if=lambda value: value is None
+    )
     artifact_ids: list[RunUUID] = Field(alias="artifactIds", default_factory=list, max_length=40)
 
 

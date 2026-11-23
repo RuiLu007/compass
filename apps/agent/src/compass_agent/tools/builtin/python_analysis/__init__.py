@@ -2,6 +2,7 @@
 
 from compass_agent.prompt_assets import tool_text
 from compass_agent.schemas import ToolDefinition, ToolFunction
+from compass_agent.tools.builtin.python_analysis.evidence import calculation
 from compass_agent.tools.catalog_contracts import ToolSpec
 from compass_agent.tools.contracts import (
     RegisteredTool,
@@ -47,6 +48,7 @@ def python_analysis_tool() -> RegisteredTool:
         authorize,
         bounded_payload,
         parallel_safe=True,
+        evidence_adapter=calculation,
     )
 
 

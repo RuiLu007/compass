@@ -1102,7 +1102,6 @@ def test_0017_reopens_drained_control_and_protects_semantic_receipts(targets, mo
             settings=Settings(
                 compass_context_runtime_enabled=False,
                 compass_semantic_workspaces="",
-                compass_search_workspaces="",
             ),
         )
         store.ready = True

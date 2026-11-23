@@ -194,11 +194,11 @@
   {
     "number": 23,
     "title": "Agentic Search",
-    "description": "面向经营分析的自主检索流程。",
+    "description": "通用 Loop 中的自主检索、回答交付与知识库检索。",
     "artifacts": [
       {
         "id": "technical-design",
-        "title": "Agentic Search · 技术方案",
+        "title": "Agentic Search · 主技术方案",
         "source": "mai-specs/973-lesson-23-agentic-search/design/TECH_DESIGN.html",
         "href": "/resources/lessons/23/technical-design.html",
         "markdown": {
@@ -208,42 +208,29 @@
       },
       {
         "id": "vector-search",
-        "title": "华东 GMV 为什么下降了 12%？ · Showcase 与向量检索方案",
+        "title": "知识库检索 · 技术方案",
         "source": "mai-specs/973-lesson-23-agentic-search/design/VECTOR_SEARCH.html",
         "href": "/resources/lessons/23/vector-search.html",
         "markdown": {
           "source": "mai-specs/973-lesson-23-agentic-search/design/VECTOR_SEARCH.md",
           "href": "/resources/lessons/23/vector-search.md"
         }
-      },
+      }
+    ]
+  },
+  {
+    "number": 24,
+    "title": "动态上下文选择与压缩",
+    "description": "大工具结果按需回读，JEV 按当前问题选择历史，容量仍紧张时摘要并接回最近完整轮。",
+    "artifacts": [
       {
-        "id": "code-design",
-        "title": "检索循环与代码实现",
-        "source": "mai-specs/973-lesson-23-agentic-search/design/CODE_DESIGN.html",
-        "href": "/resources/lessons/23/code-design.html",
+        "id": "technical-design",
+        "title": "动态上下文选择与压缩 · 技术方案",
+        "source": "mai-specs/972-lesson-24-context-selection-compression/design/TECH_DESIGN.html",
+        "href": "/resources/lessons/24/technical-design.html",
         "markdown": {
-          "source": "mai-specs/973-lesson-23-agentic-search/design/CODE_DESIGN.md",
-          "href": "/resources/lessons/23/code-design.md"
-        }
-      },
-      {
-        "id": "evidence",
-        "title": "经营结论与引用校验",
-        "source": "mai-specs/973-lesson-23-agentic-search/design/EVIDENCE.html",
-        "href": "/resources/lessons/23/evidence.html",
-        "markdown": {
-          "source": "mai-specs/973-lesson-23-agentic-search/design/EVIDENCE.md",
-          "href": "/resources/lessons/23/evidence.md"
-        }
-      },
-      {
-        "id": "retail-case",
-        "title": "零售数据与课堂验收",
-        "source": "mai-specs/973-lesson-23-agentic-search/design/RETAIL_CASE.html",
-        "href": "/resources/lessons/23/retail-case.html",
-        "markdown": {
-          "source": "mai-specs/973-lesson-23-agentic-search/design/RETAIL_CASE.md",
-          "href": "/resources/lessons/23/retail-case.md"
+          "source": "mai-specs/972-lesson-24-context-selection-compression/design/TECH_DESIGN.md",
+          "href": "/resources/lessons/24/technical-design.md"
         }
       }
     ]

@@ -34,6 +34,7 @@ class RunRoute:
     vendor: str = ""
     model: str = ""
     task_type: str = ""
+    schema_output: bool = False
 
 
 def initial_messages(

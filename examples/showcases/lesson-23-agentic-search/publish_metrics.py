@@ -111,12 +111,13 @@ def main():
         "assortment",
         "inventory_snapshot",
     ]
-    for code in [
+    case_codes = [
         *dimensions,
         *("entity." + name for name in sources),
         *TRIALS,
         "term.sales_amount",
-    ]:
+    ]
+    for code in case_codes:
         v = views.get(code)
         dictionary_changed = (
             code in dimensions
@@ -359,6 +360,25 @@ def main():
             ),
         )
         print(code, "published", res["release_id"], flush=True)
+
+    # Current asset permissions are independent of the older scope memberships.
+    # Grant only this classroom's published inputs to its dedicated analyst.
+    directory = admin.semantic("asset-grants")
+    grant_codes = set(case_codes) - {"term.sales_amount"}  # Shared terms use their own read policy.
+    assets = sorted(item["id"] for item in directory["assets"] if item["code"] in grant_codes)
+    if len(assets) != len(grant_codes):
+        raise ValueError("Classroom asset publication is incomplete")
+    admin.semantic(
+        "asset-grants",
+        dict(
+            request_key=key("classroom-analyst-assets", *assets),
+            mode="member",
+            target_ids=["99500000-0000-4000-8000-000000000031"],
+            asset_ids=assets,
+            active=True,
+        ),
+    )
+    print("Classroom analyst asset permissions verified", flush=True)
 
 
 if __name__ == "__main__":

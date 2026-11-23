@@ -8,7 +8,12 @@ import sys
 from dataclasses import asdict, replace
 from uuid import uuid5
 
-from compass_agent.execution_context import current_execution, execution_scope, recorded
+from compass_agent.execution_context import (
+    current_execution,
+    execution_path,
+    execution_scope,
+    recorded,
+)
 from compass_agent.harness.autonomy import AutonomyStopped
 from compass_agent.harness.contracts import RunFailure, Step, ToolResult
 from compass_agent.harness.subagent_process import FRAME_LIMIT, MAX_STEPS
@@ -19,6 +24,7 @@ from compass_agent.tools.contracts import (
     PhaseCanceled,
     ResourceUnconfirmed,
     ToolBatchPolicy,
+    ToolExecutionResult,
     ToolRejected,
     json_bytes,
 )
@@ -27,10 +33,27 @@ from compass_agent.tools.dispatcher import CallControl
 CHILD_TOOLS = frozenset({"database_query"})
 
 
+def child_tools(entries, visible, protocol):
+    if protocol != 2:
+        return CHILD_TOOLS.intersection(visible)
+    return frozenset(
+        name
+        for name, entry in entries.items()
+        if name in visible
+        and entry.policy.effect == "read_only"
+        and entry.policy.approval == "none"
+        and not entry.local_effect
+        and not entry.completion
+        and not getattr(entry.binding, "orchestrates", False)
+    )
+
+
 def _tool_observation(result):
     payload = result["payload"]
     if payload is None:
         payload = {"status": result["status"], "code": result["reason_code"]}
+        if result.get("proposal"):
+            payload = {**payload, "requiresParentAction": True, "proposal": result["proposal"]}
     return json_bytes(payload).decode()
 
 
@@ -83,7 +106,12 @@ class SubAgent:
         runtime = bindings.runtime
         assert runtime is not None
         trace = bindings.state.trace
-        names = CHILD_TOOLS.intersection(context.visible_names)
+        journal = current_execution.get()
+        names = child_tools(
+            runtime.registry.entries,
+            context.visible_names,
+            (getattr(journal, "context_binding", None) or {}).get("answerProtocol"),
+        )
         declarations = runtime.registry.definitions(names)
         process = await asyncio.create_subprocess_exec(
             sys.executable,
@@ -133,7 +161,12 @@ class SubAgent:
                 frame = json.loads(line)
                 kind = frame["type"]
                 if kind == "done" and steps:
-                    return {"answer": bindings.executor._final_answer(frame["answer"])}
+                    journal = current_execution.get()
+                    evidence = getattr(journal, "answer_evidence", {}).get(execution_path.get(), {})
+                    return {
+                        "answer": bindings.executor._final_answer(frame["answer"]),
+                        **({"evidenceIds": list(evidence)} if evidence else {}),
+                    }
                 if kind == "error":
                     raise ToolRejected("subagent_incomplete")
                 index = frame["index"]
@@ -229,7 +262,8 @@ class SubAgent:
                     raise AutonomyStopped("execution_timeout")
             bindings.executor._require_complete(response)
         if trace and node:
-            trace.model_content(str(step.id), response, node_id=node)
+            if response.tool_calls:
+                trace.model_content(str(step.id), response, node_id=node)
             if not response.tool_calls:
                 trace.finish(node)
         return step, node, response
@@ -273,6 +307,8 @@ class SubAgent:
                 runtime.dispatcher, calls, child_context, ToolBatchPolicy()
             ):
                 receipt = asdict(item)
+                if item.proposal is not None:
+                    receipt["proposal"] = item.proposal.model_dump(mode="json")
                 # The model fingerprints the exact tool message, including JSON key order.
                 receipt["observation_json"] = _tool_observation(receipt)
                 results.append(receipt)
@@ -285,6 +321,23 @@ class SubAgent:
             dispatch,
             list[dict],
         )
+        journal = current_execution.get()
+        if (getattr(journal, "context_binding", None) or {}).get("answerProtocol") == 2:
+            from compass_agent.context_runtime.evidence import after_tool_batch, model_observation
+
+            step.tool_calls = calls
+            receipts = [
+                ToolExecutionResult(**{k: v for k, v in item.items() if k != "observation_json"})
+                for item in results
+            ]
+            observations = await asyncio.to_thread(
+                after_tool_batch, journal, step, receipts, runtime.registry, context.trusted
+            )
+            for item, observed in zip(results, observations, strict=True):
+                if observed["evidence"] or observed.get("feedback"):
+                    item["observation_json"] = json_bytes(
+                        model_observation(item["payload"], observed)
+                    ).decode()
         for item in results:
             if item["cleanup"] == "unconfirmed":
                 raise ResourceUnconfirmed()

@@ -696,6 +696,7 @@ class DurableRuntime:
                     drafts=journal.pending_drafts,
                     delivery=getattr(result, "_delivery", None),
                     citations=citations,
+                    answer_acceptance=getattr(result, "_answer_acceptance", None),
                 )
             await self.publisher.flush(run_id)
         except BoundaryYield:

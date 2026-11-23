@@ -16,11 +16,11 @@
 pnpm start             # Web、两个 Agent 副本、Scheduler、Home、Memory、PostgreSQL、Redis、沙箱
 pnpm start --langfuse  # 同时启动 Langfuse 并启用观测
 pnpm stop              # 停止应用和依赖容器，保留全部数据卷
-pnpm restart           # 一键停止并重新启动，默认不启 Langfuse
+pnpm restart           # 清理应用端口占用并重启全部服务，默认不启 Langfuse
 pnpm restart -- --langfuse # 重启并启用 Langfuse
 ```
 
-Docker API 不可用时会尝试启动 Docker Desktop，并轮询等待引擎就绪（最多 120 秒）；桌面应用已打开时也会等待。启动会加载根 `.env`、沙箱配置并执行 Web / Agent 迁移；Agent 后台槽执行 Run，Scheduler 使用独立凭据交付定时任务。默认关闭应用观测，不启动 Langfuse；已单独运行的 Langfuse 保持原状。应用端口被占用时提示先停旧进程。Ctrl+C 停止本次应用进程，依赖容器继续运行并保留数据。`pnpm stop` 通过当前仓库专属控制 socket 停止由 `start` / `restart` 管理的应用，再停止 `compass` 和 `compass-sandbox` 项目的容器（包括已启动的 Langfuse），保留容器和全部数据卷；重复停止安全。单独用 `pnpm dev` 启动的进程请在原终端停止。
+Docker API 不可用时会尝试启动 Docker Desktop，并轮询等待引擎就绪（每次最多 120 秒）；启动失败或引擎持续无响应时，自动强制停止 Desktop 后重新启动一次。启动会加载根 `.env`、沙箱配置并执行 Web / Agent 迁移；Agent 后台槽执行 Run，Scheduler 使用独立凭据交付定时任务。默认关闭应用观测，不启动 Langfuse；已单独运行的 Langfuse 保持原状。`pnpm start` 遇到端口占用时提示使用 `pnpm restart`。重启会清理 8100–8103 的监听进程和同一仓库的启动器／热重载父进程，先发 SIGTERM，5 秒后仍未退出则发 SIGKILL；随后确认端口释放。Docker 映射的目标端口通过停止对应容器释放，数据卷保留。Ctrl+C 停止本次应用进程，依赖容器继续运行并保留数据。`pnpm stop` 通过当前仓库专属控制 socket 停止由 `start` / `restart` 管理的应用，再停止 `compass` 和 `compass-sandbox` 项目的容器（包括已启动的 Langfuse），保留容器和全部数据卷；重复停止安全。`pnpm restart` 也会清理手动启动的应用及同仓库的 Scheduler；停止阶段遇到 Docker API 不可用会继续进入启动恢复。`pnpm run restart` 和直接运行 `node scripts/restart.mjs` 同样执行完整重启。Home 日常启动复用已有分发资源，资源缺失时生成；更新课程资料使用 `pnpm dev -F home` 或对应单课同步命令。
 
 首次安装从本目录执行：
 

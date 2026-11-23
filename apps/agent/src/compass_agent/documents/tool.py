@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from compass_agent.documents.evidence import sections
 from compass_agent.models.errors import ModelError
 from compass_agent.prompt_assets import tool_text
 from compass_agent.schemas import ToolDefinition, ToolFunction
@@ -54,7 +55,13 @@ def document_tool(name, op, args_type):
                 return ExecutionReceipt(execution.call_id, "error", "confirmed", payload, code)
             except (ModelError, ToolRejected) as exc:
                 code = (
-                    "document_unavailable"
+                    "access_denied"
+                    if exc.code == "forbidden"
+                    and (
+                        getattr(getattr(service, "journal", None), "context_binding", None) or {}
+                    ).get("answerProtocol")
+                    == 2
+                    else "document_unavailable"
                     if exc.code in {"forbidden", "document_unavailable"}
                     else exc.code
                 )
@@ -65,7 +72,12 @@ def document_tool(name, op, args_type):
                     {"status": "unavailable", "retryable": False, "code": code},
                     code,
                 )
-            return ExecutionReceipt(execution.call_id, "ok", "confirmed", value)
+            return ExecutionReceipt(
+                execution.call_id,
+                "empty" if value.get("status") == "empty" else "ok",
+                "confirmed",
+                value,
+            )
 
         return RegisteredTool(
             name,
@@ -86,4 +98,5 @@ def document_tool(name, op, args_type):
         lambda c: c.documents is not None,
         context_factory=register,
         parallel_safe=True,
+        evidence_adapter=sections,
     )

@@ -160,6 +160,7 @@ async def read_database[ReadResult](
     read: Callable[[Any], Awaitable[ReadResult]],
     *,
     connect: Callable[[AuthorizedDatabaseBinding, UUID], Awaitable[Any]] = open_connection,
+    repeatable_read: bool = False,
 ) -> ReadResult:
     connection = cursor = None
     command: asyncio.Task | None = None
@@ -169,7 +170,14 @@ async def read_database[ReadResult](
         connection = await asyncio.shield(connecting)
         control.require_running()
         cursor = connection.cursor()
-        command = asyncio.create_task(_execute(cursor, "BEGIN READ ONLY"))
+        command = asyncio.create_task(
+            _execute(
+                cursor,
+                "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY"
+                if repeatable_read
+                else "BEGIN READ ONLY",
+            )
+        )
         await asyncio.shield(command)
         control.require_running()
         command = asyncio.create_task(check_identity(cursor, binding))

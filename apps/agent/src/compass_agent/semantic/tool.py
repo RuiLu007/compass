@@ -12,6 +12,7 @@ from compass_agent.runtime.private_state import digest
 from compass_agent.schemas import ToolApprovalProposal, ToolDefinition, ToolFunction
 from compass_agent.semantic.client import SourceUnavailable
 from compass_agent.semantic.draft_fields import authored_preview
+from compass_agent.semantic.evidence import result as evidence_result
 from compass_agent.tools.catalog_contracts import ToolSpec
 from compass_agent.tools.contracts import (
     ExecutionReceipt,
@@ -230,4 +231,5 @@ def tool(name, op, capability, args_type):
         definition,
         lambda ctx: ctx.semantics is not None,
         context_factory=register,
+        evidence_adapter=evidence_result,
     )

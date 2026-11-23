@@ -13,6 +13,7 @@ from compass_agent.harness.contracts import ToolResult
 from compass_agent.runtime.subagent import SubAgent
 from compass_agent.runtime.workflow_tools import WorkflowTools
 from compass_agent.schemas import (
+    TOOL_CATALOG_LIMIT,
     ExecutionEnvironment,
     ExecutionOrigin,
     RunArtifact,
@@ -101,11 +102,13 @@ class RunToolBindings:
     async def with_workflows(self, declarations, snapshot):
         assert self.workflow_tools is not None
         if snapshot is None:
-            if len(declarations) >= 16:
+            if len(declarations) >= TOOL_CATALOG_LIMIT:
                 return
             assert self.workflow_tools.assets is not None
             assets = await asyncio.to_thread(
-                self.workflow_tools.assets.active_tools, self.trusted, limit=16 - len(declarations)
+                self.workflow_tools.assets.active_tools,
+                self.trusted,
+                limit=TOOL_CATALOG_LIMIT - len(declarations),
             )
             candidates = [(asset, None) for asset in assets]
         else:
@@ -289,7 +292,11 @@ class RunToolBindings:
                 return
             binding = prepared.tool.binding
             fields: dict[str, object] = {}
-            if not self.search:
+            if (
+                not self.search
+                and not prepared.tool.completion
+                and prepared.tool.public_projection == "normal"
+            ):
                 fields["detail"] = trace.tool_detail(
                     identifier, input_json=json_bytes(prepared.args).decode()
                 )
@@ -340,7 +347,9 @@ class RunToolBindings:
                     output = json_bytes(
                         {"status": value.status, "code": value.reason_code}
                     ).decode()
-                if not self.search:
+                if not self.search and not (
+                    entry and (entry.completion or entry.public_projection == "status_only")
+                ):
                     fields["detail"] = trace.tool_detail(identifier, output_json=output)
                 status = {
                     "ok": "completed",
@@ -380,6 +389,15 @@ class RunToolBindings:
         results = await self.control.perform(
             lambda: dispatch_batch(runtime.dispatcher, step.tool_calls, context, policy)
         )
+        observations = {}
+        if (getattr(journal, "context_binding", None) or {}).get("answerProtocol") == 2:
+            from compass_agent.context_runtime.evidence import after_tool_batch
+
+            admitted = await asyncio.to_thread(
+                after_tool_batch, journal, step, results, runtime.registry, self.trusted
+            )
+            observations = {item["callId"]: item for item in admitted}
+        self.last_results = results
         if self.search and all(
             r.cleanup != "unconfirmed" and r.status not in {"waiting", "canceled", "timeout"}
             for r in results
@@ -423,6 +441,15 @@ class RunToolBindings:
                     ],
                 }
             observation = json_bytes(payload).decode()
+            if result.call_id in observations and (
+                observations[result.call_id]["evidence"]
+                or observations[result.call_id].get("feedback")
+            ):
+                from compass_agent.context_runtime.evidence import model_observation
+
+                observation = json_bytes(
+                    model_observation(payload, observations[result.call_id])
+                ).decode()
             self.state.record_tool_result(
                 step,
                 ToolResult(
@@ -446,4 +473,13 @@ class RunToolBindings:
                     continuation="execute_tool",
                     proposal=result.proposal,
                 )
+        if journal and getattr(journal, "context_results", None) and waiting is None:
+            from compass_agent.context_runtime.history import record_batch
+            from compass_agent.execution_context import execution_path
+
+            restored = await record_batch(
+                journal, step, self.state.messages[-len(results) - 1 :], execution_path.get()
+            )
+            if restored is not None:
+                self.state.messages[-len(results) - 1 :] = restored
         return waiting

@@ -2,6 +2,7 @@
 
 from uuid import UUID
 
+from compass_agent.context_runtime.receipt_evidence import receipt
 from compass_agent.prompt_assets import prompt_text
 from compass_agent.schemas import ToolDefinition, ToolFunction
 from compass_agent.tools.contracts import InProcessBinding, RegisteredTool, ToolPolicy
@@ -43,4 +44,5 @@ def registration(asset, handler, *, declaration=None):
         parse_arguments,
         lambda args, context: context.require_running(),
         bounded_payload,
+        evidence_adapter=receipt,
     )

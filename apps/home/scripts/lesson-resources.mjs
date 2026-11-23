@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -43,11 +43,17 @@ export async function prepareLessonResources(app, lessonNumber) {
       await copyFile(source, destination);
       continue;
     }
-    const html = (await readFile(source, "utf8")).replace(
-      /href=(["'])(?:\.\/)?([^"'#?]+)([?#][^"']*)?\1/g,
-      (match, quote, target, suffix = "") =>
-        links.has(target) ? `href=${quote}${links.get(target)}${suffix}${quote}` : match,
-    );
+    const published = new Set([...links.keys(), ...links.values()]);
+    const html = (await readFile(source, "utf8"))
+      .replace(
+        /<a\b[^>]*\bhref=(["'])(?:\.\/)?([^"'/?#]+\.html)(?:[?#][^"']*)?\1[^>]*>([\s\S]*?)<\/a>/gi,
+        (match, _quote, target, label) => (published.has(target) ? match : label),
+      )
+      .replace(
+        /href=(["'])(?:\.\/)?([^"'#?]+)([?#][^"']*)?\1/g,
+        (match, quote, target, suffix = "") =>
+          links.has(target) ? `href=${quote}${links.get(target)}${suffix}${quote}` : match,
+      );
     await writeFile(
       destination,
       html.replace(
@@ -59,6 +65,19 @@ export async function prepareLessonResources(app, lessonNumber) {
         </style></head>`,
       ),
     );
+  }
+  if (lessonNumber !== undefined) {
+    const directory = path.join(app, "public/resources/lessons", String(lessonNumber));
+    const destinations = new Set(files.map(({ destination }) => path.resolve(destination)));
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const filename = path.join(directory, entry.name);
+      if (
+        entry.isFile() &&
+        /\.(html|md)$/i.test(entry.name) &&
+        !destinations.has(path.resolve(filename))
+      )
+        await rm(filename);
+    }
   }
 }
 

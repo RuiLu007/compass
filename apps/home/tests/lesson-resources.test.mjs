@@ -9,10 +9,10 @@ import { prepareLessonResources } from "../scripts/lesson-resources.mjs";
 const app = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const lessons = JSON.parse(await readFile(path.join(app, "src/lib/lesson-resources.json"), "utf8"));
 
-test("course resources list lessons 11–23 in order", () => {
+test("course resources list lessons 11–24 in order", () => {
   assert.deepEqual(
     lessons.map((lesson) => lesson.number),
-    [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23],
+    [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24],
   );
 });
 
@@ -86,8 +86,12 @@ test("single lesson publication preserves other lessons and distributes linked e
   try {
     const source = path.join(fixture, "reference/lessons/23");
     const previous = path.join(fixture, "public/resources/lessons/22");
+    const current = path.join(fixture, "public/resources/lessons/23");
     await mkdir(source, { recursive: true });
     await mkdir(previous, { recursive: true });
+    await mkdir(current, { recursive: true });
+    await writeFile(path.join(current, "retired.html"), "retired edition");
+    await writeFile(path.join(current, "retired.md"), "# Retired edition");
     await mkdir(path.join(fixture, "src/lib"), { recursive: true });
     await writeFile(path.join(previous, "technical-design.html"), "previous edition");
     const lesson = (number) => ({
@@ -103,7 +107,7 @@ test("single lesson publication preserves other lessons and distributes linked e
     );
     await writeFile(
       path.join(source, "technical-design.html"),
-      '<html><head></head><a href="VECTOR_SEARCH.html#section-2">专题</a></html>',
+      '<html><head></head><a href="VECTOR_SEARCH.html#section-2">专题</a><a href="RETIRED.html">旧专题</a></html>',
     );
     await writeFile(path.join(source, "vector-search.html"), "<html><head></head></html>");
     await prepareLessonResources(fixture, 23);
@@ -116,6 +120,10 @@ test("single lesson publication preserves other lessons and distributes linked e
       "utf8",
     );
     assert.match(published, /href="vector-search\.html#section-2"/);
+    assert.match(published, /旧专题/);
+    assert.doesNotMatch(published, /href="RETIRED\.html"/);
+    await assert.rejects(readFile(path.join(current, "retired.html")), { code: "ENOENT" });
+    await assert.rejects(readFile(path.join(current, "retired.md")), { code: "ENOENT" });
     await assert.rejects(prepareLessonResources(fixture, 99), /Unknown lesson/);
   } finally {
     await rm(fixture, { recursive: true, force: true });

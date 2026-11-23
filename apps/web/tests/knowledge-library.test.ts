@@ -63,3 +63,15 @@ it("retains Markdown headings, splits long paragraphs and rejects empty or inval
   await expect(parseFile("txt", Buffer.from([255]))).rejects.toThrow("UTF-8");
   await expect(parseFile("txt", Buffer.from("  "))).rejects.toThrow("没有可提取的正文");
 });
+
+it("distinguishes a workspace without a library from a library without indexed documents", async () => {
+  vi.mocked(currentBinding).mockResolvedValue(undefined);
+  const query = vi.fn().mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] });
+  const absent = await knowledgeCatalog({ query }, scope);
+  expect(absent.emptyReason).toBe("no_library");
+  expect(absent.live.documents).toEqual([]);
+  query.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [{ id: "library" }] });
+  const empty = await knowledgeCatalog({ query }, scope);
+  expect(empty.emptyReason).toBe("no_indexed_documents");
+  expect(empty.live.documents).toEqual([]);
+});

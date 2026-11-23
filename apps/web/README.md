@@ -145,9 +145,9 @@ Web 通过 Agent HTTP 契约访问提示词库。分析页只读取当前租户�
 
 华东区域工作区的「华东区 GMV 为什么下降了 12%？」使用 12 篇课堂原文和独立的只读经营账本。已发布的向量存入 Web 主库 `web.document_vectors`。查询在权限和业务日期范围内按余弦距离取前十，与词法排名融合后返回三个章节。资料导入、索引重建和首页用法见[课堂案例](../../examples/showcases/lesson-23-east-gmv-rag/README.md)。
 
-在 Agent 的 `COMPASS_SEARCH_WORKSPACES` 中显式登记启用的工作区 UUID。在 Web 服务进程设置 `COMPASS_DOCUMENTS_ROOT` 和 `COMPASS_DOCUMENTS_PIN_DIR` 的绝对路径。前者为只读发布目录，含 `collections/<sha256>.json` 原件包及 `bindings/<tenantId>/<workspaceId>.json` 当前指针与访问政策。后者为 Web 独占的持久可写目录。多 Web 实例须共享两目录并支持同目录文件硬链接。Compose 已配置只读发布目录和持久固定记录卷，宿主路径与备份方式见[部署说明](../../deploy/README.md#工作区资料检索)。
+新运行默认可调用文档检索工具。首次检索固定该 Run 的资料版本；工作区没有知识库或没有已索引文档时返回明确空状态。在 Web 服务进程设置 `COMPASS_DOCUMENTS_ROOT` 和 `COMPASS_DOCUMENTS_PIN_DIR` 的绝对路径。前者为只读发布目录，含 `collections/<sha256>.json` 原件包及 `bindings/<tenantId>/<workspaceId>.json` 当前指针与访问政策。后者为 Web 独占的持久可写目录。多 Web 实例须共享两目录并支持同目录文件硬链接。Compose 已配置只读发布目录和持久固定记录卷，宿主路径与备份方式见[部署说明](../../deploy/README.md#工作区资料检索)。
 
-启用该工作区前发布资料包并配置受众工作区。分析成员只可搜索发布时与当前政策均准许的段落。受限受众按活动工作区的显式成员关系管理，商业报价可独立撤权。切换包时保留旧摘要文件和 Run 固定记录，恢复和回看仍按当前发布政策重新验证。停用某类来源可从绑定的 `kinds` 移除，撤回单份材料可移除 `policies` 中对应文号或将其 `enabled` 改为 false。
+使用资料包时先发布资料并配置受众工作区。分析成员只可搜索发布时与当前政策均准许的段落。受限受众按活动工作区的显式成员关系管理，商业报价可独立撤权。切换包时保留旧摘要文件和 Run 固定记录，恢复和回看仍按当前发布政策重新验证。新运行的权限由文档工具和 Web 所有者检查，撤回单份材料可移除 `policies` 中对应文号或将其 `enabled` 改为 false。
 
 Chat 中的数字角标可用键盘或鼠标打开。详情展示结论、适用范围、来源与复算过程。回看、重连与附件下载均按当前身份复核材料权限。运行课堂用例见[跨源检索课堂入口](../../examples/showcases/lesson-23-agentic-search/README.md)。
 

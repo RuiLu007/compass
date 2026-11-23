@@ -4,19 +4,18 @@ import path from "node:path";
 import { renderCourseEdition } from "../../../../scripts/course-design/reader.mjs";
 
 const topics = {
-  VECTOR_SEARCH: [
-    "OpenAI 向量检索与华东 GMV 诊断",
-    "从 12 份经营资料检索线索，再回到账本解释两周差额",
-  ],
+  VECTOR_SEARCH: ["知识库检索技术方案", "目标、技术选型、数据模型与 Web 到 Agent 的完整流程"],
   CODE_DESIGN: ["检索循环与代码实现", "从固定 Run 来源，到核验比较表中的每个数值"],
   EVIDENCE: ["经营结论与引用校验", "工具回执怎样进入答案，读者如何重新打开原文"],
   RETAIL_CASE: ["零售数据与课堂验收", "投放复议和华东 GMV 诊断分别使用哪些资料与经营时点"],
 };
 
-export async function buildSupplements(directory) {
+export async function buildSupplements(directory, names = Object.keys(topics)) {
+  if (names.some((name) => !Object.hasOwn(topics, name))) throw new Error("Unknown supplement");
   const tmp = await mkdtemp(path.join(os.tmpdir(), "compass-reading-"));
   try {
-    for (const [name, [title, subtitle]] of Object.entries(topics)) {
+    for (const name of names) {
+      const [title, subtitle] = topics[name];
       const source = path.join(directory, name + ".md");
       const markdown = await readFile(source, "utf8");
       const links = [];

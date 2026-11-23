@@ -18,6 +18,7 @@ COPY --from=workflow /usr/local/bin/node /usr/local/bin/node
 COPY --from=workflow /runner/node_modules /app/apps/agent/workflow-runner/node_modules
 RUN uv sync --frozen --no-dev --package compass-agent
 RUN useradd --create-home --uid 10001 compass
+RUN install -d -o compass -g compass -m 700 /var/lib/compass/tool-results
 USER compass
 ENV PATH="/app/.venv/bin:$PATH"
 WORKDIR /app/apps/agent

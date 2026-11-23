@@ -61,8 +61,14 @@ function resultText(output?: Record<string, unknown>, rowCount?: number) {
       .filter(Boolean);
     return [`${output.connections.length} 个连接`, ...names].join(" · ");
   }
-  const rows: unknown[] | undefined = Array.isArray(output?.rows) ? output.rows : undefined;
-  const count = rowCount ?? rows?.length;
+  const original = typeof output?.ref === "string";
+  const rows: unknown[] | undefined = Array.isArray(output?.rows)
+    ? output.rows
+    : Array.isArray(output?.preview)
+      ? output.preview
+      : undefined;
+  const count =
+    typeof output?.returnedRows === "number" ? output.returnedRows : (rowCount ?? rows?.length);
   if (count === undefined) return;
   const first = rows?.[0];
   const columns: unknown[] = Array.isArray(output?.columns) ? output.columns : [];
@@ -71,9 +77,10 @@ function resultText(output?: Record<string, unknown>, rowCount?: number) {
     const value = Array.isArray(first) && cellText(first[index]);
     return name && value ? [`${name}=${value}`] : [];
   });
-  return [`返回 ${count} 行${output?.truncated === true ? "（已截断）" : ""}`, ...values].join(
-    " · ",
-  );
+  return [
+    `返回 ${count} 行${original ? (output?.complete === true ? "（原件已保存）" : "（部分结果已保存）") : output?.truncated === true ? "（已截断）" : ""}`,
+    ...values,
+  ].join(" · ");
 }
 
 export function withDatabaseQuerySummary(entry: ExecutionEntry, rowCount?: number): ExecutionEntry {

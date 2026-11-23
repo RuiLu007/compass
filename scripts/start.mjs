@@ -9,6 +9,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { terminateProcesses } from "./process-tree.mjs";
 import { dockerAvailable, ensureDocker } from "./docker-ready.mjs";
 import { listenControl } from "./local-control.mjs";
+import { APP_PORTS } from "./local-ports.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export function options(args) {
@@ -46,6 +47,20 @@ const schedulerCommand = [
   "-m",
   "compass_agent.scheduler.main",
 ];
+export function homeAssetsReady(directory = root) {
+  const app = path.join(directory, "apps/home");
+  const manifest = JSON.parse(
+    readFileSync(path.join(app, "src/lib/lesson-resources.json"), "utf8"),
+  );
+  return [
+    "/prototype/index.html",
+    "/resources/system-architecture.png",
+    "/resources/business-schema.json",
+    "/resources/system-schema.json",
+    "/resources/system-data-model.md",
+    ...manifest.flatMap((lesson) => lesson.artifacts.map((artifact) => artifact.href)),
+  ].every((href) => existsSync(path.join(app, "public", href)));
+}
 export async function main(args) {
   const { langfuse } = options(args);
   if (!existsSync(path.join(root, ".env"))) throw new Error("Create .env first; see README.md");
@@ -53,11 +68,11 @@ export async function main(args) {
   const env = { ...readEnv(".env"), ...process.env };
   const agentArgs = agentCommand(env);
   // Never terminate an unrelated listener (the Web dev command otherwise replaces it).
-  for (const port of [8100, 8101, 8102, 8103]) {
+  for (const port of APP_PORTS) {
     await new Promise((resolve, reject) => {
       const server = net.createServer();
       server.once("error", () =>
-        reject(new Error(`Port ${port} is occupied; stop the existing app before pnpm start`)),
+        reject(new Error(`Port ${port} is occupied; run pnpm restart to replace the existing app`)),
       );
       server.listen(port, "127.0.0.1", () => server.close(resolve));
     });
@@ -118,6 +133,10 @@ export async function main(args) {
         if (process.platform === "darwin") await run("open", ["-a", "Docker"]);
         await run("docker", ["desktop", "start", "--detach"]);
       },
+      recover: async () => {
+        console.log("Docker API is unresponsive; restarting Docker Desktop once…");
+        await run("docker", ["desktop", "stop", "--force", "--timeout", "30"]);
+      },
     });
     await run("docker", [
       "compose",
@@ -147,9 +166,22 @@ export async function main(args) {
     env.COMPASS_OBSERVABILITY_ENABLED = String(langfuse);
     await run("pnpm", ["db:provision", "-F", "agent"]);
     await run("pnpm", ["db:migrate", "-F", "web", "-F", "agent"]);
-    background("pnpm", ["dev", "-F", "web", "-F", "home", "-F", "memory"]);
+    if (!homeAssetsReady())
+      await run("pnpm", ["--dir", "apps/home", "exec", "node", "scripts/prepare-assets.mjs"]);
+    background("pnpm", ["dev", "-F", "web", "-F", "memory"]);
+    background("pnpm", [
+      "--dir",
+      "apps/home",
+      "exec",
+      "next",
+      "dev",
+      "--hostname",
+      "127.0.0.1",
+      "--port",
+      "8101",
+    ]);
     background("uv", agentArgs);
-    for (const port of [8100, 8101, 8102, 8103]) {
+    for (const port of APP_PORTS) {
       const deadline = Date.now() + 120000;
       while (true) {
         if (stopping) return;

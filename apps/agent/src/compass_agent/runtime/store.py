@@ -436,31 +436,33 @@ class RuntimeStore:
             config["schedule"] = schedule
         if imported_history:
             config["importedHistory"] = imported_history
-        from compass_agent.documents import client as documents
-
-        search_enabled = documents.enabled(
-            getattr(self, "source_settings", None), session.workspace_id
-        )
-        if search_enabled and not self.context_enabled:
-            raise ModelError("context_policy_unavailable", 503)
         if self.context_enabled:
-            from compass_agent.context_runtime.pipeline import pin
+            from compass_agent.context_runtime.pipeline import exact, pin
 
             config["contextRuntime"] = pin(tx, context, self)
+            config["contextRuntime"]["answerProtocol"] = 2
+            exact(
+                tx,
+                config["contextRuntime"],
+                ["tools/final_answer.json", "shared/fragments/answer-protocol.md"],
+            )
+            if self.source_settings.compass_context_optimization_enabled:
+                exact(
+                    tx,
+                    config["contextRuntime"],
+                    [
+                        "support/context/selection.md",
+                        "support/context/compaction.md",
+                        "shared/fragments/context-results.md",
+                        "tools/read_tool_result.json",
+                    ],
+                )
+                config["contextRuntime"]["optimizationVersion"] = 1
             from compass_agent.semantic.client import enabled, pin_manifest
 
-            if search_enabled:
-                snapshot = documents.accept(self.source_settings, context, run_id)
-                config["searchSnapshot"] = snapshot
-                config["contextRuntime"]["search"] = snapshot
             if enabled(self.source_settings, session.workspace_id):
-                key = (
-                    "registry"
-                    if not search_enabled or "semantic" in config["searchSnapshot"]["kinds"]
-                    else "glossary"
-                )
                 config["contextRuntime"].update(
-                    pin_manifest(self.source_settings, context, run_id, key)
+                    pin_manifest(self.source_settings, context, run_id, "registry")
                 )
         run = AgentRun(
             id=run_id,
@@ -528,6 +530,14 @@ class RuntimeStore:
             assert session is not None
             history = []
             managed = bool(run.config_snapshot.get("contextRuntime"))
+            if run.config_snapshot.get("contextRuntime", {}).get("optimizationVersion") == 1:
+                from compass_agent.runtime.history import decode_command
+
+                data = dict(run.config_snapshot["command"])
+                data.pop("sessionId", None)
+                data = decode_command(data)
+                data["history"] = []
+                return AnalysisRunInput.model_validate(data)
             trusted = (
                 TrustedContext.model_validate(run.config_snapshot["context"]) if managed else None
             )
@@ -772,12 +782,49 @@ class RuntimeStore:
         drafts=(),
         delivery=None,
         citations=None,
+        answer_acceptance=None,
     ):
         with self.transaction() as tx:
             session, run = self.lock(tx, run_id)
             self.require_epoch(run, epoch)
+            if (
+                status == "completed"
+                and run.config_snapshot.get("contextRuntime", {}).get("answerProtocol") == 2
+                and answer_acceptance is None
+            ):
+                raise ModelError("delivery_conflict", 409)
+            if answer_acceptance is not None:
+                from compass_agent.context_runtime.source_access import read_private
+                from compass_agent.runtime.private_state import digest
+
+                accepted = read_private(
+                    self, tx, run_id, f"answer/v2/accepted/{answer_acceptance['candidateId']}"
+                )
+                if (
+                    accepted is None
+                    or accepted != answer_acceptance
+                    or accepted["executionPath"] != "root"
+                    or accepted["textDigest"] != digest(answer)
+                    or accepted["citationsDigest"] != digest(citations)
+                ):
+                    raise ModelError("delivery_conflict", 409)
+                from hashlib import sha256
+
+                artifact_digest = sha256(delivery.data).hexdigest() if delivery else None
+                if accepted["artifactDigest"] != artifact_digest:
+                    raise ModelError("delivery_conflict", 409)
+                from compass_agent.context_runtime.source_access import require_run_sources
+
+                require_run_sources(
+                    self,
+                    run_id,
+                    TrustedContext.model_validate(run.config_snapshot["context"]),
+                    epoch=epoch,
+                )
             if run.status == "cancelling":
                 status = "canceled" if cleanup == "confirmed" else "cancelling"
+                if answer_acceptance is not None:
+                    answer, citations, delivery, answer_acceptance = None, None, None, None
             run.status, run.reason_code, run.cleanup_status = status, reason, cleanup
             run.execution_epoch = None
             if status in TERMINAL:
@@ -814,6 +861,8 @@ class RuntimeStore:
 
                 refs = assistant.source_refs or []
                 if any(ref.get("kind") == "transient" for ref in refs):
+                    if answer_acceptance is not None:
+                        raise ModelError("delivery_conflict", 409)
                     answer = (
                         (answer or "") + "\n\n本次数据源仅支持即时读取，无法保存附件。"
                         "可使用支持历史读取的连接重新生成。"
@@ -831,7 +880,7 @@ class RuntimeStore:
                     )
 
                     if citations:
-                        from compass_agent.context_runtime.search_verification import (
+                        from compass_agent.context_runtime.citations import (
                             publish_citations,
                         )
 
@@ -841,6 +890,11 @@ class RuntimeStore:
                     save_final_text(self, tx, run, assistant, answer)
                     answer = REFERENCE
                 value["content"] = {**value["content"], "text": answer}
+                if answer_acceptance is not None:
+                    value["content"].update(
+                        answerMode=answer_acceptance["mode"],
+                        completion=answer_acceptance["completion"],
+                    )
             value["content"]["artifactIds"] = [
                 str(v)
                 for v in tx.scalars(select(AgentArtifact.id).where(AgentArtifact.run_id == run.id))

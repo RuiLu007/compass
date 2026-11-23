@@ -1,10 +1,10 @@
 # 工程脚本
 
-- `stop.mjs` / `restart.mjs` / `local-control.mjs`：`pnpm stop` 通过仓库专属控制 socket 结束应用，再按精确 Compose project 标签停止 Compass / Sandbox 容器；保留容器和数据卷。`pnpm restart [-- --langfuse]` 使用 pnpm 内置 stop → restart → start 生命周期（中间脚本仅校验参数），默认关闭观测。`local-control.mjs` 管理本机控制 socket，`local-control.test.mjs` 验证重复停止、已有实例保护和退出确认。
+- `stop.mjs` / `restart.mjs` / `local-control.mjs`：`pnpm stop` 通过仓库专属控制 socket 结束应用，再按精确 Compose project 标签停止 Compass / Sandbox 容器；保留容器和数据卷。`pnpm restart [-- --langfuse]` 使用 pnpm 内置 stop → restart → start 生命周期（中间脚本不重复启动），默认关闭观测；stop 阶段额外清理应用端口及同仓库 Scheduler，Docker API 不可用时继续进入启动恢复。`pnpm run restart`／直接执行 restart 脚本自行串起 stop → start。`local-control.mjs` 管理本机控制 socket，`local-control.test.mjs` 验证重复停止、已有实例保护和退出确认。
 
-- `docker-ready.mjs`：启动前检查 Docker API；打开 Desktop 后以有超时的探测轮询引擎就绪，支持取消，120 秒未就绪时明确报错。
+- `docker-ready.mjs`：启动前检查 Docker API；打开 Desktop 后以有超时的探测轮询引擎就绪，支持取消；启动失败或 120 秒未就绪时强制停止 Desktop 并重试一次，再次失败则明确退出。
 
-- `start.mjs`：`pnpm start` 一键启动本地完整环境；`pnpm start --langfuse` 追加 Langfuse。启动 PostgreSQL / Redis / Sandbox、执行 Web / Agent 迁移，等待 Web / Agent / Home / Memory 就绪后启动两个独立 Worker。要求已安装依赖、配置根 `.env` 并初始化数据库和账号；端口占用时退出，Ctrl+C 终止本次应用进程并保留依赖容器及数据。`start.test.mjs` 与 `tasks.test.mjs` 覆盖参数、Worker 令牌分配及 Turbo 环境透传。
+- `start.mjs`：`pnpm start` 一键启动本地完整环境；`pnpm start --langfuse` 追加 Langfuse。启动 PostgreSQL / Redis / Sandbox、执行 Web / Agent 迁移，以两个 Agent 副本运行后台 Worker，等待 Web / Agent / Home / Memory 就绪后启动 Scheduler。要求已安装依赖、配置根 `.env` 并初始化数据库和账号；独立 start 遇到端口占用时提示 restart；Home 复用完整的已有分发资源，缺失时才生成。Ctrl+C 终止本次应用进程并保留依赖容器及数据。`start.test.mjs` 与 `tasks.test.mjs` 覆盖参数、Worker 令牌分配及 Turbo 环境透传。
 
 - `observability.mjs`：`pnpm observability <init|up|status|logs|down>` 创建私有配置、启停同项目的六个 Langfuse 服务；固定本机 Docker、独立持久卷和无覆盖初始化。`observability.test.mjs` 验证权限、凭据分配与命令范围；运行参数及存储见 [观测说明](../deploy/observability/README.md)。
 
@@ -38,3 +38,5 @@ Web 数据库任务通过相同短名发现机制转发，入口在 [apps/web/sc
 显式声明 `interactive: true` 的一次性任务要求单个 workspace filter，由根入口直接透传 stdin 给 pnpm 子进程；不经 Turbo 的终端 UI。这使受管密码的隐藏 TTY/管道输入可用，仍加载根环境、复用 workspace 发现并且不缓存。
 
 - `sandbox.mjs`：`pnpm sandbox <init|up|status|logs|down>` 管理课堂 OpenSandbox/NFS；私有密钥写入忽略目录，停止保留数据卷。
+
+- `local-ports.mjs`：restart 清理 8100–8103 的监听进程及同仓库启动器、热重载父进程和 Scheduler；先 TERM，5 秒后 KILL，确认端口释放。Docker 发布端口只停止对应容器，保留卷。`local-ports.test.mjs` 用真实监听进程验证热重载、忽略 TERM、重复清理及其他端口不受影响；`restart.test.mjs` 验证实际 pnpm 生命周期和参数透传。

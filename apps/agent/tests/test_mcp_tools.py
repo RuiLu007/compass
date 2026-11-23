@@ -294,7 +294,7 @@ async def catalog_server(mode):
             if mode == "timeout":
                 await asyncio.sleep(8.2)
             schema = {"type": "array"} if mode == "schema" else {"type": "object"}
-            count = 257 if mode == "oversized" else 17 if mode == "combined" else 1
+            count = 257 if mode == "oversized" else 33 if mode == "combined" else 1
             value = {
                 "tools": [
                     {"name": f"tool_{cursor}_{i}", "inputSchema": schema} for i in range(count)

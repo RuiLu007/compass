@@ -30,19 +30,20 @@
 
 ## 资料检索
 
-启用检索的工作区通过 `search_documents` 检索制度、历史产物和外部材料，通过 `read_document` 打开本轮已取得的段落及同版本相邻段。启用向量的资料包用现有 OpenAI Provider 的 text-embedding-3-small 生成查询向量，再与词法排名融合。可用 COMPASS_EMBEDDING_PROVIDER_ID 指定连接。搜索结果中的 retrievalMode 表示实际用到的 hybrid 或 lexical。搜索摘要与原文均登记来源。Web 在候选排名、取原文、继续执行和历史读取时按当前成员、工作区和发布方政策重新授权。来源包、时点与连接配置见 [Web 资料来源](../../../../../apps/web/README.md#第-23-课资料与回答引用)。
+新 Run 默认装配文档工具，通过 `search_documents` 检索制度、历史产物和外部材料，通过 `read_document` 打开本轮已取得的段落及同版本相邻段。启用向量的资料包用现有 OpenAI Provider 的 text-embedding-3-small 生成查询向量，再与词法排名融合。可用 COMPASS_EMBEDDING_PROVIDER_ID 指定连接。搜索结果中的 retrievalMode 表示实际用到的 hybrid 或 lexical。搜索摘要与原文均登记来源。Web 在候选排名、取原文、继续执行和历史读取时按当前成员、工作区和发布方政策重新授权。来源包、时点与连接配置见 [Web 资料来源](../../../../../apps/web/README.md#第-23-课资料与回答引用)。
 
-资料包可声明自己的核验操作。通用检索支持当前来源的行列、引文、计算与比较。已启用的零售包另外提供观察窗口、采购档位及工作日历核验；输出 Schema 与回执校验共用本轮相同的包配置。
+文档工具在首次调用时固定当前获准资料，无库或无索引文档返回空状态，空库跳过 Embedding。模型可继续选择其他工具。新 Run 的交付校验使用通用来源、取值、计算和同主模型审阅；零售包核验仅保留在旧协议恢复路径。
 
 ## 默认装配
 
 Runtime 默认工具集为空。产品入口 compass_definition() 装配 todo、database、python、workflow 及经授权的定时任务工具：
 
+- final_answer：提交 plain / evidence 私有候选，由同一 Loop 校验后发布正文、引用和附件。完成能力独占调用批次，不占业务工具次数。
 - todo_write：模型登记和维护任务计划。
 - database_query：列出授权 PostgreSQL 连接、发现获准 schema 的表和字段、执行受限只读 SQL。多连接使用 connectionId，表名须带 schema。工具读取表和字段注释；账号权限与 RLS 继续约束可见数据。当前 MySQL 仅提供连接配置与探测。
 - python_analysis：沙箱可用时执行通用分析代码；输入必须是当前 owner、租户和 Run 授权的数据引用。当前产物通道保留 PNG。
 - create_workflow：用本次参数试跑模型生成的编排，成功后提出保存邀请。脚本入口支持异步函数体及 `async function (args) { … }` 包装，编译失败返回 `invalid_workflow_script`。
-- sub_agent：接收 prompt，启动独立的只读分析循环，只向父级返回最终结果。
+- sub_agent：接收 prompt，启动独立的只读调查循环。新答案协议按注册元数据继承当前可见只读能力；变更、固定审批、递归编排和完成能力留给父级，动态确认事项交回父级。父子共享预算，子级只返回内部结果与证据，父级统一交付。旧 Run 保留原数据库委派边界。
 - schedule_read 读取当前工作区内本人计划和触发历史。schedule_write 生成一次所有者确认，摘要包含计划变更和按计划时区显示的预计触发时间，分析内容保留 Markdown 换行。工具使用已批准的计划版本、Run 租约与持久 Action 同事务完成更新和 Checkpoint。定时 Run 只装配读取工具。
 - 个人工作流：按用户及工作区装配启用的动态资产，执行时再次复验。模型工具清单保留通用和 MCP 工具，剩余槽位按创建时间装配资产。
 - 用户配置的 MCP：每个 Run 重新发现，沿用统一授权、预算、审批、取消和恢复机制。
@@ -56,3 +57,15 @@ Runtime 默认工具集为空。产品入口 compass_definition() 装配 todo、
 ## 验证
 
 从仓库根运行 pnpm lint -F agent、pnpm typecheck -F agent、pnpm test -F agent 和 pnpm build -F agent。test_tool_catalog.py 检查目录和注册一致性；test_showcase_isolation.py 检查默认清单、请求边界和实际构建的 wheel；test_generic_database_integration.py 使用独立 PostgreSQL、真实 Sandbox 和 Redis 验证查询、授权输入及审批恢复。
+
+## 通用结果与交付接入
+
+工具结果直接返回模型的默认预算为 20,000 token，由 [result_store.py](result_store.py) 的 `INLINE_TOKENS` 统一定义；`database_query` 的内联结果和 `read_tool_result` 的默认分页共用该预算。当前使用 UTF-8 字节数保守估算 token。超过预算时保存完整原件并返回引用和预览，后续按需分页读取；原件回执的预览预算为 512。
+
+ToolSpec / RegisteredTool 的 evidence_adapter 负责把已授权回执适配为可引用来源；completion 标记受信完成能力，public_projection 控制公开过程详情。无适配器的工具仍可正常执行。after_tool_batch 登记结果，before_delivery 检查候选；需要语义审阅时返回主 Loop 的 verify 模型步骤。原有权限、审批、预算、取消与恢复继续复用。模型工具目录总容量为 32；MCP 按同一目录容量装配。
+
+## 大结果与渐进读取
+
+`read_tool_result` 是通用只读工具，按不透明 ref、零起始 offset / limit 或 nextCursor 读取既有结果。工具原文先通过生产者的输出校验，再保存私有原件；公开回执保留状态、实际规模、完整性、有限样本及引用。大单行、宽字段与长文本使用片段游标，页大小保持有界。
+
+具有来源授权信息的生产者在 `ExecutionReceipt.source_deps` 声明本次操作的依赖；数据库使用查询或元信息 witness。未声明的通用结果包含当前 Run / epoch 的 transient 依赖。授权依赖与原件 manifest 经 Journal 接受后才能回读，恢复时复核内容摘要；原件故障不重复执行已接受的外部动作。

@@ -1,0 +1,127 @@
+{
+  "lesson": 24,
+  "title": "动态上下文选择与压缩",
+  "subtitle": "治理大工具结果，以 JEV 动态选择历史；容量触发时剪枝、摘要并回填最近原文。",
+  "brand": "Compass",
+  "label": "第 24 课 · 技术方案",
+  "source": "../TECH_DESIGN.md",
+  "guide": "guide.md",
+  "output": "../TECH_DESIGN.html",
+  "code": {
+    "block_01": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "U[\"新问题 / 工具续轮\"] --> H[\"历史读取器 history.py<br/>原始用户轮 + 当前执行状态\"]",
+      "language": "mermaid"
+    },
+    "block_02": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "subgraph G[\"完整用户轮 TurnGroup：一个用户问题及其执行\"]",
+      "language": "mermaid"
+    },
+    "block_03": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "sequenceDiagram",
+      "language": "mermaid"
+    },
+    "block_04": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "O[\"工具生产者：本次实际完整输出\"] --> V[\"校验类型、状态与原始 schema\"]",
+      "language": "mermaid"
+    },
+    "block_05": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "\"status\": \"ok\",",
+      "language": "json"
+    },
+    "block_06": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "H[\"原始完整用户轮\"] --> S[\"最新 3 轮 + 当前任务作为保护背景\"]",
+      "language": "mermaid"
+    },
+    "block_07": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "def selection_should_stop(*, completed_batches, routed, below_watermark, protocol_ok):",
+      "language": "python"
+    },
+    "block_08": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "\"model\": \"<api_model>\",",
+      "language": "json"
+    },
+    "block_09": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "from compass_agent.schemas import DecisionInput, DecisionQuestion",
+      "language": "python"
+    },
+    "block_10": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "def systemone_body(api_model, request):",
+      "language": "python"
+    },
+    "block_11": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "\"choice\": \"drop\",",
+      "language": "json"
+    },
+    "block_12": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "V[\"选后历史 + 保护轮 + active\"] --> T{\"完整帧仍 ≥ T 或超硬上限？\"}",
+      "language": "mermaid"
+    },
+    "block_13": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "def recent_turns(closed_turns, selected_ids, budget, wire_cost):",
+      "language": "python"
+    },
+    "block_14": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "原 system prompt、默认内置上下文及工具",
+      "language": "text"
+    },
+    "block_15": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "你在为助手的下一次调用选择历史。当前问题、最近完整轮和既有任务约束在 state 中作为背景。",
+      "language": "text"
+    },
+    "block_16": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "你为即将继续工作的助手整理会话交接。请用会话所用语言写一份短摘要，使下一轮能从已有进度继续。",
+      "language": "text"
+    },
+    "block_17": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "\"outputTokenBudget\": 2048,",
+      "language": "json"
+    },
+    "block_18": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "from compass_agent.schemas import ChatMessage, GenerateInput",
+      "language": "python"
+    },
+    "block_19": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "工具结果可能提供完整原文，也可能提供状态、规模、样本和原件引用。先根据当前任务判断已有内容是否足够。",
+      "language": "text"
+    },
+    "block_20": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "读取本会话已经保存的工具结果原件，适用于核对预览之外的行、文本或字段。",
+      "language": "text"
+    },
+    "block_21": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "from pydantic import BaseModel, ConfigDict, Field, model_validator",
+      "language": "python"
+    },
+    "block_22": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "列出可查询的表、查看字段，或执行一条只读 PostgreSQL SELECT。",
+      "language": "text"
+    },
+    "block_23": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "- 临时查数、用户提供 SQL、查看有哪些表或字段时使用 database_query。",
+      "language": "text"
+    }
+  }
+}

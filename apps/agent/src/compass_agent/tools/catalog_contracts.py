@@ -26,6 +26,7 @@ class CatalogContext:
     schedule_effect: Callable | None = None
     semantics: RegistryTools | None = None
     documents: DocumentTools | None = None
+    result_reader: Callable | None = None
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,8 @@ class ToolSpec:
     orchestrates: bool = False
     factory: Callable[[], RegisteredTool] | None = None
     context_factory: Callable[[CatalogContext], RegisteredTool] | None = None
+    evidence_adapter: Callable | None = None
+    public_projection: Literal["normal", "status_only"] = "normal"
 
     def register(self, context: CatalogContext, handler: Callable) -> RegisteredTool:
         if self.context_factory is not None:
@@ -56,6 +59,10 @@ class ToolSpec:
                 bounded_payload,
                 parallel_safe=self.parallel_safe,
             )
+        if self.evidence_adapter is not None:
+            entry = replace(entry, evidence_adapter=self.evidence_adapter)
+        if self.public_projection != "normal":
+            entry = replace(entry, public_projection=self.public_projection)
         if entry.definition:
             from compass_agent.promptops.structured import enrich_definition
 

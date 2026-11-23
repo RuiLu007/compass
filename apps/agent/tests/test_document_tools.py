@@ -138,3 +138,57 @@ async def test_in_flight_document_read_releases_http_socket_on_cancellation():
             await reading
         assert stopped.value.cleanup_confirmed
         await asyncio.wait_for(released.wait(), 2)
+
+
+@pytest.mark.anyio
+async def test_default_documents_pin_once_and_skip_embedding_for_empty_library(monkeypatch):
+    import asyncio
+
+    from compass_agent.documents import client, service
+
+    from .test_tool_dispatcher import context
+
+    execution = context("search_documents")
+    assert execution.trusted.scope.kind == "tenant"
+    pin = {
+        "protocol": 2,
+        "tenantId": str(execution.trusted.scope.tenant_id),
+        "workspaceId": str(execution.trusted.scope.workspace_id),
+        "knownAt": "2025-01-01T00:00:00+00:00",
+        "collectionDigest": "a" * 64,
+        "emptyReason": "no_library",
+        "vectorIndex": service.INDEX,
+    }
+    calls, cache = [], {}
+
+    def accept(*args, **kwargs):
+        calls.append(kwargs)
+        return pin
+
+    async def local_read(key, args, read, **kwargs):
+        if key not in cache:
+            cache[key] = await read()
+        return cache[key]
+
+    journal = SimpleNamespace(
+        store=SimpleNamespace(source_settings=None),
+        search_snapshot=None,
+        run_id=execution.run_id,
+        context_binding={"answerProtocol": 2},
+        local_read=local_read,
+    )
+    response = {**pin, "status": "empty", "sections": [], "reason": "no_library"}
+    owner = AsyncMock(return_value=response)
+    embedding = AsyncMock(side_effect=AssertionError("empty library needs no embedding"))
+    monkeypatch.setattr(client, "accept", accept)
+    monkeypatch.setattr(service, "read_document_operation", owner)
+    monkeypatch.setattr(service, "embed", embedding)
+    monkeypatch.setattr(service, "record_sources", lambda *args: None)
+    first, second = (DocumentTools(journal, execution.trusted) for _ in range(2))
+    results = await asyncio.gather(
+        first.run("search", {"query": "规则"}, execution),
+        second.run("search", {"query": "另一个问题"}, execution),
+    )
+    assert calls == [{"protocol": 2}]
+    assert all(r["status"] == "empty" and r["reason"] == "no_library" for r in results)
+    assert owner.await_count == 2 and embedding.await_count == 0

@@ -42,8 +42,6 @@ export async function currentBinding(
   const item = binding.safeParse(value);
   if (
     !item.success ||
-    !item.data.connectionId ||
-    !item.data.connectionRevision ||
     item.data.tenantId !== s.tenant_id ||
     item.data.workspaceId !== s.workspace_id
   )
@@ -87,7 +85,12 @@ export async function readPin(s: Subject) {
     reject("forbidden");
   return pin.data;
 }
-export async function acceptPin(s: Subject, b: Binding, managed?: Collection) {
+export async function acceptPin(
+  s: Subject,
+  b: Binding,
+  managed?: Collection,
+  options: Pick<Pin, "protocol" | "emptyReason"> = {},
+) {
   try {
     return await readPin(s);
   } catch (error) {
@@ -97,6 +100,7 @@ export async function acceptPin(s: Subject, b: Binding, managed?: Collection) {
     ...binding.omit({ policies: true }).strip().parse(b),
     runId: s.run_id,
     actorUserId: s.actor_user_id,
+    ...options,
     knownAt: new Date(Math.min(Date.parse(b.knownAt), Date.now())).toISOString(),
   });
   if (managed) {

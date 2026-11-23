@@ -233,6 +233,9 @@ async def call_model(journal, executor, step, draft, route, trusted, control, bu
     previous = journal.context_receipts.get(path)
     frame = {}
     fresh = False
+    optimizer = getattr(journal, "context_optimizer", None)
+    if child or getattr(journal, "answer_turn", {}).get(path, {}).get("purpose") == "verify":
+        optimizer = None
 
     def build(tx):
         if inputs is None:
@@ -254,7 +257,10 @@ async def call_model(journal, executor, step, draft, route, trusted, control, bu
             )
         budget_extra = len(canonical(continuation)) if continuation else 0
         schema = None
-        if phase == "generate" and not child and binding.get("search"):
+        answer_turn = getattr(journal, "answer_turn", {}).get(path, {})
+        if binding.get("answerProtocol") == 2:
+            schema = answer_turn.get("schema")
+        elif phase == "generate" and not child and binding.get("search"):
             if binding["search"].get("reportFormat") == "comparison_brief":
                 from compass_agent.context_runtime.comparison_brief import ComparisonBrief
 
@@ -296,7 +302,7 @@ async def call_model(journal, executor, step, draft, route, trusted, control, bu
         # Root search proposals are published only after verification. Request one
         # JSON response so per-token SSE framing does not consume their wire budget.
         # Recording this choice in the frame also preserves earlier steps on replay.
-        if path == "root" and binding.get("search"):
+        if binding.get("answerProtocol") == 2 or (path == "root" and binding.get("search")):
             model_draft = model_draft.model_copy(update={"stream": False})
             # Search opens a fresh phase with verified tool observations. Native
             # reasoning can resume only with the provider's original sealed prefix.
@@ -307,7 +313,7 @@ async def call_model(journal, executor, step, draft, route, trusted, control, bu
         value = prepare_input(
             tx,
             ctx,
-            binding,
+            {**binding, "answerIntermediate": True} if child else binding,
             model_draft,
             limits,
             trusted,
@@ -331,6 +337,7 @@ async def call_model(journal, executor, step, draft, route, trusted, control, bu
             output_schema=schema,
             question=journal.context_questions.get(path),
             support_paths=support,
+            fit_budget=optimizer is None,
         )
         data = value.request.model_dump(mode="json", exclude={"continuation_token"})
         return {
@@ -345,6 +352,30 @@ async def call_model(journal, executor, step, draft, route, trusted, control, bu
             "continuation": continuation,
             "receipt": value.receipt,
         }
+
+    frame_factory = build
+    if optimizer and inputs is not None:
+
+        def compile_frame():
+            with Session(journal.store.engine) as tx:
+                return build(tx)
+
+        compiled = await finish_context_read(asyncio.to_thread(compile_frame))
+        compiled = await optimizer.optimize(
+            compiled,
+            executor.models,
+            trusted,
+            control,
+            budget,
+            route,
+            model_limits(route, budget),
+            draft,
+        )
+
+        def frozen_frame(tx):
+            return compiled
+
+        frame_factory = frozen_frame
 
     def receive(value, existed):
         nonlocal fresh
@@ -362,10 +393,37 @@ async def call_model(journal, executor, step, draft, route, trusted, control, bu
         step.prepared_request = GenerateInput.model_validate(
             journal.restore_continuation(request_input["request"], value["continuation"])
         )
+        optimization = value.get("contextOptimization")
+        if optimization:
+            if hashlib.sha256(canonical(optimization)).hexdigest() != request_input.get(
+                "contextOptimizationDigest"
+            ):
+                raise ModelError("checkpoint_corrupt", 409)
+            if optimizer:
+                optimizer.restore(optimization, step.prepared_request.messages)
 
     async def revalidate():
         now = await journal.capabilities() if journal.capabilities else {}
         receipt = frame["receipt"]
+        if optimization := frame.get("contextOptimization"):
+            from compass_agent.context_runtime.optimization_calls import restore_budget
+            from compass_agent.context_runtime.source_access import allows
+
+            await asyncio.to_thread(
+                restore_budget,
+                journal,
+                budget,
+                optimization.get("attemptRefs")
+                or [
+                    *optimization["selection"]["batchAttemptRefs"],
+                    *(optimization.get("summary") or {}).get("attempt_refs", []),
+                ],
+            )
+
+            if not await asyncio.to_thread(
+                allows, journal.store, trusted, optimization["sourceDeps"], raise_unavailable=True
+            ):
+                raise ModelError("context_access_changed", 403)
         if (
             not now.get("analysis")
             or not now.get("model")
@@ -381,16 +439,14 @@ async def call_model(journal, executor, step, draft, route, trusted, control, bu
         if binding.get("search"):
             from compass_agent.context_runtime.source_access import require_search_sources
 
-            await asyncio.to_thread(
-                require_search_sources, journal, trusted, epoch=journal.epoch if fresh else None
-            )
+            await asyncio.to_thread(require_search_sources, journal, trusted, epoch=journal.epoch)
         else:
             await asyncio.to_thread(
                 require_run_sources,
                 journal.store,
                 journal.run_id,
                 trusted,
-                epoch=journal.epoch if fresh else None,
+                epoch=journal.epoch,
             )
 
         def recheck():
@@ -399,7 +455,11 @@ async def call_model(journal, executor, step, draft, route, trusted, control, bu
                 current = sources(tx, trusted.scope)
                 if any(current.get(k) != v for k, v in receipt["sources"].items()):
                     raise ModelError("context_access_changed", 403)
-                if "database_query" in receipt["tools"] and not current:
+                if (
+                    "database_query" in receipt["tools"]
+                    and not current
+                    and binding.get("answerProtocol") != 2
+                ):
                     raise ModelError("context_access_changed", 403)
 
         await asyncio.to_thread(recheck)
@@ -420,6 +480,14 @@ async def call_model(journal, executor, step, draft, route, trusted, control, bu
                 )
 
         observe(getattr(executor.models, "root_observation", None), receipt, restored=not fresh)
+        if info := receipt.get("contextOptimization"):
+            trace = getattr(journal, "execution_trace", None)
+            identifier = trace.steps.get(str(step.id)) if trace else None
+            if trace and identifier and (info["dropped"] or info["compacted"]):
+                parts = [f"历史保留 {info['selected']} 轮，移出 {info['dropped']} 轮"]
+                if info["compacted"]:
+                    parts.append(f"已生成交接摘要，回填最近 {info['tail']} 轮")
+                trace.update(identifier, summary="；".join(parts))
 
     async def invoke():
         assert step.prepared_request is not None
@@ -438,12 +506,13 @@ async def call_model(journal, executor, step, draft, route, trusted, control, bu
             invoke,
             AgentCallResponse,
             budget=budget,
-            frame_factory=build,
+            frame_factory=frame_factory,
             receive_frame=receive,
             revalidate=revalidate,
-            # A search batch yields after verification, when evidence and remaining
-            # budget can be checkpointed together with the executed tool receipts.
-            yield_boundary=not binding.get("search"),
+            # Review results remain durably checkpointed. Complete the delivery check
+            # on this worker so the final reserve does not require a full journal replay.
+            yield_boundary=not binding.get("search")
+            and getattr(journal, "answer_turn", {}).get(path, {}).get("purpose") != "verify",
         )
     except (ContextLimit, ModelError, PromptError) as error:
         observe_failure(getattr(executor.models, "root_observation", None), binding, phase, error)

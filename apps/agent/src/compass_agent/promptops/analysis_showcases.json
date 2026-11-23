@@ -41,5 +41,18 @@
         "path": "analysis/east-gmv-diagnosis.md"
       }
     ]
+  },
+  {
+    "title": "第 24 课 · 动态上下文选择与压缩",
+    "suggestions": [
+      {
+        "label": "一万行渠道日报，先看前五行",
+        "path": "analysis/channel-daily-sample.md"
+      },
+      {
+        "label": "两班退款记录，怎么交给下一班？",
+        "path": "analysis/refund-shift-handoff.md"
+      }
+    ]
   }
 ]

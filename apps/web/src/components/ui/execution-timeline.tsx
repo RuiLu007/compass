@@ -60,6 +60,7 @@ export function executionEntries(
       (node) =>
         node.kind !== "model" ||
         node.status !== "completed" ||
+        node.summary ||
         node.detail?.thinking ||
         node.detail?.narration,
     )
@@ -107,11 +108,13 @@ export function executionEntries(
         status: !active && executionActive(node) ? "incomplete" : node.status,
         title:
           node.kind === "model"
-            ? ""
+            ? node.summary
+              ? "整理上下文"
+              : ""
             : node.origin?.kind === "mcp"
               ? (node.origin.toolName ?? node.title)
               : node.title,
-        summary: node.kind === "model" ? undefined : node.summary,
+        summary: node.summary,
         context,
         input: node.detail?.input ?? display?.inputPreview,
         output: node.detail?.output ?? display?.outputPreview,

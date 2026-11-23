@@ -45,7 +45,7 @@ Compass 的开发源码维护在 `https://github.com/shanggqm/compass`。课程�
 | 环境诊断       | `pnpm doctor`                                                                               | 检查 Node、pnpm、uv、Docker Compose 与 daemon。                                                                     |
 | 启动数据库     | `pnpm db:up`                                                                                | 启动本地 PostgreSQL，宿主机端口 55432。                                                                             |
 | 初始化应用数据 | `pnpm db:migrate`；`pnpm db:seed`                                                           | 首次先执行 `pnpm db:provision -F web`；迁移 Web/Agent，默认 seed 只写 Agent 三天样本；按 `-F` 选择应用。            |
-| 停止与重启     | `pnpm stop`；`pnpm restart [-- --langfuse]`                                                 | 停止受管应用和依赖容器，保留数据卷；重启默认不启 Langfuse。                                                         |
+| 停止与重启     | `pnpm stop`；`pnpm restart [-- --langfuse]`                                                 | 停止受管应用和依赖容器，保留数据卷；重启自动清理 8100–8103 占用及同仓库启动器，默认不启 Langfuse。                  |
 | 一键启动       | `pnpm start`；`pnpm start --langfuse`                                                       | 前者启动应用与所需本地依赖，后者追加 Langfuse；要求已完成首次初始化。                                               |
 | 开发           | `pnpm dev`；`pnpm dev -F home`                                                              | 前者启动全部四个应用；`-F` 可选 `home`、`web`、`agent`、`memory`，支持重复筛选。                                    |
 | 应用检查       | `pnpm lint -F <短名>`；`pnpm typecheck -F <短名>`；`pnpm test -F <短名>`                    | 使用对应 app 的 ESLint / Ruff、TypeScript / Pyright、Node test / Vitest / pytest。                                  |

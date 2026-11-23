@@ -33,7 +33,9 @@ BUSINESS_TOOLS = {
 def test_production_registry_contains_only_shipped_tools():
     assert {tool.name for tool in TOOLS if tool.category == "builtin"} == {
         "todo_write",
+        "final_answer",
         "database_query",
+        "read_tool_result",
         "python_analysis",
         "create_workflow",
         "sub_agent",
@@ -120,7 +122,9 @@ def test_production_wheel_excludes_showcases(tmp_path):
     }
     assert tools == {
         "todo_write",
+        "final_answer",
         "database_query",
+        "read_tool_result",
         "python_analysis",
         "create_workflow",
         "sub_agent",

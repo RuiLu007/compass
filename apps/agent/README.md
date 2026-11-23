@@ -121,8 +121,20 @@ Agent 在受理时固定工作区的发布清单。正式查询通过 Registry �
 
 ## 第 23 课跨源检索
 
-在受控工作区打开普通 Chat，主模型可使用四个语义工具、只读数据库查询、资料检索和原段阅读。受理时固定业务时点、数据库连接、语义发布清单及文档集合。模型按问题登记待核事项，Runtime 逐批记录实际派发与新观察，核过的数字与原文才会进入对应的答案角标。
+普通 Chat 的新 Run 使用同一个 AgentLoop，自由选择语义、数据库、知识库、代码执行、MCP 和现有委派工具。没有搜索模式开关。Run 固定语义与 PromptOps 版本；文档工具首次调用时固定资料，空库返回空状态，访问权限继续由工具及来源 owner 执行。
 
-复杂报告可以在查下一项材料时先校验已有断言。模型补查后可按键修订原草稿。交付时重新核对当前读权、所有依赖和适用范围。资料服务连续两次不可用时，同一资料包的其他问法也进入退避。退避后允许一次探测，恢复后继续检索，持续故障则在本次 Run 内关闭该来源。
+工具结果通过注册的 evidence_adapter 接入 after_tool_batch。模型调用 final_answer 提交 plain / evidence 候选；before_delivery 检查结构、引用与计算，再由同主模型在既有 Loop 中执行 purpose=verify 审阅。缺口回到工作步骤；合格的部分回答可以交付。最终正文、引用、附件与出箱事件原子保存，前端按 answerMode 划分正文呈现。
 
-启用工作区须同时配置受控模型预算和 Web 资料绑定。资料、指标发布及课堂对照的运行命令见[第 23 课课堂入口](../../examples/showcases/lesson-23-agentic-search/README.md)。Agent 的搜索状态和引用沿用现有 Run 私有存储。[华东 GMV 案例](../../examples/showcases/lesson-23-east-gmv-rag/README.md)使用 OpenAI 查询向量和 Web 主库中的章节向量。工作区可使用 comparison_brief 简报格式，程序复算两期比较，模型据已读原文与业务查询提出判断和建议。
+新 Run 固定 answerProtocol=2，候选与 Review 使用既有私有运行记录。旧 Run 保留原协议恢复。模型上游需支持工具调用或结构化输出，提示词更新沿既有 PromptOps 发布入口进行。通用方法和工具说明随源码提供，运行前核对发布版本。
+
+课堂资料、受限数据库、教学分析员的资产授权及独立金标准由[第 23 课课堂入口](../../examples/showcases/lesson-23-agentic-search/README.md)装配。当前实现与验证见[技术方案](../../mai-specs/973-lesson-23-agentic-search/design/TECH_DESIGN.md)。
+
+## 第 24 课上下文选择与压缩
+
+`COMPASS_CONTEXT_OPTIMIZATION_ENABLED=true` 为新 Run 固定优化版本。小工具结果直接追加；超过 2,048 的 UTF-8 token 上界时保存完整原件，模型收到至多 512 的回执，通过 `read_tool_result` 分页读取。数据库 SELECT 在同次快照中流式保存全部实际返回行。
+
+历史达到 8 个完整轮或请求达到有效输入容量的 70% 时先用 JEV 选择旧轮，最近 3 轮受保护。JEV 不可用或完整共享背景超窗时保留未判断轮；仍有容量压力则剪枝、摘要并按预算回填最近完整轮。系统提示词和内置材料沿原装配逻辑保留。
+
+JEV 复用平台启用的 decision Provider；可通过 `COMPASS_ROUTING_JEV_PROVIDER_ID` 显式指定。需在 `COMPASS_AUTONOMY_MODEL_PROFILES` 中登记对应 Provider、绑定版本、输入输出预算及费率；decision 的 `sdk_model` 可为 null。预算缺失只跳过可选选择调用。选择与摘要按原 Journal 结算、取消及恢复。
+
+`COMPASS_CONTEXT_RESULTS_ROOT` 应设置为所有 Agent Worker 可访问的同一绝对路径；目录权限 0700、文件 0600，禁止映射为公开静态目录。原件引用随会话删除清理，跨 Run 回读重新检查身份、会话重置点及来源权限。关闭优化只影响新 Run；旧 Run 继续按受理时的版本恢复。本课新增 0 张表，修改 0 张表。

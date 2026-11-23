@@ -9,7 +9,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from compass_agent.schemas import ToolDefinition
+from compass_agent.schemas import TOOL_CATALOG_LIMIT, ToolDefinition
 from compass_agent.tools.contracts import (
     McpBinding,
     RegisteredTool,
@@ -45,17 +45,17 @@ def parse_arguments(raw: str) -> object:
         raise ToolRejected("invalid_parameters") from error
 
 
-def check_depth(value: object, *, maximum: int = 20) -> None:
+def check_depth(value: object, *, maximum: int = 20, maximum_nodes: int | None = 8192) -> None:
     pending = [(value, 0)]
     count = 0
     while pending:
         current, depth = pending.pop()
         count += 1
-        if depth > maximum or count > 8192:
+        if depth > maximum or (maximum_nodes is not None and count > maximum_nodes):
             raise ToolRejected("structure_limit")
         if isinstance(current, dict):
             pending.extend((item, depth + 1) for item in current.values())
-        elif isinstance(current, list):
+        elif isinstance(current, (list, tuple)):
             pending.extend((item, depth + 1) for item in current)
 
 
@@ -90,7 +90,10 @@ def bounded_payload(value: object) -> object:
 
 def has_catalog_room(definitions: Iterable[ToolDefinition]) -> bool:
     values = list(definitions)
-    return len(values) <= 16 and len(json_bytes([d.model_dump() for d in values])) <= 64 * 1024
+    return (
+        len(values) <= TOOL_CATALOG_LIMIT
+        and len(json_bytes([d.model_dump() for d in values])) <= 64 * 1024
+    )
 
 
 def validate_catalog(definitions: Iterable[ToolDefinition]) -> None:

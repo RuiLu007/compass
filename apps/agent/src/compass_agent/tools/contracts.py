@@ -139,6 +139,9 @@ class ExecutionReceipt:
     reason_code: str | None = None
     file: bytes | None = field(default=None, repr=False)
     environment_id: str | None = None
+    context_result: dict | None = field(default=None, repr=False)
+    governed: bool = field(default=False, repr=False)
+    source_deps: tuple[dict, ...] | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +154,7 @@ class ToolExecutionResult:
     artifacts: tuple[ArtifactRef, ...] = ()
     artifact_status: str = "none"
     proposal: BudgetProposal | ToolApprovalProposal | None = None
+    context_result: dict | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -268,6 +272,10 @@ class RegisteredTool:
         Callable[[object, ToolExecutionContext], Awaitable[PreparedApproval | None]] | None
     ) = None
     local_effect: bool = False
+    # Code-owned capabilities. Remote declarations cannot opt into these ports.
+    completion: bool = False
+    public_projection: Literal["normal", "status_only"] = "normal"
+    evidence_adapter: Callable | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass, field, fields
 from typing import Literal
 
-from compass_agent.schemas import RUN_CONTEXT_MESSAGES
+from compass_agent.schemas import RUN_CONTEXT_MESSAGES, TOOL_CATALOG_LIMIT
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,7 +16,7 @@ class OutputLimits:
     continuation_bytes: int = 1_048_576
     wire_response_bytes: int = 2_097_152
     messages: int = RUN_CONTEXT_MESSAGES
-    tools: int = 16
+    tools: int = TOOL_CATALOG_LIMIT
 
     def __post_init__(self):
         defaults = {f.name: f.default for f in fields(self)}

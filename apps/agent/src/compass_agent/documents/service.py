@@ -24,6 +24,30 @@ class DocumentTools:
         self.trusted = trusted
         self.store = journal.store
         self.snapshot = journal.search_snapshot
+        if not hasattr(journal, "document_pin_lock"):
+            journal.document_pin_lock = asyncio.Lock()
+
+    async def pin(self):
+        if self.snapshot is not None:
+            return
+        from compass_agent.documents.client import accept
+
+        async with self.journal.document_pin_lock:
+            if self.snapshot is not None:
+                return
+
+            async def read():
+                return await asyncio.to_thread(
+                    accept,
+                    self.store.source_settings,
+                    self.trusted,
+                    self.journal.run_id,
+                    protocol=2,
+                )
+
+            self.snapshot = await self.journal.local_read(
+                "documents/pin", {"protocol": 2}, read, kind="control", yield_boundary=False
+            )
 
     def lookup(self, ref):
         with self.store.transaction() as tx:
@@ -45,12 +69,18 @@ class DocumentTools:
         started = monotonic()
         if execution.run_id != self.journal.run_id or execution.trusted != self.trusted:
             raise ToolRejected("tool_scope_denied")
+        await self.pin()
+        assert self.snapshot is not None
         if op == "read":
             source = await asyncio.to_thread(self.lookup, args["ref"])
             if not source:
                 raise ToolRejected("document_unavailable")
             args = {"sourceRef": source, "offset": args["offset"]}
-        if op == "search" and self.snapshot.get("vectorIndex") == INDEX:
+        if (
+            op == "search"
+            and not self.snapshot.get("emptyReason")
+            and self.snapshot.get("vectorIndex") == INDEX
+        ):
             try:
                 query = " ".join(filter(None, (args["query"], args.get("entity"))))
                 vectors = await embed(self.store.engine, self.store.source_settings, [query])
@@ -76,6 +106,7 @@ class DocumentTools:
         }
 
     def checked_rows(self, op, result):
+        assert self.snapshot is not None
         try:
             rows = result["sections"]
             if (
@@ -91,7 +122,10 @@ class DocumentTools:
                 source = row["sourceRef"]
                 if (
                     source["kind"] != "document"
-                    or row["kind"] not in self.snapshot["kinds"]
+                    or (
+                        self.snapshot.get("protocol") != 2
+                        and row["kind"] not in self.snapshot["kinds"]
+                    )
                     or source["runId"] != str(self.journal.run_id)
                     or source["collectionDigest"] != self.snapshot["collectionDigest"]
                     or source["tenant"] != self.snapshot["tenantId"]

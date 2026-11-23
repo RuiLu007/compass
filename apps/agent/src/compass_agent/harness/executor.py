@@ -64,6 +64,7 @@ class AgentLoop:
         publish_text: bool = True,
         model_timeout: float | None = 25,
         handle_incomplete: IncompleteHandler | None = None,
+        public_response: Callable[[CallResponse], bool] | None = None,
     ) -> RunResult:
         for index in range(1, RUN_STREAM_LIMITS["steps"] + 1):
             control.require_running()
@@ -111,7 +112,7 @@ class AgentLoop:
                     control.require_running()
                     return recovery
             self._require_complete(result)
-            if state.trace and not getattr(getattr(state, "tools", None), "search", None):
+            if state.trace and (public_response is None or public_response(result)):
                 state.trace.model_content(str(step.id), result)
             candidate = await handle(step, result, prepared)
             self._finish_step(step, "completed", emit)
@@ -138,6 +139,7 @@ class AgentLoop:
         publish_text: bool = True,
         model_timeout: float | None = 25,
         handle_incomplete: IncompleteHandler | None = None,
+        public_response: Callable[[CallResponse], bool] | None = None,
     ) -> RunResult:
         """Advance any configured tool catalog using the same model loop.
 
@@ -179,6 +181,7 @@ class AgentLoop:
             publish_text=publish_text,
             model_timeout=model_timeout,
             handle_incomplete=handle_incomplete,
+            public_response=public_response,
         )
 
     async def _invoke_model(

@@ -107,10 +107,16 @@ Agent 部署需显式提供独立 Fernet `COMPASS_RUNTIME_STATE_KEY`，同时保
 
 ## 工作区资料检索
 
-在 Web 部署宿主设置 `COMPASS_DOCUMENTS_ROOT` 为已发布包目录的绝对路径，默认目录为仓库下的 `work/document-releases`。Compose 将它只读挂载到 Web 容器的 `/srv/compass/documents`。发布、撤销某份文档或改进资料后，以原子替换方式更新 `bindings/<tenantId>/<workspaceId>.json`，保留各代 `collections/<sha256>.json`。需要零售场景方法的工作区在绑定里显式填写 `"scenePack":"retail"`。
+在 Web 部署宿主设置 `COMPASS_DOCUMENTS_ROOT` 为已发布包目录的绝对路径，默认目录为仓库下的 `work/document-releases`。Compose 将它只读挂载到 Web 容器的 `/srv/compass/documents`。发布、撤销某份文档或改进资料后，以原子替换方式更新 `bindings/<tenantId>/<workspaceId>.json`，保留各代 `collections/<sha256>.json`。新运行采用通用搜索与交付流程；已有绑定中的场景字段仅供旧协议运行恢复。
 
 Web 容器以 `node` 用户将 Run 固定记录写入 `/var/lib/compass/document-pins`。Compose 默认使用 `documents-pins` 持久卷。已有共享文件系统可设置宿主 `COMPASS_DOCUMENTS_PIN_DIR` 为可写的绝对路径，确保 UID 1000 有目录权限并支持同目录硬链接；所有 Web 实例使用同一套发布目录与固定记录。备份时一并保存两者和 Agent 数据库。回看旧 Run 时由 Web 读取其固定记录，并重新核对当前授予的权限。
 
-在所有 Agent 副本上登记相同的 `COMPASS_SEARCH_WORKSPACES`，启用受控模型预算并发布对应 PromptOps 版本。只有被登记工作区的新 Run 固定检索时点、只读连接及资料版本。课堂专用时点副本和验收入口位于[第 23 课案例目录](../examples/showcases/lesson-23-agentic-search/)。
+部署包含答案协议 v2 的 Agent 后发布对应 PromptOps 版本。新 Run 固定通用答案协议，首次文档检索固定资料版本；来源权限和连接可用性在各工具中检查。旧 Run 沿其已保存协议恢复。课堂专用时点副本和验收入口位于[第 23 课案例目录](../examples/showcases/lesson-23-agentic-search/)。
 
 Web 数据库迁移到 0010_knowledge_library 后可从管理页导入文件。先部署含 knowledge-embeddings 接口的 Agent，再启动新版 Web。复用已安装的 pgvector 扩展与 Agent 的 OpenAI Provider。管理页修改后的文件分段及向量在 Web 数据库备份内；由新 Run 固定的内容快照保存在现有 documents-pins 卷。
+
+## 上下文原件共享卷
+
+Agent 的 `context-results` 私有卷挂载到 `/var/lib/compass/tool-results`，所有 Worker 与同镜像 Scheduler 使用一致配置。复制 Agent 实例时共享该目录，保证已保存 ref 可在接管实例读取；禁止挂载到 Web 静态目录。保留结果卷与 Agent Journal 一起恢复，使用 `pnpm deploy:down` 停服务时保留卷。
+
+新 Run 默认启用 `COMPASS_CONTEXT_OPTIMIZATION_ENABLED`。JEV 使用已配置的 decision Provider 及 `COMPASS_AUTONOMY_MODEL_PROFILES` 预算档案；未配置时保留历史并按容量进入摘要。发布前通过 PromptOps 发布新增选择、摘要及回读工具资产。该功能新增 0 张表，修改 0 张表。

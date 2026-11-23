@@ -14,6 +14,22 @@ from compass_agent.semantic import client as transport
 Kind = Literal["semantic", "detail", "knowledge", "history", "external"]
 
 
+class DocumentSnapshot(BaseModel):
+    """The document owner's version binding; authorization stays with that owner."""
+
+    model_config = ConfigDict(extra="ignore")
+    tenantId: UUID
+    workspaceId: UUID
+    runId: UUID
+    actorUserId: UUID
+    knownAt: AwareDatetime
+    timezone: str
+    collectionDigest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    protocol: Literal[2] = 2
+    vectorIndex: Literal["text-embedding-3-small:1024:v1"] | None = None
+    emptyReason: Literal["no_library", "no_indexed_documents"] | None = None
+
+
 class SearchSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid")
     tenantId: UUID
@@ -32,21 +48,19 @@ class SearchSnapshot(BaseModel):
     vectorIndex: Literal["text-embedding-3-small:1024:v1"] | None = None
     scenePack: Literal["retail"] | None = None
     maxToolCalls: int | None = Field(default=None, ge=0, le=400)
-
-
-def enabled(settings, workspace_id):
-    return str(workspace_id) in {
-        v.strip() for v in getattr(settings, "compass_search_workspaces", "").split(",")
-    }
+    emptyReason: Literal["no_library", "no_indexed_documents"] | None = None
 
 
 def request(settings, trusted, run_id, op, args=None):
     return transport.request(settings, trusted, run_id, op, args, namespace="documents")
 
 
-def accept(settings, trusted, run_id):
+def accept(settings, trusted, run_id, *, protocol=1):
     try:
-        pin = SearchSnapshot.model_validate(request(settings, trusted, run_id, "pin"))
+        schema = DocumentSnapshot if protocol == 2 else SearchSnapshot
+        pin = schema.model_validate(
+            request(settings, trusted, run_id, "pin", {"protocol": 2} if protocol == 2 else {})
+        )
         ZoneInfo(pin.timezone)
         if (pin.tenantId, pin.workspaceId, pin.actorUserId, pin.runId) != (
             trusted.scope.tenant_id,

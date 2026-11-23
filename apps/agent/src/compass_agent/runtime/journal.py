@@ -129,6 +129,16 @@ class ExecutionJournal:
         # Preserve the original model request fingerprint when an older Run resumes.
         self.deepseek_thinking = run.config_snapshot.get("deepseekThinking", False)
         self.state_providers = {}
+        self.context_results = None
+        self.context_optimizer = None
+        self.context_accounted_attempts = set()
+        if (self.context_binding or {}).get("optimizationVersion") == 1:
+            from compass_agent.runtime.context_results import ContextResults
+
+            self.context_results = ContextResults(self)
+            from compass_agent.context_runtime.optimizer import ContextOptimizer
+
+            self.context_optimizer = ContextOptimizer(self)
 
     def business_state(self):
         return {path: provider() for path, provider in self.state_providers.items()}
@@ -945,15 +955,21 @@ class ExecutionJournal:
                 if revalidate:
                     await revalidate()
                 self.last_attempt = attempt_id
-                if budget is not None:
+                already_counted = (
+                    kind in {"ctx_select", "ctx_compact"}
+                    and attempt_id in self.context_accounted_attempts
+                )
+                if budget is not None and not already_counted:
                     for name, value in saved.get("budget", {}).items():
                         setattr(budget, name, getattr(budget, name) + value)
+                    if kind in {"ctx_select", "ctx_compact"}:
+                        self.context_accounted_attempts.add(attempt_id)
                 saved = self.restore_continuation(saved["result"], saved.get("continuation"))
                 return adapter.validate_json(__import__("json").dumps(saved))
-            before = {name: getattr(budget, name) for name in budget_fields} if budget else {}
             await self.gate()
             if revalidate:
                 await revalidate()
+            before = {name: getattr(budget, name) for name in budget_fields} if budget else {}
         except asyncio.CancelledError:
             # Only local admission and replay ran; the physical dispatch intent has
             # not been committed and operation() has never been invoked.
@@ -1026,6 +1042,8 @@ class ExecutionJournal:
                 **({"expected_attempt_status": "prepared"} if kind == "routing_host" else {}),
             )
             self.last_attempt = attempt_id
+            if kind in {"ctx_select", "ctx_compact"} and budget is not None:
+                self.context_accounted_attempts.add(attempt_id)
             await self.publisher.flush(self.run_id)
             if yielded:
                 if self.flush_progress:

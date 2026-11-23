@@ -175,6 +175,8 @@ class McpRun:
             .encode()[:2000]
             .decode(errors="ignore")
         )
+        from compass_agent.context_runtime.receipt_evidence import receipt
+
         return RegisteredTool(
             name,
             ToolDefinition(
@@ -191,6 +193,7 @@ class McpRun:
             proposal,
             parallel_safe=True,
             revalidate=revalidate,
+            evidence_adapter=receipt,
         )
 
     async def execute(
@@ -266,7 +269,10 @@ class McpRun:
                 "text": [c.text for c in result.content if isinstance(c, TextContent)],
                 "structuredContent": result.structured_content,
             }
-            bounded_payload(payload)
+            from compass_agent.execution_context import current_execution
+
+            if getattr(current_execution.get(), "context_results", None) is None:
+                bounded_payload(payload)
             if remote.output_schema and not Draft202012Validator(remote.output_schema).is_valid(
                 cast(Any, result.structured_content)
             ):

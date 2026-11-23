@@ -198,6 +198,13 @@ async def check_metrics(dictionaries=None):
             entries = api("search", {"query": alias, "kinds": ["metric"]})["items"]
             assert code in [e["code"] for e in entries[:3]], (alias, entries)
             resolved = api("resolve", {"mention": alias, "dimensions": []})
+            if resolved.get("status") == "needs_clarification":
+                options = resolved["options"]
+                assert len(options) > 1
+                chosen = next(item for item in options if item["code"] == code)
+                resolved = api(
+                    "choice", {"mention": alias, "metric_id": chosen["asset_id"], "dimensions": []}
+                )
             assert resolved.get("metric", {}).get("code") == code, (alias, resolved)
             metric = resolved["metric"]
             ref = dict(

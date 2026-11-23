@@ -43,7 +43,7 @@ class AutonomyModelProfile(BaseModel):
 
     provider_id: UUID
     binding_version: int = Field(ge=1)
-    sdk_model: str = Field(min_length=1, max_length=200)
+    sdk_model: str | None = Field(min_length=1, max_length=200)
     api_base: str = Field(max_length=2048)
     input_tokens: int = Field(ge=1, le=1_050_000)
     output_tokens: int = Field(ge=1, le=32768)
@@ -68,6 +68,8 @@ class Settings(BaseSettings):
     compass_model_max_inflight: int = Field(default=32, ge=1, le=256)
     compass_observability_enabled: bool = False
     compass_context_runtime_enabled: bool = True
+    compass_context_optimization_enabled: bool = True
+    compass_context_results_root: str = "work/runtime/tool-results"
     compass_context_scope_profiles: list[ScopeRule] = Field(default_factory=list, max_length=512)
 
     compass_metric_dictionary_path: str = ""
@@ -100,7 +102,6 @@ class Settings(BaseSettings):
     compass_runtime_lease_seconds: int = Field(default=15, ge=3, le=300)
     compass_semantic_workspaces: str = ""
     compass_embedding_provider_id: str = ""
-    compass_search_workspaces: str = ""
     compass_web_authz_url: str = "http://127.0.0.1:8100/api/internal/analysis/authorize"
     compass_demo_enabled: bool = False
     compass_agent_service_token: str = ""

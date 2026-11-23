@@ -85,7 +85,19 @@ def update_session(
         store.record_command(
             tx, context, command.request_id, kind, payload, session.id, None, receipt
         )
-        return receipt
+    if not rename:
+        from compass_agent.tools.result_store import ToolResultStore
+
+        try:
+            ToolResultStore(store.source_settings.compass_context_results_root).remove_session(
+                session_id
+            )
+        except OSError:
+            logger.warning(
+                "Deleted session result files await storage cleanup",
+                extra={"session_id": str(session_id)},
+            )
+    return receipt
 
 
 @dataclass(frozen=True)

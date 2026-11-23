@@ -19,7 +19,7 @@ export function descendants(table, roots) {
   } while (ids.size !== size);
   return table.filter((row) => ids.has(row.pid));
 }
-export async function terminateProcesses(roots) {
+export async function terminateProcesses(roots, { graceMs = 15000 } = {}) {
   const owned = descendants(processTable(), roots);
   const live = () =>
     processTable().filter(
@@ -37,7 +37,7 @@ export async function terminateProcesses(roots) {
     }
   };
   signal(live(), "SIGTERM");
-  const deadline = Date.now() + 15000;
+  const deadline = Date.now() + graceMs;
   while (live().length) {
     if (Date.now() > deadline) signal(live(), "SIGKILL");
     if (Date.now() > deadline + 5000) throw new Error("Application processes did not exit");

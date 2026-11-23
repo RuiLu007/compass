@@ -1,36 +1,122 @@
 {
-  "title": "第 23 课 · Agentic Search",
-  "subtitle": "从经营问题到可签批的建议",
+  "lesson": 23,
+  "title": "通用 Loop 中的 Agentic Search 与回答交付",
+  "subtitle": "默认搜索方法 · 工具层权限 · 通用 Verify · 明确的正文边界",
   "brand": "Compass",
-  "label": "技术方案 · 实现与课堂案例",
+  "label": "实现与验收核对版",
   "source": "../TECH_DESIGN.md",
   "guide": "guide.md",
   "output": "../TECH_DESIGN.html",
   "code": {
-    "layers": {
+    "loop": {
       "file": "../TECH_DESIGN.md",
-      "contains": "Fixed[\"随 Run 固定版本",
+      "contains": "User[\"用户问题\"]",
       "language": "mermaid"
     },
-    "feedback": {
+    "method": {
       "file": "../TECH_DESIGN.md",
-      "contains": "Plan[\"Plan",
+      "contains": "先明确用户需要得到哪些结果",
+      "language": "text"
+    },
+    "verify": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "participant M as 主模型",
       "language": "mermaid"
     },
-    "verify-feedback": {
-      "file": "../TECH_DESIGN.md",
-      "contains": "\"call-receipt\"",
+    "decision": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "class Decision:",
+      "language": "python"
+    },
+    "plain": {
+      "file": "../EVIDENCE.md",
+      "contains": "GMV 表示",
       "language": "json"
     },
-    "architecture": {
-      "file": "../TECH_DESIGN.md",
-      "contains": "Chat[\"经营者",
+    "publication": {
+      "file": "../CODE_DESIGN.md",
+      "contains": "C[\"私有 Candidate\"]",
       "language": "mermaid"
     },
-    "wire-verify": {
-      "file": "../CODE_DESIGN.md",
-      "contains": "before, after = cells",
-      "language": "python"
+    "wireFlow": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "participant UI as Web 聊天界面",
+      "language": "mermaid"
+    },
+    "wireSchema": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "type UUID = string;",
+      "language": "typescript"
+    },
+    "wireSubmit": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "POST /api/web/v1/analysis/sessions/submit",
+      "language": "http"
+    },
+    "wireAccepted": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "\"streamUrl\"",
+      "language": "json"
+    },
+    "wireSubscribe": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "GET /api/web/v1/analysis/sessions/10000000-0000-4000-8000-000000000005/messages?tenantId=10000000-0000-4000-8000-000000000001&workspaceId=10000000-0000-4000-8000-000000000002&runId=10000000-0000-4000-8000-000000000004",
+      "language": "http"
+    },
+    "wireSse": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "id: 10000000-0000-4000-8000-000000000004:1795334400000-1",
+      "language": "text"
+    },
+    "wireEnvelope": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "\"protocol\": \"compass.run\"",
+      "language": "json"
+    },
+    "wireIndexRequest": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "GET /api/web/v1/analysis/runs/10000000-0000-4000-8000-000000000004/citations?tenantId=10000000-0000-4000-8000-000000000001&workspaceId=10000000-0000-4000-8000-000000000002",
+      "language": "http"
+    },
+    "wireIndex": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "\"anchors\"",
+      "language": "json"
+    },
+    "wireDetailRequest": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "GET /api/web/v1/analysis/runs/10000000-0000-4000-8000-000000000004/citations/10000000-0000-4000-8000-000000000007?tenantId=10000000-0000-4000-8000-000000000001&workspaceId=10000000-0000-4000-8000-000000000002",
+      "language": "http"
+    },
+    "wireDetail": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "\"退货制度（接口示例）\"",
+      "language": "json"
+    },
+    "wirePlain": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "\"GMV 表示一定时期内的商品交易总额。\"",
+      "language": "json"
+    },
+    "treeAgent": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "apps/agent/",
+      "language": "text"
+    },
+    "treeWeb": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "apps/web/",
+      "language": "text"
+    },
+    "treeHome": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "apps/home/",
+      "language": "text"
+    },
+    "treeSources": {
+      "file": "../TECH_DESIGN.md",
+      "contains": "mai-specs/973-lesson-23-agentic-search/",
+      "language": "text"
     }
   }
 }

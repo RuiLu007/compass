@@ -614,7 +614,11 @@ class RunScheduler:
 
         # Model dispatch requires a physical receipt written under the live epoch.
         # Cleanup may arrive after fencing, when logical output can no longer commit.
-        for attempt in tx.scalars(unresolved.where(AgentStep.kind.in_(("model", "routing")))):
+        for attempt in tx.scalars(
+            unresolved.where(
+                AgentStep.kind.in_(("model", "routing", "classifier", "ctx_select", "ctx_compact"))
+            )
+        ):
             receipts = tx.scalars(
                 select(ModelAttempt)
                 .join(ModelCall, ModelCall.call_id == ModelAttempt.call_id)

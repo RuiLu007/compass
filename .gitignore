@@ -25,6 +25,7 @@ coverage/
 
 # Local work and generated output.
 /work/
+/apps/agent/work/runtime/tool-results/
 .next-export/
 out/
 

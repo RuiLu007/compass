@@ -32,12 +32,8 @@
         "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/TECH_DESIGN.md",
         "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/VECTOR_SEARCH.html",
         "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/VECTOR_SEARCH.md",
-        "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/CODE_DESIGN.html",
-        "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/CODE_DESIGN.md",
-        "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/EVIDENCE.html",
-        "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/EVIDENCE.md",
-        "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/RETAIL_CASE.html",
-        "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/RETAIL_CASE.md"
+        "$TURBO_ROOT$/mai-specs/972-lesson-24-context-selection-compression/design/TECH_DESIGN.html",
+        "$TURBO_ROOT$/mai-specs/972-lesson-24-context-selection-compression/design/TECH_DESIGN.md"
       ],
       "outputs": [
         ".next/**",
@@ -82,12 +78,8 @@
         "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/TECH_DESIGN.md",
         "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/VECTOR_SEARCH.html",
         "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/VECTOR_SEARCH.md",
-        "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/CODE_DESIGN.html",
-        "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/CODE_DESIGN.md",
-        "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/EVIDENCE.html",
-        "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/EVIDENCE.md",
-        "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/RETAIL_CASE.html",
-        "$TURBO_ROOT$/mai-specs/973-lesson-23-agentic-search/design/RETAIL_CASE.md"
+        "$TURBO_ROOT$/mai-specs/972-lesson-24-context-selection-compression/design/TECH_DESIGN.html",
+        "$TURBO_ROOT$/mai-specs/972-lesson-24-context-selection-compression/design/TECH_DESIGN.md"
       ],
       "outputs": []
     }

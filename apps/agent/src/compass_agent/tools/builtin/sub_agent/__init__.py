@@ -23,6 +23,22 @@ def definition(_context):
     )
 
 
+def evidence(args, payload, refs):
+    # The child returns handles; permission records remain in private Run storage.
+    identifiers = payload.get("evidenceIds", [])
+    # Earlier receipts included full records; their IDs address the same private storage.
+    identifiers = [*identifiers, *(item["id"] for item in payload.get("evidence", []))]
+    for identifier in dict.fromkeys(identifiers):
+        yield {"importEvidenceId": identifier}
+
+
 SPEC = ToolSpec(
-    NAME, "builtin", "workflow", definition, lambda context: context.workflow, orchestrates=True
+    NAME,
+    "builtin",
+    "workflow",
+    definition,
+    lambda context: context.workflow,
+    orchestrates=True,
+    evidence_adapter=evidence,
+    public_projection="status_only",
 )

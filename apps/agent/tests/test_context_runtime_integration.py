@@ -395,6 +395,12 @@ async def exercise_delivery(engine, store, key, owner, task, topic):
     run_id = UUID(store.submit(command, owner, run_environment=environment)["runId"])
     retry = store.submit(command, owner, run_environment={**environment, "tenantName": "改名"})
     assert retry["runId"] == str(run_id)
+    # Persisted v1 deliveries must remain replayable after new Runs default to v2.
+    with store.transaction() as tx:
+        _, run = store.lock(tx, run_id)
+        config = dict(run.config_snapshot)
+        config["contextRuntime"] = {**config["contextRuntime"], "answerProtocol": 1}
+        run.config_snapshot = config
     epoch = store.claim(run_id, uuid4())
     secrets = SecretStore(key)
     turn = FixtureTurn(secrets, topic)
@@ -576,8 +582,8 @@ async def exercise_classifiers(engine, store, owner):
         metrics.shutdown()
 
 
-@pytest.mark.parametrize(("search", "key"), [(False, "registry"), (True, "glossary")])
-def test_empty_registry_release_accepts_and_pins_first_run(targets, monkeypatch, search, key):
+@pytest.mark.parametrize("search", [False, True])
+def test_empty_registry_release_accepts_and_pins_first_run(targets, monkeypatch, search):
     from compass_agent.documents import client as documents
     from compass_agent.semantic import client
 
@@ -588,10 +594,12 @@ def test_empty_registry_release_accepts_and_pins_first_run(targets, monkeypatch,
     owner = CHAT.model_copy(
         update={"scope": TenantScope(kind="tenant", tenant_id=uuid4(), workspace_id=workspace)}
     )
-    settings = Settings(
-        compass_semantic_workspaces=str(workspace),
-        compass_search_workspaces=str(workspace) if search else "",
-        compass_context_runtime_enabled=True,
+    settings = Settings.model_validate(
+        dict(
+            compass_semantic_workspaces=str(workspace),
+            compass_search_workspaces=str(workspace) if search else "",
+            compass_context_runtime_enabled=True,
+        )
     )
     store = RuntimeStore(engine, Fernet.generate_key().decode(), settings=settings)
     store.ready = True
@@ -602,15 +610,402 @@ def test_empty_registry_release_accepts_and_pins_first_run(targets, monkeypatch,
             "selection": {"mode": "fixed", "provider_id": str(PROVIDER_ID)},
         }
     )
-    monkeypatch.setattr(documents, "accept", lambda *_: {"kinds": ["knowledge"]})
+
+    def eager_document_pin(*args, **kwargs):
+        pytest.fail("Knowledge is pinned lazily by its tools")
+
+    monkeypatch.setattr(documents, "accept", eager_document_pin)
     monkeypatch.setattr(client, "request", lambda *_: {"manifest_hash": "e" * 64, "releases": []})
     try:
         run_id = UUID(store.submit(command, owner)["runId"])
         binding = store.read_run(run_id).config_snapshot["contextRuntime"]
-        assert ("registry" in binding) is not search
-        assert binding[key] == {
+        assert binding["answerProtocol"] == 2
+        assert "glossary" not in binding
+        assert binding["registry"] == {
             "pins": [],
             "manifest": "e" * 64,
         }
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "plain",
+        "evidence",
+        "fallback",
+        "markdown",
+        "csv",
+        "dashboard",
+        "deadline",
+        "child",
+        "oversized",
+        "truncated",
+        "worker_boundary",
+        "transient_replay",
+    ],
+)
+def test_answer_protocol_uses_generic_loop_private_submission_and_durable_replay(targets, mode):
+    from dataclasses import replace
+
+    from compass_agent.runtime.execution_trace import ExecutionTrace
+    from compass_agent.runtime.tool_bindings import RunToolBindings
+    from compass_agent.semantic.evidence import result as adapt_query
+    from compass_agent.tools.catalog_contracts import CatalogContext
+    from compass_agent.tools.contracts import ExecutionReceipt
+    from compass_agent.tools.loader import ToolLoader
+
+    from .test_tool_dispatcher import call, registration
+
+    evidential = mode in {
+        "evidence",
+        "markdown",
+        "csv",
+        "dashboard",
+        "deadline",
+        "child",
+        "oversized",
+        "transient_replay",
+    }
+    url, _ = targets("answer_v2")
+    db.migrate()
+    engine = install_prompts(create_engine(url))
+    key = Fernet.generate_key().decode()
+    store = RuntimeStore(engine, key, settings=Settings(compass_context_runtime_enabled=True))
+    store.ready = True
+    owner = CHAT.model_copy(
+        update={"scope": TenantScope(kind="tenant", tenant_id=uuid4(), workspace_id=uuid4())}
+    )
+    command = SessionSubmit(
+        requestId=uuid4(),
+        question="请解释结果并交付。",
+        selection=cast(Any, {"mode": "fixed", "provider_id": PROVIDER_ID}),
+    )
+    run_id = UUID(store.submit(command, owner)["runId"])
+    assert store.read_run(run_id).config_snapshot["contextRuntime"]["answerProtocol"] == 2
+    assert "searchSnapshot" not in store.read_run(run_id).config_snapshot
+    epoch = store.claim(run_id, uuid4())
+    secrets = SecretStore(key)
+    events, invocations, lookups = [], [], []
+    oversized_sent = False
+    truncated_sent = False
+    reviewed = False
+
+    async def lookup(args, context):
+        lookups.append(context.call_id)
+        if mode == "transient_replay":
+            from compass_agent.context_runtime.source_access import record_source
+
+            record_source(current_execution.get(), {"kind": "transient"})
+        return ExecutionReceipt(
+            context.call_id,
+            "ok",
+            "confirmed",
+            {
+                "resultId": "inventory-receipt",
+                "columns": ["quantity"],
+                "rows": [[17]],
+            },
+        )
+
+    entry = replace(registration("lookup_inventory", lookup), evidence_adapter=adapt_query)
+
+    class AnswerTurn(RuntimeTurn):
+        definition = AgentDefinition()
+        models = cast(Any, SimpleNamespace(root_observation=None))
+
+        async def _invoke_model_live(
+            self, step, request, route, context, control, budget, emit=None, *, publish_text=True
+        ):
+            nonlocal oversized_sent, truncated_sent, reviewed
+            assert not publish_text
+            invocations.append(request)
+            if mode == "truncated" and not truncated_sent:
+                truncated_sent = True
+                out = model_result(
+                    tool_calls=[call("final_answer", "cut", args='{"body":')], finish="length"
+                )
+                return AgentCallResponse.model_validate(
+                    out.model_copy(
+                        update={"status": "incomplete", "error_code": "output_truncated"}
+                    ).model_dump()
+                )
+            journal = current_execution.get()
+            from compass_agent.execution_context import execution_path
+
+            if mode == "child" and "subagent:" in execution_path.get():
+                assert [t.function.name for t in request.tools] == ["lookup_inventory"]
+                if any(m.role == "tool" for m in request.messages):
+                    assert "recordRef" in str(request.messages)
+                    out = model_result(text="已查到库存 17 件，回执随结果返回。")
+                else:
+                    out = model_result(
+                        tool_calls=[call("lookup_inventory", "child-lookup")],
+                        finish="tool_calls",
+                        token=secrets.seal("tool_continuation", {"approved": "fixture"}),
+                    )
+                return AgentCallResponse.model_validate(out.model_dump())
+            assert request.max_tokens == LIMITS.max_output_tokens
+            purpose = journal.answer_turn["root"]["purpose"]
+            if purpose == "verify":
+                reviewed = True
+                assert not request.tools and request.output_format == "schema"
+                material = json.loads(request.messages[-1].content or "")
+                if mode == "deadline":
+                    assert material["remaining"]["workToolsAvailable"] is False
+                value = {
+                    "candidateDigest": material["candidateDigest"],
+                    "evidenceRevision": material["evidenceRevision"],
+                    "decision": "accept",
+                    "modeValid": True,
+                    "goals": [{"goalId": "root", "status": "covered", "reason": "完整"}],
+                    "claims": [
+                        {"claimId": c["id"], "status": "supported", "reason": "来源一致"}
+                        for c in material["candidate"].get("claims", [])
+                    ],
+                    "feedback": "private-review-marker",
+                }
+                out = model_result(text=json.dumps(value))
+            else:
+                evidence = getattr(journal, "answer_evidence", {}).get("root", {})
+                if evidential and not any(item["kind"] == "query" for item in evidence.values()):
+                    if mode == "oversized" and not oversized_sent:
+                        oversized_sent = True
+                        return AgentCallResponse.model_validate(
+                            model_result(
+                                tool_calls=[
+                                    call("lookup_inventory", f"oversized-{i}") for i in range(5)
+                                ],
+                                finish="tool_calls",
+                                token=secrets.seal("tool_continuation", {"approved": "fixture"}),
+                            ).model_dump()
+                        )
+                    if mode == "deadline":
+                        cast(Any, control).deadline_at = asyncio.get_running_loop().time() + 60
+                    out = model_result(
+                        tool_calls=[
+                            call(
+                                "delegate_lookup" if mode == "child" else "lookup_inventory",
+                                "lookup",
+                            )
+                        ],
+                        token=secrets.seal("tool_continuation", {"approved": "fixture"}),
+                        finish="tool_calls",
+                    )
+                    if mode == "deadline":
+                        out = out.model_copy(update={"duration_ms": 30_000})
+                else:
+                    if mode == "deadline":
+                        assert [t.function.name for t in request.tools] == ["final_answer"]
+                    if mode == "child":
+                        child_result = next(
+                            json.loads(m.content or "{}")["result"]
+                            for m in request.messages
+                            if m.role == "tool" and "evidenceIds" in (m.content or "")
+                        )
+                        assert set(child_result["evidenceIds"]).issubset(evidence)
+                        imported = [evidence[key] for key in child_result["evidenceIds"]]
+                        assert any(item["tool"] == "lookup_inventory" for item in imported)
+                    value = {
+                        "mode": "evidence" if evidential else "plain",
+                        "completion": "complete",
+                        "coveredGoalIds": ["root"],
+                        "unresolved": [],
+                    }
+                    if evidential:
+                        value.update(
+                            claims=[
+                                {
+                                    "id": "quantity",
+                                    "kind": "fact",
+                                    "text": "private-answer-marker：17 件。",
+                                    "refs": [
+                                        {
+                                            "evidenceId": next(
+                                                key
+                                                for key, item in evidence.items()
+                                                if item["kind"] == "query"
+                                            ),
+                                            "row": 0,
+                                            "column": "quantity",
+                                        }
+                                    ],
+                                }
+                            ],
+                            blocks=[{"type": "paragraph", "claimIds": ["quantity"]}],
+                        )
+                    else:
+                        value["body"] = "private-answer-marker：GMV 是交易总额。"
+                    if mode in {"markdown", "csv", "dashboard"}:
+                        value["artifact"] = {
+                            "format": mode,
+                            "title": "库存查询",
+                            "evidenceIds": [
+                                k for k, item in evidence.items() if item["kind"] == "query"
+                            ],
+                        }
+                    if mode == "fallback":
+                        assert not request.tools and request.output_format == "schema"
+                        out = model_result(text=json.dumps(value, ensure_ascii=False))
+                    else:
+                        out = model_result(
+                            tool_calls=[
+                                call(
+                                    "final_answer",
+                                    "answer",
+                                    args=json.dumps(value, ensure_ascii=False),
+                                )
+                            ],
+                            token=secrets.seal("tool_continuation", {"approved": "fixture"}),
+                            finish="tool_calls",
+                        )
+            return AgentCallResponse.model_validate(out.model_dump())
+
+    class BoundaryJournal(ExecutionJournal):
+        def accept(self, *args, **kwargs):
+            result = super().accept(*args, **kwargs)
+            # Simulate the scheduler returning the lease at accepted root boundaries.
+            return result or (mode == "worker_boundary" and kwargs.get("boundary", True))
+
+    async def perform():
+        journal = BoundaryJournal(store, LocalPublisher(), run_id, epoch)
+        journal.model_secrets = secrets
+        journal.capabilities = lambda: capability_grants(owner)
+        state = TaskState(messages=[ChatMessage(role="user", content=command.question)])
+        trace = ExecutionTrace(events.append)
+        state.trace = trace
+        turn = AnswerTurn(cast(Any, SimpleNamespace(root_observation=None)))
+        route = RunRoute(
+            PROVIDER_ID,
+            1,
+            "fixture",
+            "SC-01",
+            "",
+            False,
+            False,
+            tools_enabled=mode != "fallback",
+            deliverable="business_qa",
+            limits=LIMITS,
+            schema_output=True,
+        )
+        control = RunRegistry().register(OwnerKey.from_context(owner), run_id=run_id)
+        token = current_execution.set(journal)
+        try:
+            entries = (entry,)
+            if mode == "child":
+                from compass_agent.tools.builtin.sub_agent import evidence as child_evidence
+                from compass_agent.tools.contracts import InProcessBinding
+
+                async def delegate(args, context):
+                    assert state.tools is not None
+                    result = await state.tools.subagent.run("查询库存并返回回执。", context)
+                    return ExecutionReceipt(context.call_id, "ok", "confirmed", result)
+
+                entries = (
+                    entry,
+                    replace(
+                        registration("delegate_lookup", delegate),
+                        binding=InProcessBinding(delegate, orchestrates=True),
+                        evidence_adapter=child_evidence,
+                    ),
+                )
+            state.tools = RunToolBindings(
+                turn,
+                state,
+                route,
+                owner,
+                control,
+                None,
+                trace.emit,
+                ToolLoader(),
+                None,
+                entries=entries,
+                catalog=CatalogContext(frozenset({"completion"})),
+            )
+            return await turn.execute_turn(state, route, owner, control, None, trace.emit)
+        finally:
+            current_execution.reset(token)
+
+    def advance():
+        from compass_agent.runtime.journal import BoundaryYield
+
+        for _ in range(4):
+            try:
+                return asyncio.run(perform())
+            except BoundaryYield:
+                assert mode == "worker_boundary"
+                assert not reviewed, "Accepted review must reach delivery without another replay"
+        pytest.fail("Root boundaries did not advance")
+
+    try:
+        done = advance()
+        count = len(invocations)
+        if mode in {"markdown", "csv", "dashboard"}:
+            assert done.status == "completed" and done._delivery is not None
+            assert b"17" in done._delivery.data
+
+        assert done.status == "completed" and "private-answer-marker" in done.final_answer
+        if mode == "oversized":
+            assert lookups == ["lookup"]
+        assert "private-answer-marker" not in str(events) and "private-review-marker" not in str(
+            events
+        )
+        replay = advance()
+        assert replay.status == "completed"
+        assert replay.final_answer == done.final_answer and len(invocations) == count
+        from compass_agent.models.errors import ModelError
+
+        with pytest.raises(ModelError, match="delivery_conflict"):
+            store.finish(run_id, epoch, "completed", answer=done.final_answer)
+        with pytest.raises(ModelError, match="delivery_conflict"):
+            store.finish(
+                run_id,
+                epoch,
+                "completed",
+                answer=done.final_answer + "changed",
+                citations=done._citations,
+                answer_acceptance=done._answer_acceptance,
+                delivery=done._delivery,
+            )
+        if done._delivery is not None:
+            with pytest.raises(ModelError, match="delivery_conflict"):
+                store.finish(
+                    run_id,
+                    epoch,
+                    "completed",
+                    answer=done.final_answer,
+                    citations=done._citations,
+                    answer_acceptance=done._answer_acceptance,
+                    delivery=replace(done._delivery, data=b"changed attachment"),
+                )
+        store.finish(
+            run_id,
+            epoch,
+            "completed",
+            answer=done.final_answer,
+            citations=done._citations,
+            delivery=done._delivery,
+            answer_acceptance=done._answer_acceptance,
+        )
+        from compass_agent.context_runtime.source_access import final_text
+        from compass_agent.runtime.entities import AgentOutbox
+
+        with store.transaction() as tx:
+            box = tx.scalar(
+                select(AgentOutbox)
+                .where(AgentOutbox.run_id == run_id)
+                .order_by(AgentOutbox.run_version.desc())
+            )
+            assert box is not None
+            message = next(
+                packet["event"]["payload"]
+                for packet in box.payload["packets"]
+                if packet["event"]["type"] == "message.upsert"
+            )
+            assert message["content"]["answerMode"] == ("evidence" if evidential else "plain")
+            assert message["content"]["completion"] == "complete"
+            assert "private-answer-marker" not in str(box.payload)
+            assert final_text(store, tx, run_id) == done.final_answer
     finally:
         engine.dispose()

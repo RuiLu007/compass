@@ -151,6 +151,8 @@ def member_usages(version=None):
                 "workflow",
             ),
         ),
+        ("support/context", "上下文优化", ("selection", "compaction")),
+        ("shared/fragments", "上下文优化", ("context-results",)),
         ("support/diagnostics", "运行诊断", ("reliability-request",)),
         ("support/delivery", "最终交付格式修正", ("repair",)),
         ("support/session", "会话标题", ("title",)),

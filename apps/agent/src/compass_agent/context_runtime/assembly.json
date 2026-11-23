@@ -9,7 +9,7 @@
     "finance": {
       "audience": "财务负责人",
       "toolCeiling": {
-        "base": ["todo_write", "database_query"],
+        "base": ["todo_write", "database_query", "read_tool_result"],
         "withSearch": ["search_documents", "read_document"],
         "registryCapabilities": [
           "semantic_read",

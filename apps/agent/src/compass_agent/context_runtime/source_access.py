@@ -82,7 +82,8 @@ def record_sources_locked(store, tx, run, incoming, epoch):
                     refs.append(guard)
     # Default terms are reauthorized in batches independently of the tool reference budget.
     counted = sum(not (r.get("kind") == "semantic" and r.get("default_term")) for r in refs)
-    if counted > (MAX_SEARCH_REFS if search else 64):
+    modern = run.config_snapshot.get("contextRuntime", {}).get("answerProtocol") == 2
+    if counted > (MAX_SEARCH_REFS if search or modern else 64):
         refs = [{"kind": "source_set_blocked" if search else "transient"}]
     message.source_refs = refs
 

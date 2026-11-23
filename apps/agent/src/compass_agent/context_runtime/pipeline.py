@@ -242,9 +242,11 @@ def prepare_input(
     question=None,
     registry_context=None,
     run_facts=None,
+    fit_budget=True,
 ):
     from compass_agent.promptops.template import render
 
+    native_continuation_extra = continuation_extra
     current = sources(tx, trusted.scope)
     search = binding.get("search")
     if search:
@@ -254,7 +256,7 @@ def prepare_input(
             if k == search.get("connectionId") and v == search.get("connectionRevision")
         }
     available = tuple(t.function.name for t in draft.tools)
-    if not current:
+    if not current and binding.get("answerProtocol") != 2:
         available = tuple(t for t in available if t != "database_query")
     allow = grants.get("analysis") is True and grants.get("model") is True
     if not allow:
@@ -269,6 +271,8 @@ def prepare_input(
         enabled=allow,
         registry=bool(binding.get("registry")),
         search=search,
+        answer_protocol=binding.get("answerProtocol", 1),
+        intermediate=binding.get("answerIntermediate", False),
     )
     declared = [t for t in draft.tools if t.function.name in profile.tools]
     from compass_agent.tools.catalog import TOOLS
@@ -282,6 +286,8 @@ def prepare_input(
     if "create_workflow" in names:
         usage.append("shared/fragments/workflow.md")
     paths = list(dict.fromkeys([*profile.paths, *support_paths, *usage]))
+    if binding.get("optimizationVersion") == 1:
+        paths.append("shared/fragments/context-results.md")
     files = exact(tx, binding, paths)
     receipts = [f.receipt() for f in files]
     definitions = [f"tools/{tool.name}.json" for tool in TOOLS if tool.name in names]
@@ -427,16 +433,30 @@ def prepare_input(
         receipts.extend(f.receipt() for f in protocol_files)
         continuation_extra += len(canonical(output_message(value, by_path.__getitem__))) + 8
     limit = min(FRAME_BYTE_LIMIT, input_budget(limits, value.max_tokens))
-    value, before, after, selections, transforms = fit(
-        value,
-        limit,
-        continuation_extra=continuation_extra,
-        required_positions=required_positions,
-        organization_position=organization_position,
-        metric_access=tuple(
-            AccessRef(ctx.tenant_id, ctx.workspace_id, key, str(rev))
-            for key, rev in used_sources.items()
-        ),
+    value, before, after, selections, transforms = (
+        fit(
+            value,
+            limit,
+            continuation_extra=continuation_extra,
+            required_positions=required_positions,
+            organization_position=organization_position,
+            metric_access=tuple(
+                AccessRef(ctx.tenant_id, ctx.workspace_id, key, str(rev))
+                for key, rev in used_sources.items()
+            ),
+        )
+        if fit_budget
+        else (
+            value,
+            len(canonical(value.model_dump(mode="json", exclude_none=True)))
+            + len(value.messages) * 8
+            + continuation_extra,
+            len(canonical(value.model_dump(mode="json", exclude_none=True)))
+            + len(value.messages) * 8
+            + continuation_extra,
+            (),
+            (),
+        )
     )
     receipt = {
         "schemaVersion": 1,
@@ -463,7 +483,14 @@ def prepare_input(
         "metrics": metric_ids,
         "semantic": semantic,
         "metricSources": metric_sources,
-        "budget": {"method": "utf8_upper_bound", "before": before, "after": after, "limit": limit},
+        "budget": {
+            "method": "utf8_upper_bound",
+            "before": before,
+            "after": after,
+            "limit": limit,
+            "continuationExtra": native_continuation_extra,
+            "protocolExtra": continuation_extra - native_continuation_extra,
+        },
         "selections": [asdict(s) for s in selections],
         "compactions": [asdict(c) for c in transforms],
         "requestDigest": hashlib.sha256(

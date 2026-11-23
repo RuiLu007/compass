@@ -64,7 +64,9 @@ def prepare(targets):
 
 @asynccontextmanager
 async def service(engine):
-    value = DurableRuntime(engine, Settings(), RunRegistry())
+    # These fixtures exercise the pre-context protocol and its persisted workflows.
+    # The v2 answer path has separate real-PostgreSQL coverage in context integration.
+    value = DurableRuntime(engine, Settings(compass_context_runtime_enabled=False), RunRegistry())
 
     async def allowed(context, **kwargs):
         return None

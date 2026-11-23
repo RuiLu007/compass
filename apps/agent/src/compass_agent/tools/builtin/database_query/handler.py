@@ -17,7 +17,9 @@ from compass_agent.schemas import (
     ToolStartedPayload,
     ToolSucceededPayload,
 )
+from compass_agent.semantic.evidence import result as evidence_result
 from compass_agent.tools.builtin.database_query import (
+    _FUNCTIONS,
     DATABASE_ACTION,
     DatabaseResult,
     ListConnections,
@@ -145,6 +147,16 @@ def registration(
             lambda: (query or query_database)(call, binding, context.control), timeout_s=8
         )
         if not isinstance(result, DatabaseResult):
+            failure = {"status": "error", "code": result}
+            if result == "invalid_parameters":
+                failure.update(
+                    repair=(
+                        "请依据 list_tables / describe_table 返回的业务表和字段修正单条 SELECT。"
+                        "元信息使用上述工具操作读取；普通函数调用支持 supportedFunctions 中的名字，"
+                        "也可直接选择原始列。"
+                    ),
+                    supportedFunctions=sorted(_FUNCTIONS),
+                )
             emit(
                 ToolFinished(
                     type="tool.finished",
@@ -152,13 +164,11 @@ def registration(
                         **common,
                         status="error",
                         errorCode=cast(RunToolError, result),
-                        resultPreview=json_bytes({"status": "error", "code": result}).decode(),
+                        resultPreview=json_bytes(failure).decode(),
                     ),
                 )
             )
-            return ExecutionReceipt(
-                context.call_id, "error", "confirmed", {"status": "error", "code": result}
-            )
+            return ExecutionReceipt(context.call_id, "error", "confirmed", failure)
         payload = json.loads(result.observation())
         from compass_agent.context_runtime.source_access import record_source
 
@@ -182,16 +192,33 @@ def registration(
         context.sources[payload["resultId"]] = AuthorizedInput(
             context.run_id, context.owner, payload, revalidate
         )
-        preview = result.observation(include_result_id=False)
+        manifest = result.context_result
+        if manifest is not None and journal and journal.context_results:
+            payload = journal.context_results.files.receipt(manifest, metadata=payload)
+        preview = (
+            json_bytes(payload).decode()
+            if manifest
+            else result.observation(include_result_id=False)
+        )
         payload_event = (
             ToolSucceededPayload(
-                **common, status="ok", rowCount=len(result.rows), resultPreview=preview
+                **common,
+                status="ok",
+                rowCount=manifest["returnedCount"] if manifest else len(result.rows),
+                resultPreview=preview,
             )
-            if result.rows
+            if (manifest["returnedCount"] if manifest else len(result.rows))
             else ToolEmptyPayload(**common, status="empty", rowCount=0, resultPreview=preview)
         )
         emit(ToolFinished(type="tool.finished", payload=payload_event))
-        return ExecutionReceipt(context.call_id, "ok", "confirmed", payload)
+        return ExecutionReceipt(
+            context.call_id,
+            "ok",
+            "confirmed",
+            payload,
+            context_result=manifest,
+            source_deps=(witness,),
+        )
 
     return RegisteredTool(
         "database_query",
@@ -202,4 +229,5 @@ def registration(
         authorize,
         bounded_payload,
         parallel_safe=True,
+        evidence_adapter=evidence_result,
     )

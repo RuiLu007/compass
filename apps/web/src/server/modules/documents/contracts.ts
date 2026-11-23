@@ -71,9 +71,12 @@ export const binding = z.strictObject({
   scenePack: z.literal("retail").optional(),
   policies: z.record(name, z.strictObject({ enabled: z.boolean(), audienceWorkspaceId: audience })),
 });
-export const pinSchema = binding
-  .omit({ policies: true })
-  .extend({ runId: z.uuid(), actorUserId: z.uuid() });
+export const pinSchema = binding.omit({ policies: true }).extend({
+  runId: z.uuid(),
+  actorUserId: z.uuid(),
+  protocol: z.literal(2).optional(),
+  emptyReason: z.enum(["no_library", "no_indexed_documents"]).optional(),
+});
 export const sourceRef = z.strictObject({
   kind: z.literal("document"),
   runId: z.uuid(),

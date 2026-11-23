@@ -19,7 +19,9 @@
 
 ## 关键决策
 
-[PRD](spec/PRD.md) 维护默认问题卡、材料、金标准与验收要求。通用 Skill 指导模型按信息缺口选源，单次运行的工具顺序由模型决定。
+2026-11-22 按用户确认重梳技术方案：数据 Agent 默认采用通用 Loop 中的搜索方法，移除搜索模式开关；来源存在性、权限与资料状态由工具和来源服务处理。Verify 在工具批次返回后和候选交付前通用接入，可修复缺口回到同一循环。统一 final_answer 入口按任务提交 plain 或 evidence，校验接受并持久发布后进入最终正文。
+
+本轮已按连续授权实施通用 Loop、回答协议与知识库接入，并完成工程检查及真实 Chat 链路复验。综合案例已交付带 10 个引用的部分回答，完整履约诊断与采购资格仍有缺口；PRD 业务验收未达结项门槛。历史验收保留，当前结果分别登记在 dev/IMPLEMENTATION.md、review/code_review.md 与 test/ACCEPTANCE.md。[PRD](spec/PRD.md) 的业务问题、材料、金标准与验收保留；涉及技术机制的当前决定记录在主方案。
 
 ## 上下文索引
 
@@ -27,13 +29,11 @@
 
 ## 技术方案
 
-[Compass Chat 高保真交互原型](design/CHAT_PROTOTYPE.html) · [离线 HTML 阅读版](design/TECH_DESIGN.html) · [主方案](design/TECH_DESIGN.md) · [结论与引用校验](design/EVIDENCE.md) · [Retail 数据与验收](design/RETAIL_CASE.md) · [代码设计](design/CODE_DESIGN.md)
+[离线 HTML 阅读版](design/TECH_DESIGN.html) · [主方案](design/TECH_DESIGN.md) · [回答路由与引用契约](design/EVIDENCE.md) · [供评审的代码设计](design/CODE_DESIGN.md) · [知识库与向量检索](design/VECTOR_SEARCH.md) · [课堂数据与验收](design/RETAIL_CASE.md)
 
-本课的具体交付按[模型工具与语义层清单](design/TECH_DESIGN.md#1-本课实施清单)、[上下文装配](design/TECH_DESIGN.md#2-上下文装配)、[Prompt 设定](design/TECH_DESIGN.md#3-prompt-设定)和[Verify 接入](design/TECH_DESIGN.md#4-verify-接入)查阅。
+重点阅读[通用 Loop 与工具边界](design/TECH_DESIGN.md#2-通用-loop-与工具边界)、[Verify 的通用接入](design/TECH_DESIGN.md#4-verify-的通用接入)、[普通回答循证回答与正文边界](design/TECH_DESIGN.md#5-普通回答循证回答与正文边界)。前端传输与引用用例见[接口协议](design/TECH_DESIGN.md#7-前端推理接口协议)，文件级调整见[按 App 划分的文件改动](design/TECH_DESIGN.md#8-按-app-划分的文件改动)。
 
-主 Agent 通过 Plan → Execute → Verify 驱动检索。Context Runtime 全量装配选中场景的基础方法，按需装入经营事实，再根据已核断言、缺口与实际预算收口。本版按现有实现回写，发布与恢复列在[开发顺序](design/TECH_DESIGN.md#7-开发顺序兼容与恢复)。
-
-增量方案见 [OpenAI 向量检索与华东 GMV 诊断](design/VECTOR_SEARCH.md)。
+[原 Chat 交互原型](design/CHAT_PROTOTYPE.html)保留为旧版交互参考；新版候选、校验与正文的边界以主方案和回答契约为准。
 
 ## 实施与验收
 

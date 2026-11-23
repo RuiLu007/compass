@@ -2,7 +2,7 @@
   "type": "function",
   "function": {
     "name": "sub_agent",
-    "description": "**用途与调用规则**\n\n- 将一个明确的只读分析子任务交给独立 Agent。\n- 在 prompt 提供必要背景、数据范围和预期输出。\n- 仅返回子任务结论。",
+    "description": "**用途与调用规则**\n\n- 将一个明确、规模较小的只读调查子任务交给独立 Agent。\n- 新协议继承本次任务中可用的只读查询和检索能力，具体以子任务工具声明为准；最多 8 个模型步骤，共用父任务预算。\n- 在 prompt 中提供必要背景、已知表或资料线索、范围和预期输出。跨来源的总体协调由主 Agent 保持。\n- 返回子任务结论、证据及缺口；需要用户确认的事项交回主 Agent，主 Agent 统一完成最终回答。",
     "parameters": {
       "additionalProperties": false,
       "properties": {

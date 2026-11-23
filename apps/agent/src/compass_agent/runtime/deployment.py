@@ -53,6 +53,8 @@ def policy_fingerprint(settings, overrides, metric_catalog=None):
             "budget": budget_snapshot(settings),
             "context": {
                 "enabled": settings.compass_context_runtime_enabled,
+                "optimization": settings.compass_context_optimization_enabled,
+                "resultsRoot": settings.compass_context_results_root,
                 "policy": POLICY_DIGEST,
                 "scopes": sorted(
                     (str(r.tenant_id), str(r.workspace_id or ""), r.profile)
@@ -63,17 +65,6 @@ def policy_fingerprint(settings, overrides, metric_catalog=None):
                 **(
                     {"semanticWorkspaces": settings.compass_semantic_workspaces.split(",")}
                     if settings.compass_semantic_workspaces
-                    else {}
-                ),
-                **(
-                    {"searchWorkspaces": sorted(search_workspaces)}
-                    if (
-                        search_workspaces := {
-                            item.strip()
-                            for item in settings.compass_search_workspaces.split(",")
-                            if item.strip()
-                        }
-                    )
                     else {}
                 ),
             },
